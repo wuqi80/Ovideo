@@ -101,8 +101,13 @@ async def add_member(
     await _require_project_permission(project_id, user_id, "admin", project_member_dao=project_member_dao)
     target_user = await user_dao.get_user_by_id(target_user_id)
     if not target_user:
+        lookup_by_username = getattr(user_dao, "get_user_by_username", None)
+        if callable(lookup_by_username):
+            target_user = await lookup_by_username(target_user_id)
+    if not target_user:
         raise UserNotFound("Target user not found")
-    member = await project_member_dao.add_member(project_id, target_user_id, role, responsibility)
+    resolved_user_id = str(target_user.get("user_id") or target_user_id)
+    member = await project_member_dao.add_member(project_id, resolved_user_id, role, responsibility)
     return {"success": True, "member": _row_to_dict(member)}
 
 

@@ -18,6 +18,7 @@ import { BrandLogo } from '../components/BrandLogo';
 import AccountMenu from '../components/AccountMenu';
 import { crmMessage } from '../admin/crmUI';
 import { clearAccountIdentity } from '../services/accountStorage';
+import { secureApiUrl } from '../services/httpClient';
 import {
   changeMyPassword,
   getMyProfile,
@@ -47,6 +48,12 @@ const formatNumber = (value: number | null | undefined) => (value ?? 0).toLocale
 const formatDate = (value?: string | null) => {
   if (!value) return '暂无时间';
   return new Date(value).toLocaleDateString('zh-CN');
+};
+
+const coverImageSrc = (url: string) => {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url) && !url.startsWith(window.location.origin)) return url;
+  return secureApiUrl(url, { absolute: url.startsWith('/') });
 };
 
 export const ProfilePage: React.FC = () => {
@@ -348,7 +355,7 @@ export const ProfilePage: React.FC = () => {
                         >
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-b75 bg-b50">
                             {project.cover_url ? (
-                              <img src={project.cover_url} alt="" className="h-full w-full rounded object-cover" />
+                              <img src={coverImageSrc(project.cover_url)} alt="" className="h-full w-full rounded object-cover object-center" />
                             ) : (
                               <BrandLogo variant="mark" className="h-5 w-5 opacity-60" alt="" />
                             )}

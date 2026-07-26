@@ -71,10 +71,16 @@ class FakeProjectMemberDAO:
 
 class FakeUserDAO:
     existing = {"user_2"}
+    existing_by_username = {"alice": "user_alice"}
 
     @classmethod
     async def get_user_by_id(cls, user_id: str):
         return {"user_id": user_id} if user_id in cls.existing else None
+
+    @classmethod
+    async def get_user_by_username(cls, username: str):
+        user_id = cls.existing_by_username.get(username)
+        return {"user_id": user_id, "username": username} if user_id else None
 
 
 def setup_function():
@@ -92,6 +98,7 @@ def setup_function():
     FakeProjectMemberDAO.removed = []
     FakeProjectMemberDAO.member_role = "member"
     FakeUserDAO.existing = {"user_2"}
+    FakeUserDAO.existing_by_username = {"alice": "user_alice"}
 
 
 async def test_update_project_requires_admin_and_preserves_empty_fields():
@@ -179,6 +186,26 @@ async def test_add_member_requires_admin_and_existing_user():
             user_dao=FakeUserDAO,
             project_member_dao=FakeProjectMemberDAO,
         )
+
+
+async def test_add_member_accepts_username_and_stores_canonical_user_id():
+    result = await project_admin_service.add_member(
+        "proj_1",
+        "admin",
+        target_user_id="alice",
+        role="member",
+        responsibility="all",
+        user_dao=FakeUserDAO,
+        project_member_dao=FakeProjectMemberDAO,
+    )
+
+    assert result["success"] is True
+    assert FakeProjectMemberDAO.added == {
+        "project_id": "proj_1",
+        "user_id": "user_alice",
+        "role": "member",
+        "responsibility": "all",
+    }
 
 
 async def test_update_member_only_updates_explicit_fields():

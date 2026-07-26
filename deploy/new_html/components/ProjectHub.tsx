@@ -1,10 +1,19 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Archive, Trash2, Users, Clock, FolderOpen, MoreVertical, Share2, Maximize2, Minimize2 } from 'lucide-react';
+import { Plus, Search, Archive, Trash2, Users, Clock, FolderOpen, MoreVertical, Share2, Maximize2, Minimize2, Upload, Pencil, UserPlus } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
+import { secureApiUrl } from '../services/httpClient';
 import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
 import ShareResourceDialog from './ShareResourceDialog';
 import { createShare } from '../services/shareService';
+import { uploadEntityFile } from '../services/entityFileService';
+import {
+    addProjectMember,
+    getProjectMembers,
+    removeProjectMember,
+    updateProject,
+    updateProjectMember,
+} from '../services/projectWorkflowService';
 import type { ProjectInfo } from '../types';
 import { crmMessage, crmConfirm } from '../admin/crmUI';
 import { BrandLogo } from './BrandLogo';
@@ -12,9 +21,16 @@ import AccountMenu from './AccountMenu';
 
 type SortKey = 'updated' | 'created' | 'name';
 type ProjectTab = 'all' | 'archived';
+type ProjectMemberRow = {
+    user_id: string;
+    username?: string;
+    role?: string;
+    responsibility?: string;
+};
 
 const ProjectHub: React.FC = () => {
     const navigate = useNavigate();
+    const coverInputRef = useRef<HTMLInputElement | null>(null);
     const [projects, setProjects] = useState<ProjectInfo[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -25,6 +41,17 @@ const ProjectHub: React.FC = () => {
     const [newProjectDesc, setNewProjectDesc] = useState('');
     const [newProjectMembers, setNewProjectMembers] = useState('');
     const [contextMenu, setContextMenu] = useState<{ projectId: string; x: number; y: number; isArchived?: boolean } | null>(null);
+    const [coverUploadTargetId, setCoverUploadTargetId] = useState<string | null>(null);
+    const [uploadingCoverProjectId, setUploadingCoverProjectId] = useState<string | null>(null);
+    const [editTarget, setEditTarget] = useState<ProjectInfo | null>(null);
+    const [editProjectName, setEditProjectName] = useState('');
+    const [editProjectDesc, setEditProjectDesc] = useState('');
+    const [editMembers, setEditMembers] = useState<ProjectMemberRow[]>([]);
+    const [editMembersLoading, setEditMembersLoading] = useState(false);
+    const [editSaving, setEditSaving] = useState(false);
+    const [memberBusyId, setMemberBusyId] = useState<string | null>(null);
+    const [newMemberIdentity, setNewMemberIdentity] = useState('');
+    const [newMemberRole, setNewMemberRole] = useState('member');
     const [isWideLayout, setIsWideLayout] = useState(() => localStorage.getItem('project_hub_layout') === 'wide');
 
     // 2026-05-26 组织管理 MVP — workspace 联动 + share dialog 状态
@@ -198,6 +225,184 @@ const ProjectHub: React.FC = () => {
         }
     };
 
+    const openCoverUpload = useCallback((projectId: string) => {
+        setContextMenu(null);
+        setCoverUploadTargetId(projectId);
+        window.setTimeout(() => coverInputRef.current?.click(), 0);
+    }, []);
+
+    const handleCoverFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0] || null;
+        event.target.value = '';
+        const projectId = coverUploadTargetId;
+        setCoverUploadTargetId(null);
+        if (!file || !projectId) return;
+
+        if (!file.type.startsWith('image/')) {
+            crmMessage.warning('请选择图片文件作为项目封面');
+            return;
+        }
+
+        setUploadingCoverProjectId(projectId);
+        try {
+            const uploaded = await uploadEntityFile(file, 'project', projectId, 'cover');
+            await updateProject(projectId, { cover_url: uploaded.fileUrl });
+            setProjects(prev => prev.map(project =>
+                project.projectId === projectId
+                    ? { ...project, coverUrl: uploaded.fileUrl, updatedAt: Date.now() }
+                    : project
+            ));
+            crmMessage.success('项目封面已更新');
+        } catch (error) {
+            console.error('上传项目封面失败:', error);
+            crmMessage.error('上传项目封面失败，请检查图片格式或网络');
+        } finally {
+            setUploadingCoverProjectId(null);
+        }
+    }, [coverUploadTargetId]);
+
+    const loadEditMembers = useCallback(async (projectId: string) => {
+        setEditMembersLoading(true);
+        try {
+            const data = await getProjectMembers(projectId);
+            const members = data.members || [];
+            setEditMembers(members);
+            return members as ProjectMemberRow[];
+        } catch (error) {
+            console.error('加载项目成员失败:', error);
+            setEditMembers([]);
+            crmMessage.error('加载项目成员失败');
+            return [] as ProjectMemberRow[];
+        } finally {
+            setEditMembersLoading(false);
+        }
+    }, []);
+
+    const openEditProject = useCallback((project: ProjectInfo) => {
+        setContextMenu(null);
+        setEditTarget(project);
+        setEditProjectName(project.projectName);
+        setEditProjectDesc(project.description || '');
+        setNewMemberIdentity('');
+        setNewMemberRole('member');
+        void loadEditMembers(project.projectId);
+    }, [loadEditMembers]);
+
+    const closeEditProject = useCallback(() => {
+        if (editSaving || memberBusyId) return;
+        setEditTarget(null);
+        setEditMembers([]);
+        setNewMemberIdentity('');
+    }, [editSaving, memberBusyId]);
+
+    const refreshProjectMemberCount = useCallback((projectId: string, nextCount: number) => {
+        setProjects(prev => prev.map(project =>
+            project.projectId === projectId ? { ...project, memberCount: nextCount } : project
+        ));
+    }, []);
+
+    const handleSaveProjectEdit = useCallback(async () => {
+        if (!editTarget) return;
+        const nextName = editProjectName.trim();
+        if (!nextName) {
+            crmMessage.warning('项目名称不能为空');
+            return;
+        }
+
+        setEditSaving(true);
+        try {
+            await updateProject(editTarget.projectId, {
+                project_name: nextName,
+                description: editProjectDesc,
+            });
+            setProjects(prev => prev.map(project =>
+                project.projectId === editTarget.projectId
+                    ? { ...project, projectName: nextName, description: editProjectDesc, updatedAt: Date.now() }
+                    : project
+            ));
+            setEditTarget(prev => prev ? { ...prev, projectName: nextName, description: editProjectDesc } : prev);
+            crmMessage.success('项目信息已保存');
+        } catch (error) {
+            console.error('保存项目信息失败:', error);
+            crmMessage.error('保存项目信息失败，请检查权限或网络');
+        } finally {
+            setEditSaving(false);
+        }
+    }, [editProjectDesc, editProjectName, editTarget]);
+
+    const handleAddEditMember = useCallback(async () => {
+        if (!editTarget) return;
+        const identities = newMemberIdentity
+            .split(/[\s,，;；]+/)
+            .map(value => value.trim())
+            .filter(Boolean);
+        if (!identities.length) {
+            crmMessage.warning('请输入要添加的用户名或用户 ID');
+            return;
+        }
+
+        setMemberBusyId('__add__');
+        try {
+            for (const identity of identities) {
+                await addProjectMember(editTarget.projectId, identity, newMemberRole, 'all');
+            }
+            setNewMemberIdentity('');
+            const nextMembers = await loadEditMembers(editTarget.projectId);
+            refreshProjectMemberCount(editTarget.projectId, nextMembers.length);
+            crmMessage.success('成员已添加');
+        } catch (error) {
+            console.error('添加项目成员失败:', error);
+            crmMessage.error('添加成员失败，请确认用户存在且你有管理权限');
+        } finally {
+            setMemberBusyId(null);
+        }
+    }, [editTarget, loadEditMembers, newMemberIdentity, newMemberRole, refreshProjectMemberCount]);
+
+    const handleRemoveEditMember = useCallback(async (member: ProjectMemberRow) => {
+        if (!editTarget || !member.user_id) return;
+        const label = member.username || member.user_id;
+        if (!await crmConfirm({
+            title: '移除项目成员',
+            message: `确定将「${label}」移出项目？不会删除该成员已创建的内容。`,
+            type: 'danger',
+            confirmText: '移除',
+        })) return;
+
+        setMemberBusyId(member.user_id);
+        try {
+            await removeProjectMember(editTarget.projectId, member.user_id);
+            const nextMembers = editMembers.filter(item => item.user_id !== member.user_id);
+            setEditMembers(nextMembers);
+            refreshProjectMemberCount(editTarget.projectId, nextMembers.length);
+            crmMessage.success('成员已移除');
+        } catch (error) {
+            console.error('移除项目成员失败:', error);
+            crmMessage.error('移除成员失败，owner 不能被移除');
+        } finally {
+            setMemberBusyId(null);
+        }
+    }, [editMembers, editTarget, refreshProjectMemberCount]);
+
+    const handleUpdateEditMember = useCallback(async (
+        member: ProjectMemberRow,
+        patch: Partial<Pick<ProjectMemberRow, 'role' | 'responsibility'>>,
+    ) => {
+        if (!editTarget || !member.user_id) return;
+        const nextMember = { ...member, ...patch };
+        setEditMembers(prev => prev.map(item => item.user_id === member.user_id ? nextMember : item));
+        setMemberBusyId(member.user_id);
+        try {
+            await updateProjectMember(editTarget.projectId, member.user_id, patch);
+            crmMessage.success('成员信息已更新');
+        } catch (error) {
+            console.error('更新项目成员失败:', error);
+            setEditMembers(prev => prev.map(item => item.user_id === member.user_id ? member : item));
+            crmMessage.error('更新成员失败，请检查权限');
+        } finally {
+            setMemberBusyId(null);
+        }
+    }, [editTarget]);
+
     const formatTime = (ts: number) => {
         const d = new Date(ts);
         const now = Date.now();
@@ -216,9 +421,22 @@ const ProjectHub: React.FC = () => {
         : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5';
     const pageTitle = activeTab === 'archived' ? '已归档' : '全部项目';
     const stablePageCount = activeTab === 'archived' ? archivedProjectCount : activeProjectCount;
+    const coverImageSrc = useCallback((url: string) => {
+        if (!url) return '';
+        if (/^https?:\/\//i.test(url) && !url.startsWith(window.location.origin)) return url;
+        return secureApiUrl(url, { absolute: url.startsWith('/') });
+    }, []);
 
     return (
         <div className="layout-safe min-h-screen bg-n20 text-n800" onClick={() => setContextMenu(null)}>
+            <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                aria-label="选择项目封面图片"
+                onChange={handleCoverFileChange}
+            />
             <div className={`min-h-screen w-full ${shellWidthClass} mx-auto bg-n0 md:border-x md:border-n40`}>
                 <header className="animate-slideDown">
                     <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
@@ -349,10 +567,15 @@ const ProjectHub: React.FC = () => {
                                 >
                                     <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-n30 via-primary-light to-b75">
                                         {p.coverUrl ? (
-                                            <img src={p.coverUrl} alt={`${p.projectName} 封面`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" />
+                                            <img src={coverImageSrc(p.coverUrl)} alt={`${p.projectName} 封面`} className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02]" />
                                         ) : (
                                             <div className="flex h-full items-center justify-center">
                                                 <BrandLogo variant="mark" className="h-20 w-20 opacity-[0.12]" alt="" />
+                                            </div>
+                                        )}
+                                        {uploadingCoverProjectId === p.projectId && (
+                                            <div className="absolute inset-0 flex items-center justify-center bg-n800/45 text-sm font-medium text-white">
+                                                封面上传中...
                                             </div>
                                         )}
                                         {p.isArchived && (
@@ -412,12 +635,31 @@ const ProjectHub: React.FC = () => {
             {/* 右键菜单 */}
             {contextMenu && (
                 <div
-                    className="fixed z-50 bg-n0 border border-n40 rounded-md shadow-bottom py-1 min-w-[140px]"
+                    className="fixed z-50 bg-n0 border border-n40 rounded-md shadow-bottom py-1 min-w-[152px]"
                     style={{ left: contextMenu.x, top: contextMenu.y }}
                     onClick={e => e.stopPropagation()}
                 >
+                    <button
+                        type="button"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-n20 flex items-center gap-2 text-n700"
+                        onClick={() => {
+                            const proj = projects.find(p => p.projectId === contextMenu.projectId);
+                            if (proj) openEditProject(proj);
+                        }}
+                    >
+                        <Pencil className="w-4 h-4" /> 编辑项目
+                    </button>
+                    <button
+                        type="button"
+                        className="w-full px-4 py-2 text-left text-sm hover:bg-n20 flex items-center gap-2 text-n700 disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={() => openCoverUpload(contextMenu.projectId)}
+                        disabled={uploadingCoverProjectId === contextMenu.projectId}
+                    >
+                        <Upload className="w-4 h-4" /> 上传封面
+                    </button>
                     {contextMenu.isArchived ? (
                     <button
+                        type="button"
                         className="w-full px-4 py-2 text-left text-sm hover:bg-n20 flex items-center gap-2 text-success"
                         onClick={() => handleUnarchive(contextMenu.projectId)}
                     >
@@ -425,6 +667,7 @@ const ProjectHub: React.FC = () => {
                     </button>
                     ) : (
                     <button
+                        type="button"
                         className="w-full px-4 py-2 text-left text-sm hover:bg-n20 flex items-center gap-2 text-n700"
                         onClick={() => handleArchive(contextMenu.projectId)}
                     >
@@ -432,6 +675,7 @@ const ProjectHub: React.FC = () => {
                     </button>
                     )}
                     <button
+                        type="button"
                         className="w-full px-4 py-2 text-left text-sm hover:bg-n20 flex items-center gap-2 text-primary"
                         onClick={() => {
                             const proj = projects.find(p => p.projectId === contextMenu.projectId);
@@ -442,6 +686,7 @@ const ProjectHub: React.FC = () => {
                         <Share2 className="w-4 h-4" /> 共享…
                     </button>
                     <button
+                        type="button"
                         className="w-full px-4 py-2 text-left text-sm hover:bg-r50 flex items-center gap-2 text-danger"
                         onClick={() => handleDelete(contextMenu.projectId)}
                     >
@@ -458,6 +703,183 @@ const ProjectHub: React.FC = () => {
                     onClose={() => setShareTarget(null)}
                     onChange={() => { loadProjects(); }}
                 />
+            )}
+
+            {/* 编辑项目弹窗 */}
+            {editTarget && (
+                <div
+                    className="app-modal-backdrop fixed inset-0 flex items-center justify-center z-50 p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="edit-project-title"
+                    onClick={closeEditProject}
+                >
+                    <div className="app-modal-surface w-full max-w-4xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="app-modal-header">
+                            <div>
+                                <h2 id="edit-project-title" className="text-lg font-semibold text-n800">编辑项目</h2>
+                                <p className="mt-1 text-xs text-n100">修改项目基础信息、成员角色和协作范围。</p>
+                            </div>
+                        </div>
+                        <div className="app-modal-body grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+                            <section className="space-y-4">
+                                <div>
+                                    <label className="block text-sm text-n300 mb-1">项目名称</label>
+                                    <input
+                                        type="text"
+                                        value={editProjectName}
+                                        onChange={e => setEditProjectName(e.target.value)}
+                                        placeholder="输入项目名称"
+                                        className="w-full px-3 py-2 bg-n0 border border-n40 rounded text-sm text-n800 placeholder:text-n100 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm text-n300 mb-1">项目描述</label>
+                                    <textarea
+                                        value={editProjectDesc}
+                                        onChange={e => setEditProjectDesc(e.target.value)}
+                                        placeholder="补充项目介绍、风格或制作说明"
+                                        rows={6}
+                                        className="w-full px-3 py-2 bg-n0 border border-n40 rounded text-sm text-n800 placeholder:text-n100 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none transition-colors"
+                                    />
+                                </div>
+                                <div className="rounded-lg border border-n40 bg-n10 p-3 text-xs text-n200">
+                                    封面可从项目卡片右上角菜单的「上传封面」单独更新；图片展示使用居中裁剪，不会拉伸变形。
+                                </div>
+                                <div className="flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveProjectEdit}
+                                        disabled={editSaving}
+                                        className="inline-flex h-10 min-w-[112px] items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-card transition-all hover:bg-primary-hover hover:shadow-atlas disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {editSaving ? '保存中...' : '保存信息'}
+                                    </button>
+                                </div>
+                            </section>
+
+                            <section className="rounded-lg border border-n40 bg-n0">
+                                <div className="flex items-center justify-between border-b border-n40 px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                        <Users className="h-4 w-4 text-primary" />
+                                        <span className="text-sm font-semibold text-n800">项目成员</span>
+                                    </div>
+                                    <span className="rounded-full border border-b75 bg-b50 px-2 py-0.5 text-xs text-primary">{editMembers.length}</span>
+                                </div>
+                                <div className="space-y-3 p-4">
+                                    <div className="rounded-lg border border-n40 bg-n10 p-3">
+                                        <label className="mb-2 block text-xs font-medium text-n300">添加成员（用户名或用户 ID，可多个）</label>
+                                        <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+                                            <input
+                                                type="text"
+                                                value={newMemberIdentity}
+                                                onChange={e => setNewMemberIdentity(e.target.value)}
+                                                placeholder="例如 admin 或 user_xxx"
+                                                className="h-9 flex-1 rounded border border-n40 bg-n0 px-2 text-xs text-n800 outline-none transition-colors placeholder:text-n100 focus:border-primary"
+                                            />
+                                            <div className="flex gap-2">
+                                                <select
+                                                    value={newMemberRole}
+                                                    onChange={e => setNewMemberRole(e.target.value)}
+                                                    className="h-9 flex-1 rounded border border-n40 bg-n0 px-2 text-xs text-n700 outline-none transition-colors focus:border-primary"
+                                                >
+                                                    <option value="member">member</option>
+                                                    <option value="admin">admin</option>
+                                                    <option value="readonly">readonly</option>
+                                                </select>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleAddEditMember}
+                                                    disabled={memberBusyId === '__add__'}
+                                                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded bg-primary px-3 text-xs font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    <UserPlus className="h-3.5 w-3.5" />
+                                                    添加
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1">
+                                        {editMembersLoading ? (
+                                            <div className="rounded border border-dashed border-n40 py-8 text-center text-xs text-n100">加载成员...</div>
+                                        ) : editMembers.length === 0 ? (
+                                            <div className="rounded border border-dashed border-n40 py-8 text-center text-xs text-n100">暂无成员</div>
+                                        ) : editMembers.map(member => {
+                                            const memberLabel = member.username || member.user_id;
+                                            const isOwner = member.role === 'owner';
+                                            const busy = memberBusyId === member.user_id;
+                                            return (
+                                                <div key={member.user_id} className="rounded-lg border border-n40 bg-n0 p-3">
+                                                    <div className="mb-2 flex items-start justify-between gap-2">
+                                                        <div className="min-w-0">
+                                                            <div className="truncate text-sm font-medium text-n800">{memberLabel}</div>
+                                                            <div className="truncate text-[11px] text-n100">{member.user_id}</div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRemoveEditMember(member)}
+                                                            disabled={isOwner || busy}
+                                                            className="shrink-0 rounded border border-r75 bg-r50 px-2 py-1 text-[11px] text-danger transition-colors hover:bg-r50 disabled:cursor-not-allowed disabled:opacity-40"
+                                                            title={isOwner ? 'owner 不能移除' : '移除成员'}
+                                                        >
+                                                            移除
+                                                        </button>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <label className="block">
+                                                            <span className="mb-1 block text-[11px] text-n100">角色</span>
+                                                            <select
+                                                                value={member.role || 'member'}
+                                                                onChange={e => handleUpdateEditMember(member, { role: e.target.value })}
+                                                                disabled={isOwner || busy}
+                                                                className="h-8 w-full rounded border border-n40 bg-n0 px-2 text-xs text-n700 outline-none focus:border-primary disabled:opacity-50"
+                                                            >
+                                                                <option value="owner" disabled>owner</option>
+                                                                <option value="admin">admin</option>
+                                                                <option value="member">member</option>
+                                                                <option value="readonly">readonly</option>
+                                                            </select>
+                                                        </label>
+                                                        <label className="block">
+                                                            <span className="mb-1 block text-[11px] text-n100">职责</span>
+                                                            <input
+                                                                type="text"
+                                                                value={member.responsibility || ''}
+                                                                onChange={e => {
+                                                                    const next = e.target.value;
+                                                                    setEditMembers(prev => prev.map(item =>
+                                                                        item.user_id === member.user_id
+                                                                            ? { ...item, responsibility: next }
+                                                                            : item
+                                                                    ));
+                                                                }}
+                                                                onBlur={e => handleUpdateEditMember(member, { responsibility: e.target.value.trim() || 'all' })}
+                                                                disabled={busy}
+                                                                placeholder="all / script / art"
+                                                                className="h-8 w-full rounded border border-n40 bg-n0 px-2 text-xs text-n700 outline-none placeholder:text-n100 focus:border-primary disabled:opacity-50"
+                                                            />
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                        <div className="app-modal-footer">
+                            <button
+                                type="button"
+                                onClick={closeEditProject}
+                                disabled={editSaving || !!memberBusyId}
+                                className="px-4 py-2 text-sm text-n300 hover:text-n800 hover:bg-n20 rounded transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                关闭
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* 新建项目弹窗 */}

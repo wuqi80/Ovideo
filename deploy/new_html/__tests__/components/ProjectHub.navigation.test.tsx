@@ -6,10 +6,17 @@ import { MemoryRouter } from 'react-router-dom';
 
 import ProjectHub from '../../components/ProjectHub';
 import { apiJson } from '../../services/httpClient';
+import { uploadEntityFile } from '../../services/entityFileService';
+import {
+  addProjectMember,
+  getProjectMembers,
+  updateProject,
+} from '../../services/projectWorkflowService';
 
 vi.mock('../../services/httpClient', () => ({
   apiJson: vi.fn(),
   apiFetch: vi.fn().mockResolvedValue({ success: true }),
+  secureApiUrl: vi.fn((url: string) => `${url}?token=token-cover`),
 }));
 
 vi.mock('../../contexts/WorkspaceContext', () => ({
@@ -19,6 +26,18 @@ vi.mock('../../contexts/WorkspaceContext', () => ({
 
 vi.mock('../../services/shareService', () => ({
   createShare: vi.fn(),
+}));
+
+vi.mock('../../services/entityFileService', () => ({
+  uploadEntityFile: vi.fn(),
+}));
+
+vi.mock('../../services/projectWorkflowService', () => ({
+  updateProject: vi.fn(),
+  getProjectMembers: vi.fn(),
+  addProjectMember: vi.fn(),
+  removeProjectMember: vi.fn(),
+  updateProjectMember: vi.fn(),
 }));
 
 vi.mock('../../admin/crmUI', () => ({
@@ -86,11 +105,28 @@ describe('ProjectHub navigation and filters', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.setItem('username', '159****7184');
+    localStorage.setItem('auth_token', 'token-cover');
     (apiJson as any).mockImplementation(async (url: string) => {
       if (url.startsWith('/api/projects?')) {
         return { success: true, projects: projectRows };
       }
       return { success: true };
+    });
+    (uploadEntityFile as any).mockResolvedValue({
+      fileId: 'file_cover',
+      fileUrl: '/api/files/file_cover/download',
+    });
+    (updateProject as any).mockResolvedValue({ success: true });
+    (getProjectMembers as any).mockResolvedValue({
+      success: true,
+      members: [
+        { user_id: 'owner', username: 'admin', role: 'owner', responsibility: 'all' },
+        { user_id: 'user_2', username: 'alice', role: 'member', responsibility: 'art' },
+      ],
+    });
+    (addProjectMember as any).mockResolvedValue({
+      success: true,
+      member: { user_id: 'user_3', username: 'bob', role: 'member', responsibility: 'all' },
     });
   });
 
@@ -136,5 +172,70 @@ describe('ProjectHub navigation and filters', () => {
 
     expect(screen.getByRole('menuitem', { name: /个人中心/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /退出登录/ })).toBeInTheDocument();
+  });
+
+  it('uploads a project cover from the card menu and renders it with crop styling', async () => {
+    render(
+      <MemoryRouter>
+        <ProjectHub />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('树洞里的星辰');
+    fireEvent.click(screen.getByLabelText('树洞里的星辰 更多操作'));
+    fireEvent.click(screen.getByText('上传封面'));
+
+    const file = new File(['cover-bytes'], 'cover.png', { type: 'image/png' });
+    fireEvent.change(screen.getByLabelText('选择项目封面图片'), { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(uploadEntityFile).toHaveBeenCalledWith(file, 'project', 'active-1', 'cover');
+      expect(updateProject).toHaveBeenCalledWith('active-1', {
+        cover_url: '/api/files/file_cover/download',
+      });
+    });
+    const cover = await screen.findByAltText('树洞里的星辰 封面');
+    expect(cover).toHaveClass('object-cover');
+    expect(cover.getAttribute('src')).toContain('/api/files/file_cover/download?token=token-cover');
+  });
+
+  it('edits project metadata and adds members from the card menu', async () => {
+    render(
+      <MemoryRouter>
+        <ProjectHub />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('树洞里的星辰');
+    fireEvent.click(screen.getByLabelText('树洞里的星辰 更多操作'));
+    fireEvent.click(screen.getByText('编辑项目'));
+
+    await waitFor(() => expect(getProjectMembers).toHaveBeenCalledWith('active-1'));
+    expect(screen.getAllByText('admin').some(node => node.tagName.toLowerCase() === 'div')).toBe(true);
+    expect(screen.getAllByText('alice').some(node => node.tagName.toLowerCase() === 'div')).toBe(true);
+
+    fireEvent.change(screen.getByDisplayValue('树洞里的星辰'), {
+      target: { value: '树洞里的星辰 · 新封面版' },
+    });
+    fireEvent.change(screen.getByDisplayValue('未归档项目'), {
+      target: { value: '更新后的项目描述' },
+    });
+    fireEvent.click(screen.getByText('保存信息'));
+
+    await waitFor(() => {
+      expect(updateProject).toHaveBeenCalledWith('active-1', {
+        project_name: '树洞里的星辰 · 新封面版',
+        description: '更新后的项目描述',
+      });
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('例如 admin 或 user_xxx'), {
+      target: { value: 'bob' },
+    });
+    fireEvent.click(screen.getByText('添加'));
+
+    await waitFor(() => {
+      expect(addProjectMember).toHaveBeenCalledWith('active-1', 'bob', 'member', 'all');
+    });
   });
 });

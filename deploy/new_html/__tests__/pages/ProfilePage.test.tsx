@@ -15,6 +15,7 @@ vi.mock('../../services/profileService', () => ({
 
 vi.mock('../../services/httpClient', () => ({
   apiFetch: vi.fn().mockResolvedValue({ success: true }),
+  secureApiUrl: vi.fn((url: string) => `${url}?token=test`),
 }));
 
 vi.mock('../../admin/crmUI', () => ({

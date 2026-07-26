@@ -157,6 +157,9 @@ describe('Webflow design-system contract', () => {
     expect(projectHub).toContain('MECHA <span className="text-primary">·</span> 漫剧创作平台');
     expect(projectHub).toContain('include_archived: \'true\'');
     expect(projectHub).toContain('<AccountMenu');
+    expect(projectHub).toContain('编辑项目');
+    expect(projectHub).toContain('上传封面');
+    expect(projectHub).toContain('object-cover object-center');
     expect(projectHub).not.toContain('含已归档');
     expect(episodeHub).toContain('全部分集');
     expect(episodeHub).toContain('app-modal-backdrop');
