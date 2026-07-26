@@ -9,6 +9,7 @@ import type {
   FileStatus, FileVersion, GeneratedImage,
 } from '../types';
 import { isAssetImageFileRole } from './assetImageRoles';
+import { normalizePositiveIntegerSeconds } from './storyboardSegments';
 
 const CHAR_PREFIX = 'char:';
 const SCENE_PREFIX = 'scene:';
@@ -153,6 +154,9 @@ function assetHasImages(asset: AssetItem): boolean {
 export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetItem[]): StoryboardItem {
   const boundAssets = Array.isArray(item.boundAssets) ? item.boundAssets : [];
   const { charNames, sceneName, propNames, assetIds, selections, noSelections } = parseBoundAssetTags(boundAssets);
+  const plannedDurationSeconds = normalizePositiveIntegerSeconds(
+    item.plannedDurationMs ? item.plannedDurationMs / 1000 : null,
+  );
 
   let characters = charNames;
   let scene = sceneName;
@@ -265,9 +269,9 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
     cameraMovement: item.cameraMovement,
     scriptSegmentId: item.scriptSegmentId,
     sourceVideoShotNo: item.sourceVideoShotNo,
-    plannedDurationMs: item.plannedDurationMs,
-    duration: item.plannedDurationMs && item.plannedDurationMs > 0
-      ? `${item.plannedDurationMs / 1000}秒`
+    plannedDurationMs: plannedDurationSeconds ? plannedDurationSeconds * 1000 : null,
+    duration: plannedDurationSeconds
+      ? `${plannedDurationSeconds}秒`
       : undefined,
     videoScriptBlock: item.videoScriptBlock || '',
     generatedImage: item.generatedImageUrl || undefined,

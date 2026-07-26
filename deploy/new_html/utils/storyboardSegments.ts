@@ -186,6 +186,11 @@ function positiveNumber(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+export function normalizePositiveIntegerSeconds(value: unknown): number | null {
+  const parsed = positiveNumber(value);
+  return parsed === null ? null : Math.max(1, Math.round(parsed));
+}
+
 export function getStoryboardItemDurationSeconds(item: StoryboardItem): number {
   const planned = positiveNumber(item.plannedDurationMs);
   if (planned) return planned / 1000;
@@ -456,6 +461,7 @@ export function normalizeStoryboardItemsForWorkflow(
   return normalized.map((item) => {
     if (item.isPlaceholder) return item;
     const segment = lookup.get(item.id);
+    const durationSeconds = normalizePositiveIntegerSeconds(getStoryboardItemDurationSeconds(item)) || 1;
     const shotNumber = segment
       ? formatHierarchicalShotNumber(segment.segmentNo, segment.localShotNo)
       : String(item.shotNumber || item.sourceVideoShotNo || '');
@@ -470,6 +476,8 @@ export function normalizeStoryboardItemsForWorkflow(
           )
         : item.originalText,
       sourceVideoShotNo: item.sourceVideoShotNo || shotNumber || '',
+      plannedDurationMs: durationSeconds * 1000,
+      duration: `${durationSeconds}秒`,
     };
   });
 }

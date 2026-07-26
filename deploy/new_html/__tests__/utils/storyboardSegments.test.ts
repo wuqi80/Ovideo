@@ -8,6 +8,7 @@ import {
   getStoryboardItemDurationSeconds,
   getStoryboardSegmentPromptSections,
   mergeStoryboardDisplayItems,
+  normalizePositiveIntegerSeconds,
   normalizeStoryboardItemsForWorkflow,
   serializeStoryboardItemsWithSegments,
   synchronizeStoryboardSegmentVideoPrompts,
@@ -191,6 +192,26 @@ describe('storyboard segment normalization', () => {
     expect(normalized.map(item => item.shotNumber)).toEqual(['镜头1-1', '镜头1-2', '镜头2-1']);
     expect(normalized.map(item => item.sourceVideoShotNo)).toEqual(['镜头1-1', '镜头1-2', '镜头2-1']);
     expect(normalized[2].originalText.startsWith('镜头2-1')).toBe(true);
+  });
+
+  it('normalizes generated, persisted, and estimated workflow durations to integer seconds', () => {
+    const normalized = normalizeStoryboardItemsForWorkflow([
+      { ...shot('persisted', '4.5秒'), plannedDurationMs: 4500 },
+      shot('explicit', '2.4秒'),
+      {
+        id: 'estimated',
+        originalText: '办公室内',
+        scriptSegment: '办公室内',
+        dialogue: '你为什么要这样做我已经告诉过你很多次了',
+        characters: [],
+      },
+    ]);
+
+    expect(normalized.map(item => item.plannedDurationMs)).toEqual([5000, 2000, 5000]);
+    expect(normalized.map(item => item.duration)).toEqual(['5秒', '2秒', '5秒']);
+    expect(normalizePositiveIntegerSeconds(0.2)).toBe(1);
+    expect(normalizePositiveIntegerSeconds(3.6)).toBe(4);
+    expect(normalizePositiveIntegerSeconds(0)).toBeNull();
   });
 
   it('serializes visible segment headings and restarts shot numbers per segment', () => {

@@ -99,6 +99,27 @@ describe('ScriptConversationPane workflow', () => {
     expect(workspace).toContain('onOpenStoryboard={handleOpenStoryboardDrawer}');
   });
 
+  it('counts and opens only real storyboard designs, waiting for persisted rows before opening', () => {
+    expect(workspace).toContain(
+      'const selectedStoryboardItemCount = (selectedFile?.storyboard?.items || [])',
+    );
+    expect(workspace).not.toContain(
+      'selectedConversationVersion?.storyboardItems\n    || selectedFile?.storyboard?.items',
+    );
+    expect(workspace).toContain('const loadWorkspaceStoryboardPage = useCallback(async (');
+    expect(workspace).toContain(
+      'const loadedItems = await loadWorkspaceStoryboardPage(selectedFileId, knownTotal)',
+    );
+    expect(workspace).toContain('filesRef.current = next;');
+
+    const openHandler = workspace.slice(
+      workspace.indexOf('const handleOpenStoryboardDrawer'),
+      workspace.indexOf('const handleConversationExportVersion'),
+    );
+    expect(openHandler).not.toContain('handleConversationGenerateDesign');
+    expect(openHandler).toContain('setStoryboardDrawerOpen(true)');
+  });
+
   it('expands storyboard design across the workspace beside the file list with linked script and design columns', () => {
     expect(workspace).toContain('data-testid="storyboard-workspace-drawer"');
     expect(workspace).toContain('absolute inset-0 z-40 w-full');

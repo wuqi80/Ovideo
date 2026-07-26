@@ -35,6 +35,7 @@ import {
 } from './utils/scriptIteration';
 import {
   buildStoryboardSegmentGroups,
+  normalizePositiveIntegerSeconds,
   normalizeStoryboardItemsForWorkflow,
   serializeStoryboardItemsWithSegments,
   synchronizeStoryboardSegmentVideoPrompts,
@@ -111,20 +112,13 @@ function buildScriptSegmentPayload(segments: ScriptSegment[]) {
 }
 const LegacyHistoryPage = React.lazy(() => import('./components/HistoryPage').then(m => ({ default: m.HistoryPage })));
 
-function normalizePositiveIntegerDuration(value?: number | null): number | null {
-  if (value === null || value === undefined) return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return Math.max(1, Math.round(parsed));
-}
-
 function allocateExtractedStoryboardDurations(
   extractions: ExtractedStoryboardPrompt[],
   sourceDurationSec: number | null,
 ): number[] {
   if (extractions.length === 0) return [];
-  const target = normalizePositiveIntegerDuration(sourceDurationSec);
-  const durations = extractions.map(extraction => normalizePositiveIntegerDuration(extraction.durationSec));
+  const target = normalizePositiveIntegerSeconds(sourceDurationSec);
+  const durations = extractions.map(extraction => normalizePositiveIntegerSeconds(extraction.durationSec));
   if (!target) return durations.map(duration => duration || 1);
   if (extractions.length === 1) return [target];
 
@@ -216,6 +210,10 @@ function mapWorkspaceStoryboardRowsToItems(rows: any[]): StoryboardItem[] {
       : [];
     const imageUrl = r.generated_image_url ?? r.generatedImageUrl ?? null;
     const imageId = `img_${r.item_id ?? r.itemId ?? idx}`;
+    const rawPlannedDurationMs = r.planned_duration_ms ?? r.plannedDurationMs ?? null;
+    const plannedDurationSeconds = normalizePositiveIntegerSeconds(
+      rawPlannedDurationMs ? rawPlannedDurationMs / 1000 : null,
+    );
     return {
       id: r.item_id ?? r.itemId ?? uuidv4(),
       shotNumber: r.source_video_shot_no ?? r.sourceVideoShotNo ?? idx + 1,
@@ -241,7 +239,8 @@ function mapWorkspaceStoryboardRowsToItems(rows: any[]): StoryboardItem[] {
       characters: boundAssets.filter((a: string) => a.startsWith('char:')).map((a: string) => a.replace('char:', '')),
       scene: boundAssets.find((a: string) => a.startsWith('scene:'))?.replace('scene:', '') || '',
       props: boundAssets.filter((a: string) => a.startsWith('prop:')).map((a: string) => a.replace('prop:', '')),
-      plannedDurationMs: r.planned_duration_ms ?? r.plannedDurationMs ?? null,
+      plannedDurationMs: plannedDurationSeconds ? plannedDurationSeconds * 1000 : null,
+      duration: plannedDurationSeconds ? `${plannedDurationSeconds}秒` : undefined,
       scriptSegmentId: r.script_segment_id ?? r.scriptSegmentId ?? undefined,
       sourceVideoShotNo: r.source_video_shot_no ?? r.sourceVideoShotNo ?? '',
       videoScriptBlock: r.video_script_block ?? r.videoScriptBlock ?? '',
@@ -659,11 +658,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const selectedHistoryScopeKey = selectedFileId
     ? buildVersionHistoryScopeKey(selectedFileId, selectedConversationVersion?.id)
     : null;
-  const selectedStoryboardItemCount = (
-    selectedConversationVersion?.storyboardItems
-    || selectedFile?.storyboard?.items
-    || []
-  ).filter(item => !item.isPlaceholder).length;
+  const selectedStoryboardItemCount = (selectedFile?.storyboard?.items || [])
+    .filter(item => !item.isPlaceholder).length;
   const handleQuickSelectVersion = useCallback((versionId: string) => {
     if (!selectedFileId) return;
     setQuickSelectedVersionIds(prev => ({ ...prev, [selectedFileId]: versionId }));
@@ -1458,37 +1454,45 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
 
 
-  const loadWorkspaceStoryboardPage = useCallback((fileId: string, count: number) => {
-    if (!propEpisodeId || !fileId) return;
+  const loadWorkspaceStoryboardPage = useCallback(async (
+    fileId: string,
+    count: number,
+  ): Promise<StoryboardItem[]> => {
+    if (!propEpisodeId || !fileId) return [];
     const targetCount = Math.max(WORKSPACE_INITIAL_STORYBOARD_COUNT, count || WORKSPACE_INITIAL_STORYBOARD_COUNT);
     const currentFile = filesRef.current.find(f => f.id === fileId);
-    const currentCount = currentFile?.storyboard?.items?.length || 0;
-    if (targetCount <= currentCount) return;
+    const currentItems = (currentFile?.storyboard?.items || []).filter(item => !item.isPlaceholder);
+    if (fileId.startsWith('local_') || targetCount <= currentItems.length) return currentItems;
 
-    const scriptId = fileId.startsWith('local_') ? undefined : fileId;
-    getStoryboardItems(propEpisodeId, scriptId, {
+    const res: any = await getStoryboardItems(propEpisodeId, fileId, {
       limit: targetCount,
       includeTotal: true,
-    })
-      .then((res: any) => {
-        if (!res?.success) return;
-        const items = mapWorkspaceStoryboardRowsToItems(res.items || []);
-        setFiles(prev => prev.map(f => (
-          f.id === fileId
-            ? { ...f, storyboard: items.length > 0 ? { items } : null }
-            : f
-        )));
-        const total = typeof res.total === 'number' ? res.total : items.length;
-        setStoryboardTotalsByFileId(prev => ({ ...prev, [fileId]: total }));
-      })
-      .catch(err => {
-        console.warn('Workspace storyboard page load failed:', err);
-      });
+    });
+    if (!res?.success) {
+      throw new Error(res?.error || '镜头设计数据加载失败');
+    }
+    const items = normalizeStoryboardItemsForWorkflow(
+      mapWorkspaceStoryboardRowsToItems(res.items || []),
+    );
+    setFiles(prev => {
+      const next = prev.map(f => (
+        f.id === fileId
+          ? { ...f, storyboard: items.length > 0 ? { items } : null }
+          : f
+      ));
+      filesRef.current = next;
+      return next;
+    });
+    const total = typeof res.total === 'number' ? res.total : items.length;
+    setStoryboardTotalsByFileId(prev => ({ ...prev, [fileId]: total }));
+    return items;
   }, [propEpisodeId]);
 
   const handleWorkspaceVisibleShotCountChange = useCallback((count: number) => {
     if (!selectedFileId) return;
-    loadWorkspaceStoryboardPage(selectedFileId, count);
+    void loadWorkspaceStoryboardPage(selectedFileId, count).catch(err => {
+      console.warn('Workspace storyboard page load failed:', err);
+    });
   }, [loadWorkspaceStoryboardPage, selectedFileId]);
 
   const handleExportNext = async (data: any) => {
@@ -2197,24 +2201,32 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     urlProjectId,
   ]);
 
-  const handleOpenStoryboardDrawer = useCallback(() => {
+  const handleOpenStoryboardDrawer = useCallback(async () => {
     if (!selectedFileId) return;
+    setConversationError(null);
     const file = filesRef.current.find(item => item.id === selectedFileId);
     const existingItems = (file?.storyboard?.items || []).filter(item => !item.isPlaceholder);
     if (existingItems.length > 0) {
-      setConversationError(null);
       setStoryboardDrawerOpen(true);
       return;
     }
-    const conversation = scriptConversations[selectedFileId];
-    const version = conversation?.versions.find(item => item.id === conversation.currentVersionId)
-      || conversation?.versions[conversation.versions.length - 1];
-    if (version) {
-      void handleConversationGenerateDesign(version, { autoSnapshot: false });
-      return;
+    try {
+      const knownTotal = storyboardTotalsByFileId[selectedFileId] ?? WORKSPACE_INITIAL_STORYBOARD_COUNT;
+      const loadedItems = await loadWorkspaceStoryboardPage(selectedFileId, knownTotal);
+      if (loadedItems.some(item => !item.isPlaceholder)) {
+        setStoryboardDrawerOpen(true);
+        return;
+      }
+      setConversationError('当前还没有可展示的镜头设计，请先生成镜头设计。');
+    } catch (error) {
+      console.warn('Workspace storyboard drawer load failed:', error);
+      setConversationError(`镜头设计加载失败：${summarizePipelineError(error)}`);
     }
-    setConversationError('当前还没有可展示的镜头设计。');
-  }, [handleConversationGenerateDesign, scriptConversations, selectedFileId]);
+  }, [
+    loadWorkspaceStoryboardPage,
+    selectedFileId,
+    storyboardTotalsByFileId,
+  ]);
 
   const handleConversationExportVersion = useCallback((version: ScriptStoryboardVersion) => {
     const file = filesRef.current.find(item => item.id === selectedFileId);
@@ -2230,7 +2242,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       setStoryboardDrawerOpen(false);
     const file = filesRef.current.find(f => f.id === id);
     if (!file?.storyboard?.items?.length && storyboardTotalsByFileId[id] !== 0) {
-      loadWorkspaceStoryboardPage(id, WORKSPACE_INITIAL_STORYBOARD_COUNT);
+      void loadWorkspaceStoryboardPage(id, WORKSPACE_INITIAL_STORYBOARD_COUNT).catch(err => {
+        console.warn('Workspace storyboard page load failed:', err);
+      });
     }
     setHighlightedScriptSegments(new Set());
     setHighlightedStoryboardItemIds(new Set());
@@ -3428,8 +3442,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           const localShotNo = (localShotCountBySegment.get(segmentNo) || 0) + 1;
           const shotNumber = formatHierarchicalShotNumber(segmentNo, localShotNo);
           const durationSec = extractedDurations[extractionIndex]
-            || normalizePositiveIntegerDuration(ex.durationSec)
-            || normalizePositiveIntegerDuration(block.durationSec)
+            || normalizePositiveIntegerSeconds(ex.durationSec)
+            || normalizePositiveIntegerSeconds(block.durationSec)
             || 1;
           localShotCountBySegment.set(segmentNo, localShotNo);
           items.push({

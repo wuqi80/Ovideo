@@ -38,6 +38,20 @@ describe('storyboard segment metadata adapters', () => {
       sourceVideoShotNo: '镜头01',
     }));
   });
+
+  it('rounds legacy millisecond durations to whole seconds for every downstream page', () => {
+    const record = normalizeStoryboardRecord({
+      item_id: 'shot_fractional',
+      episode_id: 'episode_1',
+      sort_order: 1,
+      planned_duration_ms: 4500,
+    });
+
+    expect(dbItemToStoryboardItem(record)).toEqual(expect.objectContaining({
+      plannedDurationMs: 5000,
+      duration: '5秒',
+    }));
+  });
 });
 
 describe('assetsToMaterialLibrary', () => {

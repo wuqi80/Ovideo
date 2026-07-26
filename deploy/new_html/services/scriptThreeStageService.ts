@@ -18,6 +18,7 @@ import {
   MIN_STABILITY_CONSTRAINT_CHARACTERS,
   MIN_VISUAL_STYLE_CHARACTERS,
 } from '../utils/scriptPromptStandards';
+import { normalizePositiveIntegerSeconds } from '../utils/storyboardSegments';
 import type { TextTaskContext } from './textTaskContext';
 
 const loadAiModelService = () => import('./aiModelService');
@@ -465,20 +466,13 @@ export async function iterateEpisodeVideoScript(
   };
 }
 
-function normalizePositiveIntegerDuration(value?: number | null): number | null {
-  if (value === null || value === undefined) return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return Math.max(1, Math.round(parsed));
-}
-
 function allocateExtractedStoryboardDurations(
   extractions: ExtractedStoryboardPrompt[],
   sourceDurationSec: number | null,
 ): number[] {
   if (extractions.length === 0) return [];
-  const target = normalizePositiveIntegerDuration(sourceDurationSec);
-  const durations = extractions.map(extraction => normalizePositiveIntegerDuration(extraction.durationSec));
+  const target = normalizePositiveIntegerSeconds(sourceDurationSec);
+  const durations = extractions.map(extraction => normalizePositiveIntegerSeconds(extraction.durationSec));
   if (!target) return durations.map(duration => duration || 1);
   if (extractions.length === 1) return [target];
 
@@ -524,9 +518,9 @@ function buildStoryboardItem(
   resolvedDurationSec?: number | null,
 ): StoryboardItem {
   const shotNumber = formatHierarchicalShotNumber(groupNo, localShotNo);
-  const durationSec = normalizePositiveIntegerDuration(resolvedDurationSec)
-    || normalizePositiveIntegerDuration(extraction.durationSec)
-    || normalizePositiveIntegerDuration(block.durationSec);
+  const durationSec = normalizePositiveIntegerSeconds(resolvedDurationSec)
+    || normalizePositiveIntegerSeconds(extraction.durationSec)
+    || normalizePositiveIntegerSeconds(block.durationSec);
   const originalText = [
     shotNumber,
     durationSec ? `时间：${durationSec}秒` : '',
@@ -578,7 +572,7 @@ function getStoryboardExtractionValidationError(
   const invalidIndex = extractions.findIndex(extraction => (
     !extraction.sceneDescription
     || !extraction.imagePrompt
-    || (extraction.durationSec !== null && !normalizePositiveIntegerDuration(extraction.durationSec))
+    || (extraction.durationSec !== null && !normalizePositiveIntegerSeconds(extraction.durationSec))
   ));
   if (invalidIndex >= 0) {
     return `${canonicalShotNo}第${invalidIndex + 1}个镜头设计缺少画面描述、分镜生成提示词或有效时长`;
