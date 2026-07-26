@@ -390,8 +390,8 @@ describe('three-stage video script contract', () => {
     expect(onStream).not.toHaveBeenCalled();
   });
 
-  it('runs stage three for a selected version and builds fresh hierarchical cards', async () => {
-    aiMocks.aiExtractStoryboardPromptsFromVideoShots.mockResolvedValue([{
+  it('runs stage three per source storyboard and builds fresh hierarchical cards', async () => {
+    aiMocks.aiExtractStoryboardPromptFromVideoShot.mockResolvedValue([{
       shotNo: '镜头1-1',
       shotSize: '近景',
       sceneDescription: '主角推门进入办公室。',
@@ -410,119 +410,65 @@ describe('three-stage video script contract', () => {
       '镜头1-1',
       '时长（秒）：15',
       '画面描述：主角推门进入办公室。',
-      '【视觉风格】都市写实。',
-      '【正向稳定约束】人物与场景稳定。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
     ].join('\n'));
 
-    expect(aiMocks.aiExtractStoryboardPromptsFromVideoShots).toHaveBeenCalledWith(
+    expect(aiMocks.aiExtractStoryboardPromptsFromVideoShots).not.toHaveBeenCalled();
+    expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).toHaveBeenCalledWith(
       AiModel.DeepseekChat,
       expect.stringContaining('镜头1-1'),
-      ['镜头1-1'],
-      undefined,
+      '镜头1-1',
+      expect.objectContaining({ suppressNotification: true }),
     );
-    expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).not.toHaveBeenCalled();
     expect(result.items).toHaveLength(1);
     expect(result.items[0].shotNumber).toBe('镜头1-1');
+    expect(result.items[0].sourceVideoShotNo).toBe('镜头1-1');
     expect(result.items[0].imagePrompt).toContain('主角推门');
   });
 
-  it('generates independent segment groups concurrently but renders cards in source order', async () => {
-    let active = 0;
-    let maxActive = 0;
-    aiMocks.aiExtractStoryboardPromptsFromVideoShots.mockImplementation(async (
-      _model: AiModel,
-      _videoShotBlocks: string,
-      expectedShotNumbers: string[],
-    ) => {
-      active += 1;
-      maxActive = Math.max(maxActive, active);
-      await new Promise(resolve => setTimeout(
-        resolve,
-        expectedShotNumbers[0] === '镜头1-1' ? 20 : 1,
-      ));
-      active -= 1;
-      return expectedShotNumbers.map((shotNo, index) => ({
-        shotNo,
-        shotSize: '近景',
-        sceneDescription: `${shotNo}的画面`,
-        characters: [],
-        scene: '',
-        props: [],
-        imagePrompt: `${shotNo}，近景，平视，人物动作，室内环境，稳定光影。`,
-        cameraAngle: '平视',
-        cameraMove: '固定',
-        dialogue: '',
-        durationSec: index === 0 ? 8 : 7,
-      }));
-    });
-    const secondGroup = validGroup
-      .replace('分段1', '分段2')
-      .replaceAll('镜头1-', '镜头2-')
-      .replaceAll('主角', '配角')
-      .replaceAll('办公室', '走廊');
-
-    const result = await generateStoryboardDesignForVersion(
-      AiModel.DeepseekChat,
-      `${validGroup}\n\n${secondGroup}`,
-    );
-
-    expect(maxActive).toBe(2);
-    expect(aiMocks.aiExtractStoryboardPromptsFromVideoShots).toHaveBeenCalledTimes(2);
-    expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).not.toHaveBeenCalled();
-    expect(result.items.map(item => item.shotNumber)).toEqual([
-      '镜头1-1',
-      '镜头1-2',
-      '镜头2-1',
-      '镜头2-2',
-    ]);
-  });
-
-  it('repairs only missing batch entries and restores them to the fixed source position', async () => {
-    aiMocks.aiExtractStoryboardPromptsFromVideoShots.mockResolvedValue([{
+  it('allows one source storyboard to split into multiple design shots while preserving total duration', async () => {
+    aiMocks.aiExtractStoryboardPromptFromVideoShot.mockResolvedValue([{
       shotNo: '镜头1-1',
       shotSize: '近景',
-      sceneDescription: '主角推门进入办公室。',
+      sceneDescription: '主角推开办公室门。',
       characters: ['主角'],
-      scene: '办公室',
+      scene: '办公室门口',
       props: ['门'],
-      imagePrompt: '近景，平视，主角推门，办公室日光。',
+      imagePrompt: '近景，平视，主角推门，门口日光。',
       cameraAngle: '平视',
       cameraMove: '固定',
       dialogue: '',
-      durationSec: 8,
-    }]);
-    aiMocks.aiExtractStoryboardPromptFromVideoShot.mockResolvedValue([{
+      durationSec: 5,
+    }, {
       shotNo: '镜头1-2',
       shotSize: '中景',
-      sceneDescription: '主角停在办公桌前。',
+      sceneDescription: '主角走进办公室看向桌边。',
       characters: ['主角'],
       scene: '办公室',
       props: ['办公桌'],
-      imagePrompt: '中景，平视，主角停步，办公室柔和日光。',
+      imagePrompt: '中景，平视，主角进屋，办公室柔和日光。',
       cameraAngle: '平视',
       cameraMove: '固定',
       dialogue: '',
-      durationSec: 7,
+      durationSec: null,
     }]);
 
-    const result = await generateStoryboardDesignForVersion(
-      AiModel.DeepseekChat,
-      validGroup,
-    );
+    const result = await generateStoryboardDesignForVersion(AiModel.DeepseekChat, [
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：15',
+      '画面描述：主角推门进入办公室。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+    ].join('\n'));
 
-    expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).toHaveBeenCalledTimes(1);
-    expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).toHaveBeenCalledWith(
-      AiModel.DeepseekChat,
-      expect.stringContaining('主角停在办公桌前'),
-      '镜头1-2',
-      expect.objectContaining({ suppressNotification: true }),
-    );
     expect(result.items.map(item => item.shotNumber)).toEqual(['镜头1-1', '镜头1-2']);
-    expect(result.items[1].imagePrompt).toContain('主角停步');
+    expect(result.items.map(item => item.sourceVideoShotNo)).toEqual(['镜头1-1', '镜头1-1']);
+    expect(result.items.map(item => item.plannedDurationMs)).toEqual([5000, 10000]);
   });
 
-  it('repairs multiple missing entries concurrently without changing display order', async () => {
-    aiMocks.aiExtractStoryboardPromptsFromVideoShots.mockResolvedValue([]);
+  it('generates source shots concurrently but renders design cards in source order', async () => {
     let active = 0;
     let maxActive = 0;
     aiMocks.aiExtractStoryboardPromptFromVideoShot.mockImplementation(async (
@@ -540,11 +486,11 @@ describe('three-stage video script contract', () => {
       return [{
         shotNo: canonicalShotNo,
         shotSize: '近景',
-        sceneDescription: `${canonicalShotNo}修复后的画面`,
+        sceneDescription: `${canonicalShotNo}的画面`,
         characters: [],
         scene: '',
         props: [],
-        imagePrompt: `${canonicalShotNo}，近景，平视，人物动作，环境与光影稳定。`,
+        imagePrompt: `${canonicalShotNo}，近景，平视，人物动作，室内环境，稳定光影。`,
         cameraAngle: '平视',
         cameraMove: '固定',
         dialogue: '',
@@ -627,7 +573,7 @@ describe('three-stage video script contract', () => {
       expect.stringContaining('主角推门进入办公室'),
       '镜头1-1',
       expect.stringContaining('不完整草稿'),
-      '镜头1-1缺少画面描述或分镜生成提示词',
+      '镜头1-1第1个镜头设计缺少画面描述、分镜生成提示词或有效时长',
       expect.objectContaining({ suppressNotification: true }),
     );
     expect(result.items[0].imagePrompt).toContain('主角推门');

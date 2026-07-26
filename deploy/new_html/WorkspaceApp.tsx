@@ -7,7 +7,7 @@ import { FileText, ShieldCheck } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Header } from './components/Header';
 import { SkeletonScreen } from './components/SkeletonScreen';
-import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, VideoScriptBlock, ScriptConversation, ScriptStoryboardVersion } from './types';
+import { ProjectFile, FileStatus, StoryboardItem, FileVersion, AppView, MaterialLibrary, Material, AiModel, TaskNotification, ScriptSegment, ScriptGenerationStageState, VideoScriptBlock, ScriptConversation, ScriptStoryboardVersion, ExtractedStoryboardPrompt } from './types';
 import {
   combineVideoScriptOutputs,
   ensureVideoScriptPromptLengths,
@@ -92,6 +92,9 @@ function summarizePipelineError(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error || '未知错误');
   const normalized = raw.replace(/\s+/g, ' ').trim();
   if (!normalized) return '未知错误';
+  if (/存在缺失或非正整数镜头时长|累计\d+(?:\.\d+)?秒，超过15秒上限/.test(normalized)) {
+    return '当前分镜脚本时长未通过校验，请重新生成视频脚本后再生成镜头设计';
+  }
   return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
 }
 
@@ -107,6 +110,53 @@ function buildScriptSegmentPayload(segments: ScriptSegment[]) {
   }));
 }
 const LegacyHistoryPage = React.lazy(() => import('./components/HistoryPage').then(m => ({ default: m.HistoryPage })));
+
+function normalizePositiveIntegerDuration(value?: number | null): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.max(1, Math.round(parsed));
+}
+
+function allocateExtractedStoryboardDurations(
+  extractions: ExtractedStoryboardPrompt[],
+  sourceDurationSec: number | null,
+): number[] {
+  if (extractions.length === 0) return [];
+  const target = normalizePositiveIntegerDuration(sourceDurationSec);
+  const durations = extractions.map(extraction => normalizePositiveIntegerDuration(extraction.durationSec));
+  if (!target) return durations.map(duration => duration || 1);
+  if (extractions.length === 1) return [target];
+
+  const allocated = durations.map(duration => duration || 0);
+  const missingIndexes = allocated
+    .map((duration, index) => (duration > 0 ? -1 : index))
+    .filter(index => index >= 0);
+  if (missingIndexes.length > 0) {
+    const knownTotal = allocated.reduce((total, duration) => total + Math.max(0, duration), 0);
+    let remaining = Math.max(target - knownTotal, missingIndexes.length);
+    missingIndexes.forEach((index, order) => {
+      const slotsLeft = missingIndexes.length - order;
+      const nextDuration = Math.max(1, Math.floor(remaining / slotsLeft));
+      allocated[index] = nextDuration;
+      remaining -= nextDuration;
+    });
+  }
+
+  let delta = target - allocated.reduce((sum, duration) => sum + duration, 0);
+  if (delta > 0) {
+    allocated[allocated.length - 1] += delta;
+  } else if (delta < 0) {
+    for (let index = allocated.length - 1; index >= 0 && delta < 0; index -= 1) {
+      const reducible = Math.max(0, allocated[index] - 1);
+      const reduction = Math.min(reducible, -delta);
+      allocated[index] -= reduction;
+      delta += reduction;
+    }
+  }
+
+  return allocated.map(duration => Math.max(1, Math.round(duration)));
+}
 
 function buildBoundAssetTags(item: Partial<StoryboardItem>): string[] {
   return [
@@ -212,6 +262,14 @@ function normalizeVersionStoryboardItems(rows: any[]): StoryboardItem[] {
   return normalizeStoryboardItemsForWorkflow(normalized);
 }
 
+function buildLocalScriptVersionStoryboardItems(file: ProjectFile): StoryboardItem[] {
+  if (file.scriptContent?.trim()) {
+    const parsedItems = parseStoryboardVersionContent(file.scriptContent);
+    if (parsedItems.length > 0) return parsedItems;
+  }
+  return file.storyboard?.items || [];
+}
+
 function buildLocalScriptConversation(file: ProjectFile): ScriptConversation {
   const now = Date.now();
   const fallbackVersion: ScriptStoryboardVersion | undefined = file.scriptContent ? {
@@ -219,7 +277,7 @@ function buildLocalScriptConversation(file: ProjectFile): ScriptConversation {
     scriptId: file.id,
     versionNo: 1,
     content: file.scriptContent,
-    storyboardItems: file.storyboard?.items || [],
+    storyboardItems: buildLocalScriptVersionStoryboardItems(file),
     source: 'legacy',
     status: 'ready',
     modelAlias: '历史版本',
@@ -562,6 +620,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const [visibleColumns, setVisibleColumns] = useState<boolean[]>([true, true, true, true]);  // ✅ 强制所有列始终显示
   const [aiModel, setAiModel] = useState<AiModel>(AiModel.MinimaxM3);
   const [scriptConversations, setScriptConversations] = useState<Record<string, ScriptConversation>>({});
+  const [quickSelectedVersionIds, setQuickSelectedVersionIds] = useState<Record<string, string>>({});
   const [conversationLoadingId, setConversationLoadingId] = useState<string | null>(null);
   const [conversationSendingId, setConversationSendingId] = useState<string | null>(null);
   const [conversationError, setConversationError] = useState<string | null>(null);
@@ -589,8 +648,14 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const selectedConversationVersion = selectedConversation?.versions.find(
     version => version.id === selectedConversation.currentVersionId,
   ) || selectedConversation?.versions[selectedConversation.versions.length - 1];
-  const quickPipelineVersion = selectedConversationVersion
-    || (selectedFile?.scriptContent ? buildLocalScriptConversation(selectedFile).versions[0] : undefined);
+  const fallbackQuickVersion = selectedFile?.scriptContent ? buildLocalScriptConversation(selectedFile).versions[0] : undefined;
+  const quickAvailableVersions = selectedConversation?.versions?.length
+    ? selectedConversation.versions
+    : (fallbackQuickVersion ? [fallbackQuickVersion] : []);
+  const quickSelectedVersionId = selectedFileId ? quickSelectedVersionIds[selectedFileId] : undefined;
+  const quickPipelineVersion = quickAvailableVersions.find(version => version.id === quickSelectedVersionId)
+    || selectedConversationVersion
+    || fallbackQuickVersion;
   const selectedHistoryScopeKey = selectedFileId
     ? buildVersionHistoryScopeKey(selectedFileId, selectedConversationVersion?.id)
     : null;
@@ -599,6 +664,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     || selectedFile?.storyboard?.items
     || []
   ).filter(item => !item.isPlaceholder).length;
+  const handleQuickSelectVersion = useCallback((versionId: string) => {
+    if (!selectedFileId) return;
+    setQuickSelectedVersionIds(prev => ({ ...prev, [selectedFileId]: versionId }));
+  }, [selectedFileId]);
 
   const syncScriptConversationFromFile = useCallback((fileId: string) => {
     const file = filesRef.current.find(item => item.id === fileId);
@@ -2109,6 +2178,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           },
         }) : prev);
       }
+      window.alert(`生成镜头设计完成，已拆为 ${persistedItems.length} 个镜头`);
     } catch (error) {
       const message = summarizePipelineError(error);
       console.error('生成镜头设计失败:', error);
@@ -3353,9 +3423,14 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         if (exList.length === 0) {
           throw new Error('AI 返回内容未解析出分镜提示词');
         }
-        for (const ex of exList) {
+        const extractedDurations = allocateExtractedStoryboardDurations(exList, block.durationSec);
+        for (const [extractionIndex, ex] of exList.entries()) {
           const localShotNo = (localShotCountBySegment.get(segmentNo) || 0) + 1;
           const shotNumber = formatHierarchicalShotNumber(segmentNo, localShotNo);
+          const durationSec = extractedDurations[extractionIndex]
+            || normalizePositiveIntegerDuration(ex.durationSec)
+            || normalizePositiveIntegerDuration(block.durationSec)
+            || 1;
           localShotCountBySegment.set(segmentNo, localShotNo);
           items.push({
             id: uuidv4(),
@@ -3370,10 +3445,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             videoPrompt: block.rawBlock,
             dialogue: ex.dialogue || '',
             cameraMovement: [ex.shotSize, ex.cameraAngle, ex.cameraMove].filter(Boolean).join(' / '),
-            plannedDurationMs: (ex.durationSec ?? block.durationSec) != null
-              ? (ex.durationSec ?? block.durationSec)! * 1000 : null,
+            plannedDurationMs: durationSec * 1000,
+            duration: `${durationSec}秒`,
             scriptSegmentId: segmentId,
-            sourceVideoShotNo: shotNumber,
+            sourceVideoShotNo: block.shotNo || shotNumber,
             videoScriptBlock: block.rawBlock,
             shotSize: ex.shotSize || '',
             cameraAngle: ex.cameraAngle || '',
@@ -3402,6 +3477,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     syncScriptConversationFromFile(file.id);
     setStage(file.id, 'storyboardPrompt', { status: 'done', completed: shots.length });
     await saveEpisodeToBackend();
+    window.alert(`生成镜头设计完成，已拆为 ${normalizedItems.filter(item => !item.isPlaceholder).length} 个镜头`);
     return true;
   }, [selectedFileId, aiModel, propEpisodeId, setStage, syncScriptConversationFromFile, saveEpisodeToBackend, urlProjectId]);
 
@@ -4072,11 +4148,15 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                           <QuickScriptVersionColumn
                             selectedFile={selectedFile}
                             version={quickPipelineVersion}
+                            versions={quickAvailableVersions}
+                            currentVersionId={quickPipelineVersion?.id}
+                            designItems={selectedFile?.storyboard?.items || []}
                             isSending={conversationSendingId === selectedFileId}
                             error={conversationError}
                             highlightedItemIds={highlightedStoryboardItemIds}
                             onDismissError={() => setConversationError(null)}
                             onSelectItemIds={handleStoryboardSelectionChange}
+                            onSelectVersion={handleQuickSelectVersion}
                             onEditVersion={handleConversationEditVersion}
                             onGenerateDesign={(version) => handleConversationGenerateDesign(version, { openDrawer: false })}
                             onExportVersion={handleConversationExportVersion}

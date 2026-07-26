@@ -134,6 +134,11 @@ describe('parseVideoScriptBlocks', () => {
         expect(blocks[2].durationSec).toBe(2);
     });
 
+    it('also accepts legacy 时间：N秒 duration labels', () => {
+        const blocks = parseVideoScriptBlocks('分段1\n镜头1-1\n时间：6秒\n画面描述：主角抬头。');
+        expect(blocks[0].durationSec).toBe(6);
+    });
+
     it('returns [] for empty', () => {
         expect(parseVideoScriptBlocks('')).toEqual([]);
     });

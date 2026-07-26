@@ -50,7 +50,7 @@ describe('StoryboardScriptColumn', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /镜头1-1/ }));
+    fireEvent.click(screen.getByRole('button', { name: /分镜1-1/ }));
     expect(onSelectItemIds).toHaveBeenCalledTimes(1);
     expect(Array.from(onSelectItemIds.mock.calls[0][0])).toEqual(['shot-1']);
   });
@@ -78,7 +78,7 @@ describe('StoryboardScriptColumn', () => {
     );
 
     expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
-    expect(screen.getByRole('button', { name: /镜头1-2/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /分镜1-2/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('uses visible item order when legacy shot numbers are duplicated', () => {
@@ -90,8 +90,8 @@ describe('StoryboardScriptColumn', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: /镜头1-1/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /镜头1-2/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /分镜1-1/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /分镜1-2/ })).toBeInTheDocument();
   });
 
   it('renders segment prompts and every shot as separate cards', () => {
@@ -105,10 +105,10 @@ describe('StoryboardScriptColumn', () => {
 
     expect(screen.getByTestId('segment-1-visual-style-card')).toHaveTextContent(VISUAL_STYLE_REFERENCE);
     expect(screen.getByTestId('segment-1-stability-constraint-card')).toHaveTextContent(STABILITY_CONSTRAINT_REFERENCE);
-    expect(screen.getByRole('button', { name: /镜头1-1/ })).not.toHaveTextContent('视频提示词');
-    expect(screen.getByRole('button', { name: /镜头1-1/ })).not.toHaveTextContent('正向稳定约束');
+    expect(screen.getByRole('button', { name: /分镜1-1/ })).not.toHaveTextContent('视频提示词');
+    expect(screen.getByRole('button', { name: /分镜1-1/ })).not.toHaveTextContent('正向稳定约束');
     expect(
-      screen.getByRole('button', { name: /镜头1-2/ }).compareDocumentPosition(
+      screen.getByRole('button', { name: /分镜1-2/ }).compareDocumentPosition(
         screen.getByTestId('segment-1-visual-style-card'),
       ) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -148,9 +148,9 @@ describe('StoryboardScriptColumn', () => {
       />,
     );
 
-    expect(screen.getByText('共 2 个分段 · 3 个镜头')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '分段1 镜头1-2' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '分段2 镜头2-1' })).toBeInTheDocument();
+    expect(screen.getByText('共 2 个分段 · 3 个分镜')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '分段1 分镜1-2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '分段2 分镜2-1' })).toBeInTheDocument();
     expect(screen.getAllByText('01', { selector: '.text-warning' })).toHaveLength(1);
     expect(screen.getAllByText('02', { selector: '.text-warning' })).toHaveLength(1);
   });

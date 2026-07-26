@@ -19,9 +19,9 @@ function segLocalId(): string {
     return `seg_local_${Date.now().toString(36)}_${_segCounter}`;
 }
 
-/** 从一行里解析 时长：N秒 / 时长（秒）：N，取第一个正整数，找不到返回 null */
+/** 从一行里解析 时长：N秒 / 时长（秒）：N / 时间：N秒，取第一个正整数，找不到返回 null */
 function parseDurationSec(line: string): number | null {
-    const m = line.match(/时长[（(]?秒?[)）]?\s*[:：]\s*(\d+)/);
+    const m = line.match(/(?:时长|时间)[（(]?秒?[)）]?\s*[:：]\s*(\d+)/);
     if (m) return parseInt(m[1], 10);
     return null;
 }
@@ -128,7 +128,7 @@ export function normalizeShotHeader(line: string): string | null {
 
 /**
  * Stage 2 输出 → VideoScriptBlock[]
- * 以 "镜头N" 行作为块起点，块内找 时长（秒）：N。
+ * 以 "镜头N" 行作为块起点，块内找 时长（秒）：N；兼容历史镜头设计里的 时间：N秒。
  */
 export function parseVideoScriptBlocks(text: string): VideoScriptBlock[] {
     if (!text || !text.trim()) return [];
@@ -142,7 +142,7 @@ export function parseVideoScriptBlocks(text: string): VideoScriptBlock[] {
         let durationSec: number | null = null;
         for (const l of rawBlock.split('\n')) {
             const d = parseDurationSec(l);
-            if (d !== null && /时长/.test(l)) { durationSec = d; break; }
+            if (d !== null && /(?:时长|时间)/.test(l)) { durationSec = d; break; }
         }
         blocks.push({ shotNo: current.shotNo, durationSec, rawBlock });
         current = null;

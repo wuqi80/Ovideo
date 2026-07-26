@@ -465,15 +465,68 @@ export async function iterateEpisodeVideoScript(
   };
 }
 
+function normalizePositiveIntegerDuration(value?: number | null): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.max(1, Math.round(parsed));
+}
+
+function allocateExtractedStoryboardDurations(
+  extractions: ExtractedStoryboardPrompt[],
+  sourceDurationSec: number | null,
+): number[] {
+  if (extractions.length === 0) return [];
+  const target = normalizePositiveIntegerDuration(sourceDurationSec);
+  const durations = extractions.map(extraction => normalizePositiveIntegerDuration(extraction.durationSec));
+  if (!target) return durations.map(duration => duration || 1);
+  if (extractions.length === 1) return [target];
+
+  const allocated = durations.map(duration => duration || 0);
+  const missingIndexes = allocated
+    .map((duration, index) => (duration > 0 ? -1 : index))
+    .filter(index => index >= 0);
+  if (missingIndexes.length > 0) {
+    const knownTotal = allocated.reduce((total, duration) => total + Math.max(0, duration), 0);
+    let remaining = Math.max(target - knownTotal, missingIndexes.length);
+    missingIndexes.forEach((index, order) => {
+      const slotsLeft = missingIndexes.length - order;
+      const nextDuration = Math.max(1, Math.floor(remaining / slotsLeft));
+      allocated[index] = nextDuration;
+      remaining -= nextDuration;
+    });
+  }
+
+  let total = allocated.reduce((sum, duration) => sum + duration, 0);
+  let delta = target - total;
+  if (delta > 0) {
+    allocated[allocated.length - 1] += delta;
+  } else if (delta < 0) {
+    for (let index = allocated.length - 1; index >= 0 && delta < 0; index -= 1) {
+      const reducible = Math.max(0, allocated[index] - 1);
+      const reduction = Math.min(reducible, -delta);
+      allocated[index] -= reduction;
+      delta += reduction;
+    }
+  }
+
+  total = allocated.reduce((sum, duration) => sum + duration, 0);
+  if (total <= 0) return extractions.map(() => 1);
+  return allocated.map(duration => Math.max(1, Math.round(duration)));
+}
+
 function buildStoryboardItem(
   extraction: ExtractedStoryboardPrompt,
   block: VideoScriptBlock,
   groupNo: number,
   localShotNo: number,
   sharedVideoPrompt: string,
+  resolvedDurationSec?: number | null,
 ): StoryboardItem {
   const shotNumber = formatHierarchicalShotNumber(groupNo, localShotNo);
-  const durationSec = extraction.durationSec ?? block.durationSec;
+  const durationSec = normalizePositiveIntegerDuration(resolvedDurationSec)
+    || normalizePositiveIntegerDuration(extraction.durationSec)
+    || normalizePositiveIntegerDuration(block.durationSec);
   const originalText = [
     shotNumber,
     durationSec ? `时间：${durationSec}秒` : '',
@@ -507,7 +560,7 @@ function buildStoryboardItem(
     plannedDurationMs: durationSec ? durationSec * 1000 : null,
     duration: durationSec ? `${durationSec}秒` : undefined,
     scriptSegmentId: `storyboard-segment-${groupNo}`,
-    sourceVideoShotNo: shotNumber,
+    sourceVideoShotNo: block.shotNo || shotNumber,
     videoScriptBlock: block.rawBlock,
     shotSize: extraction.shotSize,
     cameraAngle: extraction.cameraAngle,
@@ -522,14 +575,13 @@ function getStoryboardExtractionValidationError(
   if (extractions.length === 0) {
     return `${canonicalShotNo}未提取出有效镜头设计`;
   }
-  if (extractions.length !== 1) {
-    return `${canonicalShotNo}应一一对应1个镜头设计，实际提取出${extractions.length}个`;
-  }
-  if (extractions[0].shotNo !== canonicalShotNo) {
-    return `${canonicalShotNo}镜头号不匹配`;
-  }
-  if (!extractions[0].sceneDescription || !extractions[0].imagePrompt) {
-    return `${canonicalShotNo}缺少画面描述或分镜生成提示词`;
+  const invalidIndex = extractions.findIndex(extraction => (
+    !extraction.sceneDescription
+    || !extraction.imagePrompt
+    || (extraction.durationSec !== null && !normalizePositiveIntegerDuration(extraction.durationSec))
+  ));
+  if (invalidIndex >= 0) {
+    return `${canonicalShotNo}第${invalidIndex + 1}个镜头设计缺少画面描述、分镜生成提示词或有效时长`;
   }
   return null;
 }
@@ -594,80 +646,22 @@ export async function generateStoryboardDesignForVersion(
   const inputTexts: string[] = [];
   const outputTexts: string[] = [];
   let completed = 0;
-  let sourceIndex = 0;
-  const groupJobs = groups.map((group) => ({
-    group,
-    shots: group.blocks.map((block, localIndex) => ({
+  const sourceShots = groups.flatMap(group => (
+    group.blocks.map((block, localIndex) => ({
       block,
       group,
       localShotNo: localIndex + 1,
       canonicalShotNo: formatHierarchicalShotNumber(group.groupNo, localIndex + 1),
-      sourceIndex: sourceIndex++,
-    })),
-  }));
-  const sourceShots = groupJobs.flatMap(job => job.shots);
-  const extractionBySourceIndex = new Map<number, ExtractedStoryboardPrompt>();
-  const {
-    aiExtractStoryboardPromptsFromVideoShots,
-    aiExtractStoryboardPromptFromVideoShot,
-  } = await loadAiModelService();
+    }))
+  ));
+  const { aiExtractStoryboardPromptFromVideoShot } = await loadAiModelService();
 
-  // 同一分段按固定镜头号一次生成；不同分段有限并发。结果数组始终按输入组顺序返回。
-  const groupResults = await runWithConcurrencyInOrder(
-    groupJobs,
-    STORYBOARD_GROUP_GENERATION_CONCURRENCY,
-    async (job) => {
-      const expectedShotNumbers = job.shots.map(shot => shot.canonicalShotNo);
-      let extractions: ExtractedStoryboardPrompt[] = [];
-      try {
-        extractions = await aiExtractStoryboardPromptsFromVideoShots(
-          model,
-          job.group.rawGroup,
-          expectedShotNumbers,
-          options.taskContext,
-        );
-      } catch {
-        // 批量请求失败时只将本组标记为待修复，后续按镜头有限并发，不暴露中间错误。
-      }
-      const aligned = alignStoryboardExtractions(expectedShotNumbers, extractions);
-      const validCount = aligned.filter(Boolean).length;
-      completed += validCount;
-      if (validCount > 0) {
-        options.onProgress?.({
-          stage: 'storyboardDesign',
-          completed,
-          total: sourceShotCount,
-        });
-      }
-      return {
-        inputText: job.group.rawGroup,
-        outputText: JSON.stringify(extractions),
-        aligned,
-      };
-    },
-  );
-
-  groupResults.forEach((result, groupIndex) => {
-    inputTexts.push(result.inputText);
-    if (result.outputText !== '[]') outputTexts.push(result.outputText);
-    result.aligned.forEach((extraction, localIndex) => {
-      if (extraction) {
-        extractionBySourceIndex.set(
-          groupJobs[groupIndex].shots[localIndex].sourceIndex,
-          extraction,
-        );
-      }
-    });
-  });
-
-  const repairShots = sourceShots.filter(
-    shot => !extractionBySourceIndex.has(shot.sourceIndex),
-  );
-  const repairResults = await runWithConcurrencyInOrder(
-    repairShots,
+  // 回到 master 逻辑：单个视频分镜独立提取，可拆成多个镜头设计；并发只影响请求速度，最终仍按源顺序组装。
+  const extractionResults = await runWithConcurrencyInOrder(
+    sourceShots,
     STORYBOARD_LOCAL_REPAIR_CONCURRENCY,
     async (shot) => {
-      const repairTaskContext = {
+      const extractionTaskContext = {
         ...options.taskContext,
         suppressNotification: true,
       };
@@ -675,14 +669,14 @@ export async function generateStoryboardDesignForVersion(
         model,
         shot.block.rawBlock,
         shot.canonicalShotNo,
-        repairTaskContext,
+        extractionTaskContext,
       );
       const extractions = await validateOrReplanStoryboardExtractions(
         model,
         shot.block.rawBlock,
         shot.canonicalShotNo,
         initialExtractions,
-        repairTaskContext,
+        extractionTaskContext,
       );
       completed += 1;
       options.onProgress?.({
@@ -692,7 +686,7 @@ export async function generateStoryboardDesignForVersion(
       });
       return {
         shot,
-        extraction: extractions[0],
+        extractions,
         inputTexts: extractions === initialExtractions
           ? [shot.block.rawBlock]
           : [shot.block.rawBlock, shot.block.rawBlock],
@@ -702,16 +696,14 @@ export async function generateStoryboardDesignForVersion(
       };
     },
   );
-  repairResults.forEach((result) => {
-    extractionBySourceIndex.set(result.shot.sourceIndex, result.extraction);
+  extractionResults.forEach((result) => {
     inputTexts.push(...result.inputTexts);
     outputTexts.push(...result.outputTexts);
   });
 
-  // 最终卡片只按源镜头序号组装，与并发请求完成顺序无关。
-  const items = sourceShots.map((shot) => {
-    const extraction = extractionBySourceIndex.get(shot.sourceIndex);
-    if (!extraction) throw new Error(SAFE_EXTRACTION_REPLAN_FAILURE_MESSAGE);
+  const localShotCountByGroup = new Map<number, number>();
+  const items = extractionResults.flatMap((result) => {
+    const { shot, extractions } = result;
     const firstShot = formatHierarchicalShotNumber(shot.group.groupNo, 1);
     const lastShot = formatHierarchicalShotNumber(
       shot.group.groupNo,
@@ -723,13 +715,19 @@ export async function generateStoryboardDesignForVersion(
       shot.group.visualStyle ? `【视觉风格】${shot.group.visualStyle}` : '',
       shot.group.stabilityConstraint ? `【正向稳定约束】${shot.group.stabilityConstraint}` : '',
     ].filter(Boolean).join('，') + '。';
-    return buildStoryboardItem(
-      extraction,
-      shot.block,
-      shot.group.groupNo,
-      shot.localShotNo,
-      finalSharedVideoPrompt,
-    );
+    const durations = allocateExtractedStoryboardDurations(extractions, shot.block.durationSec);
+    return extractions.map((extraction, extractionIndex) => {
+      const localShotNo = (localShotCountByGroup.get(shot.group.groupNo) || 0) + 1;
+      localShotCountByGroup.set(shot.group.groupNo, localShotNo);
+      return buildStoryboardItem(
+        extraction,
+        shot.block,
+        shot.group.groupNo,
+        localShotNo,
+        finalSharedVideoPrompt,
+        durations[extractionIndex],
+      );
+    });
   });
 
   if (items.length === 0) throw new Error(SAFE_EXTRACTION_REPLAN_FAILURE_MESSAGE);

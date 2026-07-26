@@ -26,10 +26,12 @@ describe('latest three-step script prompts', () => {
     expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('14-15秒的段落应占30%以上');
     expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('平均时长应≥10秒');
     expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('情绪闭环');
+    expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('任何段落估算超过15秒都是错误');
   });
 
   it('uses the latest stage-two rules and hierarchical numbering', () => {
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('每组中镜头数严禁大于5个');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('任何分段累计>15秒都必须重新拆分或重新分配镜头');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('1-2 日 内 浅浅家');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('镜头1-1');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('镜头2-1');
@@ -42,8 +44,9 @@ describe('latest three-step script prompts', () => {
 
   it('generates all stage-one segments in one stage-two request', () => {
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('{segmentsText}');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('输入有多少个分段，输出必须有且仅有多少个分段');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('镜头累计时长必须与该输入分段标注的时长完全一致');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('正常情况下输入有多少个分段，输出必须有且仅有多少个分段');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('允许把该输入分段拆成多个连续输出分段');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('绝对不得超过15秒');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('发现局部不合格时只修正该段');
   });
 
@@ -78,8 +81,9 @@ describe('latest three-step script prompts', () => {
     expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('分镜生成提示词：用于AI生成分镜图片的提示词');
     expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('景别（只需要景别不要运镜）、角度、主体、动作、环境、光影');
     expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('{canonicalShotNo}');
-    expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('{expectedShotNumbers}');
-    expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('逐个一一对应');
-    expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('不得合并、拆分、遗漏、重复或调换顺序');
+    expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('一个输入视频分镜可以输出1个或多个镜头设计');
+    expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('必须拆成多个连续镜头设计');
+    expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).not.toContain('{expectedShotNumbers}');
+    expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).not.toContain('逐个一一对应');
   });
 });

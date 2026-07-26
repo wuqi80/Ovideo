@@ -1,16 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, Edit2, FileText, LoaderCircle, Save, Sparkles, X } from 'lucide-react';
-import type { ProjectFile, ScriptStoryboardVersion } from '../types';
+import type { ProjectFile, ScriptStoryboardVersion, StoryboardItem } from '../types';
 import { StoryboardScriptColumn } from './StoryboardScriptColumn';
 
 interface QuickScriptVersionColumnProps {
   selectedFile: ProjectFile | undefined;
   version: ScriptStoryboardVersion | undefined;
+  versions?: ScriptStoryboardVersion[];
+  currentVersionId?: string;
+  designItems?: StoryboardItem[];
   isSending: boolean;
   error: string | null;
   highlightedItemIds: Set<string>;
   onDismissError: () => void;
   onSelectItemIds: (selectedIds: Set<string>) => void;
+  onSelectVersion?: (versionId: string) => void;
   onEditVersion: (version: ScriptStoryboardVersion, content: string) => Promise<void>;
   onGenerateDesign: (version: ScriptStoryboardVersion) => Promise<void>;
   onExportVersion: (version: ScriptStoryboardVersion) => void;
@@ -19,11 +23,15 @@ interface QuickScriptVersionColumnProps {
 export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> = ({
   selectedFile,
   version,
+  versions = [],
+  currentVersionId,
+  designItems = [],
   isSending,
   error,
   highlightedItemIds,
   onDismissError,
   onSelectItemIds,
+  onSelectVersion,
   onEditVersion,
   onGenerateDesign,
   onExportVersion,
@@ -47,6 +55,52 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
       storyboard: { items: version.storyboardItems },
     };
   }, [selectedFile, version]);
+  const availableVersions = useMemo(() => {
+    const byId = new Map<string, ScriptStoryboardVersion>();
+    versions.forEach(item => byId.set(item.id, item));
+    if (version) byId.set(version.id, version);
+    return Array.from(byId.values()).sort((a, b) => a.versionNo - b.versionNo);
+  }, [version, versions]);
+
+  const scriptItems = version?.storyboardItems || [];
+  const normalizedText = (value?: string | null) => String(value || '').replace(/\s+/g, '').trim();
+  const getSourceKey = (item: StoryboardItem): string => (
+    String(item.sourceVideoShotNo || item.shotNumber || '').trim()
+  );
+  const findScriptItemsForDesign = useCallback((designItem: StoryboardItem) => {
+    const sourceKey = getSourceKey(designItem);
+    const sourceBlock = normalizedText(designItem.videoScriptBlock);
+    return scriptItems.filter(scriptItem => (
+      (sourceKey && getSourceKey(scriptItem) === sourceKey)
+      || (sourceBlock && normalizedText(scriptItem.videoScriptBlock || scriptItem.originalText) === sourceBlock)
+    ));
+  }, [scriptItems]);
+  const findDesignItemsForScript = useCallback((scriptItem: StoryboardItem) => {
+    const sourceKey = getSourceKey(scriptItem);
+    const sourceBlock = normalizedText(scriptItem.videoScriptBlock || scriptItem.originalText);
+    return designItems.filter(designItem => (
+      (sourceKey && getSourceKey(designItem) === sourceKey)
+      || (sourceBlock && normalizedText(designItem.videoScriptBlock) === sourceBlock)
+    ));
+  }, [designItems]);
+  const highlightedScriptItemIds = useMemo(() => {
+    const mapped = new Set<string>();
+    designItems
+      .filter(item => highlightedItemIds.has(item.id))
+      .forEach(designItem => {
+        findScriptItemsForDesign(designItem).forEach(scriptItem => mapped.add(scriptItem.id));
+      });
+    return mapped.size > 0 ? mapped : highlightedItemIds;
+  }, [designItems, findScriptItemsForDesign, highlightedItemIds]);
+  const handleSelectScriptItems = useCallback((selectedIds: Set<string>) => {
+    const mapped = new Set<string>();
+    scriptItems
+      .filter(item => selectedIds.has(item.id))
+      .forEach(scriptItem => {
+        findDesignItemsForScript(scriptItem).forEach(designItem => mapped.add(designItem.id));
+      });
+    onSelectItemIds(mapped.size > 0 ? mapped : selectedIds);
+  }, [findDesignItemsForScript, onSelectItemIds, scriptItems]);
 
   const save = async () => {
     if (!version || !draft.trim() || isSaving) return;
@@ -70,7 +124,24 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
       <header className="flex h-[52px] flex-shrink-0 items-center gap-2 border-b border-n40 px-4">
         <FileText className="h-4 w-4 flex-shrink-0 text-primary" />
         <h2 className="whitespace-nowrap text-sm font-semibold text-n700">3. 分镜脚本</h2>
-        {version && (
+        {version && availableVersions.length > 1 && onSelectVersion ? (
+          <label className="relative">
+            <span className="sr-only">选择分镜脚本版本</span>
+            <select
+              value={currentVersionId || version.id}
+              onChange={event => onSelectVersion(event.target.value)}
+              disabled={isSending || isSaving}
+              className="h-7 rounded border border-primary/30 bg-primary-light px-2 text-[10px] font-semibold text-primary outline-none hover:border-primary disabled:opacity-40"
+              aria-label="选择分镜脚本版本"
+            >
+              {availableVersions.map(item => (
+                <option key={item.id} value={item.id}>
+                  V{item.versionNo}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : version && (
           <span className="rounded bg-primary-light px-2 py-1 text-[10px] font-semibold text-primary">
             V{version.versionNo}
           </span>
@@ -168,14 +239,14 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
         ) : versionFile ? (
           <StoryboardScriptColumn
             selectedFile={versionFile}
-            highlightedItemIds={highlightedItemIds}
-            onSelectItemIds={onSelectItemIds}
+            highlightedItemIds={highlightedScriptItemIds}
+            onSelectItemIds={handleSelectScriptItems}
             showHeader={false}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-n100">
             <FileText className="h-10 w-10 opacity-25" />
-            <p className="text-xs">在文字脚本列生成后，这里会显示分段和独立镜头卡片</p>
+            <p className="text-xs">在文字脚本列生成后，这里会显示分段和独立分镜卡片</p>
           </div>
         )}
       </div>

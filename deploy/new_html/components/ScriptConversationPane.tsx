@@ -144,7 +144,7 @@ export const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion 
             <header className="flex items-center gap-2 border-b border-n40 bg-n20 px-3 py-2">
               <span className="text-xs font-semibold text-n500">分段</span>
               <span className="font-mono text-sm font-bold text-warning">{String(group.segmentNo).padStart(2, '0')}</span>
-              <span className="text-[10px] text-n100">{group.entries.length} 个镜头 · 约 {Number(group.estimatedDurationSec.toFixed(1))} 秒</span>
+              <span className="text-[10px] text-n100">{group.entries.length} 个分镜 · 约 {Number(group.estimatedDurationSec.toFixed(1))} 秒</span>
             </header>
             <div className="space-y-3 p-3">
               {group.entries.map(entry => (
@@ -153,7 +153,7 @@ export const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion 
                   className="rounded-md border border-n40 bg-n20/60 px-3 py-3"
                   data-testid={`segment-${group.segmentNo}-shot-${entry.localShotNo}-card`}
                 >
-                  <div className="mb-1 text-xs font-semibold text-primary">{entry.localShotLabel}</div>
+                  <div className="mb-1 text-xs font-semibold text-primary">{entry.localShotLabel.replace(/^镜头/, '分镜')}</div>
                   <div className="whitespace-pre-wrap break-words font-mono text-sm leading-7 text-n700">
                     {cleanStoryboardShotCardText(
                       entry.item.originalText || entry.item.videoScriptBlock || entry.item.scriptSegment,
@@ -546,7 +546,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               )}
               {version && (
                 <span className="rounded border border-primary/30 bg-primary-light px-1.5 py-0.5 text-[10px] text-primary">
-                  V{version.versionNo} · {versionSegmentCount} 个分段 · {version.storyboardItems.length} 个镜头
+                  V{version.versionNo} · {versionSegmentCount} 个分段 · {version.storyboardItems.length} 个分镜
                 </span>
               )}
               {version && isWorkflowScript && conversation?.currentVersionId === version.id && (

@@ -47,7 +47,7 @@ describe('QuickScriptSourceColumn', () => {
     expect(screen.getByRole('button', { name: '按三步生成' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '拆分剧本' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成视频脚本' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '提取分镜提示词' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '生成镜头设计' })).toBeInTheDocument();
     expect(screen.queryByLabelText('分镜脚本修改要求')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '生成新版' })).not.toBeInTheDocument();
   });
@@ -119,7 +119,7 @@ describe('QuickScriptSourceColumn', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '拆分剧本' }));
     fireEvent.click(screen.getByRole('button', { name: '生成视频脚本' }));
-    fireEvent.click(screen.getByRole('button', { name: '提取分镜提示词' }));
+    fireEvent.click(screen.getByRole('button', { name: '生成镜头设计' }));
 
     await waitFor(() => {
       expect(onSplitScript).toHaveBeenCalledWith('script-1');
@@ -129,6 +129,6 @@ describe('QuickScriptSourceColumn', () => {
     expect(screen.getAllByText('完成')).toHaveLength(3);
     expect(screen.getByText('分段数：1')).toBeInTheDocument();
     expect(screen.getByText('已生成：1/1')).toBeInTheDocument();
-    expect(screen.getByText('分镜提示词：1')).toBeInTheDocument();
+    expect(screen.getByText('镜头设计：1')).toBeInTheDocument();
   });
 });

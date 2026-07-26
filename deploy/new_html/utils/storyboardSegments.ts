@@ -469,7 +469,7 @@ export function normalizeStoryboardItemsForWorkflow(
             segment.localShotNo,
           )
         : item.originalText,
-      sourceVideoShotNo: shotNumber || item.sourceVideoShotNo || '',
+      sourceVideoShotNo: item.sourceVideoShotNo || shotNumber || '',
     };
   });
 }

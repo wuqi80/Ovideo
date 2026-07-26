@@ -307,7 +307,7 @@ export const aiReplanInvalidVideoScript = async (
   );
 };
 
-/** Stage 3：按固定镜头号顺序批量提取同一分段的镜头设计。 */
+/** Stage 3：批量提取同一分段的镜头设计。 */
 export const aiExtractStoryboardPromptsFromVideoShots = async (
   model: AiModel,
   videoShotBlocks: string,
@@ -322,7 +322,6 @@ export const aiExtractStoryboardPromptsFromVideoShots = async (
     {
       videoShotBlock: videoShotBlocks,
       canonicalShotNo: orderedShotNumbers[0],
-      expectedShotNumbers: orderedShotNumbers.join('、'),
     },
     undefined,
     {
@@ -335,7 +334,7 @@ export const aiExtractStoryboardPromptsFromVideoShots = async (
   return parseStoryboardPromptExtractions(raw);
 };
 
-/** Stage 3 局部兜底：只重新提取一个缺失或不合格的镜头。 */
+/** Stage 3：单个视频分镜可拆成一个或多个更细的镜头设计。 */
 export const aiExtractStoryboardPromptFromVideoShot = async (
   model: AiModel,
   videoShotBlock: string,
@@ -348,7 +347,6 @@ export const aiExtractStoryboardPromptFromVideoShot = async (
     {
       videoShotBlock,
       canonicalShotNo,
-      expectedShotNumbers: canonicalShotNo,
     },
     undefined,
     {

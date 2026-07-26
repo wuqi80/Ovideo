@@ -60,6 +60,8 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('onEditVersion={handleConversationEditVersion}');
     expect(source).toContain('handleConversationGenerateDesign(version, { openDrawer: false })');
     expect(source).toContain('version={quickPipelineVersion}');
+    expect(source).toContain('versions={quickAvailableVersions}');
+    expect(source).toContain('onSelectVersion={handleQuickSelectVersion}');
     expect(source).toContain('selectedFile={selectedFile}');
     expect(source).not.toContain('onSend={handleRewrite}');
     expect(source).not.toContain('onSend={handleIterateScript}');
@@ -72,7 +74,8 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('currentVersionId: localVersion.id');
     expect(source).toContain('const rawSelectedConversation = selectedFileId ? scriptConversations[selectedFileId] : undefined');
     expect(source).toContain('() => mergeScriptConversationWithLocalFile(selectedFile, rawSelectedConversation)');
-    expect(source).toContain('const quickPipelineVersion = selectedConversationVersion');
+    expect(source).toContain('const quickPipelineVersion = quickAvailableVersions.find');
+    expect(source).toContain('buildLocalScriptVersionStoryboardItems(file)');
     expect(source).toContain('const syncScriptConversationFromFile = useCallback');
     expect(source).toContain('syncScriptConversationFromFile(file.id)');
     expect(source).toContain('mergeScriptConversationWithLocalFile(file, scriptConversations[fileId])');

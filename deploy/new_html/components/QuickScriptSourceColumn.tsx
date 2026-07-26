@@ -169,8 +169,8 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
             },
             {
               key: 'storyboardPrompt',
-              label: '提取分镜提示词',
-              metric: `分镜提示词：${promptCount}`,
+              label: '生成镜头设计',
+              metric: `镜头设计：${promptCount}`,
               action: onExtractStoryboardPrompts,
               disabled: generatedSegmentCount === 0,
             },

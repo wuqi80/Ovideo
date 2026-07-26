@@ -516,7 +516,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                                    )}
                                  </div>
                                  <div className="mt-1 text-[10px] text-n100">
-                                   {version.storyboardItems.length} 个脚本镜头 · {designHistoryCount} 个镜头设计版本
+                                   {version.storyboardItems.length} 个脚本分镜 · {designHistoryCount} 个镜头设计版本
                                    {version.modelAlias ? ` · ${version.modelAlias}` : ''}
                                    {version.modelName ? ` · ${version.modelName}` : ''}
                                  </div>

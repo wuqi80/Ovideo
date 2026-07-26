@@ -67,8 +67,8 @@ describe('ScriptConversationPane legacy history', () => {
     expect(body).toHaveTextContent('画面描述：小悟站在办公室中央，右手紧握智能跳绳。');
     expect(body).toHaveTextContent('镜头运动：缓慢推进。');
     expect(body).toHaveTextContent('分段');
-    expect(body).toHaveTextContent('镜头1-1');
-    expect(body).toHaveTextContent('镜头1-2');
+    expect(body).toHaveTextContent('分镜1-1');
+    expect(body).toHaveTextContent('分镜1-2');
     expect(body.textContent).not.toMatch(/###|\*\*/);
     expect(screen.getByTestId('segment-1-visual-style-card')).toHaveTextContent(VISUAL_STYLE_REFERENCE);
     expect(screen.getByTestId('segment-1-stability-constraint-card')).toHaveTextContent(STABILITY_CONSTRAINT_REFERENCE);
@@ -80,8 +80,8 @@ describe('ScriptConversationPane legacy history', () => {
     ).toBeGreaterThan(
       Array.from(segment.children).indexOf(screen.getByTestId('segment-1-shot-2-card')),
     );
-    expect(screen.getByTestId('segment-1-shot-1-card').textContent?.match(/镜头1-1/g)).toHaveLength(1);
-    expect(screen.getByTestId('segment-1-shot-2-card').textContent?.match(/镜头1-2/g)).toHaveLength(1);
+    expect(screen.getByTestId('segment-1-shot-1-card').textContent?.match(/分镜1-1/g)).toHaveLength(1);
+    expect(screen.getByTestId('segment-1-shot-2-card').textContent?.match(/分镜1-2/g)).toHaveLength(1);
   });
 
   it('keeps Yuan-style legacy history visible after collapsing and expanding the reply', () => {

@@ -69,7 +69,7 @@ describe('QuickScriptVersionColumn', () => {
     );
 
     expect(screen.getByText('deepseek-v4-flash')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /镜头1-1/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /分镜1-1/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '生成镜头设计' }));
     expect(onGenerateDesign).toHaveBeenCalledWith(version);
@@ -86,5 +86,73 @@ describe('QuickScriptVersionColumn', () => {
       version,
       '镜头1-1\n主角缓慢推门进入。',
     ));
+  });
+
+  it('switches visible script versions without regenerating design', () => {
+    const onSelectVersion = vi.fn();
+    const version2 = {
+      ...version,
+      id: 'version-2',
+      versionNo: 2,
+      content: '镜头1-1\n主角停在门口。',
+      storyboardItems: [{ ...item, id: 'shot-v2', originalText: '镜头1-1\n主角停在门口。' }],
+    } as ScriptStoryboardVersion;
+
+    render(
+      <QuickScriptVersionColumn
+        selectedFile={file}
+        version={version2}
+        versions={[version, version2]}
+        currentVersionId={version2.id}
+        isSending={false}
+        error={null}
+        highlightedItemIds={new Set()}
+        onDismissError={vi.fn()}
+        onSelectItemIds={vi.fn()}
+        onSelectVersion={onSelectVersion}
+        onEditVersion={vi.fn()}
+        onGenerateDesign={vi.fn()}
+        onExportVersion={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText('选择分镜脚本版本'), {
+      target: { value: 'version-1' },
+    });
+
+    expect(onSelectVersion).toHaveBeenCalledWith('version-1');
+  });
+
+  it('maps one script storyboard card to multiple generated design shots', () => {
+    const onSelectItemIds = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const designItems = [
+      { ...item, id: 'design-1', sourceVideoShotNo: '镜头1-1', shotNumber: '镜头1-1' },
+      { ...item, id: 'design-2', sourceVideoShotNo: '镜头1-1', shotNumber: '镜头1-2' },
+    ];
+
+    render(
+      <QuickScriptVersionColumn
+        selectedFile={file}
+        version={version}
+        designItems={designItems}
+        isSending={false}
+        error={null}
+        highlightedItemIds={new Set(['design-2'])}
+        onDismissError={vi.fn()}
+        onSelectItemIds={onSelectItemIds}
+        onEditVersion={vi.fn()}
+        onGenerateDesign={vi.fn()}
+        onExportVersion={vi.fn()}
+      />,
+    );
+
+    const scriptCard = screen.getByRole('button', { name: /分镜1-1/ });
+    expect(scriptCard).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(scriptCard);
+    expect(Array.from(onSelectItemIds.mock.calls[0][0]).sort()).toEqual(['design-1', 'design-2']);
   });
 });
