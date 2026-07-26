@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -30,6 +30,16 @@ import AccountMenu from '../components/AccountMenu';
 import { crmConfirm, crmMessage } from '../admin/crmUI';
 
 type EpisodeCard = Episode & { coverUrl?: string };
+type EpisodeStatus = Episode['status'];
+type EpisodeTab = 'all' | EpisodeStatus;
+
+const episodeStatusOrder: EpisodeStatus[] = ['draft', 'in_progress', 'completed', 'published'];
+const episodeStatusLabels: Record<EpisodeStatus, string> = {
+  draft: '草稿',
+  in_progress: '制作中',
+  completed: '已完成',
+  published: '已发布',
+};
 
 function normalizeEpisodeSettings(value: any): Record<string, any> {
   if (!value) return {};
@@ -63,6 +73,7 @@ function sortEpisodes(items: EpisodeCard[]): EpisodeCard[] {
 
 function mapEpisode(row: any): EpisodeCard {
   const settings = normalizeEpisodeSettings(row.settings);
+  const status = episodeStatusOrder.includes(row.status) ? row.status : 'draft';
   return {
     episodeId: row.episode_id ?? row.episodeId,
     projectId: row.project_id ?? row.projectId,
@@ -70,7 +81,7 @@ function mapEpisode(row: any): EpisodeCard {
     episodeName: row.episode_name ?? row.episodeName ?? '',
     description: row.description || '',
     coverUrl: row.cover_url ?? row.coverUrl ?? settings.cover_url ?? settings.coverUrl,
-    status: row.status || 'draft',
+    status,
     settings,
     sortOrder: Number(row.sort_order ?? row.sortOrder ?? row.episode_number ?? 0),
     createdAt: row.created_at ?? row.createdAt,
@@ -95,6 +106,7 @@ export const EpisodeHubPage: React.FC = () => {
   const [reordering, setReordering] = useState(false);
   const [coverUploadTargetId, setCoverUploadTargetId] = useState<string | null>(null);
   const [uploadingCoverEpisodeId, setUploadingCoverEpisodeId] = useState<string | null>(null);
+  const [activeStatusTab, setActiveStatusTab] = useState<EpisodeTab>('all');
   const [isWideLayout, setIsWideLayout] = useState(() => localStorage.getItem('episode_hub_layout') === 'wide');
 
   const loadEpisodes = useCallback(async () => {
@@ -324,6 +336,35 @@ export const EpisodeHubPage: React.FC = () => {
     published: 'bg-g50 text-g400',
   };
 
+  const statusCounts = useMemo(() => (
+    episodeStatusOrder.reduce<Record<EpisodeStatus, number>>((acc, status) => {
+      acc[status] = episodes.filter(ep => ep.status === status).length;
+      return acc;
+    }, {
+      draft: 0,
+      in_progress: 0,
+      completed: 0,
+      published: 0,
+    })
+  ), [episodes]);
+
+  const episodeTabs = useMemo(() => [
+    { key: 'all' as const, label: '全部分集', count: episodes.length },
+    ...episodeStatusOrder.map(status => ({
+      key: status,
+      label: episodeStatusLabels[status],
+      count: statusCounts[status],
+    })),
+  ], [episodes.length, statusCounts]);
+
+  const filteredEpisodes = useMemo(() => (
+    activeStatusTab === 'all'
+      ? episodes
+      : episodes.filter(ep => ep.status === activeStatusTab)
+  ), [activeStatusTab, episodes]);
+
+  const pageTitle = activeStatusTab === 'all' ? '全部分集' : episodeStatusLabels[activeStatusTab];
+
   const shellWidthClass = isWideLayout ? 'max-w-none' : 'max-w-[1320px]';
   const episodeGridClass = isWideLayout
     ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5'
@@ -385,9 +426,24 @@ export const EpisodeHubPage: React.FC = () => {
             >
               <ArrowLeft size={18} />
             </button>
-            <div className="relative flex h-full items-center px-2 text-sm font-medium text-primary after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary">
-              全部分集
-              <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full border border-b75 bg-primary-light px-1.5 py-0.5 text-[11px] text-primary">{episodes.length}</span>
+            <div className="flex h-full min-w-0 items-end gap-4 overflow-x-auto">
+              {episodeTabs.map(tab => {
+                const active = activeStatusTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setActiveStatusTab(tab.key)}
+                    className={`relative flex h-full shrink-0 items-center px-2 text-sm font-medium transition-colors after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 ${active ? 'text-primary after:bg-primary' : 'text-n700 after:bg-transparent hover:text-primary'}`}
+                  >
+                    {tab.label}
+                    <span className={`ml-2 inline-flex min-w-5 items-center justify-center rounded-full border px-1.5 py-0.5 text-[11px] ${active ? 'border-b75 bg-primary-light text-primary' : 'border-n40 bg-n20 text-n300'}`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </header>
@@ -395,8 +451,8 @@ export const EpisodeHubPage: React.FC = () => {
         <main className="px-4 py-7 sm:px-6 lg:px-8">
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-n800">全部分集</h2>
-              <p className="mt-1 text-xs text-n100">每个分集拥有独立生产链路；拖动卡片可调整顺序，EP 编号会按当前顺序自动刷新。</p>
+              <h2 className="text-xl font-bold tracking-tight text-n800">{pageTitle}</h2>
+              <p className="mt-1 text-xs text-n100">共 {filteredEpisodes.length} 个分集；每个分集拥有独立生产链路，拖动卡片可调整顺序，EP 编号会按当前顺序自动刷新。</p>
             </div>
             <button
               type="button"
@@ -413,26 +469,29 @@ export const EpisodeHubPage: React.FC = () => {
                 <div key={item} className="aspect-[4/3] animate-pulse rounded-lg border border-n40 bg-n20" />
               ))}
             </div>
-          ) : episodes.length === 0 ? (
+          ) : filteredEpisodes.length === 0 ? (
             <div className="flex min-h-[360px] flex-col items-center justify-center rounded-lg border border-dashed border-n40 bg-n10 px-6 text-center text-n100">
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary-light text-primary">
                 <Film className="h-7 w-7" />
               </div>
-              <p className="mb-1 text-base font-medium text-n700">暂无分集</p>
-              <p className="text-sm">点击「新建分集」开始创作</p>
+              <p className="mb-1 text-base font-medium text-n700">{episodes.length === 0 ? '暂无分集' : `暂无${pageTitle}分集`}</p>
+              <p className="text-sm">{episodes.length === 0 ? '点击「新建分集」开始创作' : '切换其他状态或新建分集继续创作'}</p>
             </div>
           ) : (
             <div className={episodeGridClass}>
-              {episodes.map((ep, idx) => (
-                <article
-                  key={ep.episodeId}
-                  data-testid={`episode-card-${ep.episodeId}`}
-                  className={`group overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-all duration-300 hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas animate-slideUp ${draggingEpisodeId === ep.episodeId ? 'opacity-55 ring-2 ring-primary/25' : ''}`}
-                  style={{ animationDelay: `${idx * 60}ms` }}
-                  onClick={event => event.stopPropagation()}
-                  onDragOver={event => handleDragOver(event, ep.episodeId)}
-                  onDrop={event => handleDrop(event, ep.episodeId)}
-                >
+              {filteredEpisodes.map((ep, idx) => {
+                const displayIndex = episodes.findIndex(item => item.episodeId === ep.episodeId);
+                const displayNumber = displayIndex >= 0 ? displayIndex + 1 : idx + 1;
+                return (
+                  <article
+                    key={ep.episodeId}
+                    data-testid={`episode-card-${ep.episodeId}`}
+                    className={`group overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-all duration-300 hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas animate-slideUp ${draggingEpisodeId === ep.episodeId ? 'opacity-55 ring-2 ring-primary/25' : ''}`}
+                    style={{ animationDelay: `${idx * 60}ms` }}
+                    onClick={event => event.stopPropagation()}
+                    onDragOver={event => handleDragOver(event, ep.episodeId)}
+                    onDrop={event => handleDrop(event, ep.episodeId)}
+                  >
                   <div className="relative aspect-video overflow-visible bg-gradient-to-br from-n30 via-n20 to-primary-light">
                     {ep.coverUrl ? (
                       <img src={coverImageSrc(ep.coverUrl)} alt={`${ep.episodeName || '未命名分集'} 封面`} className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02]" />
@@ -448,7 +507,7 @@ export const EpisodeHubPage: React.FC = () => {
                     )}
                     <div className="absolute left-3 top-3 flex items-center gap-2">
                       <span className="inline-flex overflow-hidden rounded bg-n800/85 text-[11px] font-semibold text-white shadow-card">
-                        <span className="flex h-7 items-center px-2">EP {String(idx + 1).padStart(2, '0')}</span>
+                        <span className="flex h-7 items-center px-2">EP {String(displayNumber).padStart(2, '0')}</span>
                         <button
                           type="button"
                           draggable={!reordering && !editingId}
@@ -464,7 +523,7 @@ export const EpisodeHubPage: React.FC = () => {
                         </button>
                       </span>
                       <span className={`rounded px-2 py-1 text-[11px] font-medium shadow-card ${statusColors[ep.status] || statusColors.draft}`}>
-                        {ep.status === 'draft' ? '草稿' : ep.status === 'in_progress' ? '制作中' : ep.status === 'completed' ? '已完成' : ep.status === 'published' ? '已发布' : ep.status}
+                        {episodeStatusLabels[ep.status] || ep.status}
                       </span>
                     </div>
                     <div className="absolute right-3 top-3 z-20">
@@ -537,8 +596,9 @@ export const EpisodeHubPage: React.FC = () => {
                       </button>
                     </div>
                   </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           )}
         </main>

@@ -72,7 +72,12 @@ def create_episodes_router(
     async def list_episodes(project_id: str, user_id: str = Depends(get_current_user)):
         await require_project(project_id, user_id, 'readonly')
         try:
-            return await list_episodes_service(project_id, episode_dao=EpisodeDAO)
+            # route-contract anchor: list_episodes_service(project_id, episode_dao=EpisodeDAO)
+            return await list_episodes_service(
+                project_id,
+                episode_dao=EpisodeDAO,
+                episode_script_dao=EpisodeScriptDAO,
+            )
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e)) from e
 

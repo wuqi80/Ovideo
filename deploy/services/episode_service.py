@@ -37,13 +37,47 @@ def _parse_json_object(value: Any) -> dict:
     return {}
 
 
+def _has_script_content(script: Any) -> bool:
+    if not script:
+        return False
+    original = str(script.get("original_content") or "").strip()
+    adapted = str(script.get("adapted_script") or "").strip()
+    return bool(original or adapted)
+
+
+async def _apply_effective_episode_status(
+    episodes: list[Dict[str, Any]],
+    *,
+    episode_script_dao: Any = None,
+) -> list[Dict[str, Any]]:
+    if episode_script_dao is None:
+        return episodes
+
+    normalized: list[Dict[str, Any]] = []
+    for episode in episodes:
+        row = dict(episode)
+        stored_status = str(row.get("status") or "draft")
+        row["status"] = stored_status
+        if stored_status == "draft":
+            scripts = await episode_script_dao.list_by_episode(str(row.get("episode_id") or ""))
+            if any(_has_script_content(script) for script in scripts):
+                row["status"] = "in_progress"
+        normalized.append(row)
+    return normalized
+
+
 async def list_episodes(
     project_id: str,
     *,
     episode_dao: Any,
+    episode_script_dao: Any = None,
 ) -> Dict[str, Any]:
     episodes = await episode_dao.get_episodes(project_id)
-    return {"success": True, "episodes": _rows_to_dicts(episodes)}
+    rows = await _apply_effective_episode_status(
+        _rows_to_dicts(episodes),
+        episode_script_dao=episode_script_dao,
+    )
+    return {"success": True, "episodes": rows}
 
 
 async def create_episode(

@@ -131,6 +131,41 @@ describe('EpisodeHubPage', () => {
     expect(within(cards[1] as HTMLElement).getByText('EP 02')).toBeInTheDocument();
   });
 
+  it('filters episodes by stable status tabs without renumbering the global EP labels', async () => {
+    (apiJson as any).mockImplementation(async (url: string) => {
+      if (url === '/api/projects/proj_1/episodes') {
+        return {
+          success: true,
+          episodes: [
+            { ...episodeRows[0], episode_id: 'ep_draft', episode_name: '草稿集', status: 'draft', sort_order: 0 },
+            { ...episodeRows[1], episode_id: 'ep_started', episode_name: '制作中集', status: 'in_progress', sort_order: 1 },
+            { ...episodeRows[1], episode_id: 'ep_done', episode_name: '完成集', status: 'completed', sort_order: 2 },
+            { ...episodeRows[1], episode_id: 'ep_live', episode_name: '发布集', status: 'published', sort_order: 3 },
+          ],
+        };
+      }
+      return { success: true };
+    });
+
+    renderEpisodeHub();
+
+    expect(await screen.findByRole('button', { name: /全部分集\s*4/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /草稿\s*1/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /制作中\s*1/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /已完成\s*1/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /已发布\s*1/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /制作中\s*1/ }));
+
+    expect(screen.getByText('制作中集')).toBeInTheDocument();
+    expect(screen.queryByText('草稿集')).not.toBeInTheDocument();
+    expect(screen.queryByText('完成集')).not.toBeInTheDocument();
+    expect(screen.queryByText('发布集')).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('episode-card-ep_started')).getByText('EP 02')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /全部分集\s*4/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /草稿\s*1/ })).toBeInTheDocument();
+  });
+
   it('uploads an episode cover from the card menu and renders it with crop styling', async () => {
     renderEpisodeHub();
 

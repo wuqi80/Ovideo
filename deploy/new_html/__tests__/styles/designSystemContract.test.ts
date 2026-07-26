@@ -164,6 +164,10 @@ describe('Webflow design-system contract', () => {
     expect(projectHub).toContain('object-cover object-center');
     expect(projectHub).not.toContain('含已归档');
     expect(episodeHub).toContain('全部分集');
+    expect(episodeHub).toContain('草稿');
+    expect(episodeHub).toContain('制作中');
+    expect(episodeHub).toContain('已完成');
+    expect(episodeHub).toContain('已发布');
     expect(episodeHub).toContain('app-modal-backdrop');
     expect(episodeHub).toContain('aria-modal="true"');
     expect(episodeHub).toContain('流程化制作');

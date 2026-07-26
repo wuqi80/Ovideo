@@ -6,6 +6,10 @@ from services import episode_service
 
 
 class FakeEpisodeDAO:
+    default_episodes = [
+        {"episode_id": "ep_1", "project_id": "proj_1", "episode_number": 1, "episode_name": "第一集"},
+        {"episode_id": "ep_2", "project_id": "proj_1", "episode_number": 2, "episode_name": "第二集"},
+    ]
     episodes = [
         {"episode_id": "ep_1", "project_id": "proj_1", "episode_number": 1, "episode_name": "第一集"},
         {"episode_id": "ep_2", "project_id": "proj_1", "episode_number": 2, "episode_name": "第二集"},
@@ -109,7 +113,32 @@ class FakeEpisodeScriptDAO:
         )
 
 
+class FakeEpisodeStatusScriptDAO:
+    @classmethod
+    async def list_by_episode(cls, episode_id: str):
+        if episode_id == "ep_1":
+            return [
+                {
+                    "script_id": "script_started",
+                    "episode_id": "ep_1",
+                    "original_content": "",
+                    "adapted_script": "镜头01：生成过的剧本内容",
+                }
+            ]
+        if episode_id == "ep_2":
+            return [
+                {
+                    "script_id": "script_blank",
+                    "episode_id": "ep_2",
+                    "original_content": "",
+                    "adapted_script": "",
+                }
+            ]
+        return []
+
+
 def setup_function():
+    FakeEpisodeDAO.episodes = [dict(row) for row in FakeEpisodeDAO.default_episodes]
     FakeEpisodeDAO.created = []
     FakeEpisodeDAO.updated = None
     FakeEpisodeDAO.deleted = []
@@ -124,6 +153,45 @@ async def test_list_episodes_returns_project_rows():
 
     assert result["success"] is True
     assert [row["episode_id"] for row in result["episodes"]] == ["ep_1", "ep_2"]
+
+
+async def test_list_episodes_marks_draft_with_script_content_as_in_progress():
+    FakeEpisodeDAO.episodes = [
+        {
+            "episode_id": "ep_1",
+            "project_id": "proj_1",
+            "episode_number": 1,
+            "episode_name": "第一集",
+            "status": "draft",
+        },
+        {
+            "episode_id": "ep_2",
+            "project_id": "proj_1",
+            "episode_number": 2,
+            "episode_name": "第二集",
+            "status": "draft",
+        },
+        {
+            "episode_id": "ep_3",
+            "project_id": "proj_1",
+            "episode_number": 3,
+            "episode_name": "第三集",
+            "status": "completed",
+        },
+    ]
+
+    result = await episode_service.list_episodes(
+        "proj_1",
+        episode_dao=FakeEpisodeDAO,
+        episode_script_dao=FakeEpisodeStatusScriptDAO,
+    )
+
+    statuses = {row["episode_id"]: row["status"] for row in result["episodes"]}
+    assert statuses == {
+        "ep_1": "in_progress",
+        "ep_2": "draft",
+        "ep_3": "completed",
+    }
 
 
 async def test_create_episode_uses_next_number_and_default_name():
