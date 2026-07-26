@@ -6,6 +6,7 @@ import {
     combineVideoScriptOutputs,
     ensureVideoScriptPromptLengths,
     findVideoScriptShotBlock,
+    normalizeGeneratedVideoScript,
     parseStoryboardPromptExtractions,
     stripDialogueMarkers,
 } from '../../utils/scriptPipelineParsers';
@@ -13,9 +14,16 @@ import {
     countPromptCharacters,
     MIN_STABILITY_CONSTRAINT_CHARACTERS,
     MIN_VISUAL_STYLE_CHARACTERS,
+    STABILITY_CONSTRAINT_REFERENCE,
+    VISUAL_STYLE_REFERENCE,
 } from '../../utils/scriptPromptStandards';
 
 describe('findVideoScriptShotBlock', () => {
+    it('locks the production reference examples to the agreed 26 and 203 characters', () => {
+        expect(countPromptCharacters(VISUAL_STYLE_REFERENCE)).toBe(26);
+        expect(countPromptCharacters(STABILITY_CONSTRAINT_REFERENCE)).toBe(203);
+    });
+
     it('matches the full hierarchical number instead of the first segment digit', () => {
         const content = [
             '分段2',
@@ -191,6 +199,29 @@ describe('parseVideoScriptGroups', () => {
         const [group] = parseVideoScriptGroups(normalized);
 
         expect(group.blocks[0].rawBlock).toContain('主角推门进入办公室');
+        expect(countPromptCharacters(group.visualStyle)).toBeGreaterThanOrEqual(MIN_VISUAL_STYLE_CHARACTERS);
+        expect(countPromptCharacters(group.stabilityConstraint))
+            .toBeGreaterThanOrEqual(MIN_STABILITY_CONSTRAINT_CHARACTERS);
+    });
+
+    it('removes internal continuation markers and preserves complete production constraints', () => {
+        const normalized = normalizeGeneratedVideoScript([
+            '分段1',
+            '镜头1-1',
+            '时间：8秒',
+            '光影色调：现代都市冷峻硬光，冲突张力强烈。',
+            '画面描述：两人在会议室激烈对峙。',
+            '---CUT---',
+            '【视觉风格】现代都市写实，冲突爆发的冷峻张力。',
+            '【正向稳定约束】角色身份与服装稳定，五官和肢体自然，无字幕、无水印、无Logo。',
+            '<<<CONTINUE_FROM 镜头1-2>>>',
+        ].join('\n'));
+        const [group] = parseVideoScriptGroups(normalized);
+
+        expect(normalized).not.toContain('---CUT---');
+        expect(normalized).not.toContain('CONTINUE_FROM');
+        expect(normalized).toContain('现代都市写实');
+        expect(normalized).toContain('同一场景内，所有镜头的摄影机机位');
         expect(countPromptCharacters(group.visualStyle)).toBeGreaterThanOrEqual(MIN_VISUAL_STYLE_CHARACTERS);
         expect(countPromptCharacters(group.stabilityConstraint))
             .toBeGreaterThanOrEqual(MIN_STABILITY_CONSTRAINT_CHARACTERS);

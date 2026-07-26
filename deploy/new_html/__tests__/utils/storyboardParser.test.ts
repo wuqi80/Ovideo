@@ -51,6 +51,22 @@ describe('storyboard dialogue duration', () => {
     expect(parsed.completedBlocks.map(block => block.segmentNo)).toEqual([1, 1, 2]);
   });
 
+  it('does not merge segment prompt cards into the last shot field', () => {
+    const parsed = parseStreamingBlocks([
+      '分段1',
+      '镜头1-1',
+      '时间：8秒',
+      '道具名称：手机',
+      '【视觉风格】现代都市写实，冲突爆发的冷峻张力，硬光强化愤怒情绪，胶片感影调。',
+      '【正向稳定约束】无背景音乐，保持无字幕、不要生成Logo、不要生成水印。',
+      '---CUT---',
+    ].join('\n'));
+
+    expect(parsed.completedBlocks[0].道具名称).toBe('手机');
+    expect(parsed.completedBlocks[0].道具名称).not.toContain('视觉风格');
+    expect(parsed.completedBlocks[0].道具名称).not.toContain('正向稳定约束');
+  });
+
   it('prioritizes an explicit shared video prompt over the legacy motion fallback', () => {
     const sharedPrompt = '镜头01-03，【视觉风格】清新动画，【正向稳定约束】角色与场景稳定。';
     const item = convertToStoryboardItem({

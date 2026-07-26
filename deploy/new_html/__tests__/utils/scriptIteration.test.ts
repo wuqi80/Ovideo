@@ -73,18 +73,19 @@ describe('script iteration helpers', () => {
   it('requires explicit storyboard segments capped near fifteen seconds', () => {
     [GENERATE_STORYBOARD_SCRIPT, CONTINUE_STORYBOARD_SCRIPT, ITERATE_FULL_SCRIPT].forEach((prompt) => {
       const text = `${prompt.system || ''}\n${prompt.user}`;
-      expect(text).toContain('分段XX');
+      expect(text).toMatch(/分段(?:XX|N)/);
       expect(text).toContain('15 秒');
     });
   });
 
-  it('requires one exact shared video prompt for every shot in a segment', () => {
-    [GENERATE_STORYBOARD_SCRIPT, CONTINUE_STORYBOARD_SCRIPT, ITERATE_FULL_SCRIPT].forEach((prompt) => {
+  it('requires one complete production constraint footer for every segment', () => {
+    [GENERATE_STORYBOARD_SCRIPT, CONTINUE_STORYBOARD_SCRIPT].forEach((prompt) => {
       const text = `${prompt.system || ''}\n${prompt.user}`;
-      expect(text).toContain('视频提示词');
       expect(text).toContain('【视觉风格】');
       expect(text).toContain('【正向稳定约束】');
-      expect(text).toContain('同一分段');
+      expect(text).toContain('每个分段');
+      expect(text).toContain('约25字');
+      expect(text).toContain('约200字');
     });
   });
 
@@ -104,9 +105,12 @@ describe('script iteration helpers', () => {
     });
   });
 
-  it('keeps the standard sample video prompt range consistent with its one shot', () => {
+  it('uses the complete reference constraints and hierarchical shot numbers without output markers', () => {
     const text = `${GENERATE_STORYBOARD_SCRIPT.system || ''}\n${GENERATE_STORYBOARD_SCRIPT.user}`;
-    expect(text).toContain('视频提示词：镜头01-01');
-    expect(text).not.toContain('视频提示词：镜头01-03');
+    expect(text).toContain('镜头1-1');
+    expect(text).toContain('古风写实，暖黄暗调，室内光影层次丰富，略带神秘氛围。');
+    expect(text).toContain('同一场景内，所有镜头的摄影机机位、人物朝向');
+    expect(text).not.toContain('---CUT---');
+    expect(text).not.toContain('<<<CONTINUE_FROM');
   });
 });

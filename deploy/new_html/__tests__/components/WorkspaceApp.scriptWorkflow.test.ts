@@ -66,11 +66,21 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('const { aiGenerateStoryboardScript } = await loadAiModelService()');
     expect(source).toContain('result = await aiGenerateStoryboardScript(');
     expect(source).toContain('appendStreamChunk');
+    expect(source).toContain('const finalContent = normalizeGeneratedVideoScript(rawFinalContent)');
+    expect(source).toContain('parseVideoScriptGroups(content).map(group => [group.groupNo, group.sharedVideoPrompt])');
+    expect(source).toContain('const videoPrompt = groupPrompts.get(segmentNo) || item.videoPrompt');
     expect(source).toContain("stage: 'directStoryboardScript'");
     expect(source).toContain("const billingInput = isFirstTurn\n      ? content");
     expect(source).not.toContain('pipelineService.generateEpisodeVideoScript');
     expect(source).not.toContain('pipelineService.iterateEpisodeVideoScript');
     expect(source).not.toContain('assertValidVideoScript(normalizedContent)');
+  });
+
+  it('runs quick three-step generation through the same version and design handlers', () => {
+    expect(source).toContain('const handleQuickThreeStageGenerate = useCallback');
+    expect(source).toContain('await handleConversationSend(content)');
+    expect(source).toContain('await handleConversationGenerateDesign(generatedVersion, { openDrawer: false })');
+    expect(source).toContain('onRunThreeStage={handleQuickThreeStageGenerate}');
   });
 
   it('keeps the file rail fixed when switching between writing and quick mode', () => {

@@ -8,7 +8,10 @@ import type {
     VideoScriptGroup,
     ExtractedStoryboardPrompt,
 } from '../types';
-import { ensureSegmentPromptLengths } from './scriptPromptStandards';
+import {
+    ensureSegmentPromptLengths,
+    STABILITY_CONSTRAINT_REFERENCE,
+} from './scriptPromptStandards';
 
 let _segCounter = 0;
 function segLocalId(): string {
@@ -268,7 +271,14 @@ export function ensureVideoScriptPromptLengths(content: string): string {
 
     return groups.map((group) => {
         const shotBody = stripVideoScriptGroupPromptSections(group.rawGroup);
-        const prompts = ensureSegmentPromptLengths(group.visualStyle, group.stabilityConstraint);
+        const lightAndColor = group.rawGroup.match(/^\s*光影色调\s*[：:]\s*([^\n]+)/m)?.[1]?.trim() || '';
+        const derivedVisualStyle = lightAndColor
+            ? `${lightAndColor}，电影级写实质感，画面氛围贴合当前剧情`
+            : '电影级写实质感，统一色彩与光影层次，画面氛围贴合当前剧情';
+        const prompts = ensureSegmentPromptLengths(
+            group.visualStyle || derivedVisualStyle,
+            group.stabilityConstraint || STABILITY_CONSTRAINT_REFERENCE,
+        );
         return [
             `分段${group.groupNo}`,
             shotBody,
@@ -276,6 +286,19 @@ export function ensureVideoScriptPromptLengths(content: string): string {
             prompts.stabilityConstraint ? `【正向稳定约束】${prompts.stabilityConstraint}` : '',
         ].filter(Boolean).join('\n\n');
     }).join('\n\n');
+}
+
+/**
+ * 清理模型内部续写协议并补齐分段级生产约束。
+ * 这是纯文本、零网络调用的最终收口，不触发模型重试，也不改变镜头正文。
+ */
+export function normalizeGeneratedVideoScript(content: string): string {
+    const cleaned = String(content || '')
+        .replace(/^[ \t]*---CUT---[ \t]*$/gmi, '')
+        .replace(/^[ \t]*<<<\s*CONTINUE_FROM\b[^>\r\n]*>>>[ \t]*$/gmi, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    return ensureVideoScriptPromptLengths(cleaned);
 }
 
 /**

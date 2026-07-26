@@ -179,6 +179,17 @@ export function parseBlockFields(blockText: string): ShotBlockFields | null {
     // 分段标题由 parseStreamingBlocks 维护，不属于镜头字段。
     if (/^(?:分段|段落)\s*0*\d+\s*$/.test(line)) continue;
 
+    // 分段级视觉风格和稳定约束由上层统一投影到该段所有镜头，
+    // 不能被误并入最后一个镜头的“道具名称”等字段。
+    if (/^【(?:视觉风格|正向稳定约束)】/.test(line)) {
+      if (currentField && currentValue.length > 0) {
+        (fields as any)[currentField] = currentValue.join('\n');
+      }
+      currentField = null;
+      currentValue = [];
+      continue;
+    }
+
     // 检查是否是镜头ID行（新格式“镜头1-1”，兼容历史“镜头01”）。
     const shotIdMatch = line.match(/^镜头\s*(\d+)(?:\s*[-－—]\s*(\d+))?/);
     if (shotIdMatch) {

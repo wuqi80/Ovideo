@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 import pytest
 
 from external_api.video import minimax as minimax_video
@@ -11,6 +13,7 @@ from external_api.video import wan2 as wan2_video
 from services import (
     ai_proxy_gemini_text_service,
     ai_proxy_http_client,
+    ai_proxy_minimax_text_service,
     ai_proxy_service,
     video_reverse_service,
 )
@@ -1352,6 +1355,72 @@ def test_minimax_m3_stream_uses_token_plan_compatible_runtime_request(monkeypatc
     assert any('"content": "stream ok"' in event for event in events)
     assert events[-1] == "data: [DONE]\n\n"
     assert completed == ["stream ok"]
+    assert response.closed is True
+
+
+def test_minimax_m3_stream_sends_keepalive_while_waiting_for_first_upstream_byte(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    m3_env = get_minimax_operation_model_env_key("minimax-m3")
+    request_started = threading.Event()
+    release_request = threading.Event()
+    response = _DeepseekStreamResponse()
+
+    monkeypatch.setenv(env_key, "test-minimax-plan-key")
+    monkeypatch.setenv(endpoint_env, "https://api.minimaxi.com/v1")
+    monkeypatch.setenv(m3_env, "MiniMax-M3")
+    monkeypatch.setattr(ai_proxy_minimax_text_service, "MINIMAX_KEEPALIVE_SECONDS", 0.01)
+
+    def fake_post(*args, **kwargs):
+        request_started.set()
+        assert release_request.wait(timeout=1)
+        return response
+
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", fake_post)
+    stream = ai_proxy_service.stream_minimax_chat(prompt="hello", model="minimax-m3")
+
+    assert next(stream) == ": connected\n\n"
+    assert request_started.wait(timeout=0.5)
+    assert next(stream) == ": keepalive\n\n"
+    release_request.set()
+    remaining = list(stream)
+
+    assert any('"content": "stream ok"' in event for event in remaining)
+    assert remaining[-1] == "data: [DONE]\n\n"
+    assert response.closed is True
+
+
+def test_minimax_m3_stream_does_not_complete_after_a_partial_upstream_failure(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    m3_env = get_minimax_operation_model_env_key("minimax-m3")
+    completed = []
+    failures = []
+    response = _DeepseekStreamResponse()
+
+    def broken_lines(decode_unicode=True):
+        yield 'data: {"choices":[{"delta":{"content":"partial"}}]}'
+        raise RuntimeError("upstream disconnected")
+
+    response.iter_lines = broken_lines
+    monkeypatch.setenv(env_key, "test-minimax-plan-key")
+    monkeypatch.setenv(endpoint_env, "https://api.minimaxi.com/v1")
+    monkeypatch.setenv(m3_env, "MiniMax-M3")
+    monkeypatch.setattr(ai_proxy_http_client.requests, "post", lambda *args, **kwargs: response)
+
+    events = list(ai_proxy_service.stream_minimax_chat(
+        prompt="hello",
+        model="minimax-m3",
+        on_complete=completed.append,
+        on_error=failures.append,
+    ))
+
+    assert any('"content": "partial"' in event for event in events)
+    assert any('"type": "error"' in event for event in events)
+    assert completed == []
+    assert failures == ["MiniMax 流式读取失败: upstream disconnected"]
     assert response.closed is True
 
 

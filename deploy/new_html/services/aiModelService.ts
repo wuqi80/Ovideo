@@ -418,7 +418,7 @@ export const aiGenerateShotDetails = async (
 
 /**
  * 🆕 生成分镜脚本（从文字脚本生成可解析的镜头块格式）
- * 输出为纯文本，使用 ---CUT--- 分隔镜头块
+ * 输出为纯文本，使用分段和层级镜头标题作为解析边界
  * 支持流式输出
  */
 export const aiGenerateStoryboardScript = async (
@@ -446,7 +446,7 @@ export const aiGenerateStoryboardScript = async (
 
 /**
  * 🆕 续写分镜脚本（从指定镜头继续生成）
- * 用于处理 <<<CONTINUE_FROM 镜头XX>>> 标记
+ * 仅供历史入口显式续写使用；当前写作入口会在一次请求中完整生成
  */
 export const aiContinueStoryboardScript = async (
   model: AiModel,

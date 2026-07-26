@@ -12,8 +12,10 @@ import {
   combineVideoScriptOutputs,
   ensureVideoScriptPromptLengths,
   formatHierarchicalShotNumber,
+  normalizeGeneratedVideoScript,
   parseHierarchicalShotNumber,
   parseVideoScriptBlocks,
+  parseVideoScriptGroups,
 } from './utils/scriptPipelineParsers';
 import { parseStreamingBlocks, convertToStoryboardItem, removeControlCharacters, segmentInputContent, countShots } from './utils/storyboardParser';
 import { deriveScriptStagesFromPersisted } from './utils/scriptStageDerivation';
@@ -250,7 +252,17 @@ function parseStoryboardVersionContent(content: string): StoryboardItem[] {
   const separated = ensureStoryboardCutSeparators(content);
   const normalized = separated.endsWith('---CUT---') ? separated : `${separated}\n---CUT---`;
   const parsed = parseStreamingBlocks(normalized);
-  const items = parsed.completedBlocks.map(convertToStoryboardItem);
+  const groupPrompts = new Map(
+    parseVideoScriptGroups(content).map(group => [group.groupNo, group.sharedVideoPrompt]),
+  );
+  const items = parsed.completedBlocks.map(convertToStoryboardItem).map((item) => {
+    const parsedShotNumber = parseHierarchicalShotNumber(item.shotNumber);
+    const segmentNo = parsedShotNumber?.segmentNo
+      || Number.parseInt(String(item.scriptSegmentId || '').match(/(\d+)$/)?.[1] || '', 10)
+      || 1;
+    const videoPrompt = groupPrompts.get(segmentNo) || item.videoPrompt;
+    return videoPrompt ? { ...item, videoPrompt } : item;
+  });
   return synchronizeStoryboardSegmentVideoPrompts(
     normalizeStoryboardItemsForWorkflow(items),
   );
@@ -476,6 +488,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const loadedConversationKeysRef = useRef<Set<string>>(new Set());
   const conversationRequestsRef = useRef<Map<string, Promise<ScriptConversation>>>(new Map());
   const appliedConversationModelRef = useRef<string>('');
+  const latestGeneratedScriptVersionRef = useRef<Record<string, ScriptStoryboardVersion>>({});
   
   const containerRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef<number | null>(null);
@@ -1551,6 +1564,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     const file = filesRef.current.find(item => item.id === fileId);
     if (!fileId || !file) throw new Error('请先选择剧本任务');
     if (fileId.startsWith('local_')) throw new Error('剧本任务尚未保存，请稍后重试');
+    delete latestGeneratedScriptVersionRef.current[fileId];
 
     const conversation = scriptConversations[fileId] || {
       scriptId: fileId,
@@ -1676,9 +1690,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       pipelineOutputTexts = [result];
 
       const rawFinalContent = (result || streamedContent).trim();
-      const parsedItems = parseStoryboardVersionContent(rawFinalContent);
       if (!rawFinalContent) throw new Error('模型未返回内容，请稍后重试');
-      const finalContent = rawFinalContent;
+      const finalContent = normalizeGeneratedVideoScript(rawFinalContent);
+      const parsedItems = parseStoryboardVersionContent(finalContent);
+      replaceStreamContent(finalContent);
       const billingParams = {
         input_tokens: estimateTextTokens(pipelineInputTexts.join('\n')),
         output_tokens: estimateTextTokens(pipelineOutputTexts.join('\n') || finalContent),
@@ -1751,6 +1766,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           },
         };
       });
+      latestGeneratedScriptVersionRef.current[fileId] = version;
     } catch (error) {
       const message = error instanceof Error ? error.message : '生成分镜脚本失败';
       setConversationError(assistantMessageId ? null : message);
@@ -2037,6 +2053,15 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     updateFileWithHistory,
     urlProjectId,
   ]);
+
+  const handleQuickThreeStageGenerate = useCallback(async (content: string) => {
+    const fileId = selectedFileId;
+    if (!fileId) throw new Error('请先选择剧本任务');
+    await handleConversationSend(content);
+    const generatedVersion = latestGeneratedScriptVersionRef.current[fileId];
+    if (!generatedVersion) throw new Error('分镜脚本尚未生成，未继续执行镜头设计');
+    await handleConversationGenerateDesign(generatedVersion, { openDrawer: false });
+  }, [handleConversationGenerateDesign, handleConversationSend, selectedFileId]);
 
   const handleOpenStoryboardDrawer = useCallback(() => {
     if (!selectedFileId) return;
@@ -3950,6 +3975,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                             onChangeModel={setAiModel}
                             onUpdateSource={handleUpdateContent}
                             onSend={handleConversationSend}
+                            onRunThreeStage={handleQuickThreeStageGenerate}
                           />
                         </React.Suspense>
                       </div>

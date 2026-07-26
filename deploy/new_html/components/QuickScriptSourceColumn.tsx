@@ -15,6 +15,7 @@ interface QuickScriptSourceColumnProps {
   onChangeModel: (model: AiModel) => void;
   onUpdateSource: (fileId: string, content: string) => void;
   onSend: (content: string) => Promise<void>;
+  onRunThreeStage: (content: string) => Promise<void>;
 }
 
 export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = ({
@@ -29,6 +30,7 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
   onChangeModel,
   onUpdateSource,
   onSend,
+  onRunThreeStage,
 }) => {
   const [instruction, setInstruction] = useState('');
   const [requestError, setRequestError] = useState('');
@@ -48,6 +50,17 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
       if (hasVersion) setInstruction('');
     } catch (submitError) {
       setRequestError(submitError instanceof Error ? submitError.message : '生成失败，请稍后重试');
+    }
+  };
+
+  const runThreeStage = async () => {
+    const content = (selectedFile?.originalContent || '').trim();
+    if (!content || isSending || hasVersion) return;
+    setRequestError('');
+    try {
+      await onRunThreeStage(content);
+    } catch (submitError) {
+      setRequestError(submitError instanceof Error ? submitError.message : '一键三步生成失败，请稍后重试');
     }
   };
 
@@ -79,24 +92,37 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
         </label>
       </header>
 
-      <div className="flex h-[52px] flex-shrink-0 items-center border-b border-n40 px-3">
+      <div className="flex h-[52px] flex-shrink-0 items-center gap-2 border-b border-n40 px-3">
         {hasVersion ? (
           <div className="flex w-full items-center rounded border border-success/30 bg-g50 px-3 py-2 text-xs text-success">
             当前已生成分镜脚本 V{currentVersionNo}
             <span className="ml-auto text-[10px] text-n300">下方输入修改要求可生成新版</span>
           </div>
         ) : (
+          <>
           <button
             type="button"
             onClick={() => void submit()}
             disabled={!selectedFile?.originalContent.trim() || isSending || isLoading}
-            className="inline-flex h-9 w-full items-center justify-center gap-2 rounded bg-primary px-3 text-xs font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-n100"
+            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded border border-primary bg-n0 px-2 text-xs font-semibold text-primary hover:bg-b50 disabled:cursor-not-allowed disabled:border-n100 disabled:text-n100"
           >
             {isSending || isLoading
               ? <LoaderCircle className="h-4 w-4 animate-spin" />
               : <Wand2 className="h-4 w-4" />}
             {isSending ? '生成中…' : isLoading ? '加载中…' : '生成分镜脚本'}
           </button>
+          <button
+            type="button"
+            onClick={() => void runThreeStage()}
+            disabled={!selectedFile?.originalContent.trim() || isSending || isLoading}
+            className="inline-flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded bg-primary px-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:bg-n100"
+          >
+            {isSending || isLoading
+              ? <LoaderCircle className="h-4 w-4 animate-spin" />
+              : <Wand2 className="h-4 w-4" />}
+            {isSending ? '执行中…' : '一键三步生成'}
+          </button>
+          </>
         )}
       </div>
 

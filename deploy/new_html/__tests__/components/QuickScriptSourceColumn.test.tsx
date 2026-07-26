@@ -33,6 +33,7 @@ const baseProps = {
   onDismissError: vi.fn(),
   onChangeModel: vi.fn(),
   onUpdateSource: vi.fn(),
+  onRunThreeStage: vi.fn().mockResolvedValue(undefined),
 };
 
 describe('QuickScriptSourceColumn', () => {
@@ -73,5 +74,20 @@ describe('QuickScriptSourceColumn', () => {
 
     const modelSelect = screen.getByLabelText('选择剧本模型');
     expect(modelSelect).toHaveTextContent('deepseek');
+  });
+
+  it('runs the unified three-step action from the original source', async () => {
+    const onRunThreeStage = vi.fn().mockResolvedValue(undefined);
+    render(
+      <QuickScriptSourceColumn
+        {...baseProps}
+        onSend={vi.fn().mockResolvedValue(undefined)}
+        onRunThreeStage={onRunThreeStage}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '一键三步生成' }));
+
+    await waitFor(() => expect(onRunThreeStage).toHaveBeenCalledWith('第一集文字剧本'));
   });
 });

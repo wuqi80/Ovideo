@@ -51,15 +51,12 @@ const STABILITY_CLAUSES = [
 export function ensureStabilityConstraintLength(value: string): string {
   let result = String(value || '').trim();
   if (!result) return '';
-  for (const clause of STABILITY_CLAUSES) {
-    if (countPromptCharacters(result) >= MIN_STABILITY_CONSTRAINT_CHARACTERS) break;
-    if (!result.includes(clause.key)) result = appendPromptClause(result, clause.text);
-  }
-  if (countPromptCharacters(result) < MIN_STABILITY_CONSTRAINT_CHARACTERS) {
-    result = appendPromptClause(
-      result,
-      '镜头之间动作衔接自然连贯，主体比例、景深、色温、环境陈设与关键细节全程统一稳定',
-    );
+  const hasCompleteProductionBaseline = STABILITY_CLAUSES.every(clause => result.includes(clause.key));
+  if (
+    countPromptCharacters(result) < MIN_STABILITY_CONSTRAINT_CHARACTERS
+    || !hasCompleteProductionBaseline
+  ) {
+    result = STABILITY_CONSTRAINT_REFERENCE;
   }
   return /[。！？]$/.test(result) ? result : `${result}。`;
 }
