@@ -51,6 +51,7 @@ FILES=(
   "Agent.md"
   "login.html"
   "admin"
+  "static"
   "core"
   "dao"
   "docs"
