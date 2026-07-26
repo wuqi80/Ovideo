@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const source = readFileSync(resolve(__dirname, '../../WorkspaceApp.tsx'), 'utf-8');
+const source = readFileSync(resolve(__dirname, '../../WorkspaceApp.tsx'), 'utf-8')
+  .replace(/\r\n/g, '\n');
 
 describe('WorkspaceApp script workflow persistence', () => {
   it('persists only the script record whose content changed', () => {
