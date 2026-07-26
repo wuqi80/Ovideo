@@ -468,12 +468,6 @@ const ProjectHub: React.FC = () => {
                             {isWideLayout ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                             {isWideLayout ? '窄屏' : '宽屏'}
                         </button>
-                        <button
-                            onClick={() => setShowCreateModal(true)}
-                            className="inline-flex h-10 min-w-[128px] flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-card transition-all hover:bg-primary-hover hover:shadow-atlas sm:flex-none"
-                        >
-                            <Plus size={17} /> 新建项目
-                        </button>
                         <AccountMenu />
                         </div>
                     </div>
@@ -532,11 +526,18 @@ const ProjectHub: React.FC = () => {
                 </header>
 
                 <main className="px-4 py-7 sm:px-6 lg:px-8">
-                    <div className="mb-5 flex items-end justify-between gap-4">
+                    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                             <h2 className="text-xl font-bold tracking-tight text-n800">{pageTitle}</h2>
                             <p className="mt-1 text-xs text-n100">共 {filteredProjects.length} 个项目</p>
                         </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowCreateModal(true)}
+                            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-card transition-all hover:bg-primary-hover hover:shadow-atlas sm:w-auto sm:min-w-[128px]"
+                        >
+                            <Plus size={17} /> 新建项目
+                        </button>
                     </div>
 
                     {loading ? (

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -172,6 +172,26 @@ describe('ProjectHub navigation and filters', () => {
 
     expect(screen.getByRole('menuitem', { name: /个人中心/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /退出登录/ })).toBeInTheDocument();
+  });
+
+  it('places the create project action in the project list toolbar', async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ProjectHub />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('树洞里的星辰');
+    const header = container.querySelector('header');
+    const main = container.querySelector('main');
+    expect(header).not.toBeNull();
+    expect(main).not.toBeNull();
+    expect(within(header as HTMLElement).queryByRole('button', { name: /新建项目/ })).not.toBeInTheDocument();
+
+    const createButton = within(main as HTMLElement).getByRole('button', { name: /新建项目/ });
+    fireEvent.click(createButton);
+
+    expect(screen.getByRole('dialog', { name: '新建项目' })).toBeInTheDocument();
   });
 
   it('uploads a project cover from the card menu and renders it with crop styling', async () => {
