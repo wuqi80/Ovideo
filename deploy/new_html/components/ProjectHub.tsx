@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Archive, Trash2, Users, Clock, FolderOpen, MoreVertical, Share2, Maximize2, Minimize2, LogOut } from 'lucide-react';
+import { Plus, Search, Archive, Trash2, Users, Clock, FolderOpen, MoreVertical, Share2, Maximize2, Minimize2 } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
 import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
 import ShareResourceDialog from './ShareResourceDialog';
@@ -8,15 +8,17 @@ import { createShare } from '../services/shareService';
 import type { ProjectInfo } from '../types';
 import { crmMessage, crmConfirm } from '../admin/crmUI';
 import { BrandLogo } from './BrandLogo';
+import AccountMenu from './AccountMenu';
 
 type SortKey = 'updated' | 'created' | 'name';
+type ProjectTab = 'all' | 'archived';
 
 const ProjectHub: React.FC = () => {
     const navigate = useNavigate();
     const [projects, setProjects] = useState<ProjectInfo[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [showArchived, setShowArchived] = useState(false);
+    const [activeTab, setActiveTab] = useState<ProjectTab>('all');
     const [sortBy, setSortBy] = useState<SortKey>('updated');
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [newProjectName, setNewProjectName] = useState('');
@@ -47,7 +49,7 @@ const ProjectHub: React.FC = () => {
     const loadProjects = useCallback(async () => {
         setLoading(true);
         try {
-            const qs = new URLSearchParams({ include_archived: String(showArchived) });
+            const qs = new URLSearchParams({ include_archived: 'true' });
             if (orgId) qs.set('org_id', orgId);
             const data = await apiJson<any>(`/api/projects?${qs.toString()}`, {}, '项目列表');
             if (data.success) {
@@ -75,12 +77,15 @@ const ProjectHub: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [showArchived, orgId]);
+    }, [orgId]);
 
     useEffect(() => { loadProjects(); }, [loadProjects]);
 
+    const activeProjectCount = useMemo(() => projects.filter(p => !p.isArchived).length, [projects]);
+    const archivedProjectCount = useMemo(() => projects.filter(p => p.isArchived).length, [projects]);
+
     const filteredProjects = useMemo(() => {
-        let list = projects;
+        let list = projects.filter(p => activeTab === 'archived' ? p.isArchived : !p.isArchived);
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
             list = list.filter(p =>
@@ -95,7 +100,7 @@ const ProjectHub: React.FC = () => {
             return b.updatedAt - a.updatedAt;
         });
         return list;
-    }, [projects, searchQuery, sortBy]);
+    }, [projects, activeTab, searchQuery, sortBy]);
 
     const handleCreate = async () => {
         if (!newProjectName.trim()) return;
@@ -209,26 +214,30 @@ const ProjectHub: React.FC = () => {
     const projectGridClass = isWideLayout
         ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5'
         : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5';
-    const currentUsername = localStorage.getItem('username') || '未登录';
+    const pageTitle = activeTab === 'archived' ? '已归档' : '全部项目';
+    const stablePageCount = activeTab === 'archived' ? archivedProjectCount : activeProjectCount;
 
     return (
         <div className="layout-safe min-h-screen bg-n20 text-n800" onClick={() => setContextMenu(null)}>
             <div className={`min-h-screen w-full ${shellWidthClass} mx-auto bg-n0 md:border-x md:border-n40`}>
                 <header className="animate-slideDown">
-                    <div className="flex min-h-[84px] flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+                    <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
                         <div className="flex min-w-0 items-center gap-4">
                             <button
                                 type="button"
                                 onClick={() => navigate('/projects')}
-                                className="shrink-0 rounded focus:outline-none focus:ring-2 focus:ring-primary/25"
-                                title="MECHA.ONE 项目"
+                                className="flex shrink-0 items-center gap-2 rounded focus:outline-none focus:ring-2 focus:ring-primary/25"
+                                title="MECHA · 漫剧创作平台"
                             >
-                                <BrandLogo className="h-8 w-auto max-w-[156px]" />
+                                <BrandLogo variant="mark" className="h-7 w-7" />
+                                <span className="hidden whitespace-nowrap text-sm font-semibold tracking-tight text-n800 sm:inline">
+                                    MECHA <span className="text-primary">·</span> 漫剧创作平台
+                                </span>
                             </button>
                             <div className="h-8 w-px shrink-0 bg-n40" />
                             <div className="min-w-0">
                                 <h1 className="truncate text-xl font-bold tracking-tight text-n800 sm:text-2xl">项目</h1>
-                                <p className="mt-0.5 text-xs text-n100 lg:hidden">{filteredProjects.length} 个项目</p>
+                                <p className="mt-0.5 text-xs text-n100 lg:hidden">{stablePageCount} 个项目</p>
                             </div>
                         </div>
                         <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-nowrap lg:gap-3">
@@ -247,64 +256,59 @@ const ProjectHub: React.FC = () => {
                         >
                             <Plus size={17} /> 新建项目
                         </button>
-                        <span className="hidden max-w-[140px] truncate text-sm text-n300 xl:block" title={currentUsername}>
-                            {currentUsername}
-                        </span>
-                        <button
-                            onClick={() => {
-                                localStorage.removeItem('auth_token');
-                                localStorage.removeItem('username');
-                                window.location.href = '/login';
-                            }}
-                            className="inline-flex h-10 items-center gap-1.5 whitespace-nowrap rounded-lg border border-n40 px-3 text-sm text-n100 transition-colors hover:border-r75 hover:bg-r50 hover:text-danger"
-                            title="退出登录"
-                        >
-                            <LogOut size={15} /> <span className="hidden sm:inline">退出</span>
-                        </button>
+                        <AccountMenu />
                         </div>
                     </div>
                     <div className="flex flex-col gap-3 border-y border-n40 px-4 py-3 sm:px-6 md:flex-row md:items-center md:justify-between md:py-0 lg:px-8">
                         <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
                             <button
                                 type="button"
-                                onClick={() => setShowArchived(false)}
+                                onClick={() => setActiveTab('all')}
                                 className={`relative h-12 shrink-0 px-1.5 text-sm transition-colors md:h-16 md:px-2 ${
-                                    !showArchived ? 'font-medium text-primary after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary' : 'text-n300 hover:text-n800'
+                                    activeTab === 'all' ? 'font-medium text-primary after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-primary' : 'text-n300 hover:text-n800'
                                 }`}
                             >
-                                全部项目 <span className="ml-1 text-xs text-n100">{!showArchived ? filteredProjects.length : ''}</span>
+                                全部项目
+                                <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full border border-b75 bg-b50 px-1.5 py-0.5 text-[11px] text-primary">
+                                    {activeProjectCount}
+                                </span>
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setShowArchived(true)}
+                                onClick={() => setActiveTab('archived')}
                                 className={`relative h-12 shrink-0 px-3 text-sm transition-colors md:h-16 ${
-                                    showArchived ? 'font-medium text-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-primary' : 'text-n300 hover:text-n800'
+                                    activeTab === 'archived' ? 'font-medium text-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-primary' : 'text-n300 hover:text-n800'
                                 }`}
                             >
-                                含已归档
+                                已归档
+                                <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full border border-b75 bg-b50 px-1.5 py-0.5 text-[11px] text-primary">
+                                    {archivedProjectCount}
+                                </span>
                             </button>
-                            <div className="ml-2 flex shrink-0 items-center gap-2 border-l border-n40 pl-3 text-sm">
+                        </div>
+                        <div className="flex w-full flex-col gap-2 sm:flex-row md:w-auto md:items-center">
+                            <label className="flex shrink-0 items-center gap-2 text-sm">
                                 <span className="text-n100">排序</span>
                                 <select
                                     value={sortBy}
                                     onChange={e => setSortBy(e.target.value as SortKey)}
-                                    className="h-9 rounded border border-n40 bg-n0 px-2 text-sm text-n700 outline-none transition-colors focus:border-primary"
+                                    className="h-10 rounded-lg border border-n40 bg-n0 px-2 text-sm text-n700 outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15"
                                 >
                                     <option value="updated">最近更新</option>
                                     <option value="created">创建时间</option>
                                     <option value="name">名称</option>
                                 </select>
+                            </label>
+                            <div className="relative w-full md:w-80">
+                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-n100" />
+                                <input
+                                    type="search"
+                                    placeholder="搜索项目"
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    className="h-10 w-full rounded-lg border border-n40 bg-n0 pl-10 pr-4 text-sm text-n800 outline-none transition-all placeholder:text-n100 focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                />
                             </div>
-                        </div>
-                        <div className="relative w-full md:w-80">
-                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-n100" />
-                            <input
-                                type="search"
-                                placeholder="搜索项目"
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                className="h-10 w-full rounded-lg border border-n40 bg-n0 pl-10 pr-4 text-sm text-n800 outline-none transition-all placeholder:text-n100 focus:border-primary focus:ring-2 focus:ring-primary/15"
-                            />
                         </div>
                     </div>
                 </header>
@@ -312,7 +316,7 @@ const ProjectHub: React.FC = () => {
                 <main className="px-4 py-7 sm:px-6 lg:px-8">
                     <div className="mb-5 flex items-end justify-between gap-4">
                         <div>
-                            <h2 className="text-xl font-bold tracking-tight text-n800">{showArchived ? '全部项目（含归档）' : '全部项目'}</h2>
+                            <h2 className="text-xl font-bold tracking-tight text-n800">{pageTitle}</h2>
                             <p className="mt-1 text-xs text-n100">共 {filteredProjects.length} 个项目</p>
                         </div>
                     </div>

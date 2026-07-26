@@ -113,6 +113,8 @@ describe('Webflow design-system contract', () => {
     const loginHtml = readProjectFile('../login.html');
     const header = readProjectFile('components/Header.tsx');
     const brandLogo = readProjectFile('components/BrandLogo.tsx');
+    const accountMenu = readProjectFile('components/AccountMenu.tsx');
+    const app = readProjectFile('App.tsx');
 
     for (const assetPath of [
       '../static/branding/mecha-one-logo.png',
@@ -128,6 +130,10 @@ describe('Webflow design-system contract', () => {
     expect(brandLogo).toContain('/static/branding/mecha-one-mark.png');
     expect(header).toContain('<BrandLogo');
     expect(header).not.toContain('<text x="14"');
+    expect(accountMenu).toContain('个人中心');
+    expect(accountMenu).toContain("window.location.href = '/profile'");
+    expect(app).toContain("const ProfilePage");
+    expect(app).toContain('path="/profile"');
     expect(appHtml).toContain('/static/favicon.ico');
     expect(loginHtml).toContain('/static/favicon.ico');
     expect(loginHtml).toContain('/static/branding/mecha-one-mark.png');
@@ -147,7 +153,11 @@ describe('Webflow design-system contract', () => {
     }
 
     expect(projectHub).toContain('全部项目');
-    expect(projectHub).toContain('含已归档');
+    expect(projectHub).toContain('已归档');
+    expect(projectHub).toContain('MECHA <span className="text-primary">·</span> 漫剧创作平台');
+    expect(projectHub).toContain('include_archived: \'true\'');
+    expect(projectHub).toContain('<AccountMenu');
+    expect(projectHub).not.toContain('含已归档');
     expect(episodeHub).toContain('全部分集');
     expect(episodeHub).toContain('app-modal-backdrop');
     expect(episodeHub).toContain('aria-modal="true"');

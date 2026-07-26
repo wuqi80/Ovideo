@@ -1,10 +1,9 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Sparkles, BookOpen, ScrollText, LayoutDashboard, FileText, Settings, Play, StopCircle, Layers, Image as ImageIcon, Video, ShieldCheck, History, LogOut, ChevronDown, FolderOpen, Coins } from 'lucide-react';
+import { Sparkles, BookOpen, ScrollText, LayoutDashboard, FileText, Settings, Play, StopCircle, Layers, Image as ImageIcon, Video, ShieldCheck, History, FolderOpen, Coins } from 'lucide-react';
 import { AppView, AiModel, TaskNotification } from '../types';
 import { NotificationPanel } from './NotificationPanel';
 import { WorkspaceSwitcher } from './WorkspaceSwitcher';
-import { apiFetch } from '../services/httpClient';
 import { getCreditBalance } from '../services/creditService';
 import {
   DEFAULT_SCRIPT_MODEL_OPTIONS,
@@ -13,6 +12,8 @@ import {
   type ScriptModelOption,
 } from '../services/scriptModelCatalogService';
 import { BrandLogo } from './BrandLogo';
+import AccountMenu from './AccountMenu';
+import { getStoredUsername } from '../services/accountStorage';
 
 interface HeaderProps {
   visibleColumns: boolean[];
@@ -48,11 +49,8 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const aiModelDisplay = formatScriptModelDisplay(getScriptModelOption(aiModel, modelOptions));
   // 🔐 检查是否为管理员（包括超级管理员）
-  const username = localStorage.getItem('username') || 'User';
+  const username = getStoredUsername('User');
   const isAdmin = username === 'admin' || username === 'lllsdhr';
-  
-  // 用户菜单状态
-  const [showUserMenu, setShowUserMenu] = useState(false);
 
   // 积分余额：与 WorkflowLayout 同一刷新模式（挂载 + 60s 轮询 + focus + credits:updated 事件）
   const [availableCredits, setAvailableCredits] = useState<number | null>(null);
@@ -82,20 +80,6 @@ export const Header: React.FC<HeaderProps> = ({
       window.removeEventListener('credits:updated', handleCreditsUpdated);
     };
   }, [refreshCredits]);
-  
-  // 登出处理
-  const handleLogout = useCallback(async () => {
-    try {
-      await apiFetch('/api/logout', {
-        method: 'POST',
-      }, { apiName: 'logout' });
-    } catch (e) {
-      console.warn('登出请求失败', e);
-    }
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('username');
-    window.location.href = '/login';
-  }, []);
   
   const navItems = [
     { icon: FileText, label: "文件", index: 0 },
@@ -303,31 +287,7 @@ export const Header: React.FC<HeaderProps> = ({
           
           {/* 用户菜单 */}
           <div className="h-6 w-px bg-n40 mx-1"></div>
-          
-          <div className="relative">
-            <button
-              onClick={() => setShowUserMenu(!showUserMenu)}
-              className="flex items-center gap-2 px-2 py-1.5 hover:bg-n20 rounded transition-colors"
-            >
-              <div className="w-6 h-6 rounded-full bg-gradient-to-r from-pink-500 to-orange-500 flex items-center justify-center text-[10px] font-bold text-white">
-                {username.charAt(0).toUpperCase()}
-              </div>
-              <span className="text-sm text-n700">{username}</span>
-              <ChevronDown className="w-3 h-3 text-n300" />
-            </button>
-            
-            {showUserMenu && (
-              <div className="absolute right-0 top-full mt-2 w-48 bg-n0 rounded-lg shadow-bottom border border-n40 py-2 z-50">
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm text-n700 hover:bg-n20 hover:text-n800 transition-colors flex items-center gap-2"
-                >
-                  <LogOut className="w-4 h-4" />
-                  退出登录
-                </button>
-              </div>
-            )}
-          </div>
+          <AccountMenu compact />
         </div>
       </div>
     </header>

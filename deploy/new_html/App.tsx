@@ -55,6 +55,7 @@ const HistoryPage = React.lazy(() => import('./pages/HistoryPage').then(m => ({ 
 const CanvasPage = React.lazy(() => import('./pages/CanvasPage').then(m => ({ default: m.CanvasPage })));
 const MediaLibraryPage = React.lazy(() => import('./pages/MediaLibraryPage'));
 const CreditsPage = React.lazy(() => import('./pages/CreditsPage'));
+const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
 const VideoReversePage = React.lazy(() => import('./pages/VideoReversePage'));
 const AdminPage = React.lazy(() => import('./components/AdminPage').then(m => ({ default: m.AdminPage })));
 const AdminFeatureTabs = React.lazy(() => import('./components/AdminFeatureTabs'));
@@ -164,6 +165,7 @@ const App: React.FC = () => {
 
                     {/* 2026-05-26 Slice 2: 用户积分页 */}
                     <Route path="/credits" element={<CreditsPage />} />
+                    <Route path="/profile" element={<ProfilePage />} />
 
                     {/* 统一 Admin Shell（refactor/v2）— 一个台子、一套层级菜单，与主站 token 隔离 */}
                     <Route path="/admin/login" element={<AdminLoginPage />} />

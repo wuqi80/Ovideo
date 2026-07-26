@@ -1,0 +1,80 @@
+import React from 'react';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { MemoryRouter } from 'react-router-dom';
+
+import ProfilePage from '../../pages/ProfilePage';
+import { getMyProfile } from '../../services/profileService';
+
+vi.mock('../../services/profileService', () => ({
+  getMyProfile: vi.fn(),
+  updateMyProfile: vi.fn(),
+  changeMyPassword: vi.fn(),
+}));
+
+vi.mock('../../services/httpClient', () => ({
+  apiFetch: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock('../../admin/crmUI', () => ({
+  crmMessage: {
+    error: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+  },
+}));
+
+describe('ProfilePage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.setItem('username', '159****7184');
+    (getMyProfile as any).mockResolvedValue({
+      success: true,
+      profile: {
+        user_id: 'user_1',
+        username: '未命名创作者',
+        phone_number: '15900007184',
+        phone_verified: true,
+      },
+      credits: {
+        available_credits: 1200,
+        frozen_credits: 30,
+        total_used_credits: 450,
+      },
+      project_stats: {
+        total: 5,
+        active: 4,
+        archived: 1,
+        owned: 3,
+        shared: 2,
+      },
+      recent_projects: [{
+        project_id: 'project_1',
+        project_name: '屏幕录制',
+        description: '',
+        is_archived: false,
+        episode_count: 1,
+        updated_at: '2026-07-25T00:00:00Z',
+      }],
+    });
+  });
+
+  it('renders identity, phone verification, credits, and recent projects', async () => {
+    render(
+      <MemoryRouter>
+        <ProfilePage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(getMyProfile).toHaveBeenCalled());
+    expect(await screen.findByRole('heading', { name: '个人中心' })).toBeInTheDocument();
+    expect(screen.getByDisplayValue('未命名创作者')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('15900007184')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('验证码 888888')).toBeInTheDocument();
+    expect(screen.getByText('已验证')).toBeInTheDocument();
+    expect(screen.getByText('1,200')).toBeInTheDocument();
+    expect(screen.getByText('积分详情')).toBeInTheDocument();
+    expect(screen.getByText('屏幕录制')).toBeInTheDocument();
+  });
+});

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, ArrowLeft, LayoutList, Grid3X3, Clock, Film, MoreVertical, Trash2, LogOut, Pencil, Copy, Maximize2, Minimize2 } from 'lucide-react';
+import { Plus, ArrowLeft, LayoutList, Grid3X3, Clock, Film, MoreVertical, Trash2, Pencil, Copy, Maximize2, Minimize2 } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
 import { duplicateEpisode as duplicateEpisodeRequest } from '../services/projectWorkflowService';
 import type { Episode } from '../types';
 import { BrandLogo } from '../components/BrandLogo';
+import AccountMenu from '../components/AccountMenu';
 import { crmConfirm, crmMessage } from '../admin/crmUI';
 
 export const EpisodeHubPage: React.FC = () => {
@@ -156,7 +157,6 @@ export const EpisodeHubPage: React.FC = () => {
   const episodeGridClass = isWideLayout
     ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5'
     : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5';
-  const currentUsername = localStorage.getItem('username') || '未登录';
 
   return (
     <div className="layout-safe min-h-screen bg-n20 text-n800" onClick={() => setMenuOpen(null)}>
@@ -203,18 +203,7 @@ export const EpisodeHubPage: React.FC = () => {
               >
                 <Plus size={17} /> 新建分集
               </button>
-              <span className="hidden max-w-[140px] truncate text-sm text-n300 xl:block" title={currentUsername}>{currentUsername}</span>
-              <button
-                onClick={() => {
-                  localStorage.removeItem('auth_token');
-                  localStorage.removeItem('username');
-                  window.location.href = '/login';
-                }}
-                className="inline-flex h-10 items-center gap-1.5 whitespace-nowrap rounded-lg border border-n40 px-3 text-sm text-n100 transition-colors hover:border-r75 hover:bg-r50 hover:text-danger"
-                title="退出登录"
-              >
-                <LogOut size={15} /> <span className="hidden sm:inline">退出</span>
-              </button>
+              <AccountMenu />
             </div>
           </div>
 

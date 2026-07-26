@@ -4778,12 +4778,14 @@ def check_frontend_http_client_contract(root: Path) -> int:
     episode_hub = new_html / "pages" / "EpisodeHubPage.tsx"
     history_page = new_html / "components" / "HistoryPage.tsx"
     header = new_html / "components" / "Header.tsx"
+    account_menu = new_html / "components" / "AccountMenu.tsx"
     project_context = new_html / "contexts" / "ProjectContext.tsx"
     workspace_app = new_html / "WorkspaceApp.tsx"
     workflow_generation_page = new_html / "pages" / "GenerationPage.tsx"
     video_gen_page = new_html / "pages" / "VideoGenPage.tsx"
     dash_scope_cards = new_html / "components" / "video" / "DashScopeCards.tsx"
     global_task_manager = new_html / "services" / "globalTaskManager.ts"
+    profile_service = new_html / "services" / "profileService.ts"
     task_notification_service = new_html / "services" / "taskNotificationService.ts"
     episode_data_service = new_html / "services" / "episodeDataService.ts"
     audio_generation_service = new_html / "services" / "audioGenerationService.ts"
@@ -4852,6 +4854,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         project_workflow_service,
         canvas_service,
         global_task_manager,
+        profile_service,
     ]
     migrated_pages = [
         project_hub,
@@ -4859,7 +4862,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         workflow_generation_page,
         video_gen_page,
         history_page,
-        header,
+        account_menu,
         project_context,
         admin_login_page,
         design_page,
@@ -5141,8 +5144,10 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (episode_hub, "apiJson<any>(`/api/projects/${projectId}/episodes`"),
         (history_page, "import { apiJson, secureApiUrl } from '../services/httpClient'"),
         (history_page, "secureApiUrl(file.fileUrl, { absolute: true })"),
-        (header, "import { apiFetch } from '../services/httpClient'"),
-        (header, "apiFetch('/api/logout'"),
+        (header, "import AccountMenu from './AccountMenu'"),
+        (account_menu, "import { apiFetch } from '../services/httpClient'"),
+        (account_menu, "apiFetch('/api/logout'"),
+        (account_menu, "window.location.href = '/profile'"),
         (project_context, "import { apiJson } from '../services/httpClient'"),
         (project_context, "apiJson<any>(`/api/projects/${projectId}`"),
         (workspace_app, "import { getAuthToken } from './services/httpClient'"),

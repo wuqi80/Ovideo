@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Outlet, useParams, NavLink, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, Image, Mic, Palette, Film, Sparkles, Clock, Brush, LogOut, LayoutGrid, Library, Clapperboard, Coins, UserRound } from 'lucide-react';
+import { ArrowLeft, FileText, Image, Mic, Palette, Film, Sparkles, Clock, Brush, LayoutGrid, Library, Clapperboard, Coins } from 'lucide-react';
 import { EpisodeProvider } from '../contexts/EpisodeContext';
 import type { SourcePage } from '../types';
 import { TaskBadge } from '../components/TaskBadge';
 import { NotificationPanel } from '../components/NotificationPanel';
 import { getCreditBalance } from '../services/creditService';
+import AccountMenu from '../components/AccountMenu';
 
 // 2026-05-20 (Task System Overhaul M1)：每个 nav item 关联 sourcePage，用于 per-page TaskBadge。
 // 视频反推已整合到剧本对话工具栏；素材库保留为独立工作流阶段。
@@ -27,7 +28,6 @@ const NAV_ITEMS: { path: string; label: string; icon: any; sourcePage: SourcePag
 export const WorkflowLayout: React.FC = () => {
   const { projectId, episodeId } = useParams<{ projectId: string; episodeId: string }>();
   const navigate = useNavigate();
-  const username = localStorage.getItem('username') || '用户';
   const [availableCredits, setAvailableCredits] = useState<number | null>(null);
 
   const refreshCredits = useCallback(async () => {
@@ -102,14 +102,7 @@ export const WorkflowLayout: React.FC = () => {
             <NotificationPanel compact />
           </div>
           <div className="ml-1 flex shrink-0 items-center gap-1 border-l border-n40 pl-2">
-            <div
-              className="inline-flex h-8 max-w-[132px] items-center gap-1.5 rounded px-2 text-xs text-n500"
-              title={`当前用户：${username}`}
-              aria-label={`当前用户：${username}`}
-            >
-              <UserRound className="h-4 w-4 shrink-0 text-n300" />
-              <span className="truncate font-medium">{username}</span>
-            </div>
+            <AccountMenu compact />
             <button
               type="button"
               onClick={() => navigate('/credits')}
@@ -121,17 +114,6 @@ export const WorkflowLayout: React.FC = () => {
               <span className="tabular-nums">{availableCredits === null ? '--' : availableCredits.toLocaleString()}</span>
             </button>
           </div>
-          <button
-            onClick={() => {
-              localStorage.removeItem('auth_token');
-              localStorage.removeItem('username');
-              window.location.href = '/login';
-            }}
-            className="flex items-center gap-1.5 px-2.5 py-2 ml-1 rounded text-sm text-n300 hover:text-danger hover:bg-r50 transition-colors"
-            title="退出登录"
-          >
-            <LogOut size={15} />
-          </button>
         </nav>
         <main className="layout-safe flex-1 min-h-0 min-w-0 overflow-auto scrollbar-atlas">
           <Outlet />
