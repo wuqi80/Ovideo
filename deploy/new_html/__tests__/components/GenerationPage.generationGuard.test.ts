@@ -6,21 +6,22 @@ const source = readFileSync(resolve(__dirname, '../../components/GenerationPage.
 const storyboardPageSource = readFileSync(resolve(__dirname, '../../pages/StoryboardGenPage.tsx'), 'utf-8');
 
 describe('GenerationPage duplicate generation guards', () => {
-  it('does not automatically submit a second generation request by default', () => {
-    expect(source).toContain(
-      "page: 'GenerationPage:autoRetryConsistency', episodeId, version: 2, defaultValue: false",
-    );
-  });
-
   it('routes each shot through the single-flight guard', () => {
     expect(source).toContain('generationRequestsRef.current');
     expect(source).toContain('runSingleFlight(');
     expect(source).toContain('() => executeGenerationForShot(shot, useCurrentState, model, currentRefs)');
   });
 
-  it('replaces the first failed attempt instead of appending both attempts', () => {
-    expect(source).toContain('generated = resolveGenerationAttemptResults(');
-    expect(source).not.toContain('generated.push(...await runOnce(2, retryFeedback))');
+  it('does not run automatic review, retry, or model rerouting after generation', () => {
+    expect(source).not.toContain('GenerationPage:smartConsistencyRouting');
+    expect(source).not.toContain('GenerationPage:qualityReviewEnabled');
+    expect(source).not.toContain('GenerationPage:autoRetryConsistency');
+    expect(source).not.toContain('reviewStoryboardImage(');
+    expect(source).not.toContain('resolveConsistencyModel(');
+    expect(source).not.toContain('resolveGenerationAttemptResults(');
+    expect(source).not.toContain('生成后自动验收');
+    expect(source).not.toContain('不合格自动重试 1 次');
+    expect(source).not.toContain('角色一致性优先调度');
   });
 });
 
@@ -85,6 +86,7 @@ describe('GenerationPage external reference persistence', () => {
     expect(source).toContain('resolveSelectedShotReferences(');
     expect(source).toContain('referencesRef.current = nextReferences');
     expect(source).toContain('configuredReferences: nextReferences');
+    expect(source).toContain('referenceConfigInitialized: true');
     expect(source).not.toContain('pendingSaveRef.current');
   });
 
@@ -97,11 +99,17 @@ describe('GenerationPage external reference persistence', () => {
 });
 
 describe('GenerationPage reference actions', () => {
-  it('keeps lock toggling separate from reference deletion', () => {
-    expect(source).toContain('handleSetReferenceLocked(ref, !ref.isLocked)');
+  it('keeps the submitted reference list independent from material bindings', () => {
     expect(source).toContain('handleDeleteReference(ref)');
-    expect(source).toContain('解除锁定（保留参考图片）');
     expect(source).toContain('从当前镜头删除参考图片');
+    expect(source).not.toContain('handleSetReferenceLocked');
+    expect(source).not.toContain('detachShotReference');
+    expect(source).not.toContain('素材绑定');
+    expect(source).not.toContain('当前绑定');
+    expect(source).not.toContain('解除素材绑定');
+    expect(source).not.toContain('目标镜头的参考图片已锁定');
+    expect(source).not.toContain('disabled={selectedShot?.isConfigConfirmed || references.length >= 6}');
+    expect(source).not.toContain('disabled={references.length >= 6 || selectedShot?.isConfigConfirmed}');
   });
 
   it('keeps all reference image actions visible inside narrow cards', () => {
@@ -117,5 +125,15 @@ describe('GenerationPage reference actions', () => {
     );
     expect(source).toContain('从其他镜头的画面分镜结果拖入');
     expect(source).toContain('实际提交参考图片');
+  });
+
+  it('uses the requested independent reference labels and preserves bottom scroll space', () => {
+    expect(source).toContain('项目素材');
+    expect(source).toContain('自动绑定');
+    expect(source).not.toContain('从项目素材选择');
+    expect(source).not.toContain('恢复绑定素材');
+    expect(source).toContain('storyboard-config-pane min-h-0');
+    expect(source).toContain('pb-24');
+    expect(storyboardPageSource).toContain('layout-safe flex-1 min-h-0 overflow-hidden');
   });
 });

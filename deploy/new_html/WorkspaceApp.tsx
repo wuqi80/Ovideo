@@ -135,6 +135,9 @@ function buildStoryboardDbPayload(items: StoryboardItem[]): any[] {
         planned_duration_ms: item.plannedDurationMs || null,
         bound_assets: buildBoundAssetTags(item),
         configured_references: item.configuredReferences || [],
+        reference_config_initialized: Boolean(
+          item.referenceConfigInitialized || item.configuredReferences?.length
+        ),
         script_segment_id: item.scriptSegmentId || null,
         source_video_shot_no: item.sourceVideoShotNo || '',
         video_script_block: item.videoScriptBlock || '',
@@ -179,6 +182,12 @@ function mapWorkspaceStoryboardRowsToItems(rows: any[]): StoryboardItem[] {
       configuredReferences: Array.isArray(r.configured_references ?? r.configuredReferences)
         ? (r.configured_references ?? r.configuredReferences)
         : [],
+      referenceConfigInitialized: Boolean(
+        r.reference_config_initialized
+        ?? r.referenceConfigInitialized
+        ?? (Array.isArray(r.configured_references ?? r.configuredReferences)
+          && (r.configured_references ?? r.configuredReferences).length > 0)
+      ),
       characters: boundAssets.filter((a: string) => a.startsWith('char:')).map((a: string) => a.replace('char:', '')),
       scene: boundAssets.find((a: string) => a.startsWith('scene:'))?.replace('scene:', '') || '',
       props: boundAssets.filter((a: string) => a.startsWith('prop:')).map((a: string) => a.replace('prop:', '')),

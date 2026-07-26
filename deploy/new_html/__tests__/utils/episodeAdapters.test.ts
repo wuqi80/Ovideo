@@ -267,6 +267,7 @@ describe('storyboard configured references', () => {
     } as any);
 
     expect(item.configuredReferences).toEqual(references);
+    expect(item.referenceConfigInitialized).toBe(true);
   });
 
   it('normalizes JSON encoded references and audio fields without dropping objects', () => {
@@ -342,5 +343,24 @@ describe('storyboard configured references', () => {
       scriptSegment: '',
       configuredReferences: references,
     } as any, 0).configured_references).toEqual(references);
+  });
+
+  it('persists an explicitly initialized empty reference list', () => {
+    const normalized = normalizeStoryboardRecord({
+      item_id: 'sb_empty',
+      episode_id: 'ep_1',
+      configured_references: [],
+      reference_config_initialized: true,
+    });
+    expect(normalized.configuredReferences).toEqual([]);
+    expect(normalized.referenceConfigInitialized).toBe(true);
+    expect(dbItemToStoryboardItem(normalized).referenceConfigInitialized).toBe(true);
+    expect(storyboardItemToDbUpdate({
+      configuredReferences: [],
+      referenceConfigInitialized: true,
+    })).toEqual({
+      configured_references: [],
+      reference_config_initialized: true,
+    });
   });
 });

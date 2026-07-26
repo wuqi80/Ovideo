@@ -17,6 +17,7 @@ class FakeConnection:
                 "sort_order": 0,
                 "generated_image_url": "/old.webp",
                 "configured_references": '[{"referenceId":"ref-1"}]',
+                "reference_config_initialized": True,
             },
             {
                 "item_id": "sb_remove",
@@ -48,7 +49,8 @@ class FakeConnection:
         self.queries.append((query, args))
         assert args[0] == "sb_keep"
         assert json.loads(args[10]) == [{"referenceId": "ref-1"}]
-        assert args[18] == "/old.webp"
+        assert args[11] is True
+        assert args[19] == "/old.webp"
         return {
             "item_id": "sb_keep",
             "episode_id": "ep_1",

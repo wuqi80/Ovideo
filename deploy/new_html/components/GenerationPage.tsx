@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { ProjectFile, StoryboardItem, MaterialLibrary, GenerationReference, ReferenceType, GeneratedImage, FileVersion, StoryboardQualityReview } from '../types';
-import { LayoutDashboard, Image as ImageIcon, Sparkles, Upload, X, ChevronLeft, ChevronRight, Wand2, Users, MapPin, Box, Zap, User, Play, CheckCircle2, CircleDashed, CheckSquare, Square, Trash2, ArrowRight, Save, History, Clock, RefreshCw, ZoomIn, Eye, FolderInput, GripVertical, Camera, Pencil, Type, MoveRight, Eraser, RotateCcw, Download, Layers, Scissors, Grid3X3, Clapperboard, ShieldCheck, AlertTriangle, LockKeyhole, LockOpen, Library, Search, Check } from 'lucide-react';
+import { ProjectFile, StoryboardItem, MaterialLibrary, GenerationReference, ReferenceType, GeneratedImage, FileVersion } from '../types';
+import { LayoutDashboard, Image as ImageIcon, Sparkles, Upload, X, ChevronLeft, ChevronRight, Wand2, Users, MapPin, Box, Zap, User, Play, CheckCircle2, CircleDashed, CheckSquare, Square, Trash2, ArrowRight, Save, History, Clock, RefreshCw, ZoomIn, Eye, FolderInput, GripVertical, Camera, Pencil, Type, MoveRight, Eraser, RotateCcw, Download, Layers, Scissors, Grid3X3, Clapperboard, AlertTriangle, Library, Search, Check } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateFinalIllustrationResult } from '../services/geminiImageGenerationService';
 import { generateWithComfyUIWorkflowQueued, generateHumanMultiAngleQueued, generateAroundAngleQueued, adjustImageAngleQueued, generateMattingQueued, generateImageFusionQueued, generatePanorama360Queued, generatePanoramaFusionQueued, generateAutoStoryboardQueued, generateMultiGridStoryboard } from '../services/comfyuiGenerationService';
@@ -37,16 +37,11 @@ import {
   type ClusterNodeOption,
 } from '../services/clusterNodeService';
 import { fitAngleOutputDimensions } from '../utils/angleOutputSize';
-import { reviewStoryboardImage } from '../services/storyboardQualityService';
 import {
   buildIdentityAnchoredPrompt,
-  detachShotReference,
-  resolveConsistencyModel,
   resolveSelectedShotReferences,
   resolveShotReferencePlan,
   resolveShotReferences,
-  reviewPassed,
-  setShotReferenceLock,
   type StoryboardGenerationModel,
 } from '../utils/storyboardConsistency';
 import {
@@ -56,7 +51,6 @@ import {
   dedupeGeneratedImages,
   estimateStoryboardGenerationProgress,
   formatStoryboardGenerationEta,
-  resolveGenerationAttemptResults,
   runSingleFlight,
   type StoryboardGenerationProgressState,
 } from '../utils/storyboardGeneration';
@@ -267,6 +261,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       onUpdateStoryboardItem(selectedShotId, {
         ...extraUpdates,
         configuredReferences: nextReferences,
+        referenceConfigInitialized: true,
       });
     }
     return nextReferences;
@@ -300,7 +295,13 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     activeReferenceShotIdRef.current = shot.id;
     referencesRef.current = nextReferences;
     setReferences(nextReferences);
-  }, [selectedShotId, selectedFile?.storyboard?.items, materialLibrary]);
+    if (!shot.referenceConfigInitialized) {
+      onUpdateStoryboardItem(shot.id, {
+        configuredReferences: nextReferences,
+        referenceConfigInitialized: true,
+      });
+    }
+  }, [selectedShotId, selectedFile?.storyboard?.items, materialLibrary, onUpdateStoryboardItem]);
 
   // 🆕 自动为已有素材生成缩略图（只在首次加载时执行一次）
   const [thumbnailProcessed, setThumbnailProcessed] = useState<Set<string>>(new Set());
@@ -515,15 +516,6 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     // 开箱即用、就是出成片那 8 张图的通道）。version+1 让旧持久化的 'qwen' 失效、回落新默认。
     version: 2,
     defaultValue: 'nanobanana',
-  });
-  const [smartConsistencyRouting, setSmartConsistencyRouting] = usePersistedPageState<boolean>({
-    page: 'GenerationPage:smartConsistencyRouting', episodeId, version: 2, defaultValue: false,
-  });
-  const [qualityReviewEnabled, setQualityReviewEnabled] = usePersistedPageState<boolean>({
-    page: 'GenerationPage:qualityReviewEnabled', episodeId, version: 1, defaultValue: true,
-  });
-  const [autoRetryConsistency, setAutoRetryConsistency] = usePersistedPageState<boolean>({
-    page: 'GenerationPage:autoRetryConsistency', episodeId, version: 2, defaultValue: false,
   });
   // ComfyUI 档位固定使用用户选择的 GPU 节点，默认 GPU1。
   const COMFYUI_MODELS = React.useMemo(() => new Set<string>(['qwen', 'qwen_lora', 'qwenN', 'qwenN_lora', 'kontext']), []);
@@ -834,19 +826,16 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       return Object.entries(materialLibrary)
           .flatMap(([tagName, materials]) => materials.map(material => {
               const type = material.assetType || typeByTag.get(tagName) || 'prop';
-              const isBound = selectedShot?.materialSelections?.[tagName] === material.id;
               return {
                   key: `${tagName}:${material.id}`,
                   tagName,
                   material,
                   type,
-                  isBound,
                   isRelevant: relevantTags.has(tagName),
               };
           }))
           .sort((left, right) => (
-              Number(right.isBound) - Number(left.isBound)
-              || Number(right.isRelevant) - Number(left.isRelevant)
+              Number(right.isRelevant) - Number(left.isRelevant)
               || left.type.localeCompare(right.type)
               || left.tagName.localeCompare(right.tagName, 'zh-CN')
           ));
@@ -951,7 +940,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const handleAutoFill = () => {
       if (!selectedShot) return;
       updateCurrentShotReferences(
-        resolveShotReferences(selectedShot, materialLibrary, referencesRef.current),
+        resolveShotReferences(selectedShot, materialLibrary),
       );
   };
 
@@ -1037,36 +1026,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       });
   };
 
-  const handleSetReferenceLocked = (
-      reference: GenerationReference,
-      isLocked: boolean,
-  ) => {
-      if (!selectedShot) return;
-
-      updateCurrentShotReferences(current => (
-          setShotReferenceLock(current, reference, isLocked)
-      ));
-  };
-
   const handleDeleteReference = (reference: GenerationReference) => {
       if (!selectedShot) return;
-
-      const detached = detachShotReference(
-          selectedShot,
-          referencesRef.current,
-          reference,
-      );
-      if (
-          detached.bindingRemoved
-          && !window.confirm(`删除当前镜头的「${reference.name || '该素材'}」参考图并解除素材绑定？素材库原图和其他镜头不会被删除。`)
-      ) {
-          return;
-      }
-
-      updateCurrentShotReferences(
-        detached.references,
-        detached.bindingRemoved ? { materialSelections: detached.materialSelections } : {},
-      );
+      updateCurrentShotReferences(current => (
+          current.filter(item => item.id !== reference.id)
+      ));
   };
 
   // 🆕 拖拽状态
@@ -1093,7 +1057,6 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       e.stopPropagation();
       setIsDraggingRef(false);
       
-      if (selectedShot?.isConfigConfirmed) return;
       if (references.length >= 6) {
           alert('最多只能添加6张参考图片');
           return;
@@ -1236,15 +1199,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           e.dataTransfer.getData('text/plain'),
       );
       if (!dragged || dragged.sourceShotId === targetShot.id || copyingImageToShotId) return;
-      if (targetShot.isConfigConfirmed) {
-          alert('目标镜头的参考图片已锁定，请先解锁后再拖入。');
-          return;
-      }
-
       const targetReferences = resolveShotReferences(
           targetShot,
           materialLibrary,
-          targetShot.configuredReferences || [],
+          targetShot.referenceConfigInitialized || (targetShot.configuredReferences?.length || 0) > 0
+              ? targetShot.configuredReferences || []
+              : undefined,
       );
       if (targetReferences.some(reference => reference.url === dragged.image.url)) {
           setSelectedShotId(targetShot.id);
@@ -1282,20 +1242,22 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               fileId: saved.fileId || undefined,
               description: '从其他镜头的画面分镜结果拖入',
               source: 'manual',
-              isLocked: false,
           };
 
           onUpdateStoryboardItem(targetShot.id, (currentItem) => {
               const currentReferences = resolveShotReferences(
                   currentItem,
                   materialLibrary,
-                  currentItem.configuredReferences || [],
+                  currentItem.referenceConfigInitialized || (currentItem.configuredReferences?.length || 0) > 0
+                      ? currentItem.configuredReferences || []
+                      : undefined,
               );
               if (currentReferences.some(reference => reference.url === copiedReference.url)) {
                   return {};
               }
               return {
                   configuredReferences: [...currentReferences, copiedReference].slice(0, 6),
+                  referenceConfigInitialized: true,
               };
           });
           setSelectedShotId(targetShot.id);
@@ -1336,81 +1298,45 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       const plan = resolveShotReferencePlan(
           shot,
           materialLibrary,
-          currentRefs ?? shot.configuredReferences ?? [],
+          currentRefs ?? (
+              shot.referenceConfigInitialized || (shot.configuredReferences?.length || 0) > 0
+                  ? shot.configuredReferences || []
+                  : undefined
+          ),
       );
-      if (plan.criticalExcluded.length > 0) {
-          const omitted = plan.criticalExcluded
-              .map(item => `${item.reference.type === 'character' ? '角色' : '场景'}「${item.reference.name || '未命名'}」`)
-              .join('、');
-          throw new Error(`参考图上限为 ${plan.maxReferences} 张，关键绑定素材 ${omitted} 未能提交。请减少当前镜头的角色/场景绑定后再生成。`);
-      }
-      const boundReferences = [...plan.references];
-      if (boundReferences.length === 0) {
+      const submittedReferences = [...plan.references];
+      if (submittedReferences.length === 0) {
           const generated = shot.selectedImageId
               ? shot.generatedImages?.find(image => image.id === shot.selectedImageId)
               : shot.generatedImages?.[0];
           const generatedUrl = generated?.url || shot.generatedImage;
           if (generatedUrl) {
-              boundReferences.push({
+              submittedReferences.push({
                   id: `current-result:${shot.id}`,
                   url: generatedUrl,
                   type: 'effect',
                   name: '当前分镜结果',
                   source: 'manual',
-                  isLocked: false,
               });
           }
       }
-      const requestedModel = model || (useCurrentState ? globalModel : (shotModels[shot.id] || globalModel));
-      const routed = resolveConsistencyModel(
-          requestedModel,
-          boundReferences,
-          shot.characters?.length || 0,
-          smartConsistencyRouting,
-      );
-      const modelToUse = routed.model;
+      const modelToUse = model || (useCurrentState ? globalModel : (shotModels[shot.id] || globalModel));
       beginShotProgress(shot.id, modelToUse);
-      if (routed.reason) console.info(`[角色一致性调度] ${routed.reason}`);
-      if (COMFYUI_MODELS.has(modelToUse) && boundReferences.length === 0) {
+      if (COMFYUI_MODELS.has(modelToUse) && submittedReferences.length === 0) {
           throw new Error('练气/筑基等本地 GPU 模型需要一张参考图；请添加参考图，或先选择当前分镜已有的生成结果。');
       }
 
       const basePrompt = (useCurrentState ? prompt : shot.imagePrompt) || shot.scriptSegment || '';
-      const refImages = boundReferences.map(reference => reference.url);
-      const qualityCharacters = (shot.characters || []).map(name => {
-          const selectedId = shot.materialSelections?.[name];
-          const materials = materialLibrary[name] || [];
-          const material = selectedId ? materials.find(item => item.id === selectedId) : undefined;
-          return {
-              name,
-              description: material?.description || '',
-              anchor: material?.styleParams?.identity_anchor || {},
-          };
-      });
-      const qualityReferences = boundReferences
-          .filter(reference => reference.type === 'character')
-          .map(reference => ({ name: reference.name || '角色', url: reference.url }));
+      const refImages = submittedReferences.map(reference => reference.url);
 
-      const unverifiedReview = (message: string, attempt: number): StoryboardQualityReview => ({
-          status: 'unverified',
-          characterConsistencyScore: 0,
-          scriptComplianceScore: 0,
-          visualQualityScore: 0,
-          overallScore: 0,
-          characterScores: [],
-          issues: [message],
-          retryPrompt: '',
-          reviewedAt: new Date().toISOString(),
-          attempt,
-      });
-
-      const runOnce = async (attempt: number, retryFeedback = ''): Promise<GeneratedImage[]> => {
+      const runOnce = async (): Promise<GeneratedImage[]> => {
+          const attempt = 1;
           updateShotProgressStage(
               shot.id,
-              attempt > 1 ? '正在按验收结果重新生成' : '正在分析提示词与参考图',
-              attempt > 1 ? 18 : 6,
+              '正在分析提示词与参考图',
+              6,
           );
-          const promptToUse = buildIdentityAnchoredPrompt(shot, basePrompt, materialLibrary, retryFeedback, boundReferences);
+          const promptToUse = buildIdentityAnchoredPrompt(shot, basePrompt, materialLibrary, submittedReferences);
           const sourceDimensions = imageRatio === 'auto' || imageK === 'auto'
               ? await loadImageDimensions(refImages)
               : [];
@@ -1436,7 +1362,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                       aspectRatio: resolvedImageSettings.ratio,
                       imageSize: resolvedImageSettings.k,
                   },
-                  boundReferences.map(reference => ({
+                  submittedReferences.map(reference => ({
                       referenceId: reference.id,
                       assetId: reference.assetId,
                       fileId: reference.fileId,
@@ -1444,7 +1370,6 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                       name: reference.name,
                       description: reference.description,
                       source: reference.source,
-                      isLocked: reference.isLocked,
                   })),
               );
               generated = [{
@@ -1463,7 +1388,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   tier,
                   prompt: promptToUse,
                   references: refImages,
-                  referenceMetadata: boundReferences.map(reference => ({
+                  referenceMetadata: submittedReferences.map(reference => ({
                       referenceId: reference.id,
                       assetId: reference.assetId,
                       fileId: reference.fileId,
@@ -1471,7 +1396,6 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                       name: reference.name,
                       description: reference.description,
                       source: reference.source,
-                      isLocked: reference.isLocked,
                   })),
                   ratio: resolvedImageSettings.ratio,
                   k: resolvedImageSettings.k,
@@ -1546,54 +1470,15 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           if (!generated.length) throw new Error('未获取到生成结果');
           updateShotProgressStage(
               shot.id,
-              qualityReviewEnabled ? '正在校验画面质量' : '画面已生成，正在整理结果',
+              '画面已生成，正在整理结果',
               90,
           );
-          if (!qualityReviewEnabled) return generated;
-
-          return Promise.all(generated.map(async image => {
-              try {
-                  const qualityReview = await reviewStoryboardImage(shot.id, {
-                      imageUrl: image.url,
-                      fileId: image.fileId || undefined,
-                      generationModel: modelToUse,
-                      generationAttempt: attempt,
-                      prompt: promptToUse,
-                      scriptSegment: shot.scriptSegment,
-                      scene: shot.scene,
-                      characters: qualityCharacters,
-                      referenceImages: qualityReferences,
-                  });
-                  return { ...image, qualityReview };
-              } catch (error) {
-                  return { ...image, qualityReview: unverifiedReview(`自动验收失败：${(error as Error).message || error}`, attempt) };
-              }
-          }));
+          return generated;
       };
 
       try {
-          let generated = await runOnce(1);
-          const shouldRetry = qualityReviewEnabled
-              && autoRetryConsistency
-              && generated.some(image => image.qualityReview?.status === 'failed')
-              && !generated.some(image => reviewPassed(image.qualityReview));
-          if (shouldRetry) {
-              const retryFeedback = generated
-                  .map(image => image.qualityReview?.retryPrompt || image.qualityReview?.issues.join('；') || '')
-                  .filter(Boolean)
-                  .join('；');
-              try {
-                  generated = resolveGenerationAttemptResults(
-                      generated,
-                      await runOnce(2, retryFeedback),
-                  );
-              } catch (retryError) {
-                  console.warn(`Quality retry failed for shot ${shot.id}; keeping the initial result.`, retryError);
-              }
-          }
-
-           const selected = [...generated].reverse().find(image => reviewPassed(image.qualityReview))
-               || generated[generated.length - 1];
+          const generated = await runOnce();
+           const selected = generated[generated.length - 1];
            updateShotProgressStage(shot.id, '正在保存生成结果', 97);
            onUpdateStoryboardItem(shot.id, currentItem => {
               const existingImages = currentItem.generatedImages || [];
@@ -2835,10 +2720,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           </div>
 
           {/* Main Content */}
-          <div className="storyboard-generation-main flex-1 flex overflow-hidden pt-[52px]">
+          <div className="storyboard-generation-main min-h-0 flex-1 flex overflow-hidden pt-[52px]">
               
             {/* Configuration Column */}
-            <div className="storyboard-config-pane flex flex-col border-r border-n40 bg-n0 p-6 overflow-y-auto custom-scrollbar">
+            <div className="storyboard-config-pane min-h-0 flex flex-col border-r border-n40 bg-n0 px-6 pt-6 pb-24 overflow-y-auto custom-scrollbar">
                   <div className="flex items-center justify-between mb-4">
                       <h3 className="text-sm font-bold text-n700 flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-primary" />
@@ -3016,21 +2901,6 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         {selectedGenerationModel === 'gpt_image_official' && '天劫二阶 · GPT Image 官方混合，可调整比例 / 分辨率 / 质量'}
                     </p>
 
-                    <div className="mt-3 pt-3 border-t border-n40 grid grid-cols-1 gap-2 text-[10px] text-n300">
-                      <label className="flex items-center gap-2 cursor-pointer" title="多角色或多参考图镜头优先使用支持多图参考的模型">
-                        <input type="checkbox" checked={smartConsistencyRouting} onChange={e => setSmartConsistencyRouting(e.target.checked)} disabled={isGenerating} className="mt-0.5 accent-indigo-600" />
-                        <span className="font-semibold text-n700">角色一致性优先调度</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer" title="检查角色一致性、脚本符合度与画面质量">
-                        <input type="checkbox" checked={qualityReviewEnabled} onChange={e => setQualityReviewEnabled(e.target.checked)} disabled={isGenerating} className="mt-0.5 accent-indigo-600" />
-                        <span className="font-semibold text-n700">生成后自动验收</span>
-                      </label>
-                      <label className={`flex items-center gap-2 ${qualityReviewEnabled ? 'cursor-pointer' : 'opacity-50'}`} title="可能产生一次额外生成费用">
-                        <input type="checkbox" checked={autoRetryConsistency} onChange={e => setAutoRetryConsistency(e.target.checked)} disabled={isGenerating || !qualityReviewEnabled} className="mt-0.5 accent-indigo-600" />
-                        <span className="font-semibold text-n700">不合格自动重试 1 次</span>
-                      </label>
-                    </div>
-
                     <div className="mt-3 pt-3 border-t border-n40">
                         <div className="text-[9px] text-n100 mb-2 flex items-center gap-1">
                           <span className="text-primary">●</span>
@@ -3130,33 +3000,28 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => { setMaterialPickerFilter('shot'); setShowMaterialPicker(true); }}
-                              disabled={selectedShot?.isConfigConfirmed || references.length >= 6}
+                              disabled={references.length >= 6}
                               className="text-[10px] flex items-center gap-1 bg-primary text-white px-2 py-1 rounded border border-primary hover:bg-primary-hover disabled:opacity-50"
                             >
                                 <Library className="w-3 h-3" />
-                                从项目素材选择
+                                项目素材
                             </button>
                             <button
                               onClick={handleAutoFill}
-                              disabled={selectedShot?.isConfigConfirmed}
                               className="text-[10px] flex items-center gap-1 bg-primary-light text-primary px-2 py-1 rounded border border-primary/30 hover:bg-primary-light disabled:opacity-50"
                             >
                                 <Wand2 className="w-3 h-3" />
-                                恢复绑定素材
+                                自动绑定
                             </button>
                           </div>
                       </div>
 
                       {referencePlan.excluded.length > 0 && (
-                        <div className={`mb-3 rounded border px-3 py-2 text-[10px] leading-relaxed ${referencePlan.criticalExcluded.length > 0 ? 'border-danger/40 bg-danger/5 text-danger' : 'border-warning/40 bg-warning/5 text-warning'}`}>
+                        <div className="mb-3 rounded border border-warning/40 bg-warning/5 px-3 py-2 text-[10px] leading-relaxed text-warning">
                           <div className="flex items-start gap-2">
                             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                             <div>
-                              <div className="font-semibold">
-                                {referencePlan.criticalExcluded.length > 0
-                                  ? '关键绑定素材超出接口上限，已阻止生成'
-                                  : `${referencePlan.excluded.length} 张补充参考未提交`}
-                              </div>
+                              <div className="font-semibold">{referencePlan.excluded.length} 张参考图未提交</div>
                               <div className="mt-1 text-current/80">
                                 未提交：{referencePlan.excluded.map(item => `${item.reference.type === 'character' ? '角色' : item.reference.type === 'scene' ? '场景' : item.reference.type === 'prop' ? '道具' : '补充'}「${item.reference.name || '未命名'}」`).join('、')}
                               </div>
@@ -3178,20 +3043,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                   decoding="async"
                                   alt=""
                                   className="w-full h-full object-cover cursor-pointer" 
-                                  onClick={() => {
-                                    // 🆕 点击打开图片编辑器
-                                    if (!ref.isLocked) setImageEditorData({ imageUrl: ref.url, referenceId: ref.id });
-                                  }} 
+                                  onClick={() => setImageEditorData({ imageUrl: ref.url, referenceId: ref.id })}
                                 />
                                   
                                 {/* Action Buttons */}
-                                {!selectedShot?.isConfigConfirmed && (
-                                  <div
-                                    className="absolute right-1 top-1 z-10 grid grid-cols-2 gap-1 opacity-100"
-                                    data-testid="reference-image-actions"
-                                  >
-                                    {!ref.isLocked && (
-                                      <>
+                                <div
+                                  className="absolute right-1 top-1 z-10 grid grid-cols-2 gap-1 opacity-100"
+                                  data-testid="reference-image-actions"
+                                >
                                       <button 
                                           onClick={(e) => { e.stopPropagation(); setImageEditorData({ imageUrl: ref.url, referenceId: ref.id }); }}
                                           className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white hover:bg-primary-hover"
@@ -3213,48 +3072,27 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                       >
                                           <RotateCcw className="w-3 h-3" />
                                       </button>
-                                      </>
-                                    )}
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleSetReferenceLocked(ref, !ref.isLocked);
-                                            }}
-                                            className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-n900/50 text-white hover:bg-primary"
-                                            title={ref.isLocked ? '解除锁定（保留参考图片）' : '锁定参考图片'}
-                                        >
-                                            {ref.isLocked
-                                              ? <LockOpen className="w-3 h-3" />
-                                              : <LockKeyhole className="w-3 h-3" />}
-                                        </button>
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 handleDeleteReference(ref);
                                             }}
                                             className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-n900/50 text-white hover:bg-danger"
-                                            title={ref.source === 'identity_anchor' || ref.source === 'material_binding'
-                                              ? '删除参考图片并解除当前镜头素材绑定'
-                                              : '从当前镜头删除参考图片'}
+                                            title="从当前镜头删除参考图片"
                                         >
                                             <Trash2 className="w-3 h-3" />
                                         </button>
-                                    </div>
-                                  )}
+                                </div>
 
                                   <div className="absolute top-1 left-1 pointer-events-none">
-                                      {ref.isLocked && <LockKeyhole className="w-3 h-3 text-success drop-shadow-md" />}
-                                      {!ref.isLocked && ref.type === 'character' && <Users className="w-3 h-3 text-primary drop-shadow-md" />}
+                                      {ref.type === 'character' && <Users className="w-3 h-3 text-primary drop-shadow-md" />}
                                       {ref.type === 'scene' && <MapPin className="w-3 h-3 text-orange-400 drop-shadow-md" />}
                                       {ref.type === 'pose' && <User className="w-3 h-3 text-blue-400 drop-shadow-md" />}
                                       {ref.type === 'prop' && <Box className="w-3 h-3 text-yellow-400 drop-shadow-md" />}
                                       {ref.type === 'effect' && <Zap className="w-3 h-3 text-primary drop-shadow-md" />}
                                   </div>
-                                  <div className="absolute bottom-1 left-1 right-1 pointer-events-none flex justify-between gap-1">
+                                  <div className="absolute bottom-1 left-1 right-1 pointer-events-none">
                                     <span className="max-w-full truncate rounded bg-n900/60 px-1.5 py-0.5 text-[9px] text-white">{ref.name || '参考图'}</span>
-                                    {(ref.source === 'identity_anchor' || ref.source === 'material_binding') && (
-                                      <span className="shrink-0 rounded bg-success/90 px-1.5 py-0.5 text-[9px] text-white">素材绑定</span>
-                                    )}
                                   </div>
                               </div>
                           ))}
@@ -3263,17 +3101,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                           {Array.from({ length: Math.max(0, 6 - references.length) }).map((_, i) => (
                               <div 
                                   key={i} 
-                                   onClick={() => {
-                                       if (!selectedShot?.isConfigConfirmed) {
-                                           setMaterialPickerFilter('shot');
-                                           setShowMaterialPicker(true);
-                                       }
+                                  onClick={() => {
+                                      setMaterialPickerFilter('shot');
+                                      setShowMaterialPicker(true);
                                    }}
-                                  className={`aspect-square rounded-lg border border-dashed flex flex-col items-center justify-center text-xs ${
-                                      selectedShot?.isConfigConfirmed 
-                                          ? 'bg-n30 border-n40 text-n100 cursor-not-allowed'
-                                          : 'bg-n30 border-n40 text-n100 hover:bg-n20 hover:border-n40 hover:text-n300 cursor-pointer transition-all'
-                                  }`}
+                                  className="aspect-square rounded-lg border border-dashed flex flex-col items-center justify-center text-xs bg-n30 border-n40 text-n100 hover:bg-n20 hover:border-n40 hover:text-n300 cursor-pointer transition-all"
                               >
                                    <Library className="w-4 h-4 mb-1 opacity-50" />
                                    <span>{i + 1 + references.length}</span>
@@ -3291,7 +3123,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                               {categories.map((cat) => (
                                   <label 
                                     key={cat.type}
-                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-[10px] cursor-pointer transition-colors ${references.length >= 6 || selectedShot?.isConfigConfirmed ? 'opacity-50 cursor-not-allowed bg-n0 border-n40 text-n100' : 'bg-n0 hover:bg-n20 border-n40 text-n700 hover:text-n800'}`}
+                                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-[10px] cursor-pointer transition-colors ${references.length >= 6 ? 'opacity-50 cursor-not-allowed bg-n0 border-n40 text-n100' : 'bg-n0 hover:bg-n20 border-n40 text-n700 hover:text-n800'}`}
                                   >
                                       <cat.icon className="w-3 h-3" />
                                       上传{cat.label}
@@ -3299,7 +3131,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                         type="file" 
                                         className="hidden" 
                                         accept="image/*"
-                                      disabled={references.length >= 6 || selectedShot?.isConfigConfirmed}
+                                      disabled={references.length >= 6}
                                         onChange={(e) => handleFileUpload(e, cat.type)} 
                                       />
                                   </label>
@@ -3422,29 +3254,6 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                                 <span className="text-xs text-white bg-n900/50 px-2 py-1 rounded">点击查看高清原图</span>
                                             </div>
                                         )}
-                                        {img.qualityReview && (
-                                          <div
-                                            className={`absolute top-2 left-2 max-w-[75%] rounded px-2 py-1 text-[9px] font-semibold shadow-lg flex items-center gap-1 ${
-                                              img.qualityReview.status === 'passed'
-                                                ? 'bg-success text-white'
-                                                : img.qualityReview.status === 'failed'
-                                                  ? 'bg-danger text-white'
-                                                  : 'bg-warning text-white'
-                                            }`}
-                                            title={img.qualityReview.issues.join('；') || '无详细问题'}
-                                          >
-                                            {img.qualityReview.status === 'passed'
-                                              ? <ShieldCheck className="w-3 h-3 shrink-0" />
-                                              : <AlertTriangle className="w-3 h-3 shrink-0" />}
-                                            <span className="truncate">
-                                              {img.qualityReview.status === 'passed'
-                                                ? `验收通过 ${img.qualityReview.overallScore}`
-                                                : img.qualityReview.status === 'failed'
-                                                  ? `角色 ${img.qualityReview.characterConsistencyScore} · 脚本 ${img.qualityReview.scriptComplianceScore}`
-                                                  : '自动验收暂不可用'}
-                                            </span>
-                                          </div>
-                                        )}
                                       {effectiveSelectedId === img.id && (
                                             <div className="absolute top-2 right-2 bg-emerald-500 text-white p-1 rounded-full shadow-lg">
                                                 <CheckCircle2 className="w-4 h-4" />
@@ -3512,14 +3321,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                       <span className={`text-xs font-medium ${effectiveSelectedId === img.id ? 'text-success' : 'text-n100'}`}>
                                         {effectiveSelectedId === img.id ? '已选定 (最终结果)' : '点击选定'}
                                       </span>
-                                      {img.qualityReview && img.qualityReview.status !== 'unverified' && (
-                                        <span className="text-[9px] text-n300 whitespace-nowrap">
-                                          角色 {img.qualityReview.characterConsistencyScore} · 脚本 {img.qualityReview.scriptComplianceScore}
-                                        </span>
-                                      )}
                                       {(img.generationModel || img.generationAttempt) && (
                                         <span className="text-[9px] text-n100 truncate">
-                                          {img.generationModel || ''}{(img.generationAttempt || 1) > 1 ? ` · 重试${img.generationAttempt}` : ''}
+                                          {img.generationModel || ''}
                                         </span>
                                       )}
                                     </div>
@@ -3789,8 +3593,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
             <div className="w-full max-w-5xl max-h-[86vh] bg-n0 border border-n40 rounded-lg shadow-bottom flex flex-col overflow-hidden" onClick={event => event.stopPropagation()}>
               <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-n40">
                 <div>
-                  <h3 className="text-sm font-bold text-n800 flex items-center gap-2"><Library className="w-4 h-4 text-primary" />从项目素材选择</h3>
-                  <p className="mt-1 text-[11px] text-n300">当前镜头绑定素材排在最前并自动参与生成；也可追加项目素材或其他分镜图片作为参考。</p>
+                  <h3 className="text-sm font-bold text-n800 flex items-center gap-2"><Library className="w-4 h-4 text-primary" />项目素材</h3>
+                  <p className="mt-1 text-[11px] text-n300">本镜头相关素材排在最前；可任意添加项目素材或其他分镜图片作为当前镜头参考。</p>
                 </div>
                 <button onClick={() => setShowMaterialPicker(false)} className="w-8 h-8 inline-flex items-center justify-center text-n300 hover:text-n800" title="关闭">
                   <X className="w-4 h-4" />
@@ -3849,7 +3653,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                             {visibleOtherStoryboardImageItems.map(item => {
                               const alreadyAdded = references.some(reference => reference.url === item.url);
-                              const disabled = alreadyAdded || references.length >= 6 || Boolean(selectedShot?.isConfigConfirmed);
+                              const disabled = alreadyAdded || references.length >= 6;
                               return (
                                 <button
                                   key={item.key}
@@ -3903,7 +3707,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                             {visibleMaterialPickerItems.map(item => {
                               const alreadyAdded = references.some(reference => reference.url === item.material.url);
-                              const disabled = alreadyAdded || references.length >= 6 || Boolean(selectedShot?.isConfigConfirmed);
+                              const disabled = alreadyAdded || references.length >= 6;
                               return (
                                 <button
                                   key={item.key}
@@ -3922,7 +3726,6 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                     </div>
                                     <div className="mt-1 flex items-center gap-1 text-[9px] text-n100">
                                       <span>{item.type === 'character' ? '人物' : item.type === 'scene' ? '场景' : '道具'}</span>
-                                      {item.isBound && <span className="rounded bg-primary-light px-1 py-0.5 text-primary">当前绑定</span>}
                                     </div>
                                   </div>
                                 </button>

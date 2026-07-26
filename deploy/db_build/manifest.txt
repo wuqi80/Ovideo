@@ -29,6 +29,7 @@ sql/db_migration_script_conversations.sql   # REF episode_scripts/storyboard_ite
 sql/db_migration_storyboard_audio_mix.sql   # ALTER storyboard_items
 sql/db_migration_storyboard_pipeline_fields.sql # ALTER storyboard_items
 sql/db_migration_storyboard_reference_config.sql # ALTER storyboard_items
+sql/db_migration_storyboard_reference_initialization.sql # ALTER storyboard_items
 sql/db_migration_storyboard_audio_segments.sql # ALTER storyboard_items
 sql/db_migration_clean_storyboard_data_urls.sql # 数据清理（storyboard_items 之后）
 sql/db_migration_files_project_episode_source.sql # ALTER files; REF projects/episodes

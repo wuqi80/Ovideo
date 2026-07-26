@@ -4,22 +4,19 @@ import type { MaterialLibrary, StoryboardItem } from '../../types';
 import {
   applyConfiguredReferenceDrafts,
   buildIdentityAnchoredPrompt,
-  detachShotReference,
-  resolveConsistencyModel,
   resolveSelectedShotReferences,
   resolveShotReferencePlan,
   resolveShotReferences,
-  setShotReferenceLock,
 } from '../../utils/storyboardConsistency';
 
 const library: MaterialLibrary = {
   女1: [
     {
       id: 'char_0', url: '/storage/char/old.png', type: 'image', source: 'asset', timestamp: 1,
-      name: '女1', description: '冷静的女总裁', styleParams: {}, isIdentityReference: true,
+      name: '女1', description: '旧角色素材', styleParams: {}, isIdentityReference: true,
     },
     {
-      id: 'char_1', url: '/storage/char/bound.png', type: 'image', source: 'asset', timestamp: 2,
+      id: 'char_1', url: '/storage/char/default.png', type: 'image', source: 'asset', timestamp: 2,
       assetId: 'asset-char', fileId: 'file-char',
       name: '女1', description: '冷静的女总裁',
       styleParams: { identity_anchor: { hair: '黑色齐肩直发', outfit: '黑色西装' } },
@@ -39,39 +36,66 @@ const shot: StoryboardItem = {
   materialSelections: { 女1: 'char_1', 客厅: 'scene_0' },
 };
 
-describe('storyboard consistency', () => {
-  it('uses the existing material binding as the fixed character reference', () => {
+describe('storyboard independent references', () => {
+  it('uses selected project materials only as the initial default list', () => {
     const refs = resolveShotReferences(shot, library);
-    expect(refs[0]).toMatchObject({
-      url: '/storage/char/bound.png',
-      assetId: 'asset-char',
-      fileId: 'file-char',
-      name: '女1',
-      source: 'identity_anchor',
-      isLocked: true,
-    });
-    expect(refs[1]).toMatchObject({ url: '/storage/scene.png', source: 'material_binding' });
+
+    expect(refs).toEqual([
+      expect.objectContaining({
+        url: '/storage/char/default.png',
+        assetId: 'asset-char',
+        fileId: 'file-char',
+        name: '女1',
+        source: 'manual',
+      }),
+      expect.objectContaining({
+        url: '/storage/scene.png',
+        name: '客厅',
+        source: 'manual',
+      }),
+    ]);
+    expect(refs.every(reference => reference.isLocked == null)).toBe(true);
   });
 
-  it('honors explicit unbinding and preserves manual references', () => {
-    const refs = resolveShotReferences(
-      { ...shot, materialSelections: {} },
+  it('keeps an explicitly emptied saved list empty instead of restoring materials', () => {
+    expect(resolveShotReferences(shot, library, [])).toEqual([]);
+    expect(resolveSelectedShotReferences(
+      { ...shot, configuredReferences: [], referenceConfigInitialized: true },
       library,
-      [{ id: 'manual', url: '/storage/manual.png', type: 'pose', source: 'manual' }],
-    );
-    expect(refs).toEqual([expect.objectContaining({ id: 'manual', url: '/storage/manual.png' })]);
+      'another-shot',
+      [{ id: 'stale', url: '/storage/stale.png', type: 'pose', source: 'manual' }],
+    )).toEqual([]);
   });
 
-  it('preserves an external reference while the active shot receives unrelated updates', () => {
+  it('keeps arbitrary saved references without adding project materials again', () => {
+    const refs = resolveShotReferences(shot, library, [
+      {
+        id: 'external',
+        url: '/storage/external-upload.png',
+        type: 'pose',
+        source: 'identity_anchor',
+        isLocked: true,
+      },
+    ]);
+
+    expect(refs).toEqual([{
+      id: 'external',
+      url: '/storage/external-upload.png',
+      type: 'pose',
+      source: 'manual',
+    }]);
+  });
+
+  it('preserves current references while the active shot receives unrelated updates', () => {
     const stalePersistedShot = {
       ...shot,
       configuredReferences: [
         { id: 'persisted', url: '/storage/old-reference.png', type: 'pose' as const, source: 'manual' as const },
       ],
     };
-    const currentReferences = resolveShotReferences(stalePersistedShot, library, [
-      { id: 'external', url: '/storage/external-upload.png', type: 'pose', source: 'manual' },
-    ]);
+    const currentReferences = [
+      { id: 'external', url: '/storage/external-upload.png', type: 'pose' as const, source: 'manual' as const },
+    ];
 
     const refs = resolveSelectedShotReferences(
       stalePersistedShot,
@@ -80,15 +104,10 @@ describe('storyboard consistency', () => {
       currentReferences,
     );
 
-    expect(refs).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'external', url: '/storage/external-upload.png' }),
-    ]));
-    expect(refs).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'persisted', url: '/storage/old-reference.png' }),
-    ]));
+    expect(refs).toEqual(currentReferences);
   });
 
-  it('loads the persisted references only when switching to another shot', () => {
+  it('loads exactly the persisted references when switching shots', () => {
     const nextShot = {
       ...shot,
       id: 'shot_2',
@@ -97,22 +116,17 @@ describe('storyboard consistency', () => {
       ],
     };
 
-    const refs = resolveSelectedShotReferences(
+    expect(resolveSelectedShotReferences(
       nextShot,
       library,
       shot.id,
       [{ id: 'previous-manual', url: '/storage/previous-shot.png', type: 'pose', source: 'manual' }],
-    );
-
-    expect(refs).toEqual(expect.arrayContaining([
+    )).toEqual([
       expect.objectContaining({ id: 'next-manual', url: '/storage/next-shot.png' }),
-    ]));
-    expect(refs).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'previous-manual', url: '/storage/previous-shot.png' }),
-    ]));
+    ]);
   });
 
-  it('keeps per-shot reference drafts when the user switches shots before the server refreshes', () => {
+  it('keeps per-shot reference drafts while the server save is pending', () => {
     const file = {
       id: 'file_1',
       name: 'test',
@@ -143,10 +157,11 @@ describe('storyboard consistency', () => {
     expect(updated.storyboard?.items[0].configuredReferences).toEqual([
       expect.objectContaining({ id: 'external', url: '/storage/external-upload.png' }),
     ]);
+    expect(updated.storyboard?.items[0].referenceConfigInitialized).toBe(true);
     expect(updated.storyboard?.items[1].configuredReferences).toEqual([]);
   });
 
-  it('keeps an explicit empty reference draft instead of restoring stale server references', () => {
+  it('keeps an explicit empty reference draft instead of stale server references', () => {
     const file = {
       id: 'file_1',
       name: 'test',
@@ -169,128 +184,33 @@ describe('storyboard consistency', () => {
 
     const updated = applyConfiguredReferenceDrafts(file, { shot_1: [] });
     expect(updated.storyboard?.items[0].configuredReferences).toEqual([]);
+    expect(updated.storyboard?.items[0].referenceConfigInitialized).toBe(true);
   });
 
-  it('detaches an automatic reference from the current shot without deleting manual references', () => {
-    const refs = resolveShotReferences(shot, library, [
-      { id: 'manual', url: '/storage/manual.png', type: 'pose', source: 'manual' },
-    ]);
-    const characterReference = refs.find(reference => reference.name === '女1');
-    expect(characterReference).toBeDefined();
-
-    const detached = detachShotReference(shot, refs, characterReference!);
-
-    expect(detached.bindingRemoved).toBe(true);
-    expect(detached.materialSelections).toEqual({ 客厅: 'scene_0' });
-    expect(detached.references).toEqual([
-      expect.objectContaining({ name: '客厅', source: 'material_binding' }),
-      expect.objectContaining({ id: 'manual', source: 'manual' }),
-    ]);
-    expect(resolveShotReferences(
-      { ...shot, materialSelections: detached.materialSelections },
+  it('uses identity details only when that character reference is actually submitted', () => {
+    const defaults = resolveShotReferences(shot, library);
+    const withReference = buildIdentityAnchoredPrompt(
+      shot,
+      shot.imagePrompt || '',
       library,
-      detached.references,
-    )).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ name: '女1' }),
-    ]));
-  });
-
-  it('unlocks an automatic reference without removing its image or material binding', () => {
-    const refs = resolveShotReferences(shot, library);
-    const characterReference = refs.find(reference => reference.name === '女1');
-    expect(characterReference).toBeDefined();
-
-    const unlocked = setShotReferenceLock(refs, characterReference!, false);
-    const resolved = resolveShotReferences(
-      { ...shot, configuredReferences: unlocked },
+      defaults,
+    );
+    const withoutReference = buildIdentityAnchoredPrompt(
+      shot,
+      shot.imagePrompt || '',
       library,
-      unlocked,
+      [],
     );
 
-    expect(resolved).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        url: '/storage/char/bound.png',
-        source: 'identity_anchor',
-        isLocked: false,
-      }),
-    ]));
-    expect(shot.materialSelections).toEqual({ 女1: 'char_1', 客厅: 'scene_0' });
+    expect(withReference).toContain('冷静的女总裁');
+    expect(withReference).toContain('黑色齐肩直发');
+    expect(withReference).toContain('参考图1 = 角色身份锚点（最高优先级）【女1】');
+    expect(withoutReference).not.toContain('冷静的女总裁');
+    expect(withoutReference).not.toContain('黑色齐肩直发');
+    expect(withoutReference).not.toContain('角色身份锚点（最高优先级硬约束）');
   });
 
-  it('can lock an imported manual reference without changing its membership', () => {
-    const manual = {
-      id: 'manual',
-      url: '/storage/manual.png',
-      type: 'pose' as const,
-      source: 'manual' as const,
-    };
-
-    expect(setShotReferenceLock([manual], manual, true)).toEqual([
-      expect.objectContaining({
-        id: 'manual',
-        url: '/storage/manual.png',
-        isLocked: true,
-      }),
-    ]);
-  });
-
-  it('removes a manual reference without changing material bindings', () => {
-    const manual = { id: 'manual', url: '/storage/manual.png', type: 'pose' as const, source: 'manual' as const };
-    const detached = detachShotReference(shot, [manual], manual);
-
-    expect(detached.bindingRemoved).toBe(false);
-    expect(detached.materialSelections).toEqual(shot.materialSelections);
-    expect(detached.references).toEqual([]);
-  });
-
-  it('does not reuse another character material when the saved binding is missing', () => {
-    const staleBindingShot = {
-      ...shot,
-      materialSelections: { ...shot.materialSelections, 女1: 'missing_material' },
-    };
-    const refs = resolveShotReferences(staleBindingShot, library);
-    const prompt = buildIdentityAnchoredPrompt(staleBindingShot, staleBindingShot.imagePrompt || '', library);
-
-    expect(refs.some(item => item.type === 'character')).toBe(false);
-    expect(prompt).not.toContain('冷静的女总裁');
-    expect(prompt).not.toContain('黑色齐肩直发');
-  });
-
-  it('replaces legacy auto references after the material binding changes', () => {
-    const refs = resolveShotReferences(shot, library, [
-      { id: 'old-auto', url: '/storage/char/old.png', type: 'character', name: '女1' },
-      { id: 'manual', url: '/storage/manual.png', type: 'pose', name: '构图参考' },
-    ]);
-    expect(refs.map(item => item.url)).toEqual([
-      '/storage/char/bound.png',
-      '/storage/scene.png',
-      '/storage/manual.png',
-    ]);
-  });
-
-  it('adds bound asset identity fields to the generation prompt', () => {
-    const refs = resolveShotReferences(shot, library);
-    const prompt = buildIdentityAnchoredPrompt(shot, shot.imagePrompt || '', library, '', refs);
-    expect(prompt).toContain('冷静的女总裁');
-    expect(prompt).toContain('黑色齐肩直发');
-    expect(prompt).toContain('黑色西装');
-    expect(prompt).toContain('女1坐在沙发上翻阅文件');
-    expect(prompt).toContain('参考图1 = 角色身份锚点（最高优先级）【女1】');
-    expect(prompt).toContain('必须生成该参考图中的同一人物');
-    expect(prompt).toContain('参考图2 = 场景参考【客厅】');
-  });
-
-  it('prefers the multi-reference model for weak multi-character routes', () => {
-    const refs = [
-      { id: '1', url: '/1.png', type: 'character' as const },
-      { id: '2', url: '/2.png', type: 'character' as const },
-      { id: '3', url: '/3.png', type: 'character' as const },
-    ];
-    expect(resolveConsistencyModel('qwen', refs, 2, true)).toMatchObject({ model: 'nanobanana' });
-    expect(resolveConsistencyModel('qwen', refs, 2, false)).toEqual({ model: 'qwen' });
-  });
-
-  it('reports every reference excluded by the provider capacity', () => {
+  it('reports capacity overflow without treating any image as a binding', () => {
     const crowdedLibrary: MaterialLibrary = {};
     const characters = Array.from({ length: 7 }, (_, index) => `角色${index + 1}`);
     const materialSelections: Record<string, string> = {};
@@ -312,19 +232,19 @@ describe('storyboard consistency', () => {
       characters,
       scene: '',
       materialSelections,
-    }, crowdedLibrary, [], 6);
+    }, crowdedLibrary, undefined, 6);
 
     expect(plan.references).toHaveLength(6);
     expect(plan.excluded).toEqual([
       expect.objectContaining({
-        isCritical: true,
+        isCritical: false,
         reference: expect.objectContaining({ name: '角色7', url: '/storage/characters/7.png' }),
       }),
     ]);
-    expect(plan.criticalExcluded).toHaveLength(1);
+    expect(plan.criticalExcluded).toEqual([]);
   });
 
-  it('does not mark an omitted manual or prop reference as critical', () => {
+  it('keeps the submitted order when enforcing provider capacity', () => {
     const manual = Array.from({ length: 6 }, (_, index) => ({
       id: `manual_${index}`,
       url: `/storage/manual/${index}.png`,
@@ -334,8 +254,8 @@ describe('storyboard consistency', () => {
     }));
     const plan = resolveShotReferencePlan(shot, library, manual, 2);
 
-    expect(plan.references.map(item => item.type)).toEqual(['character', 'scene']);
-    expect(plan.excluded).toHaveLength(6);
-    expect(plan.criticalExcluded).toHaveLength(0);
+    expect(plan.references.map(item => item.id)).toEqual(['manual_0', 'manual_1']);
+    expect(plan.excluded).toHaveLength(4);
+    expect(plan.criticalExcluded).toEqual([]);
   });
 });

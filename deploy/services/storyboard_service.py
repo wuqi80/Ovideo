@@ -20,6 +20,7 @@ SYNC_UPDATE_FIELDS = (
     ("audio_segments", ("audio_segments", "audioSegments")),
     ("bound_assets", ("bound_assets", "boundAssets")),
     ("configured_references", ("configured_references", "configuredReferences")),
+    ("reference_config_initialized", ("reference_config_initialized", "referenceConfigInitialized")),
 )
 AUDIO_URL_FIELDS = {"dialogue_audio_url", "narration_audio_url", "sfx_audio_url"}
 
@@ -248,6 +249,9 @@ def _creation_kwargs_from_sync_item(
         "configured_references": _json_list_value(
             value([], "configured_references", "configuredReferences")
         ),
+        "reference_config_initialized": bool(
+            value(False, "reference_config_initialized", "referenceConfigInitialized")
+        ),
         "script_id": script_id or value(None, "script_id", "scriptId"),
         "script_segment_id": value(None, "script_segment_id", "scriptSegmentId"),
         "source_video_shot_no": value("", "source_video_shot_no", "sourceVideoShotNo"),
@@ -374,6 +378,7 @@ async def create_storyboard_item(
     image_prompt: Optional[str],
     video_prompt: Optional[str],
     configured_references: Optional[list] = None,
+    reference_config_initialized: bool = False,
     script_id: Optional[str],
     storyboard_dao: Any,
     episode_script_dao: Any,
@@ -399,6 +404,7 @@ async def create_storyboard_item(
         image_prompt=image_prompt,
         video_prompt=video_prompt,
         configured_references=configured_references,
+        reference_config_initialized=reference_config_initialized,
         script_id=resolved_script_id,
     )
     if not item:

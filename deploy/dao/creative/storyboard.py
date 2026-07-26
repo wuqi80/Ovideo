@@ -35,6 +35,13 @@ def _json_list_value(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _reference_config_initialized(
+    configured_references: Any,
+    initialized: Any = False,
+) -> bool:
+    return bool(initialized or _json_list_value(configured_references))
+
+
 def _prepare_storyboard_items_for_export(
     existing_rows: List[Dict[str, Any]],
     storyboard_items: List[Dict[str, Any]],
@@ -103,6 +110,17 @@ def _prepare_storyboard_items_for_export(
                 )
                 if configured_references is not None:
                     item["configured_references"] = _json_list_value(configured_references)
+            if (
+                "reference_config_initialized" not in item
+                and "referenceConfigInitialized" not in item
+            ):
+                initialized = _row_value(
+                    matched,
+                    "reference_config_initialized",
+                    "referenceConfigInitialized",
+                )
+                if initialized is not None:
+                    item["reference_config_initialized"] = bool(initialized)
 
         prepared.append(item)
 
@@ -176,6 +194,7 @@ class StoryboardDAO:
             "generated_image_url",
             "bound_assets",
             "configured_references",
+            "reference_config_initialized",
             "planned_duration_ms",
             "video_script_block",
             "status",
@@ -203,6 +222,7 @@ class StoryboardDAO:
         video_prompt: str = '',
         bound_assets: list = None,
         configured_references: list = None,
+        reference_config_initialized: bool = False,
         script_id: Optional[str] = None,
         # 2026-05-29 三步生成新增字段
         script_segment_id: Optional[str] = None,
@@ -222,11 +242,12 @@ class StoryboardDAO:
             INSERT INTO storyboard_items
                 (item_id, episode_id, sort_order, scene_heading, action_text,
                  dialogue, camera_movement, image_prompt, video_prompt, bound_assets,
-                 configured_references, script_id, script_segment_id, source_video_shot_no,
+                 configured_references, reference_config_initialized, script_id,
+                 script_segment_id, source_video_shot_no,
                  video_script_block, shot_size, camera_angle,
                  generated_image_url, planned_duration_ms)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb,
-                    $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19)
+                    $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             RETURNING *
         """
         return await db.fetchrow(
@@ -235,6 +256,7 @@ class StoryboardDAO:
             camera_movement, image_prompt, video_prompt,
             json.dumps(bound_assets or [], ensure_ascii=False),
             json.dumps(configured_references or [], ensure_ascii=False),
+            _reference_config_initialized(configured_references, reference_config_initialized),
             script_id, script_segment_id, source_video_shot_no,
             video_script_block, shot_size, camera_angle,
             (generated_image_url or None), planned_duration_ms,
@@ -259,6 +281,13 @@ class StoryboardDAO:
                 video_prompt=item.get('video_prompt', ''),
                 bound_assets=item.get('bound_assets'),
                 configured_references=item.get('configured_references', item.get('configuredReferences')),
+                reference_config_initialized=_reference_config_initialized(
+                    item.get('configured_references', item.get('configuredReferences')),
+                    item.get(
+                        'reference_config_initialized',
+                        item.get('referenceConfigInitialized', False),
+                    ),
+                ),
                 script_id=script_id or item.get('script_id'),
                 script_segment_id=item.get('script_segment_id'),
                 source_video_shot_no=item.get('source_video_shot_no', ''),
@@ -323,14 +352,15 @@ class StoryboardDAO:
                                 video_prompt = $9,
                                 bound_assets = $10::jsonb,
                                 configured_references = $11::jsonb,
-                                planned_duration_ms = $12,
-                                script_id = $13,
-                                script_segment_id = $14,
-                                source_video_shot_no = $15,
-                                video_script_block = $16,
-                                shot_size = $17,
-                                camera_angle = $18,
-                                generated_image_url = COALESCE($19, generated_image_url),
+                                reference_config_initialized = $12,
+                                planned_duration_ms = $13,
+                                script_id = $14,
+                                script_segment_id = $15,
+                                source_video_shot_no = $16,
+                                video_script_block = $17,
+                                shot_size = $18,
+                                camera_angle = $19,
+                                generated_image_url = COALESCE($20, generated_image_url),
                                 updated_at = CURRENT_TIMESTAMP
                             WHERE item_id = $1 AND episode_id = $2
                             RETURNING *
@@ -348,6 +378,13 @@ class StoryboardDAO:
                             json.dumps(
                                 item.get('configured_references', item.get('configuredReferences', [])),
                                 ensure_ascii=False,
+                            ),
+                            _reference_config_initialized(
+                                item.get('configured_references', item.get('configuredReferences')),
+                                item.get(
+                                    'reference_config_initialized',
+                                    item.get('referenceConfigInitialized', False),
+                                ),
                             ),
                             item.get('planned_duration_ms'),
                             script_id or item.get('script_id'),
@@ -433,11 +470,12 @@ class StoryboardDAO:
                 INSERT INTO storyboard_items
                     (item_id, episode_id, sort_order, scene_heading, action_text,
                      dialogue, camera_movement, image_prompt, video_prompt,
-                     bound_assets, configured_references, planned_duration_ms, script_id,
+                     bound_assets, configured_references, reference_config_initialized,
+                     planned_duration_ms, script_id,
                      script_segment_id, source_video_shot_no, video_script_block,
                      shot_size, camera_angle, generated_image_url)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13,
-                        $14, $15, $16, $17, $18, $19)
+                        $14, $15, $16, $17, $18, $19, $20)
             """,
                 item_id, episode_id,
                 item.get('sort_order', 0),
@@ -451,6 +489,13 @@ class StoryboardDAO:
                 json.dumps(
                     item.get('configured_references', item.get('configuredReferences', [])),
                     ensure_ascii=False,
+                ),
+                _reference_config_initialized(
+                    item.get('configured_references', item.get('configuredReferences')),
+                    item.get(
+                        'reference_config_initialized',
+                        item.get('referenceConfigInitialized', False),
+                    ),
                 ),
                 item.get('planned_duration_ms'),
                 sid,
@@ -654,6 +699,7 @@ class StoryboardDAO:
             # 2026-05-29 三步生成新增字段
             'script_segment_id', 'source_video_shot_no', 'video_script_block',
             'shot_size', 'camera_angle',
+            'reference_config_initialized',
         }
         nullable_fields = {
             'dialogue_audio_url',

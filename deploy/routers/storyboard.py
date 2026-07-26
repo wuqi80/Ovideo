@@ -54,6 +54,7 @@ class StoryboardItemCreate(BaseModel):
     video_prompt: Optional[str] = ""
     script_id: Optional[str] = None
     configured_references: Optional[list] = None
+    reference_config_initialized: bool = False
 
 
 class StoryboardItemUpdate(BaseModel):
@@ -73,6 +74,7 @@ class StoryboardItemUpdate(BaseModel):
     planned_duration_ms: Optional[int] = None
     bound_assets: Optional[list] = None
     configured_references: Optional[list] = None
+    reference_config_initialized: Optional[bool] = None
 
 
 class ReorderRequest(BaseModel):
@@ -214,6 +216,7 @@ def create_storyboard_router(
                 image_prompt=data.image_prompt,
                 video_prompt=data.video_prompt,
                 configured_references=data.configured_references,
+                reference_config_initialized=data.reference_config_initialized,
                 script_id=data.script_id,
                 storyboard_dao=StoryboardDAO,
                 episode_script_dao=EpisodeScriptDAO,

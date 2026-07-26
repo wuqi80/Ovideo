@@ -5,7 +5,6 @@ import type {
   MaterialLibrary,
   ProjectFile,
   StoryboardItem,
-  StoryboardQualityReview,
 } from '../types';
 
 export type StoryboardGenerationModel =
@@ -18,8 +17,6 @@ export type StoryboardGenerationModel =
   | 'gpt_image_vip'
   | 'gpt_image_official';
 
-const AUTO_REFERENCE_SOURCES = new Set(['identity_anchor', 'material_binding']);
-
 export interface StoryboardReferenceExclusion {
   reference: GenerationReference;
   reason: 'capacity';
@@ -31,24 +28,6 @@ export interface StoryboardReferencePlan {
   excluded: StoryboardReferenceExclusion[];
   criticalExcluded: StoryboardReferenceExclusion[];
   maxReferences: number;
-}
-
-export interface DetachedShotReference {
-  references: GenerationReference[];
-  materialSelections: Record<string, string>;
-  bindingRemoved: boolean;
-}
-
-export function setShotReferenceLock(
-  references: GenerationReference[],
-  target: GenerationReference,
-  isLocked: boolean,
-): GenerationReference[] {
-  return references.map(reference => (
-    reference.id === target.id
-      ? { ...reference, isLocked }
-      : reference
-  ));
 }
 
 function normalizedAnchor(raw: unknown): CharacterIdentityAnchor {
@@ -72,81 +51,73 @@ function toReference(
   material: Material,
   type: GenerationReference['type'],
   name: string,
-  source: NonNullable<GenerationReference['source']>,
 ): GenerationReference {
   return {
-    id: `${source}:${material.assetId || name}:${material.id}`,
+    id: `default-reference:${material.assetId || name}:${material.id}`,
     url: material.url,
     type,
     name,
     assetId: material.assetId,
     fileId: material.fileId,
     description: material.description,
-    source,
-    isLocked: source === 'identity_anchor',
+    source: 'manual',
   };
 }
 
-export function resolveShotReferencePlan(
+function normalizeIndependentReference(reference: GenerationReference): GenerationReference {
+  const { isLocked: _legacyLock, ...independent } = reference;
+  return {
+    ...independent,
+    source: 'manual',
+  };
+}
+
+function resolveDefaultShotReferences(
   shot: StoryboardItem,
   materialLibrary: MaterialLibrary,
-  existing: GenerationReference[] = [],
-  maxReferences = 6,
-): StoryboardReferencePlan {
-  const automatic: GenerationReference[] = [];
+): GenerationReference[] {
+  const defaults: GenerationReference[] = [];
   const add = (reference?: GenerationReference) => {
-    if (!reference || automatic.some(item => item.url === reference.url)) return;
-    const persisted = existing.find(item => (
-      item.url === reference.url
-      && item.source === reference.source
-      && typeof item.isLocked === 'boolean'
-    ));
-    automatic.push(
-      persisted
-        ? { ...reference, isLocked: persisted.isLocked }
-        : reference,
-    );
+    if (!reference?.url || defaults.some(item => item.url === reference.url)) return;
+    defaults.push(reference);
   };
 
   for (const character of shot.characters || []) {
     const materials = materialLibrary[character] || [];
     const selectedId = shot.materialSelections?.[character];
     const primary = selectedMaterial(materials, selectedId);
-    if (primary) add(toReference(primary, 'character', character, 'identity_anchor'));
+    if (primary) add(toReference(primary, 'character', character));
   }
 
   if (shot.scene) {
     const materials = materialLibrary[shot.scene] || [];
     const selectedId = shot.materialSelections?.[shot.scene];
     const primary = selectedMaterial(materials, selectedId);
-    if (primary) add(toReference(primary, 'scene', shot.scene, 'material_binding'));
+    if (primary) add(toReference(primary, 'scene', shot.scene));
   }
 
   for (const prop of shot.props || []) {
     const materials = materialLibrary[prop] || [];
     const selectedId = shot.materialSelections?.[prop];
     const primary = selectedMaterial(materials, selectedId);
-    if (primary) add(toReference(primary, 'prop', prop, 'material_binding'));
+    if (primary) add(toReference(primary, 'prop', prop));
   }
 
-  const boundNames = new Set([...(shot.characters || []), ...(shot.props || []), ...(shot.scene ? [shot.scene] : [])]);
-  const manual = existing
-    .filter(reference => {
-      if (AUTO_REFERENCE_SOURCES.has(String(reference.source || ''))) return false;
-      if (reference.source === 'manual') return true;
-      // Older saved auto references had no source marker. Recognize them by the
-      // bound entity name and library URL so a changed material binding replaces them.
-      const legacyBoundMaterial = Boolean(
-        reference.name
-        && boundNames.has(reference.name)
-        && (materialLibrary[reference.name] || []).some(material => material.url === reference.url),
-      );
-      return !legacyBoundMaterial;
-    })
-    .map(reference => ({ ...reference, source: reference.source || ('manual' as const) }));
+  return defaults;
+}
 
+export function resolveShotReferencePlan(
+  shot: StoryboardItem,
+  materialLibrary: MaterialLibrary,
+  existing?: GenerationReference[],
+  maxReferences = 6,
+): StoryboardReferencePlan {
+  const submitted = existing === undefined
+    ? resolveDefaultShotReferences(shot, materialLibrary)
+    : existing;
   const candidates: GenerationReference[] = [];
-  for (const reference of [...automatic, ...manual]) {
+  for (const rawReference of submitted) {
+    const reference = normalizeIndependentReference(rawReference);
     if (!reference.url || candidates.some(item => item.url === reference.url)) continue;
     candidates.push(reference);
   }
@@ -155,7 +126,7 @@ export function resolveShotReferencePlan(
   const excluded = candidates.slice(maxReferences).map(reference => ({
     reference,
     reason: 'capacity' as const,
-    isCritical: reference.type === 'character' || reference.type === 'scene',
+    isCritical: false,
   }));
   return {
     references,
@@ -168,7 +139,7 @@ export function resolveShotReferencePlan(
 export function resolveShotReferences(
   shot: StoryboardItem,
   materialLibrary: MaterialLibrary,
-  existing: GenerationReference[] = [],
+  existing?: GenerationReference[],
   maxReferences = 6,
 ): GenerationReference[] {
   return resolveShotReferencePlan(shot, materialLibrary, existing, maxReferences).references;
@@ -183,7 +154,9 @@ export function resolveSelectedShotReferences(
 ): GenerationReference[] {
   const existing = activeShotId === shot.id
     ? currentReferences
-    : shot.configuredReferences || [];
+    : shot.referenceConfigInitialized || (shot.configuredReferences?.length || 0) > 0
+      ? shot.configuredReferences || []
+      : undefined;
   return resolveShotReferences(shot, materialLibrary, existing, maxReferences);
 }
 
@@ -200,6 +173,7 @@ export function applyConfiguredReferenceDrafts(
     return {
       ...item,
       configuredReferences: [...(drafts[item.id] || [])],
+      referenceConfigInitialized: true,
     };
   });
 
@@ -213,47 +187,37 @@ export function applyConfiguredReferenceDrafts(
   };
 }
 
-export function detachShotReference(
-  shot: StoryboardItem,
-  references: GenerationReference[],
-  target: GenerationReference,
-): DetachedShotReference {
-  const materialSelections = { ...(shot.materialSelections || {}) };
-  const isAutomaticBinding = AUTO_REFERENCE_SOURCES.has(String(target.source || ''));
-  const bindingRemoved = Boolean(
-    isAutomaticBinding
-    && target.name
-    && Object.prototype.hasOwnProperty.call(materialSelections, target.name),
-  );
-
-  if (bindingRemoved && target.name) {
-    delete materialSelections[target.name];
-  }
-
-  return {
-    references: references.filter(reference => reference.id !== target.id),
-    materialSelections,
-    bindingRemoved,
-  };
-}
-
-function materialMetadata(name: string, materialLibrary: MaterialLibrary, selectedId?: string): Material | undefined {
-  const materials = materialLibrary[name] || [];
-  return selectedMaterial(materials, selectedId);
+function referenceMaterial(
+  reference: GenerationReference,
+  materialLibrary: MaterialLibrary,
+): Material | undefined {
+  const namedMaterials = reference.name ? materialLibrary[reference.name] || [] : [];
+  const candidates = namedMaterials.length > 0
+    ? namedMaterials
+    : Object.values(materialLibrary).flat();
+  return candidates.find(material => (
+    (reference.assetId && material.assetId === reference.assetId)
+    || (reference.fileId && material.fileId === reference.fileId)
+    || material.url === reference.url
+  ));
 }
 
 export function buildIdentityAnchoredPrompt(
   shot: StoryboardItem,
   basePrompt: string,
   materialLibrary: MaterialLibrary,
-  retryFeedback = '',
   references: GenerationReference[] = [],
 ): string {
-  const characterBlocks = (shot.characters || []).map(name => {
-    const material = materialMetadata(name, materialLibrary, shot.materialSelections?.[name]);
+  const characterBlocks = references
+    .filter(reference => reference.type === 'character')
+    .map(reference => {
+    const name = reference.name || '角色';
+    const material = referenceMaterial(reference, materialLibrary);
     const anchor = normalizedAnchor(material?.styleParams?.identity_anchor);
     const details = [
-      material?.description ? `身份描述：${material.description}` : '',
+      reference.description || material?.description
+        ? `身份描述：${reference.description || material?.description}`
+        : '',
       anchor.age ? `年龄感：${anchor.age}` : '',
       anchor.face ? `脸型与五官：${anchor.face}` : '',
       anchor.hair ? `发型发色：${anchor.hair}` : '',
@@ -301,31 +265,6 @@ export function buildIdentityAnchoredPrompt(
     hardConstraints,
     referenceMap,
     storyRequirements,
-    retryFeedback ? `上次验收未通过，必须修正：${retryFeedback}` : '',
     '输出要求：角色一致性优先于装饰性变化；准确执行人物、场景、动作和构图描述；保持稳定画质，避免多余人物、错位肢体和身份漂移。',
   ].filter(Boolean).join('\n\n');
-}
-
-export function resolveConsistencyModel(
-  requestedModel: StoryboardGenerationModel,
-  references: GenerationReference[],
-  characterCount: number,
-  smartRouting: boolean,
-): { model: StoryboardGenerationModel; reason?: string } {
-  if (!smartRouting || characterCount === 0) return { model: requestedModel };
-  const characterReferenceCount = references.filter(reference => reference.type === 'character').length;
-  const weakMultiReferenceModels = new Set<StoryboardGenerationModel>(['qwen', 'kontext', 'qwenN']);
-  if (weakMultiReferenceModels.has(requestedModel) && (characterCount > 1 || references.length > 2)) {
-    return {
-      model: 'nanobanana',
-      reason: `当前镜头包含 ${characterCount} 个角色 / ${references.length} 张参考图（角色 ${characterReferenceCount} 张），已优先使用支持多图参考的化神模型`,
-    };
-  }
-  return { model: requestedModel };
-}
-
-export function reviewPassed(review?: StoryboardQualityReview): boolean {
-  return review?.status === 'passed'
-    && review.characterConsistencyScore >= 80
-    && review.scriptComplianceScore >= 75;
 }

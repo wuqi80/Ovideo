@@ -75,6 +75,7 @@ export interface StoryboardItem {
   selectedImageId?: string; // 选中用于导出的结果ID
   isConfigConfirmed?: boolean; // 用户确认了提示词/参考
   configuredReferences?: GenerationReference[]; // 🆕 确认配置时保存的参考图片
+  referenceConfigInitialized?: boolean; // 参考图列表已完成首次默认导入（包括用户明确清空）
   
   // ⏱️ 元数据
   timestamp?: number; // 生成时间戳
@@ -642,6 +643,7 @@ export interface StoryboardItemDB {
   generatedImageUrl: string | null;
   boundAssets: string[];
   configuredReferences: GenerationReference[];
+  referenceConfigInitialized?: boolean;
   status: string;
   dialogueAudioUrl: string | null;
   narrationAudioUrl: string | null;

@@ -50,6 +50,9 @@ export function parseRecord(value: unknown): Record<string, any> {
 }
 
 export function normalizeStoryboardRecord(record: any): StoryboardItemDB {
+  const configuredReferences = parseArray<GenerationReference>(
+    record.configured_references ?? record.configuredReferences,
+  );
   return {
     itemId: record.item_id ?? record.itemId ?? '',
     episodeId: record.episode_id ?? record.episodeId ?? '',
@@ -66,8 +69,11 @@ export function normalizeStoryboardRecord(record: any): StoryboardItemDB {
     videoPrompt: record.video_prompt ?? record.videoPrompt ?? '',
     generatedImageUrl: record.generated_image_url ?? record.generatedImageUrl ?? null,
     boundAssets: parseStringArray(record.bound_assets ?? record.boundAssets),
-    configuredReferences: parseArray<GenerationReference>(
-      record.configured_references ?? record.configuredReferences,
+    configuredReferences,
+    referenceConfigInitialized: Boolean(
+      record.reference_config_initialized
+      ?? record.referenceConfigInitialized
+      ?? configuredReferences.length > 0
     ),
     status: record.status ?? 'draft',
     dialogueAudioUrl: record.dialogue_audio_url ?? record.dialogueAudioUrl ?? null,
@@ -93,6 +99,10 @@ export function applyStoryboardRecordPatch(
     bound_assets: patch.bound_assets ?? patch.boundAssets ?? item.boundAssets,
     configured_references:
       patch.configured_references ?? patch.configuredReferences ?? item.configuredReferences,
+    reference_config_initialized:
+      patch.reference_config_initialized
+      ?? patch.referenceConfigInitialized
+      ?? item.referenceConfigInitialized,
     audio_segments: patch.audio_segments ?? patch.audioSegments ?? item.audioSegments,
   });
 }
@@ -266,6 +276,9 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
     configuredReferences: Array.isArray(item.configuredReferences)
       ? item.configuredReferences
       : [],
+    referenceConfigInitialized: Boolean(
+      item.referenceConfigInitialized || item.configuredReferences?.length
+    ),
     materialSelections,
     boundCharNames: charNames,
     boundSceneName: sceneName,
@@ -320,6 +333,9 @@ export function storyboardItemToDbUpdate(updates: Partial<StoryboardItem>): Reco
       ? updates.configuredReferences
       : [];
   }
+  if (updates.referenceConfigInitialized !== undefined) {
+    result.reference_config_initialized = updates.referenceConfigInitialized;
+  }
   if ((updates as any).audioSegments !== undefined) {
     result.audio_segments = Array.isArray((updates as any).audioSegments)
       ? (updates as any).audioSegments
@@ -340,6 +356,9 @@ export function newShotToDbFields(shot: Omit<StoryboardItem, 'id'>, sortOrder: n
     configured_references: Array.isArray(shot.configuredReferences)
       ? shot.configuredReferences
       : [],
+    reference_config_initialized: Boolean(
+      shot.referenceConfigInitialized || shot.configuredReferences?.length
+    ),
     bound_assets: [
       ...(shot.characters || []).map((c: string) => `${CHAR_PREFIX}${c}`),
       ...(shot.scene ? [`${SCENE_PREFIX}${shot.scene}`] : []),

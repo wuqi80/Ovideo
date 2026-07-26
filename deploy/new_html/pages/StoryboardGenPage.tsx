@@ -555,7 +555,7 @@ export const StoryboardGenPage: React.FC = () => {
           </span>
         </div>
       )}
-      <div className={showTimeline ? 'layout-safe flex-1 min-h-0 overflow-auto' : 'layout-safe h-full'}>
+      <div className={showTimeline ? 'layout-safe flex-1 min-h-0 overflow-hidden' : 'layout-safe h-full'}>
         <React.Suspense fallback={<WorkflowChunkFallback label="加载分镜工作台..." />}>
           <GenerationPage
             files={[enhancedFile]}

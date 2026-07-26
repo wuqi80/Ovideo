@@ -476,6 +476,7 @@ async def test_sync_storyboard_items_updates_configured_references():
             "script_id": "script_1",
             "sort_order": 0,
             "configured_references": '[{"referenceId":"old"}]',
+            "reference_config_initialized": False,
         }
     ]
 
@@ -485,6 +486,7 @@ async def test_sync_storyboard_items_updates_configured_references():
             "itemId": "sb_1",
             "sortOrder": 0,
             "configuredReferences": [{"referenceId": "new", "assetId": "asset-1"}],
+            "referenceConfigInitialized": True,
         }],
         script_id="script_1",
         storyboard_dao=FakeStoryboardDAO,
@@ -494,6 +496,7 @@ async def test_sync_storyboard_items_updates_configured_references():
     assert FakeStoryboardDAO.updates == [{
         "item_id": "sb_1",
         "configured_references": [{"referenceId": "new", "assetId": "asset-1"}],
+        "reference_config_initialized": True,
     }]
 
 
