@@ -131,6 +131,7 @@ FILES=(
   "scripts/windows_gpu_wan_smoke_task.cmd"
   "scripts/windows_gpu_task_repair.cmd"
   "scripts/windows_gpu_task_repair.ps1"
+  scripts/*.mjs
   scripts/*.py
   scripts/check_*.py
   tests/*.py
