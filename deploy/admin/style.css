@@ -451,6 +451,11 @@ select.input {
   pointer-events: auto;
   transform: translateY(0);
 }
+.wf-card .wf-actions-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
 .wf-card .wf-actions:empty { display: none; }
 .wf-import-btn {
   box-shadow: 0 8px 18px rgba(54,179,126,0.16);

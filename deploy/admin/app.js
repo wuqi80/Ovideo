@@ -661,6 +661,7 @@ function renderWorkflowCard(w, meta) {
     : (canImportSingle
       ? `<button class="btn btn-success btn-xs wf-import-btn" onclick="importWorkflowByKey(event, '${encodedKey}')" title="导入此工作流 JSON 到数据库">导入</button>`
       : '');
+  const actionClass = canImportSingle ? 'wf-actions wf-actions-visible' : 'wf-actions';
 
   return `
     <div class="wf-card ${actionHtml ? 'wf-card-has-actions' : ''}">
@@ -673,7 +674,7 @@ function renderWorkflowCard(w, meta) {
           ${ph.length ? `<span style="font-size:10px;color:var(--text-3)">${ph.length} 占位符</span>` : ''}
         </div>
       </div>
-      <div class="wf-actions">
+      <div class="${actionClass}">
         ${actionHtml}
       </div>
     </div>`;

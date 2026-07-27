@@ -45,7 +45,7 @@ class ProjectDAO:
         db = get_db_manager()
         # episode_count：每个项目的集数。前端用它区分"空项目"和"有内容的项目"，
         # 并在删除确认里显示，避免误删有内容的项目（identical 命名时尤其重要）。
-        columns = ("p.id, p.project_id, p.user_id, p.project_name, p.description, "
+        columns = ("p.id, p.project_id, p.user_id, p.project_name, p.description, p.cover_url, p.tags, "
                    "p.created_at, p.updated_at, p.last_accessed_at, p.is_archived, "
                    "(SELECT COUNT(*) FROM episodes e WHERE e.project_id = p.project_id) AS episode_count")
         archived_filter = "" if include_archived else "AND p.is_archived = FALSE"
@@ -71,7 +71,7 @@ class ProjectDAO:
         详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5.4
         """
         db = get_db_manager()
-        columns = ("p.id, p.project_id, p.user_id, p.project_name, p.description, "
+        columns = ("p.id, p.project_id, p.user_id, p.project_name, p.description, p.cover_url, p.tags, "
                    "p.created_at, p.updated_at, p.last_accessed_at, p.is_archived, "
                    "p.group_id, p.visibility")
         archived_clause = "" if include_archived else "p.is_archived = FALSE AND"
@@ -843,7 +843,7 @@ class ProjectMemberDAO:
         archive_filter = "" if include_archived else "AND p.is_archived = FALSE"
         query = f"""
             SELECT DISTINCT
-                   p.id, p.project_id, p.user_id, p.project_name, p.description,
+                   p.id, p.project_id, p.user_id, p.project_name, p.description, p.cover_url, p.tags,
                    p.created_at, p.updated_at, p.last_accessed_at, p.is_archived,
                    pm.role as member_role, pm.responsibility,
                    u.username as owner_name,
@@ -874,7 +874,7 @@ class ProjectMemberDAO:
         archive_filter = "" if include_archived else "AND p.is_archived = FALSE"
         query = f"""
             SELECT DISTINCT
-                   p.id, p.project_id, p.user_id, p.project_name, p.description,
+                   p.id, p.project_id, p.user_id, p.project_name, p.description, p.cover_url, p.tags,
                    p.created_at, p.updated_at, p.last_accessed_at, p.is_archived,
                    p.group_id, p.visibility,
                    COALESCE(pm.role, 'member')      AS member_role,
