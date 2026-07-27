@@ -276,12 +276,20 @@ async def test_import_one_workflow_only_imports_the_selected_key(monkeypatch, tm
 
 def test_legacy_workflow_pending_cards_render_single_import_action():
     app_js = (DEPLOY_DIR / "admin" / "app.js").read_text(encoding="utf-8")
+    style_css = (DEPLOY_DIR / "admin" / "style.css").read_text(encoding="utf-8")
 
     assert "function importWorkflowByKey(event, encodedKey)" in app_js
-    assert "w.can_import" in app_js
-    assert "只导入此工作流" in app_js
+    assert "const canImportSingle = !w.imported && !w.is_api" in app_js
+    assert "w.can_import !== false" in app_js
+    assert "wf-import-btn" in app_js
+    assert "导入此工作流 JSON 到数据库" in app_js
+    assert ">导入</button>" in app_js
+    assert "导入到数据库</button>" not in app_js
     assert "/api/admin/workflows/import-existing/${encodeURIComponent(key)}" in app_js
     assert "editWorkflowByName" in app_js
+    assert ".wf-card.wf-card-has-actions" in style_css
+    assert ".wf-card:focus-within .wf-actions" in style_css
+    assert "pointer-events: auto" in style_css
 
 
 @pytest.mark.asyncio

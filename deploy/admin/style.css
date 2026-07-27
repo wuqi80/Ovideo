@@ -412,6 +412,7 @@ select.input {
 /* ── Workflow Cards ── */
 .wf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 10px; }
 .wf-card {
+  position: relative;
   display: flex; align-items: flex-start; gap: 14px;
   padding: 14px 16px;
   background: var(--bg-1);
@@ -420,6 +421,7 @@ select.input {
   transition: all var(--transition);
   cursor: default;
 }
+.wf-card.wf-card-has-actions { padding-right: 86px; }
 .wf-card:hover { border-color: var(--border-hover); }
 .wf-card .wf-icon {
   width: 36px; height: 36px; border-radius: var(--radius-sm);
@@ -437,10 +439,22 @@ select.input {
   margin-top: 4px;
 }
 .wf-card .wf-actions {
+  position: absolute; top: 12px; right: 14px;
   display: flex; gap: 4px; opacity: 0; flex-wrap: wrap; justify-content: flex-end;
-  transition: opacity var(--transition);
+  pointer-events: none;
+  transition: opacity var(--transition), transform var(--transition);
+  transform: translateY(-2px);
 }
-.wf-card:hover .wf-actions { opacity: 1; }
+.wf-card:hover .wf-actions,
+.wf-card:focus-within .wf-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.wf-card .wf-actions:empty { display: none; }
+.wf-import-btn {
+  box-shadow: 0 8px 18px rgba(54,179,126,0.16);
+}
 
 /* ── API Config Cards ── */
 .api-card {

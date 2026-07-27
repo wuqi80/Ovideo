@@ -655,14 +655,15 @@ function renderWorkflowCard(w, meta) {
     : '<span class="badge badge-gray" style="font-size:10px">JSON</span>';
   const encodedName = encodeURIComponent(w.name || '');
   const encodedKey = encodeURIComponent(w.key || w.name || '');
+  const canImportSingle = !w.imported && !w.is_api && w.has_file !== false && Boolean(w.key || w.name || w.file) && w.can_import !== false;
   const actionHtml = w.imported
     ? `<button class="btn btn-ghost btn-xs" onclick="editWorkflowByName('${encodedName}')">编辑</button>`
-    : (w.can_import
-      ? `<button class="btn btn-ghost btn-xs" onclick="importWorkflowByKey(event, '${encodedKey}')" title="只导入此工作流">导入</button>`
+    : (canImportSingle
+      ? `<button class="btn btn-success btn-xs wf-import-btn" onclick="importWorkflowByKey(event, '${encodedKey}')" title="导入此工作流 JSON 到数据库">导入</button>`
       : '');
 
   return `
-    <div class="wf-card">
+    <div class="wf-card ${actionHtml ? 'wf-card-has-actions' : ''}">
       <div class="wf-icon" style="background:${meta.badge === 'badge-pink' ? 'rgba(236,72,153,0.1)' : meta.badge === 'badge-purple' ? 'rgba(168,85,247,0.1)' : meta.badge === 'badge-orange' ? 'rgba(249,115,22,0.1)' : meta.badge === 'badge-teal' ? 'rgba(20,184,166,0.1)' : 'rgba(113,113,122,0.1)'}">${CATEGORY_META[w.category]?.icon || '📦'}</div>
       <div class="wf-info">
         <div class="wf-name">${escapeHtml(w.name)}</div>
