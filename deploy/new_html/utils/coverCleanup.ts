@@ -1,0 +1,39 @@
+import { deleteEntityFile, hardDeleteEntityFile } from '../services/entityFileService';
+
+export type CoverCleanupResult = 'skipped' | 'hard_deleted' | 'soft_deleted';
+
+export function extractEntityFileIdFromDownloadUrl(url?: string | null): string | null {
+  const value = String(url || '').trim();
+  if (!value) return null;
+
+  const match = value.match(/(?:^|\/)api\/files\/([^/?#]+)\/download(?:[/?#]|$)/i);
+  if (!match?.[1]) return null;
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+export async function cleanupReplacedCoverFile(
+  previousCoverUrl?: string | null,
+  nextFileId?: string | null,
+): Promise<CoverCleanupResult> {
+  const previousFileId = extractEntityFileIdFromDownloadUrl(previousCoverUrl);
+  if (!previousFileId || previousFileId === nextFileId) {
+    return 'skipped';
+  }
+
+  try {
+    await hardDeleteEntityFile(previousFileId);
+    return 'hard_deleted';
+  } catch (hardDeleteError) {
+    try {
+      await deleteEntityFile(previousFileId);
+      return 'soft_deleted';
+    } catch {
+      throw hardDeleteError;
+    }
+  }
+}

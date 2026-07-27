@@ -182,10 +182,7 @@ export const ProfilePage: React.FC = () => {
                 <ArrowLeft size={18} />
               </button>
               <div className="flex min-w-0 items-center gap-2">
-                <BrandLogo variant="mark" className="h-7 w-7" />
-                <span className="hidden whitespace-nowrap text-sm font-semibold tracking-tight text-n800 sm:inline">
-                  MECHA <span className="text-primary">·</span> 漫剧创作平台
-                </span>
+                <BrandLogo className="h-8 w-auto max-w-[170px]" alt="MECHA 漫剧创作平台" />
               </div>
               <div className="hidden h-8 w-px shrink-0 bg-n40 sm:block" />
               <h1 className="truncate text-xl font-bold tracking-tight text-n800 sm:text-2xl">个人中心</h1>

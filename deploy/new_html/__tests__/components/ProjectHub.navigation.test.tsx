@@ -8,6 +8,7 @@ import ProjectHub from '../../components/ProjectHub';
 import { apiJson } from '../../services/httpClient';
 import { uploadEntityFile } from '../../services/entityFileService';
 import { prepareCoverUploadFile } from '../../utils/coverImage';
+import { cleanupReplacedCoverFile } from '../../utils/coverCleanup';
 import {
   addProjectMember,
   getProjectMembers,
@@ -37,6 +38,10 @@ vi.mock('../../utils/coverImage', () => ({
   prepareCoverUploadFile: vi.fn(),
 }));
 
+vi.mock('../../utils/coverCleanup', () => ({
+  cleanupReplacedCoverFile: vi.fn(),
+}));
+
 vi.mock('../../services/projectWorkflowService', () => ({
   updateProject: vi.fn(),
   getProjectMembers: vi.fn(),
@@ -63,7 +68,7 @@ const projectRows = [
     project_id: 'active-1',
     project_name: '树洞里的星辰',
     description: '未归档项目',
-    cover_url: null,
+    cover_url: '/api/files/file_old_project_cover/download',
     tags: '[]',
     user_id: 'u1',
     owner_name: 'admin',
@@ -124,6 +129,7 @@ describe('ProjectHub navigation and filters', () => {
     (prepareCoverUploadFile as any).mockImplementation(async (file: File) => (
       new File(['optimized-project-cover'], `small-${file.name}.jpg`, { type: 'image/jpeg' })
     ));
+    (cleanupReplacedCoverFile as any).mockResolvedValue('hard_deleted');
     (updateProject as any).mockResolvedValue({ success: true });
     (getProjectMembers as any).mockResolvedValue({
       success: true,
@@ -229,6 +235,7 @@ describe('ProjectHub navigation and filters', () => {
       expect(updateProject).toHaveBeenCalledWith('active-1', {
         cover_url: '/api/files/file_cover/download',
       });
+      expect(cleanupReplacedCoverFile).toHaveBeenCalledWith('/api/files/file_old_project_cover/download', 'file_cover');
     });
     const cover = await screen.findByAltText('树洞里的星辰 封面');
     expect(cover).toHaveClass('object-cover');

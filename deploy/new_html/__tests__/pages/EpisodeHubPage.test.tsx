@@ -8,6 +8,7 @@ import { EpisodeHubPage } from '../../pages/EpisodeHubPage';
 import { apiJson } from '../../services/httpClient';
 import { uploadEntityFile } from '../../services/entityFileService';
 import { prepareCoverUploadFile } from '../../utils/coverImage';
+import { cleanupReplacedCoverFile } from '../../utils/coverCleanup';
 
 vi.mock('../../services/httpClient', () => ({
   apiJson: vi.fn(),
@@ -20,6 +21,10 @@ vi.mock('../../services/entityFileService', () => ({
 
 vi.mock('../../utils/coverImage', () => ({
   prepareCoverUploadFile: vi.fn(),
+}));
+
+vi.mock('../../utils/coverCleanup', () => ({
+  cleanupReplacedCoverFile: vi.fn(),
 }));
 
 vi.mock('../../admin/crmUI', () => ({
@@ -39,7 +44,7 @@ const episodeRows = [
     episode_name: '第八期',
     description: '',
     status: 'draft',
-    settings: {},
+    settings: { cover_url: '/api/files/file_old_episode_cover/download' },
     sort_order: 0,
     created_at: '2026-07-27T01:00:00Z',
     updated_at: '2026-07-27T02:00:00Z',
@@ -86,6 +91,7 @@ describe('EpisodeHubPage', () => {
     (prepareCoverUploadFile as any).mockImplementation(async (file: File) => (
       new File(['optimized-episode-cover'], `small-${file.name}.jpg`, { type: 'image/jpeg' })
     ));
+    (cleanupReplacedCoverFile as any).mockResolvedValue('hard_deleted');
   });
 
   it('places the back action in the tab row and the create action in the list toolbar', async () => {
@@ -202,6 +208,7 @@ describe('EpisodeHubPage', () => {
         },
         'updateEpisode',
       );
+      expect(cleanupReplacedCoverFile).toHaveBeenCalledWith('/api/files/file_old_episode_cover/download', 'file_episode_cover');
     });
 
     const cover = await screen.findByAltText('第八期 封面');

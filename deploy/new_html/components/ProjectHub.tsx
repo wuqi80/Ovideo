@@ -19,6 +19,7 @@ import { crmMessage, crmConfirm } from '../admin/crmUI';
 import { BrandLogo } from './BrandLogo';
 import AccountMenu from './AccountMenu';
 import { prepareCoverUploadFile } from '../utils/coverImage';
+import { cleanupReplacedCoverFile } from '../utils/coverCleanup';
 
 type SortKey = 'updated' | 'created' | 'name';
 type ProjectTab = 'all' | 'archived';
@@ -246,6 +247,7 @@ const ProjectHub: React.FC = () => {
 
         setUploadingCoverProjectId(projectId);
         try {
+            const previousCoverUrl = projects.find(project => project.projectId === projectId)?.coverUrl;
             const coverFile = await prepareCoverUploadFile(file);
             const uploaded = await uploadEntityFile(coverFile, 'project', projectId, 'cover');
             await updateProject(projectId, { cover_url: uploaded.fileUrl });
@@ -254,14 +256,20 @@ const ProjectHub: React.FC = () => {
                     ? { ...project, coverUrl: uploaded.fileUrl, updatedAt: Date.now() }
                     : project
             ));
-            crmMessage.success('项目封面已更新');
+            try {
+                await cleanupReplacedCoverFile(previousCoverUrl, uploaded.fileId);
+                crmMessage.success('项目封面已更新');
+            } catch (cleanupError) {
+                console.warn('Failed to clean up replaced project cover:', cleanupError);
+                crmMessage.warning('项目封面已更新，但旧封面文件清理失败');
+            }
         } catch (error) {
             console.error('上传项目封面失败:', error);
             crmMessage.error('上传项目封面失败，请检查图片格式或网络');
         } finally {
             setUploadingCoverProjectId(null);
         }
-    }, [coverUploadTargetId]);
+    }, [coverUploadTargetId, projects]);
 
     const loadEditMembers = useCallback(async (projectId: string) => {
         setEditMembersLoading(true);
@@ -447,12 +455,9 @@ const ProjectHub: React.FC = () => {
                                 type="button"
                                 onClick={() => navigate('/projects')}
                                 className="flex shrink-0 items-center gap-2 rounded focus:outline-none focus:ring-2 focus:ring-primary/25"
-                                title="MECHA · 漫剧创作平台"
+                                title="MECHA 漫剧创作平台"
                             >
-                                <BrandLogo variant="mark" className="h-7 w-7" />
-                                <span className="hidden whitespace-nowrap text-sm font-semibold tracking-tight text-n800 sm:inline">
-                                    MECHA <span className="text-primary">·</span> 漫剧创作平台
-                                </span>
+                                <BrandLogo className="h-8 w-auto max-w-[170px]" alt="MECHA 漫剧创作平台" />
                             </button>
                             <div className="h-8 w-px shrink-0 bg-n40" />
                             <div className="min-w-0">

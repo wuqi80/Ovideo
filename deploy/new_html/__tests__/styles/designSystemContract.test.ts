@@ -134,6 +134,8 @@ describe('Webflow design-system contract', () => {
     expect(accountMenu).toContain("window.location.href = '/profile'");
     expect(app).toContain("const ProfilePage");
     expect(app).toContain('path="/profile"');
+    expect(appHtml).toContain('<title>MECHA 漫剧创作平台</title>');
+    expect(appHtml).not.toContain('MECHA.ONE · AI 漫剧创作平台');
     expect(appHtml).toContain('/static/favicon.ico');
     expect(loginHtml).toContain('/static/favicon.ico');
     expect(loginHtml).toContain('/static/branding/mecha-one-mark.png');
@@ -156,7 +158,9 @@ describe('Webflow design-system contract', () => {
 
     expect(projectHub).toContain('全部项目');
     expect(projectHub).toContain('已归档');
-    expect(projectHub).toContain('MECHA <span className="text-primary">·</span> 漫剧创作平台');
+    expect(projectHub).toContain('title="MECHA 漫剧创作平台"');
+    expect(projectHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="MECHA 漫剧创作平台" />');
+    expect(projectHub).not.toContain('MECHA <span className="text-primary">·</span> 漫剧创作平台');
     expect(projectHub).toContain('include_archived: \'true\'');
     expect(projectHub).toContain('<AccountMenu');
     expect(projectHub).toContain('编辑项目');
@@ -168,6 +172,9 @@ describe('Webflow design-system contract', () => {
     expect(episodeHub).toContain('制作中');
     expect(episodeHub).toContain('已完成');
     expect(episodeHub).toContain('已发布');
+    expect(episodeHub).toContain('title="MECHA 漫剧创作平台"');
+    expect(episodeHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="MECHA 漫剧创作平台" />');
+    expect(episodeHub).not.toContain('MECHA <span className="text-primary">·</span> 漫剧创作平台');
     expect(episodeHub).toContain('app-modal-backdrop');
     expect(episodeHub).toContain('aria-modal="true"');
     expect(episodeHub).toContain('流程化制作');
