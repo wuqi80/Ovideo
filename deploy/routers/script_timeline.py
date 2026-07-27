@@ -221,6 +221,8 @@ def create_script_timeline_router(
                 adapted_script=data.adapted_script,
                 sort_order=data.sort_order,
                 metadata=data.metadata,
+                source_type=data.source_type,
+                source_id=data.source_id,
                 episode_script_dao=EpisodeScriptDAO,
             )
         except ScriptFileCreateFailed as exc:

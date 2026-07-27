@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpen, ChevronDown, LoaderCircle, Wand2, X } from 'lucide-react';
+import { BookOpen, ChevronDown, Film, LoaderCircle, Wand2, X } from 'lucide-react';
 import type { AiModel, ProjectFile, ScriptStoryboardVersion } from '../types';
 import type { ScriptModelOption } from '../services/scriptModelCatalogService';
 
@@ -17,6 +17,7 @@ interface QuickScriptSourceColumnProps {
   onGenerateVideoScript: (fileId: string) => Promise<boolean | ScriptStoryboardVersion | void>;
   onExtractStoryboardPrompts: (fileId: string) => Promise<boolean | void>;
   onRunThreeStage: (fileId: string) => Promise<void>;
+  onOpenVideoReverse?: () => void;
 }
 
 export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = ({
@@ -33,6 +34,7 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
   onGenerateVideoScript,
   onExtractStoryboardPrompts,
   onRunThreeStage,
+  onOpenVideoReverse,
 }) => {
   const [requestError, setRequestError] = useState('');
 
@@ -142,6 +144,17 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
           )}
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold text-n700">三步生成</span>
+            {onOpenVideoReverse && (
+              <button
+                type="button"
+                onClick={onOpenVideoReverse}
+                disabled={isBusy}
+                className="ml-auto mr-2 inline-flex h-8 items-center gap-1.5 rounded border border-primary/30 bg-primary-light px-3 text-xs font-semibold text-primary hover:border-primary hover:bg-n0 disabled:cursor-not-allowed disabled:border-n40 disabled:bg-n20 disabled:text-n100"
+              >
+                <Film className="h-3.5 w-3.5" />
+                视频反推
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void runAction(onRunThreeStage, '按三步生成失败，请稍后重试')}

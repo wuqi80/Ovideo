@@ -33,3 +33,9 @@ def test_live_deploy_syncs_pipeline_and_preserves_admin_uploaded_workflows():
     upload_section = script.split('echo "Uploading MVC/API management files..."', 1)[1]
     assert "find '$REMOTE_DIR'/workflows -mindepth 1 -maxdepth 1 -type f -delete" not in upload_section
     assert "without deleting valid templates uploaded from" in upload_section
+
+
+def test_live_deploy_syncs_video_interpolation_regression_tests():
+    script = (DEPLOY_DIR / "scripts" / "live_deploy_mvc2.sh").read_text(encoding="utf-8")
+
+    assert "tests/test_video_interpolation_service.py" in script

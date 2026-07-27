@@ -27,11 +27,12 @@ import {
 import { uploadMediaItem } from '../services/mediaLibraryService';
 import { CreditEstimateModal } from '../components/CreditEstimateModal';
 import { LazyVideo } from '../components/LazyVideo';
-import { createEpisodeScript } from '../services/scriptTimelineService';
+import { createEpisodeScript, createScriptVersion } from '../services/scriptTimelineService';
 import {
   buildVideoReverseCandidateMetadata,
   buildVideoReverseCandidateName,
   buildVideoReverseCandidateScript,
+  buildVideoReverseStoryboardItems,
 } from '../utils/videoReverseCandidate';
 
 const STATUS_LABEL: Record<VideoReverseStatus, { label: string; color: string }> = {
@@ -213,15 +214,37 @@ export const VideoReversePage: React.FC<VideoReversePageProps> = ({
     setCreatingCandidate(true);
     setError(null);
     try {
+      const metadata = buildVideoReverseCandidateMetadata(selectedTask, segments);
+      const storyboardItems = buildVideoReverseStoryboardItems(selectedTask, segments);
       const result = await createEpisodeScript(episodeId, {
         file_name: buildVideoReverseCandidateName(selectedTask),
         original_content: content,
-        metadata: buildVideoReverseCandidateMetadata(selectedTask),
+        adapted_script: content,
+        metadata,
         source_type: 'video_reverse',
         source_id: selectedTask.reverse_task_id,
       });
       const scriptId = result?.script?.script_id ?? result?.script?.scriptId;
       if (!scriptId) throw new Error('候选剧本已创建，但接口未返回剧本 ID');
+      await createScriptVersion(episodeId, scriptId, {
+        content,
+        storyboardItems,
+        source: 'ai',
+        status: 'ready',
+        modelAlias: '视频反推',
+        provider: 'video_reverse',
+        modelName: 'video_reverse_prompt',
+        metadata: {
+          ...metadata,
+          scriptPipeline: {
+            version: 3,
+            stage: 'videoReverse',
+            generatedOutputs: ['text', 'storyboard', 'shot_design'],
+            keyframeReferenceMode: 'one-keyframe-per-segment',
+          },
+        },
+        setCurrent: true,
+      });
       if (onCandidateCreated) {
         await onCandidateCreated(scriptId);
       } else {

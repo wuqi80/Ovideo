@@ -174,6 +174,7 @@ FILES=(
   tests/test_user_dao_admin_delete.py
   tests/test_video_client_base.py
   tests/test_video_crop_service.py
+  tests/test_video_interpolation_service.py
   tests/test_video_capability_service.py
   tests/test_windows_gpu_agent_runner.py
   tests/test_generation_workflow_fallback.py

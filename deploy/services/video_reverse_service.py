@@ -196,7 +196,15 @@ async def analyze_segment_frames(
     回退：API 不可用时返回结构化空字符串。
     """
     if not frame_paths:
-        return {'description': '', 'camera_description': '', 'motion_description': ''}
+        return {
+            'script_text': '',
+            'storyboard_description': '',
+            'shot_design': '',
+            'description': '',
+            'camera_description': '',
+            'motion_description': '',
+            'dialogue': '',
+        }
 
     try:
         content_parts: List[Dict[str, Any]] = []
@@ -212,6 +220,18 @@ async def analyze_segment_frames(
             "You are a professional video reverse prompt engineer. Based on the consecutive frames, output JSON:\n"
             '{"description": "...", "camera_description": "...", "motion_description": "..."}'
         )
+        if language == 'zh':
+            prompt += (
+                "\n同时补充以下字段："
+                '"script_text"（按视频画面反推的文字脚本/动作段落）、'
+                '"storyboard_description"（可直接作为分镜画面描述）、'
+                '"shot_design"（可直接作为镜头设计/生图提示词，包含主体、环境、构图、光影）、'
+                '"dialogue"（若无台词则为空字符串）。'
+            )
+        else:
+            prompt += (
+                '\nAlso include "script_text", "storyboard_description", "shot_design", and "dialogue".'
+            )
         content_parts.append({'type': 'text', 'text': prompt})
         for fp in frame_paths[:3]:  # 最多 3 张/段，控制 token
             try:
@@ -242,16 +262,43 @@ async def analyze_segment_frames(
         try:
             obj = json.loads(content_stripped)
         except Exception:
-            return {'description': content[:500], 'camera_description': '', 'motion_description': ''}
+            return {
+                'script_text': content[:500],
+                'storyboard_description': content[:500],
+                'shot_design': content[:500],
+                'description': content[:500],
+                'camera_description': '',
+                'motion_description': '',
+                'dialogue': '',
+            }
 
+        script_text = str(obj.get('script_text') or obj.get('script') or '')[:1500]
+        storyboard_description = str(
+            obj.get('storyboard_description') or obj.get('description') or script_text
+        )[:1500]
+        shot_design = str(
+            obj.get('shot_design') or obj.get('image_prompt') or obj.get('prompt_zh') or storyboard_description
+        )[:1500]
         return {
-            'description': str(obj.get('description', ''))[:1500],
+            'script_text': script_text,
+            'storyboard_description': storyboard_description,
+            'shot_design': shot_design,
+            'description': storyboard_description,
             'camera_description': str(obj.get('camera_description', ''))[:500],
             'motion_description': str(obj.get('motion_description', ''))[:500],
+            'dialogue': str(obj.get('dialogue', ''))[:800],
         }
     except Exception as e:
         logger.warning(f"视觉分析失败，降级返回空: {e}")
-        return {'description': '', 'camera_description': '', 'motion_description': ''}
+        return {
+            'script_text': '',
+            'storyboard_description': '',
+            'shot_design': '',
+            'description': '',
+            'camera_description': '',
+            'motion_description': '',
+            'dialogue': '',
+        }
 
 
 # ============================================
@@ -351,10 +398,12 @@ async def run_pipeline(task) -> Dict[str, Any]:
 
         # 把每个抽帧落入 files 表 + media_library
         saved_frame_file_ids: Dict[int, List[str]] = {}
+        saved_frame_files: Dict[int, List[Dict[str, str]]] = {}
         all_frame_file_ids: List[str] = []
         for idx, fps in frames_map.items():
             await _ensure_reverse_task_active(reverse_task_id)
             saved_frame_file_ids[idx] = []
+            saved_frame_files[idx] = []
             for fp in fps:
                 with open(fp, 'rb') as fh:
                     content = fh.read()
@@ -377,6 +426,10 @@ async def run_pipeline(task) -> Dict[str, Any]:
                 fid = saved.get('file_id')
                 if fid:
                     saved_frame_file_ids[idx].append(fid)
+                    saved_frame_files[idx].append({
+                        'file_id': fid,
+                        'file_url': saved.get('file_url') or '',
+                    })
                     all_frame_file_ids.append(fid)
                     # 同步进通用素材库（best-effort）
                     try:
@@ -403,16 +456,30 @@ async def run_pipeline(task) -> Dict[str, Any]:
             await _ensure_reverse_task_active(reverse_task_id)
             local_frames = frames_map.get(idx, [])
             analysis = await analyze_segment_frames(local_frames, language=language)
+            frame_ids = saved_frame_file_ids.get(idx, [])
+            frame_files = saved_frame_files.get(idx, [])
+            keyframe = frame_files[0] if frame_files else {}
+            script_text = analysis.get('script_text') or analysis.get('description', '')
+            storyboard_description = analysis.get('storyboard_description') or analysis.get('description', '')
+            shot_design = analysis.get('shot_design') or storyboard_description
             segment_results.append({
                 'sort_order': idx,
                 'start_seconds': start,
                 'end_seconds': end,
-                'frame_file_ids': saved_frame_file_ids.get(idx, []),
-                'description': analysis.get('description', ''),
+                'frame_file_ids': frame_ids,
+                'description': storyboard_description,
                 'camera_description': analysis.get('camera_description', ''),
                 'motion_description': analysis.get('motion_description', ''),
-                'prompt_zh': analysis.get('description', ''),
+                'prompt_zh': shot_design,
                 'prompt_en': '',
+                'metadata': {
+                    'script_text': script_text,
+                    'storyboard_description': storyboard_description,
+                    'shot_design': shot_design,
+                    'dialogue': analysis.get('dialogue', ''),
+                    'keyframe_file_id': keyframe.get('file_id') or (frame_ids[0] if frame_ids else ''),
+                    'keyframe_file_url': keyframe.get('file_url') or '',
+                },
             })
             # 进度滚动
             await VideoReverseTaskDAO.update_status(

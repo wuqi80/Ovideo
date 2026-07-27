@@ -167,6 +167,60 @@ async def _reconcile_terminal_task(task: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _coerce_frame_file_ids(value: Any) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    if isinstance(value, str):
+        try:
+            import json
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed if item]
+        except Exception:
+            return [value] if value else []
+    return []
+
+
+async def _attach_frame_file_details_to_segments(segments: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    """Expose frame URLs beside persisted frame ids without changing the DB schema."""
+    frame_ids: list[str] = []
+    for segment in segments:
+        for file_id in _coerce_frame_file_ids(segment.get('frame_file_ids')):
+            if file_id not in frame_ids:
+                frame_ids.append(file_id)
+
+    file_rows: Dict[str, Dict[str, Any]] = {}
+    for file_id in frame_ids:
+        try:
+            row = await FileDAO.get_file(file_id)
+        except Exception as exc:
+            logger.warning("video_reverse frame lookup failed: file_id=%s error=%s", file_id, exc)
+            row = None
+        if row:
+            file_rows[file_id] = {
+                'file_id': row.get('file_id') or file_id,
+                'file_url': row.get('file_url') or '',
+                'thumbnail_url': row.get('thumbnail_url'),
+                'file_name': row.get('file_name') or '',
+            }
+
+    enriched: list[Dict[str, Any]] = []
+    for segment in segments:
+        ids = _coerce_frame_file_ids(segment.get('frame_file_ids'))
+        frame_files = [file_rows[file_id] for file_id in ids if file_id in file_rows]
+        keyframe = frame_files[0] if frame_files else {}
+        enriched.append({
+            **dict(segment),
+            'frame_file_ids': ids,
+            'frame_files': frame_files,
+            'keyframe_file_id': keyframe.get('file_id') or (ids[0] if ids else ''),
+            'keyframe_file_url': keyframe.get('file_url') or '',
+        })
+    return enriched
+
+
 # ============================================
 # 请求模型
 # ============================================
@@ -348,6 +402,7 @@ async def get_video_reverse_task(
         raise HTTPException(status_code=403, detail='无权访问')
     task = await _reconcile_terminal_task(task)
     segments = await VideoReverseSegmentDAO.list_for_task(reverse_task_id)
+    segments = await _attach_frame_file_details_to_segments(segments)
     return {"success": True, "task": task, "segments": segments}
 
 

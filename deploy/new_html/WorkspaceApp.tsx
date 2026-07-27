@@ -4113,6 +4113,23 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   }, []);
 
   const isFullView = visibleColumns.every(v => v);
+  const videoReverseToolDialog = videoReverseOpen ? (
+    <div className="absolute inset-0 z-[90] bg-n900/45 p-3 sm:p-5" data-testid="video-reverse-tool-dialog">
+      <div className="h-full w-full overflow-hidden rounded-md border border-n40 bg-n0 shadow-bottom">
+        <React.Suspense fallback={<LegacyViewFallback label="video-reverse" />}>
+          <VideoReversePage
+            embedded
+            onClose={() => setVideoReverseOpen(false)}
+            onCandidateCreated={async (scriptId) => {
+              setVideoReverseOpen(false);
+              loadedConversationKeysRef.current.delete(`${propEpisodeId}:${scriptId}`);
+              await loadEpisodeData(scriptId);
+            }}
+          />
+        </React.Suspense>
+      </div>
+    </div>
+  ) : null;
 
   const renderAllViews = () => {
       const adminUsername = localStorage.getItem('username') || '';
@@ -4230,28 +4247,12 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     </div>
                     </aside>
 
-                    {videoReverseOpen && (
-                      <div className="absolute inset-0 z-[90] bg-n900/45 p-3 sm:p-5" data-testid="video-reverse-tool-dialog">
-                        <div className="h-full w-full overflow-hidden rounded-md border border-n40 bg-n0 shadow-bottom">
-                          <React.Suspense fallback={<LegacyViewFallback label="video-reverse" />}>
-                            <VideoReversePage
-                              embedded
-                              onClose={() => setVideoReverseOpen(false)}
-                              onCandidateCreated={async (scriptId) => {
-                                setVideoReverseOpen(false);
-                                loadedConversationKeysRef.current.delete(`${propEpisodeId}:${scriptId}`);
-                                await loadEpisodeData(scriptId);
-                              }}
-                            />
-                          </React.Suspense>
-                        </div>
-                      </div>
-                    )}
+                    {videoReverseToolDialog}
                 </div>
                 </>
               ) : (
                 <div
-                  className="flex h-full min-h-0 w-full min-w-0 overflow-hidden bg-n0"
+                  className="relative flex h-full min-h-0 w-full min-w-0 overflow-hidden bg-n0"
                   data-testid="quick-script-workspace"
                 >
                   <div className="relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40">
@@ -4318,6 +4319,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                             onGenerateVideoScript={handleGenerateVideoScript}
                             onExtractStoryboardPrompts={handleExtractStoryboardPrompts}
                             onRunThreeStage={handleRunThreeStagePipeline}
+                            onOpenVideoReverse={() => setVideoReverseOpen(true)}
                           />
                         </React.Suspense>
                       </div>
@@ -4405,6 +4407,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     </div>
                   </div>
                   </div>
+                  {videoReverseToolDialog}
                 </div>
               )}
             </div>

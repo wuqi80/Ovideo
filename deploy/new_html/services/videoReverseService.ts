@@ -48,6 +48,14 @@ export interface VideoReverseSegment {
   start_seconds: number;
   end_seconds: number;
   frame_file_ids: string[];
+  frame_files?: Array<{
+    file_id: string;
+    file_url: string;
+    thumbnail_url?: string | null;
+    file_name?: string;
+  }>;
+  keyframe_file_id?: string;
+  keyframe_file_url?: string;
   description: string;
   prompt_zh: string;
   prompt_en: string;
