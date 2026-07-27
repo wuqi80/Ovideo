@@ -421,7 +421,6 @@ select.input {
   transition: all var(--transition);
   cursor: default;
 }
-.wf-card.wf-card-has-actions { padding-right: 86px; }
 .wf-card:hover { border-color: var(--border-hover); }
 .wf-card .wf-icon {
   width: 36px; height: 36px; border-radius: var(--radius-sm);
@@ -439,22 +438,8 @@ select.input {
   margin-top: 4px;
 }
 .wf-card .wf-actions {
-  position: absolute; top: 12px; right: 14px;
-  display: flex; gap: 4px; opacity: 0; flex-wrap: wrap; justify-content: flex-end;
-  pointer-events: none;
-  transition: opacity var(--transition), transform var(--transition);
-  transform: translateY(-2px);
-}
-.wf-card:hover .wf-actions,
-.wf-card:focus-within .wf-actions {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-.wf-card .wf-actions-visible {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
+  display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;
+  flex-shrink: 0;
 }
 .wf-card .wf-actions:empty { display: none; }
 .wf-import-btn {

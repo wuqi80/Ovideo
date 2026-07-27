@@ -661,10 +661,9 @@ function renderWorkflowCard(w, meta) {
     : (canImportSingle
       ? `<button class="btn btn-success btn-xs wf-import-btn" onclick="importWorkflowByKey(event, '${encodedKey}')" title="导入此工作流 JSON 到数据库">导入</button>`
       : '');
-  const actionClass = canImportSingle ? 'wf-actions wf-actions-visible' : 'wf-actions';
 
   return `
-    <div class="wf-card ${actionHtml ? 'wf-card-has-actions' : ''}">
+    <div class="wf-card">
       <div class="wf-icon" style="background:${meta.badge === 'badge-pink' ? 'rgba(236,72,153,0.1)' : meta.badge === 'badge-purple' ? 'rgba(168,85,247,0.1)' : meta.badge === 'badge-orange' ? 'rgba(249,115,22,0.1)' : meta.badge === 'badge-teal' ? 'rgba(20,184,166,0.1)' : 'rgba(113,113,122,0.1)'}">${CATEGORY_META[w.category]?.icon || '📦'}</div>
       <div class="wf-info">
         <div class="wf-name">${escapeHtml(w.name)}</div>
@@ -674,7 +673,7 @@ function renderWorkflowCard(w, meta) {
           ${ph.length ? `<span style="font-size:10px;color:var(--text-3)">${ph.length} 占位符</span>` : ''}
         </div>
       </div>
-      <div class="${actionClass}">
+      <div class="wf-actions">
         ${actionHtml}
       </div>
     </div>`;

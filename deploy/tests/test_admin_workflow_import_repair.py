@@ -288,13 +288,16 @@ def test_legacy_workflow_pending_cards_render_single_import_action():
     assert "导入到数据库</button>" not in app_js
     assert "/api/admin/workflows/import-existing/${encodeURIComponent(key)}" in app_js
     assert "editWorkflowByName" in app_js
-    assert ".wf-card.wf-card-has-actions" in style_css
-    assert ".wf-card:focus-within .wf-actions" in style_css
-    assert "pointer-events: auto" in style_css
-    assert "const actionClass = canImportSingle ? 'wf-actions wf-actions-visible'" in app_js
-    assert ".wf-card .wf-actions-visible" in style_css
-    assert "style.css?v=20260727-workflow-import-v3" in index_html
-    assert "app.js?v=20260727-workflow-import-v3" in index_html
+    assert '<div class="wf-actions">' in app_js
+    assert "wf-card-has-actions" not in app_js
+    assert "wf-actions-visible" not in app_js
+    actions_rule = style_css.split(".wf-card .wf-actions {", 1)[1].split("}", 1)[0]
+    assert "position: absolute" not in actions_rule
+    assert "opacity: 0" not in actions_rule
+    assert "pointer-events: none" not in actions_rule
+    assert "flex-shrink: 0" in actions_rule
+    assert "style.css?v=20260727-workflow-import-v4" in index_html
+    assert "app.js?v=20260727-workflow-import-v4" in index_html
 
 
 @pytest.mark.asyncio

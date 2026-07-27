@@ -21,3 +21,13 @@ def test_live_deploy_builds_studio_as_a_sibling_application():
     assert "studio_source_hash()" in script
     assert "npm run build || (npm ci && npm run build)" in script
     assert '\\"studio_source_sha256\\":\\"$STUDIO_SOURCE_HASH\\"' in script
+
+
+def test_live_deploy_syncs_pipeline_and_removes_stale_workflow_files_safely():
+    script = (DEPLOY_DIR / "scripts" / "live_deploy_mvc2.sh").read_text(encoding="utf-8")
+
+    assert '  "pipeline"' in script
+    assert "workflows_bak='$REMOTE_DIR'/workflows.bak.\\$ts" in script
+    assert "WORKFLOWS_BACKUP_PATH=$(printf" in script
+    assert "find '$REMOTE_DIR'/workflows -mindepth 1 -maxdepth 1 -type f -delete" in script
+    assert "cp -a '${WORKFLOWS_BACKUP_PATH:-}'/. '$REMOTE_DIR'/workflows" in script

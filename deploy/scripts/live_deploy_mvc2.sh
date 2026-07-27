@@ -68,6 +68,7 @@ FILES=(
   "routers"
   "schemas"
   "services"
+  "pipeline"
   "db_build"
   "sql"
   "utils"
@@ -205,7 +206,7 @@ cleanup() {
 trap cleanup EXIT
 
 rollback_remote() {
-  echo "Rolling back remote cluster_main.py, main dist, and Studio dist..."
+  echo "Rolling back remote cluster_main.py, workflows, main dist, and Studio dist..."
   ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
     latest=\$(ls -1t '$REMOTE_DIR'/cluster_main.py.bak.* 2>/dev/null | head -n 1 || true)
     if [ -n \"\$latest\" ]; then
@@ -220,6 +221,11 @@ rollback_remote() {
       cp -a '${STUDIO_DIST_BACKUP_PATH:-}' '$STUDIO_REMOTE_DIR'/dist
     elif [ -d '$STUDIO_REMOTE_DIR'/dist ]; then
       rm -rf '$STUDIO_REMOTE_DIR'/dist
+    fi
+    if [ -n '${WORKFLOWS_BACKUP_PATH:-}' ] && [ -d '${WORKFLOWS_BACKUP_PATH:-}' ]; then
+      mkdir -p '$REMOTE_DIR'/workflows
+      find '$REMOTE_DIR'/workflows -mindepth 1 -maxdepth 1 -type f -delete
+      cp -a '${WORKFLOWS_BACKUP_PATH:-}'/. '$REMOTE_DIR'/workflows
     fi
     rm -f '$FRONTEND_HASH_REMOTE' '$RELEASE_METADATA_REMOTE_CANDIDATE'
     rm -f '$STUDIO_HASH_REMOTE'
@@ -339,12 +345,18 @@ BACKUP_INFO=$(
       studio_dist_bak='$STUDIO_REMOTE_DIR'/dist.bak.\$ts
       cp -a '$STUDIO_REMOTE_DIR'/dist \"\$studio_dist_bak\"
     fi
-    printf '%s\n%s\n%s\n' \"\$cluster_bak\" \"\$dist_bak\" \"\$studio_dist_bak\"
+    workflows_bak=''
+    if [ -d '$REMOTE_DIR'/workflows ]; then
+      workflows_bak='$REMOTE_DIR'/workflows.bak.\$ts
+      cp -a '$REMOTE_DIR'/workflows \"\$workflows_bak\"
+    fi
+    printf '%s\n%s\n%s\n%s\n' \"\$cluster_bak\" \"\$dist_bak\" \"\$studio_dist_bak\" \"\$workflows_bak\"
   "
 )
 BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '1p')
 DIST_BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '2p')
 STUDIO_DIST_BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '3p')
+WORKFLOWS_BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '4p')
 echo "cluster_main backup: $BACKUP_PATH"
 if [ -n "$DIST_BACKUP_PATH" ]; then
   echo "dist backup: $DIST_BACKUP_PATH"
@@ -355,6 +367,11 @@ if [ -n "$STUDIO_DIST_BACKUP_PATH" ]; then
   echo "Studio dist backup: $STUDIO_DIST_BACKUP_PATH"
 else
   echo "Studio dist backup: skipped (remote Studio dist missing)"
+fi
+if [ -n "$WORKFLOWS_BACKUP_PATH" ]; then
+  echo "workflows backup: $WORKFLOWS_BACKUP_PATH"
+else
+  echo "workflows backup: skipped (remote workflows missing)"
 fi
 
 for path in "${FILES[@]}"; do
@@ -394,6 +411,8 @@ fi
 
 if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   mkdir -p '$REMOTE_DIR'
+  mkdir -p '$REMOTE_DIR'/workflows
+  find '$REMOTE_DIR'/workflows -mindepth 1 -maxdepth 1 -type f -delete
   tar -xzf '$BACKEND_TAR_REMOTE' -C '$REMOTE_DIR'
   rm -f '$BACKEND_TAR_REMOTE'
 "; then
