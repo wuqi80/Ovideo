@@ -124,6 +124,16 @@ describe('EpisodeHubPage', () => {
 
     fireEvent.dragStart(screen.getByLabelText('第八期 拖动排序'), { dataTransfer });
     fireEvent.dragOver(screen.getByTestId('episode-card-ep_2'), { dataTransfer });
+
+    await waitFor(() => {
+      const previewCards = Array.from(container.querySelectorAll('[data-testid^="episode-card-"]'));
+      expect(within(previewCards[0] as HTMLElement).getByText('第二集')).toBeInTheDocument();
+      expect(within(previewCards[0] as HTMLElement).getByTestId('episode-title-row-ep_2')).toHaveTextContent('EP 01');
+      expect(within(previewCards[1] as HTMLElement).getByText('第八期')).toBeInTheDocument();
+      expect(within(previewCards[1] as HTMLElement).getByTestId('episode-title-row-ep_8')).toHaveTextContent('EP 02');
+    });
+    expect((apiJson as any).mock.calls.filter((call: any[]) => call[0] === '/api/projects/proj_1/episodes/reorder')).toHaveLength(0);
+
     fireEvent.drop(screen.getByTestId('episode-card-ep_2'), { dataTransfer });
 
     await waitFor(() => {
@@ -140,9 +150,52 @@ describe('EpisodeHubPage', () => {
     const cards = Array.from(container.querySelectorAll('[data-testid^="episode-card-"]'));
     expect(cards).toHaveLength(2);
     expect(within(cards[0] as HTMLElement).getByText('第二集')).toBeInTheDocument();
-    expect(within(cards[0] as HTMLElement).getByText('EP 01')).toBeInTheDocument();
+    expect(within(cards[0] as HTMLElement).getByTestId('episode-title-row-ep_2')).toHaveTextContent('EP 01');
     expect(within(cards[1] as HTMLElement).getByText('第八期')).toBeInTheDocument();
-    expect(within(cards[1] as HTMLElement).getByText('EP 02')).toBeInTheDocument();
+    expect(within(cards[1] as HTMLElement).getByTestId('episode-title-row-ep_8')).toHaveTextContent('EP 02');
+  });
+
+  it('restores the original order when a drag preview is cancelled', async () => {
+    const { container } = renderEpisodeHub();
+
+    await screen.findByText('第八期');
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: vi.fn(),
+      getData: vi.fn(() => 'ep_8'),
+    };
+
+    fireEvent.dragStart(screen.getByLabelText('第八期 拖动排序'), { dataTransfer });
+    fireEvent.dragOver(screen.getByTestId('episode-card-ep_2'), { dataTransfer });
+
+    await waitFor(() => {
+      const previewCards = Array.from(container.querySelectorAll('[data-testid^="episode-card-"]'));
+      expect(within(previewCards[0] as HTMLElement).getByText('第二集')).toBeInTheDocument();
+    });
+
+    fireEvent.dragEnd(screen.getByLabelText('第八期 拖动排序'), { dataTransfer });
+
+    await waitFor(() => {
+      const restoredCards = Array.from(container.querySelectorAll('[data-testid^="episode-card-"]'));
+      expect(within(restoredCards[0] as HTMLElement).getByText('第八期')).toBeInTheDocument();
+      expect(within(restoredCards[0] as HTMLElement).getByTestId('episode-title-row-ep_8')).toHaveTextContent('EP 01');
+      expect(within(restoredCards[1] as HTMLElement).getByText('第二集')).toBeInTheDocument();
+    });
+    expect((apiJson as any).mock.calls.filter((call: any[]) => call[0] === '/api/projects/proj_1/episodes/reorder')).toHaveLength(0);
+  });
+
+  it('uses a white-only cover drag handle and places the EP badge beside the episode title', async () => {
+    renderEpisodeHub();
+
+    await screen.findByText('第八期');
+    const card = screen.getByTestId('episode-card-ep_8');
+    const dragHandle = within(card).getByLabelText('第八期 拖动排序');
+
+    expect(dragHandle).toHaveClass('text-white');
+    expect(dragHandle.className).not.toContain('bg-n800');
+    expect(dragHandle).not.toHaveTextContent('EP');
+    expect(within(card).getByTestId('episode-title-row-ep_8')).toHaveTextContent('EP 01第八期');
   });
 
   it('filters episodes by stable status tabs without renumbering the global EP labels', async () => {
@@ -175,7 +228,7 @@ describe('EpisodeHubPage', () => {
     expect(screen.queryByText('草稿集')).not.toBeInTheDocument();
     expect(screen.queryByText('完成集')).not.toBeInTheDocument();
     expect(screen.queryByText('发布集')).not.toBeInTheDocument();
-    expect(within(screen.getByTestId('episode-card-ep_started')).getByText('EP 02')).toBeInTheDocument();
+    expect(within(screen.getByTestId('episode-card-ep_started')).getByTestId('episode-title-row-ep_started')).toHaveTextContent('EP 02');
     expect(screen.getByRole('button', { name: /全部分集\s*4/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /草稿\s*1/ })).toBeInTheDocument();
   });

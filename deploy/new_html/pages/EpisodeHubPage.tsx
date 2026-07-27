@@ -73,6 +73,28 @@ function sortEpisodes(items: EpisodeCard[]): EpisodeCard[] {
   });
 }
 
+function renumberEpisodeSortOrder(items: EpisodeCard[]): EpisodeCard[] {
+  return items.map((ep, index) => ({ ...ep, sortOrder: index }));
+}
+
+function previewEpisodeReorder(items: EpisodeCard[], sourceId: string, targetId: string): EpisodeCard[] {
+  const sourceIndex = items.findIndex(ep => ep.episodeId === sourceId);
+  const targetIndex = items.findIndex(ep => ep.episodeId === targetId);
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+    return items;
+  }
+
+  const nextEpisodes = [...items];
+  const [moved] = nextEpisodes.splice(sourceIndex, 1);
+  nextEpisodes.splice(targetIndex, 0, moved);
+  return renumberEpisodeSortOrder(nextEpisodes);
+}
+
+function episodeOrderChanged(previous: EpisodeCard[], next: EpisodeCard[]): boolean {
+  if (previous.length !== next.length) return true;
+  return previous.some((ep, index) => ep.episodeId !== next[index]?.episodeId);
+}
+
 function mapEpisode(row: any): EpisodeCard {
   const settings = normalizeEpisodeSettings(row.settings);
   const status = episodeStatusOrder.includes(row.status) ? row.status : 'draft';
@@ -105,11 +127,15 @@ export const EpisodeHubPage: React.FC = () => {
   const [editingName, setEditingName] = useState('');
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [draggingEpisodeId, setDraggingEpisodeId] = useState<string | null>(null);
+  const [dragOverEpisodeId, setDragOverEpisodeId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [coverUploadTargetId, setCoverUploadTargetId] = useState<string | null>(null);
   const [uploadingCoverEpisodeId, setUploadingCoverEpisodeId] = useState<string | null>(null);
   const [activeStatusTab, setActiveStatusTab] = useState<EpisodeTab>('all');
   const [isWideLayout, setIsWideLayout] = useState(() => localStorage.getItem('episode_hub_layout') === 'wide');
+  const dragOriginEpisodesRef = useRef<EpisodeCard[] | null>(null);
+  const dragPreviewEpisodesRef = useRef<EpisodeCard[] | null>(null);
+  const dragCommittedRef = useRef(false);
 
   const loadEpisodes = useCallback(async () => {
     if (!projectId) return;
@@ -298,6 +324,10 @@ export const EpisodeHubPage: React.FC = () => {
       return;
     }
     setDraggingEpisodeId(episodeId);
+    setDragOverEpisodeId(null);
+    dragOriginEpisodesRef.current = episodes;
+    dragPreviewEpisodesRef.current = episodes;
+    dragCommittedRef.current = false;
     setMenuOpen(null);
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', episodeId);
@@ -308,28 +338,44 @@ export const EpisodeHubPage: React.FC = () => {
     if (!sourceId || sourceId === targetEpisodeId || reordering) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
+    setDragOverEpisodeId(targetEpisodeId);
+    setEpisodes(prev => {
+      const nextEpisodes = previewEpisodeReorder(prev, sourceId, targetEpisodeId);
+      if (nextEpisodes === prev) return prev;
+      dragPreviewEpisodesRef.current = nextEpisodes;
+      return nextEpisodes;
+    });
   };
 
   const handleDrop = (event: React.DragEvent<HTMLElement>, targetEpisodeId: string) => {
     event.preventDefault();
     const sourceId = draggingEpisodeId || event.dataTransfer.getData('text/plain');
     setDraggingEpisodeId(null);
-    if (!sourceId || sourceId === targetEpisodeId || reordering) return;
+    setDragOverEpisodeId(null);
+    if (!sourceId || reordering) return;
 
-    const sourceIndex = episodes.findIndex(ep => ep.episodeId === sourceId);
-    const targetIndex = episodes.findIndex(ep => ep.episodeId === targetEpisodeId);
-    if (sourceIndex < 0 || targetIndex < 0) return;
+    const previousEpisodes = dragOriginEpisodesRef.current || episodes;
+    const previewEpisodes = dragPreviewEpisodesRef.current || previewEpisodeReorder(episodes, sourceId, targetEpisodeId);
+    dragCommittedRef.current = true;
+    dragOriginEpisodesRef.current = null;
+    dragPreviewEpisodesRef.current = null;
 
-    const previousEpisodes = episodes;
-    const nextEpisodes = [...episodes];
-    const [moved] = nextEpisodes.splice(sourceIndex, 1);
-    nextEpisodes.splice(targetIndex, 0, moved);
-    const renumbered = nextEpisodes.map((ep, index) => ({ ...ep, sortOrder: index }));
-    setEpisodes(renumbered);
-    void persistEpisodeOrder(renumbered, previousEpisodes);
+    if (!episodeOrderChanged(previousEpisodes, previewEpisodes)) return;
+
+    setEpisodes(previewEpisodes);
+    void persistEpisodeOrder(previewEpisodes, previousEpisodes);
   };
 
-  const handleDragEnd = () => setDraggingEpisodeId(null);
+  const handleDragEnd = () => {
+    if (!dragCommittedRef.current && dragOriginEpisodesRef.current) {
+      setEpisodes(dragOriginEpisodesRef.current);
+    }
+    setDraggingEpisodeId(null);
+    setDragOverEpisodeId(null);
+    dragOriginEpisodesRef.current = null;
+    dragPreviewEpisodesRef.current = null;
+    dragCommittedRef.current = false;
+  };
 
   const goToWorkflow = (episodeId: string) => {
     navigate(`/projects/${projectId}/ep/${episodeId}/workflow/script`);
@@ -493,7 +539,7 @@ export const EpisodeHubPage: React.FC = () => {
                   <article
                     key={ep.episodeId}
                     data-testid={`episode-card-${ep.episodeId}`}
-                    className={`group overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-all duration-300 hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas animate-slideUp ${draggingEpisodeId === ep.episodeId ? 'opacity-55 ring-2 ring-primary/25' : ''}`}
+                    className={`group overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas animate-slideUp ${draggingEpisodeId === ep.episodeId ? 'scale-[0.98] opacity-70 ring-2 ring-primary/25' : ''} ${dragOverEpisodeId === ep.episodeId ? 'border-primary/60 shadow-bottom' : ''}`}
                     style={{ animationDelay: `${idx * 60}ms` }}
                     onClick={event => event.stopPropagation()}
                     onDragOver={event => handleDragOver(event, ep.episodeId)}
@@ -512,26 +558,20 @@ export const EpisodeHubPage: React.FC = () => {
                         封面上传中...
                       </div>
                     )}
-                    <div className="absolute left-3 top-3 flex items-center gap-2">
-                      <span className="inline-flex overflow-hidden rounded bg-n800/85 text-[11px] font-semibold text-white shadow-card">
-                        <span className="flex h-7 items-center px-2">EP {String(displayNumber).padStart(2, '0')}</span>
-                        <button
-                          type="button"
-                          draggable={!reordering && !editingId}
-                          aria-label={`${ep.episodeName || '未命名分集'} 拖动排序`}
-                          title="拖动调整分集顺序"
-                          onDragStart={event => handleDragStart(event, ep.episodeId)}
-                          onDragEnd={handleDragEnd}
-                          onClick={event => event.stopPropagation()}
-                          className="flex h-7 w-7 cursor-grab items-center justify-center border-l border-white/15 text-white/80 transition-colors hover:bg-white/10 hover:text-white active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={reordering || !!editingId}
-                        >
-                          <GripVertical size={14} />
-                        </button>
-                      </span>
-                      <span className={`rounded px-2 py-1 text-[11px] font-medium shadow-card ${statusColors[ep.status] || statusColors.draft}`}>
-                        {episodeStatusLabels[ep.status] || ep.status}
-                      </span>
+                    <div className="absolute left-3 top-3 z-20">
+                      <button
+                        type="button"
+                        draggable={!reordering && !editingId}
+                        aria-label={`${ep.episodeName || '未命名分集'} 拖动排序`}
+                        title="拖动调整分集顺序"
+                        onDragStart={event => handleDragStart(event, ep.episodeId)}
+                        onDragEnd={handleDragEnd}
+                        onClick={event => event.stopPropagation()}
+                        className="flex h-8 w-8 cursor-grab items-center justify-center rounded-full border border-white/35 bg-white/15 text-white shadow-card backdrop-blur transition-all hover:bg-white/25 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={reordering || !!editingId}
+                      >
+                        <GripVertical size={16} strokeWidth={2.4} />
+                      </button>
                     </div>
                     <div className="absolute right-3 top-3 z-20">
                       <button
@@ -572,16 +612,25 @@ export const EpisodeHubPage: React.FC = () => {
 
                   <div className="p-4">
                     {editingId === ep.episodeId ? (
-                      <input
-                        value={editingName}
-                        onChange={event => setEditingName(event.target.value)}
-                        onKeyDown={event => { if (event.key === 'Enter') submitRename(); if (event.key === 'Escape') setEditingId(null); }}
-                        onBlur={submitRename}
-                        autoFocus
-                        className="mb-2 w-full rounded border border-primary bg-n0 px-2 py-1 text-sm font-semibold text-n800 outline-none ring-2 ring-primary/15"
-                      />
+                      <div data-testid={`episode-title-row-${ep.episodeId}`} className="mb-2 flex items-center gap-2">
+                        <span className="shrink-0 rounded bg-n800 px-2 py-1 text-[11px] font-semibold text-white shadow-card">EP {String(displayNumber).padStart(2, '0')}</span>
+                        <input
+                          value={editingName}
+                          onChange={event => setEditingName(event.target.value)}
+                          onKeyDown={event => { if (event.key === 'Enter') submitRename(); if (event.key === 'Escape') setEditingId(null); }}
+                          onBlur={submitRename}
+                          autoFocus
+                          className="min-w-0 flex-1 rounded border border-primary bg-n0 px-2 py-1 text-sm font-semibold text-n800 outline-none ring-2 ring-primary/15"
+                        />
+                      </div>
                     ) : (
-                      <h3 className="mb-2 truncate text-sm font-semibold text-n800">{ep.episodeName || '未命名分集'}</h3>
+                      <div data-testid={`episode-title-row-${ep.episodeId}`} className="mb-2 flex min-w-0 items-center gap-2">
+                        <span className="shrink-0 rounded bg-n800 px-2 py-1 text-[11px] font-semibold text-white shadow-card">EP {String(displayNumber).padStart(2, '0')}</span>
+                        <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-n800">{ep.episodeName || '未命名分集'}</h3>
+                        <span className={`shrink-0 rounded px-2 py-1 text-[11px] font-medium ${statusColors[ep.status] || statusColors.draft}`}>
+                          {episodeStatusLabels[ep.status] || ep.status}
+                        </span>
+                      </div>
                     )}
                     {ep.description && <p className="mb-3 line-clamp-2 text-xs text-n200">{ep.description}</p>}
                     <div className="mb-4 flex items-center text-xs text-n100">
