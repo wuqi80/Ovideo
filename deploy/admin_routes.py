@@ -756,6 +756,228 @@ async def admin_import_workflows():
     }
 
 
+async def _admin_import_one_configured_workflow(
+    workflow_key: str,
+    cfg: Any,
+) -> Dict[str, Any]:
+    wf_dir = _workflow_dir()
+    name = getattr(cfg, "name", None) or str(workflow_key)
+    file_name = getattr(cfg, "file", None)
+    if not file_name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{name}: API workflow has no disk JSON to import",
+        )
+
+    path = wf_dir / file_name
+    if not path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{name}: missing file workflows/{file_name}",
+        )
+
+    try:
+        workflow_json = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(workflow_json, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{name}: workflow JSON root must be object",
+            )
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{name}: read/parse error: {exc}",
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{name}: read/parse error: {exc}",
+        ) from exc
+
+    invalid_reason = workflow_invalid_reason(workflow_json)
+    if invalid_reason:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{name}: invalid workflow template: {invalid_reason}",
+        )
+
+    ph_objs = _placeholders_from_workflow_config(cfg)
+    existing = await _get_workflow_template_by_key(str(workflow_key))
+    if not existing:
+        existing = await WorkflowTemplateDAO.get_by_name(name)
+    if existing:
+        update_fields: Dict[str, Any] = {}
+        if not existing.get("workflow_key"):
+            update_fields["workflow_key"] = str(workflow_key)
+
+        disk_placeholder_names = {
+            str(p.get("key", "")) for p in ph_objs if isinstance(p, dict)
+        }
+        disk_workflow_placeholder_names = set(
+            _placeholder_names_from_workflow_json(workflow_json)
+        )
+        existing_placeholders = _jsonb_to_python(existing.get("placeholders")) or []
+        existing_placeholder_names = {
+            str(p.get("key", ""))
+            for p in existing_placeholders
+            if isinstance(p, dict)
+        }
+        existing_workflow_json = _jsonb_to_python(existing.get("workflow_json")) or {}
+        existing_workflow_placeholders = set(
+            _placeholder_names_from_workflow_json(existing_workflow_json)
+        )
+
+        if disk_placeholder_names and existing_placeholder_names != disk_placeholder_names:
+            update_fields["placeholders"] = ph_objs
+        if (
+            disk_workflow_placeholder_names
+            and not disk_workflow_placeholder_names.issubset(existing_workflow_placeholders)
+        ):
+            update_fields["workflow_json"] = workflow_json
+
+        repaired = 0
+        if update_fields:
+            updated = await WorkflowTemplateDAO.update(
+                existing["template_id"], **update_fields
+            )
+            repaired = 1 if updated else 0
+        return {
+            "success": True,
+            "workflow_key": str(workflow_key),
+            "name": name,
+            "imported": 0,
+            "skipped": 1,
+            "repaired": repaired,
+        }
+
+    row = await WorkflowTemplateDAO.create(
+        name=name,
+        category=str(workflow_key),
+        workflow_json=workflow_json,
+        placeholders=ph_objs,
+        description=getattr(cfg, "description", "") or "",
+        node_type="any",
+        estimated_time=30,
+        workflow_key=str(workflow_key),
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{name}: database insert failed",
+        )
+    return {
+        "success": True,
+        "workflow_key": str(workflow_key),
+        "name": name,
+        "imported": 1,
+        "skipped": 0,
+        "repaired": 0,
+    }
+
+
+async def _admin_import_one_disk_workflow(workflow_key: str) -> Dict[str, Any]:
+    wf_dir = _workflow_dir()
+    safe_key = Path(workflow_key).stem
+    if safe_key != workflow_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="workflow key must be a single file stem",
+        )
+    path = wf_dir / f"{safe_key}.json"
+    if not path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{safe_key}: missing file workflows/{safe_key}.json",
+        )
+
+    try:
+        workflow_json = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(workflow_json, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"{safe_key}: workflow JSON root must be object",
+            )
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{safe_key}: read/parse error: {exc}",
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{safe_key}: read/parse error: {exc}",
+        ) from exc
+
+    invalid_reason = workflow_invalid_reason(workflow_json)
+    if invalid_reason:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{safe_key}: invalid workflow template: {invalid_reason}",
+        )
+
+    existing = await _get_workflow_template_by_key(safe_key)
+    if not existing:
+        existing = await WorkflowTemplateDAO.get_by_name(safe_key)
+    if existing:
+        repaired = 0
+        if not existing.get("workflow_key"):
+            updated = await WorkflowTemplateDAO.update(
+                existing["template_id"], workflow_key=safe_key
+            )
+            repaired = 1 if updated else 0
+        return {
+            "success": True,
+            "workflow_key": safe_key,
+            "name": safe_key,
+            "imported": 0,
+            "skipped": 1,
+            "repaired": repaired,
+        }
+
+    placeholder_names = _placeholder_names_from_workflow_json(workflow_json)
+    row = await WorkflowTemplateDAO.create(
+        name=safe_key,
+        category=_workflow_category_for(safe_key, path.name),
+        workflow_json=workflow_json,
+        placeholders=_placeholder_objects(placeholder_names),
+        description=f"磁盘工作流文件 {path.name}",
+        node_type="any",
+        estimated_time=30,
+        workflow_key=safe_key,
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"{safe_key}: database insert failed",
+        )
+    return {
+        "success": True,
+        "workflow_key": safe_key,
+        "name": safe_key,
+        "imported": 1,
+        "skipped": 0,
+        "repaired": 0,
+    }
+
+
+@router.post("/workflows/import-existing/{workflow_key}")
+async def admin_import_one_workflow(workflow_key: str):
+    _require_db()
+    from workflow_config import WORKFLOW_CONFIGS
+
+    key = workflow_key.strip()
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="workflow key is required",
+        )
+
+    cfg = WORKFLOW_CONFIGS.get(key)
+    if cfg is not None:
+        return await _admin_import_one_configured_workflow(key, cfg)
+    return await _admin_import_one_disk_workflow(key)
+
+
 class WorkflowCreateBody(BaseModel):
     name: str = Field(..., min_length=1)
     category: str = Field(..., min_length=1)

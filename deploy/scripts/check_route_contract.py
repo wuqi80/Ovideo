@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 269
-DEFAULT_EXPECTED_OPERATIONS = 328
+DEFAULT_EXPECTED_PATHS = 270
+DEFAULT_EXPECTED_OPERATIONS = 329
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -50,6 +50,10 @@ EXPECTED_ENDPOINTS = {
     ("/api/comfyui/upload", "POST"): ("routers.comfyui_files", "comfyui_upload_proxy"),
     ("/api/admin/users", "GET"): ("admin_routes", "admin_list_users"),
     ("/api/admin/users/{user_id}/permissions", "PUT"): ("admin_routes", "admin_update_permissions"),
+    ("/api/admin/workflows/import-existing/{workflow_key}", "POST"): (
+        "admin_routes",
+        "admin_import_one_workflow",
+    ),
     ("/api/admin/api-configs/reload-env", "POST"): ("admin_api_config_routes", "admin_reload_api_env"),
     ("/api/admin/api-configs/{config_id}/test", "POST"): ("admin_api_config_routes", "admin_test_api_config"),
     ("/api/admin/api-configs/test-all", "POST"): ("admin_api_config_routes", "admin_test_all_api_configs"),

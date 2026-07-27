@@ -653,20 +653,27 @@ function renderWorkflowCard(w, meta) {
   const typeBadge = w.is_api
     ? '<span class="badge badge-blue" style="font-size:10px">API</span>'
     : '<span class="badge badge-gray" style="font-size:10px">JSON</span>';
+  const encodedName = encodeURIComponent(w.name || '');
+  const encodedKey = encodeURIComponent(w.key || w.name || '');
+  const actionHtml = w.imported
+    ? `<button class="btn btn-ghost btn-xs" onclick="editWorkflowByName('${encodedName}')">编辑</button>`
+    : (w.can_import
+      ? `<button class="btn btn-ghost btn-xs" onclick="importWorkflowByKey(event, '${encodedKey}')" title="只导入此工作流">导入</button>`
+      : '');
 
   return `
     <div class="wf-card">
       <div class="wf-icon" style="background:${meta.badge === 'badge-pink' ? 'rgba(236,72,153,0.1)' : meta.badge === 'badge-purple' ? 'rgba(168,85,247,0.1)' : meta.badge === 'badge-orange' ? 'rgba(249,115,22,0.1)' : meta.badge === 'badge-teal' ? 'rgba(20,184,166,0.1)' : 'rgba(113,113,122,0.1)'}">${CATEGORY_META[w.category]?.icon || '📦'}</div>
       <div class="wf-info">
-        <div class="wf-name">${w.name}</div>
-        <div class="wf-file">${w.file || '(API 调用)'}</div>
+        <div class="wf-name">${escapeHtml(w.name)}</div>
+        <div class="wf-file">${escapeHtml(w.file || '(API 调用)')}</div>
         <div class="wf-meta">
           ${statusBadge} ${typeBadge}
           ${ph.length ? `<span style="font-size:10px;color:var(--text-3)">${ph.length} 占位符</span>` : ''}
         </div>
       </div>
       <div class="wf-actions">
-        ${w.imported ? `<button class="btn btn-ghost btn-xs" onclick="editWorkflowByName('${encodeURIComponent(w.name)}')">编辑</button>` : ''}
+        ${actionHtml}
       </div>
     </div>`;
 }
@@ -676,6 +683,25 @@ async function importAllWorkflows() {
   try {
     const data = await apiCall('/api/admin/workflows/import-existing', { method: 'POST' });
     showToast(`导入完成: ${data.imported} 个新增, ${data.skipped} 已存在`, 'success');
+    fetchWorkflowsDisk();
+  } catch (_) {}
+}
+
+async function importWorkflowByKey(event, encodedKey) {
+  if (event) event.stopPropagation();
+  const key = decodeURIComponent(encodedKey || '');
+  if (!key) {
+    showToast('缺少工作流标识，无法导入', 'warn');
+    return;
+  }
+  showToast('正在导入此工作流...', 'info');
+  try {
+    const data = await apiCall(`/api/admin/workflows/import-existing/${encodeURIComponent(key)}`, { method: 'POST' });
+    const name = data.name || key;
+    const action = data.imported > 0
+      ? '导入完成'
+      : (data.repaired > 0 ? '已同步修复' : '已存在');
+    showToast(`${action}: ${name}`, 'success');
     fetchWorkflowsDisk();
   } catch (_) {}
 }

@@ -203,6 +203,88 @@ async def test_import_workflows_repairs_invalid_db_from_valid_disk(monkeypatch, 
 
 
 @pytest.mark.asyncio
+async def test_import_one_workflow_only_imports_the_selected_key(monkeypatch, tmp_path):
+    import admin_routes
+
+    workflow = {
+        "1": {"class_type": "LoadImage", "inputs": {"image": "{image}"}},
+        "2": {"class_type": "SaveImage", "inputs": {"images": ["1", 0]}},
+    }
+    (tmp_path / "target.json").write_text(json.dumps(workflow), encoding="utf-8")
+    (tmp_path / "other.json").write_text(json.dumps(workflow), encoding="utf-8")
+
+    target_cfg = type(
+        "FakeCfg",
+        (),
+        {
+            "name": "目标工作流",
+            "file": "target.json",
+            "description": "只导入这一条",
+            "placeholders": ["image"],
+            "default_params": {},
+        },
+    )()
+    other_cfg = type(
+        "FakeCfg",
+        (),
+        {
+            "name": "其他工作流",
+            "file": "other.json",
+            "description": "不应被导入",
+            "placeholders": ["image"],
+            "default_params": {},
+        },
+    )()
+    fake_workflow_config = ModuleType("workflow_config")
+    fake_workflow_config.WORKFLOW_CONFIGS = {
+        "target": target_cfg,
+        "other": other_cfg,
+    }
+    monkeypatch.setitem(sys.modules, "workflow_config", fake_workflow_config)
+    monkeypatch.setattr(admin_routes, "_workflow_dir", lambda: tmp_path)
+    monkeypatch.setattr(admin_routes, "get_db_manager", lambda: object())
+    monkeypatch.setattr(
+        admin_routes,
+        "_get_workflow_template_by_key",
+        AsyncMock(return_value=None),
+    )
+
+    class FakeWorkflowTemplateDAO:
+        get_by_name = AsyncMock(return_value=None)
+        create = AsyncMock(return_value={"template_id": "wft_target"})
+        update = AsyncMock()
+
+    monkeypatch.setattr(admin_routes, "WorkflowTemplateDAO", FakeWorkflowTemplateDAO)
+
+    result = await admin_routes.admin_import_one_workflow("target")
+
+    assert result == {
+        "success": True,
+        "workflow_key": "target",
+        "name": "目标工作流",
+        "imported": 1,
+        "skipped": 0,
+        "repaired": 0,
+    }
+    FakeWorkflowTemplateDAO.create.assert_awaited_once()
+    kwargs = FakeWorkflowTemplateDAO.create.await_args.kwargs
+    assert kwargs["workflow_key"] == "target"
+    assert kwargs["name"] == "目标工作流"
+    assert kwargs["workflow_json"] == workflow
+    assert kwargs["description"] == "只导入这一条"
+
+
+def test_legacy_workflow_pending_cards_render_single_import_action():
+    app_js = (DEPLOY_DIR / "admin" / "app.js").read_text(encoding="utf-8")
+
+    assert "function importWorkflowByKey(event, encodedKey)" in app_js
+    assert "w.can_import" in app_js
+    assert "只导入此工作流" in app_js
+    assert "/api/admin/workflows/import-existing/${encodeURIComponent(key)}" in app_js
+    assert "editWorkflowByName" in app_js
+
+
+@pytest.mark.asyncio
 async def test_create_workflow_rejects_invalid_template(monkeypatch):
     import admin_routes
 
