@@ -169,6 +169,45 @@ describe('three-stage video script contract', () => {
     ]));
   });
 
+  it('normalizes an under-duration brief split instead of blocking the full three-stage run', async () => {
+    aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
+      { id: 'brief-low', order: 0, sourceText: '孙悟空大闹天宫', estimatedDurationSec: 3, status: 'done' },
+    ]);
+    aiMocks.aiGenerateVideoScriptFromSegments.mockImplementation(async (_model, segments) => {
+      const duration = segments[0].estimatedDurationSec;
+      return [
+        '分段1',
+        '镜头1-1',
+        `时长（秒）：${duration}`,
+        '画面描述：孙悟空站在云海之上，金箍棒横扫天门。',
+        `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+        `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+      ].join('\n');
+    });
+
+    const progress: Array<{ stage: string; completed: number; total: number }> = [];
+    const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '孙悟空大闹天宫', {
+      onProgress: event => progress.push({
+        stage: event.stage,
+        completed: event.completed,
+        total: event.total,
+      }),
+    });
+
+    expect(aiMocks.aiReplanInvalidScriptSegments).not.toHaveBeenCalled();
+    expect(result.segments[0]).toEqual(expect.objectContaining({
+      id: 'brief-low',
+      order: 0,
+      sourceText: '孙悟空大闹天宫',
+      estimatedDurationSec: 8,
+      videoScript: expect.stringContaining('时长（秒）：8'),
+    }));
+    expect(progress).toEqual(expect.arrayContaining([
+      { stage: 'split', completed: 1, total: 1 },
+      { stage: 'videoScript', completed: 1, total: 1 },
+    ]));
+  });
+
   it('keeps valid groups and repairs only the invalid group once', async () => {
     aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
       { id: 's1', order: 0, sourceText: '第一段', estimatedDurationSec: 15, status: 'done' },

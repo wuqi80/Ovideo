@@ -102,6 +102,59 @@ function shouldEnforceDurationDensity(durations: number[]): boolean {
   return durations.length >= 3 && totalDuration >= 30;
 }
 
+const BRIEF_SOURCE_MAX_CHARACTERS = 80;
+
+function countContentCharacters(value: string): number {
+  return String(value || '').replace(/\s+/g, '').length;
+}
+
+function estimateBriefSegmentDurationSec(sourceText: string): number {
+  const length = countContentCharacters(sourceText);
+  if (length <= 12) return 8;
+  if (length <= 30) return 10;
+  return 15;
+}
+
+function normalizeBriefSingleSegmentPlan(
+  segments: ScriptSegment[],
+  originalContent: string,
+): ScriptSegment[] {
+  const source = String(originalContent || '').trim();
+  if (!source || countContentCharacters(source) > BRIEF_SOURCE_MAX_CHARACTERS || segments.length > 1) {
+    return segments;
+  }
+
+  const [segment] = segments;
+  const sourceText = (segment?.sourceText || source).trim();
+  if (!sourceText) return segments;
+
+  const currentDuration = segment?.estimatedDurationSec ?? null;
+  if (currentDuration !== null && currentDuration > 15) {
+    return segments;
+  }
+  const normalizedDuration = currentDuration === null || currentDuration < 4
+    ? estimateBriefSegmentDurationSec(sourceText)
+    : currentDuration;
+
+  if (
+    segment
+    && segment.estimatedDurationSec === normalizedDuration
+    && segment.order === 0
+  ) {
+    return segments;
+  }
+
+  return [{
+    ...(segment || {}),
+    id: segment?.id || `seg_brief_${Date.now().toString(36)}`,
+    order: 0,
+    sourceText,
+    estimatedDurationSec: normalizedDuration,
+    status: 'done' as const,
+    errorMessage: '',
+  }];
+}
+
 function serializeSplitSegments(segments: ScriptSegment[]): string {
   return segments.map(segment => [
     segment.sourceText,
@@ -263,7 +316,10 @@ async function splitWithValidation(
   taskContext?: TextTaskContext,
 ): Promise<ScriptSegment[]> {
   const { aiSplitScriptIntoSegments } = await loadAiModelService();
-  let segments = await aiSplitScriptIntoSegments(model, originalContent, undefined, taskContext);
+  let segments = normalizeBriefSingleSegmentPlan(
+    await aiSplitScriptIntoSegments(model, originalContent, undefined, taskContext),
+    originalContent,
+  );
   for (let attempt = 0; attempt <= MAX_SPLIT_REPLAN_ATTEMPTS; attempt += 1) {
     try {
       assertValidSplitSegments(segments);
@@ -274,12 +330,15 @@ async function splitWithValidation(
         throw new Error(SAFE_SPLIT_REPLAN_FAILURE_MESSAGE);
       }
       const { aiReplanInvalidScriptSegments } = await loadAiModelService();
-      segments = await aiReplanInvalidScriptSegments(
-        model,
+      segments = normalizeBriefSingleSegmentPlan(
+        await aiReplanInvalidScriptSegments(
+          model,
+          originalContent,
+          serializeSplitSegments(segments),
+          error.message,
+          taskContext,
+        ),
         originalContent,
-        serializeSplitSegments(segments),
-        error.message,
-        taskContext,
       );
     }
   }

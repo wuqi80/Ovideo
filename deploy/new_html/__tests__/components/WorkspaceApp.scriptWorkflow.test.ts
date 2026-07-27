@@ -111,6 +111,7 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('if (!splitOk) return;');
     expect(source).toContain("throw new Error('模型未返回可用的剧本分段')");
     expect(source).toContain('splitScriptIntoValidatedSegments(aiModel, file.originalContent');
+    expect(source).toContain("if (progress.stage === 'split')");
     expect(source).toContain('generateVideoScriptForSegments(');
     expect(source).toContain('createScriptVersion(propEpisodeId, file.id');
     expect(source).toContain('setCurrent: false');

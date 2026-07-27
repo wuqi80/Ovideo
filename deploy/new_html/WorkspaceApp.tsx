@@ -3362,6 +3362,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           entityType: 'episode_script',
           entityId: file.id,
         },
+        onProgress: progress => {
+          if (progress.stage === 'split') {
+            setStage(file.id, 'split', {
+              status: 'running',
+              total: progress.total,
+              completed: progress.completed,
+              errorMessage: '',
+            });
+          }
+        },
       });
       if (segments.length === 0) {
         throw new Error('模型未返回可用的剧本分段');
