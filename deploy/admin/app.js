@@ -662,8 +662,8 @@ function renderWorkflowCard(w, meta) {
     ? `<button class="btn btn-ghost btn-xs" onclick="editWorkflowByName('${encodedName}')">编辑</button>`
     : (canImportSingle
       ? (w.requires_upload
-        ? `<button class="btn btn-success btn-xs wf-import-btn" onclick="openWorkflowUploadImport(event, '${encodedKey}')" title="上传完整工作流 JSON 后导入">导入</button>`
-        : `<button class="btn btn-success btn-xs wf-import-btn" onclick="importWorkflowByKey(event, '${encodedKey}')" title="导入此工作流 JSON 到数据库">导入</button>`)
+        ? `<button class="btn btn-success btn-xs wf-import-btn" onclick="openWorkflowUploadImport(event, '${encodedKey}')" title="导入">导入</button>`
+        : `<button class="btn btn-success btn-xs wf-import-btn" onclick="importWorkflowByKey(event, '${encodedKey}')" title="导入">导入</button>`)
       : '');
 
   return `

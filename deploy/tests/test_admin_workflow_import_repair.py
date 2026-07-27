@@ -343,8 +343,9 @@ def test_legacy_workflow_pending_cards_render_single_import_action():
     assert "const canImportSingle = !w.imported && !w.is_api" in app_js
     assert "w.can_import !== false" in app_js
     assert "wf-import-btn" in app_js
-    assert "导入此工作流 JSON 到数据库" in app_js
-    assert "上传完整工作流 JSON 后导入" in app_js
+    assert 'title="导入">导入</button>' in app_js
+    assert "导入此工作流 JSON 到数据库" not in app_js
+    assert "上传完整工作流 JSON 后导入" not in app_js
     assert ">导入</button>" in app_js
     assert "导入到数据库</button>" not in app_js
     assert "/api/admin/workflows/import-existing/${encodeURIComponent(key)}" in app_js
@@ -362,8 +363,8 @@ def test_legacy_workflow_pending_cards_render_single_import_action():
     assert "repeat(auto-fit, minmax(min(320px, 100%), 1fr))" not in style_css
     assert 'id="wf-key"' in index_html
     assert 'id="wf-json-file"' in index_html
-    assert "style.css?v=20260727-workflow-import-v5" in index_html
-    assert "app.js?v=20260727-workflow-import-v5" in index_html
+    assert "style.css?v=20260727-workflow-import-v6" in index_html
+    assert "app.js?v=20260727-workflow-import-v6" in index_html
 
 
 @pytest.mark.asyncio
