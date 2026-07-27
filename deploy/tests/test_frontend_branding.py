@@ -21,18 +21,32 @@ def test_favicon_routes_serve_the_mecha_one_assets(monkeypatch):
 
     ico_response = asyncio.run(_route_endpoint("/favicon.ico")())
     png_response = asyncio.run(_route_endpoint("/favicon.png")())
+    png_32_response = asyncio.run(_route_endpoint("/favicon-32x32.png")())
+    png_16_response = asyncio.run(_route_endpoint("/favicon-16x16.png")())
+    svg_response = asyncio.run(_route_endpoint("/favicon.svg")())
+    apple_response = asyncio.run(_route_endpoint("/apple-touch-icon.png")())
 
-    assert isinstance(ico_response, FileResponse)
-    assert Path(ico_response.path).as_posix() == "static/favicon.ico"
-    assert ico_response.media_type == "image/x-icon"
-    assert isinstance(png_response, FileResponse)
-    assert Path(png_response.path).as_posix() == "static/favicon-32x32.png"
-    assert png_response.media_type == "image/png"
+    expectations = [
+        (ico_response, "static/favicon.ico", "image/x-icon"),
+        (png_response, "static/favicon-32x32.png", "image/png"),
+        (png_32_response, "static/favicon-32x32.png", "image/png"),
+        (png_16_response, "static/favicon-16x16.png", "image/png"),
+        (svg_response, "static/favicon.svg", "image/svg+xml"),
+        (apple_response, "static/apple-touch-icon.png", "image/png"),
+    ]
+    for response, path, media_type in expectations:
+        assert isinstance(response, FileResponse)
+        assert Path(response.path).as_posix() == path
+        assert response.media_type == media_type
+        assert response.headers["cache-control"] == "no-cache, no-store, must-revalidate"
+        assert response.headers["pragma"] == "no-cache"
+        assert response.headers["expires"] == "0"
 
 
 def test_mecha_one_favicon_files_have_valid_signatures():
     assert (DEPLOY_DIR / "static/favicon.ico").read_bytes()[:4] == b"\x00\x00\x01\x00"
     assert (DEPLOY_DIR / "static/favicon-32x32.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    assert (DEPLOY_DIR / "static/apple-touch-icon.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
 def test_mecha_brand_favicons_stay_clean_while_homepage_adds_white_outline():

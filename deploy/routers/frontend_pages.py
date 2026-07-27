@@ -7,6 +7,13 @@ from fastapi import APIRouter
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 
 
+ICON_CACHE_HEADERS = {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
+
 def _serve_spa():
     """Return the React SPA entry with no-cache headers for fresh build hashes."""
     dist_index = Path("dist/index.html")
@@ -56,6 +63,13 @@ def _serve_studio_spa():
     )
 
 
+def _serve_icon(relative_path: str, media_type: str):
+    icon_path = Path("static") / relative_path
+    if icon_path.exists():
+        return FileResponse(icon_path, media_type=media_type, headers=ICON_CACHE_HEADERS)
+    return Response(status_code=204, headers=ICON_CACHE_HEADERS)
+
+
 def create_frontend_pages_router() -> APIRouter:
     router = APIRouter()
 
@@ -69,17 +83,24 @@ def create_frontend_pages_router() -> APIRouter:
 
     @router.get("/favicon.ico")
     async def favicon():
-        favicon_path = Path("static/favicon.ico")
-        if favicon_path.exists():
-            return FileResponse(favicon_path, media_type="image/x-icon")
-        return Response(status_code=204)
+        return _serve_icon("favicon.ico", "image/x-icon")
 
     @router.get("/favicon.png")
+    @router.get("/favicon-32x32.png")
     async def favicon_png():
-        favicon_path = Path("static/favicon-32x32.png")
-        if favicon_path.exists():
-            return FileResponse(favicon_path, media_type="image/png")
-        return Response(status_code=204)
+        return _serve_icon("favicon-32x32.png", "image/png")
+
+    @router.get("/favicon-16x16.png")
+    async def favicon_16_png():
+        return _serve_icon("favicon-16x16.png", "image/png")
+
+    @router.get("/favicon.svg")
+    async def favicon_svg():
+        return _serve_icon("favicon.svg", "image/svg+xml")
+
+    @router.get("/apple-touch-icon.png")
+    async def apple_touch_icon():
+        return _serve_icon("apple-touch-icon.png", "image/png")
 
     @router.get("/editor")
     async def editor_page():

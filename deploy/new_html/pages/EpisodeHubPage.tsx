@@ -95,6 +95,11 @@ function episodeOrderChanged(previous: EpisodeCard[], next: EpisodeCard[]): bool
   return previous.some((ep, index) => ep.episodeId !== next[index]?.episodeId);
 }
 
+function isInteractiveDragTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest('button,input,textarea,select,a,[data-no-card-drag="true"]'));
+}
+
 function mapEpisode(row: any): EpisodeCard {
   const settings = normalizeEpisodeSettings(row.settings);
   const status = episodeStatusOrder.includes(row.status) ? row.status : 'draft';
@@ -319,10 +324,11 @@ export const EpisodeHubPage: React.FC = () => {
   }, [projectId]);
 
   const handleDragStart = (event: React.DragEvent<HTMLElement>, episodeId: string) => {
-    if (reordering || editingId) {
+    if (reordering || editingId || isInteractiveDragTarget(event.target)) {
       event.preventDefault();
       return;
     }
+    const card = event.currentTarget;
     setDraggingEpisodeId(episodeId);
     setDragOverEpisodeId(null);
     dragOriginEpisodesRef.current = episodes;
@@ -331,6 +337,12 @@ export const EpisodeHubPage: React.FC = () => {
     setMenuOpen(null);
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', episodeId);
+    if (typeof event.dataTransfer.setDragImage === 'function') {
+      const rect = card.getBoundingClientRect();
+      const offsetX = rect.width > 0 ? Math.round(rect.width / 2) : 24;
+      const offsetY = rect.height > 0 ? Math.round(Math.min(rect.height / 2, 120)) : 24;
+      event.dataTransfer.setDragImage(card, offsetX, offsetY);
+    }
   };
 
   const handleDragOver = (event: React.DragEvent<HTMLElement>, targetEpisodeId: string) => {
@@ -535,13 +547,23 @@ export const EpisodeHubPage: React.FC = () => {
               {filteredEpisodes.map((ep, idx) => {
                 const displayIndex = episodes.findIndex(item => item.episodeId === ep.episodeId);
                 const displayNumber = displayIndex >= 0 ? displayIndex + 1 : idx + 1;
+                const isDragging = draggingEpisodeId === ep.episodeId;
+                const isDropTarget = dragOverEpisodeId === ep.episodeId;
+                const canDragCard = !reordering && !editingId;
                 return (
                   <article
                     key={ep.episodeId}
                     data-testid={`episode-card-${ep.episodeId}`}
-                    className={`group overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas animate-slideUp ${draggingEpisodeId === ep.episodeId ? 'scale-[0.98] opacity-70 ring-2 ring-primary/25' : ''} ${dragOverEpisodeId === ep.episodeId ? 'border-primary/60 shadow-bottom' : ''}`}
+                    data-dragging={isDragging ? 'true' : undefined}
+                    data-drop-target={isDropTarget ? 'true' : undefined}
+                    title={canDragCard ? '拖动卡片调整分集顺序' : undefined}
+                    draggable={canDragCard}
+                    className={`group relative overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-all duration-200 ease-out animate-slideUp ${canDragCard ? 'cursor-grab select-none active:cursor-grabbing' : 'cursor-default'} hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas ${isDragging ? 'z-30 scale-[1.02] rotate-[0.2deg] opacity-90 ring-2 ring-primary/35 shadow-[0_26px_60px_rgba(15,23,42,0.22)]' : ''} ${isDropTarget ? 'border-primary/70 outline outline-2 outline-primary/35 outline-offset-4 shadow-[0_18px_44px_rgba(25,103,255,0.16)]' : ''}`}
                     style={{ animationDelay: `${idx * 60}ms` }}
                     onClick={event => event.stopPropagation()}
+                    onDragStart={event => handleDragStart(event, ep.episodeId)}
+                    onDragEnd={handleDragEnd}
+                    onDragEnter={event => handleDragOver(event, ep.episodeId)}
                     onDragOver={event => handleDragOver(event, ep.episodeId)}
                     onDrop={event => handleDrop(event, ep.episodeId)}
                   >
@@ -559,19 +581,13 @@ export const EpisodeHubPage: React.FC = () => {
                       </div>
                     )}
                     <div className="absolute left-3 top-3 z-20">
-                      <button
-                        type="button"
-                        draggable={!reordering && !editingId}
+                      <div
                         aria-label={`${ep.episodeName || '未命名分集'} 拖动排序`}
-                        title="拖动调整分集顺序"
-                        onDragStart={event => handleDragStart(event, ep.episodeId)}
-                        onDragEnd={handleDragEnd}
-                        onClick={event => event.stopPropagation()}
-                        className="flex h-8 w-8 cursor-grab items-center justify-center rounded-full border border-white/35 bg-white/15 text-white shadow-card backdrop-blur transition-all hover:bg-white/25 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
-                        disabled={reordering || !!editingId}
+                        data-testid={`episode-drag-handle-${ep.episodeId}`}
+                        className={`pointer-events-none flex h-8 w-8 items-center justify-center rounded-md border-2 border-white/90 bg-white/10 text-white shadow-card backdrop-blur transition-all group-hover:bg-white/20 ${isDragging ? 'scale-110 border-primary bg-primary/70' : ''}`}
                       >
                         <GripVertical size={16} strokeWidth={2.4} />
-                      </button>
+                      </div>
                     </div>
                     <div className="absolute right-3 top-3 z-20">
                       <button

@@ -136,8 +136,12 @@ describe('Webflow design-system contract', () => {
     expect(app).toContain('path="/profile"');
     expect(appHtml).toContain('<title>MECHA 漫剧创作平台</title>');
     expect(appHtml).not.toContain('MECHA.ONE · AI 漫剧创作平台');
-    expect(appHtml).toContain('/static/favicon.ico');
-    expect(loginHtml).toContain('/static/favicon.ico');
+    expect(appHtml).toContain('/favicon.ico?v=20260727-mecha-icon-v2');
+    expect(appHtml).toContain('/favicon-32x32.png?v=20260727-mecha-icon-v2');
+    expect(appHtml).toContain('/apple-touch-icon.png?v=20260727-mecha-icon-v2');
+    expect(loginHtml).toContain('/favicon.ico?v=20260727-mecha-icon-v2');
+    expect(loginHtml).toContain('/favicon-32x32.png?v=20260727-mecha-icon-v2');
+    expect(loginHtml).toContain('/apple-touch-icon.png?v=20260727-mecha-icon-v2');
     expect(loginHtml).toContain('/static/branding/mecha-one-mark.png');
     expect(loginHtml).toContain('<div class="brand-name">MECHA</div>');
     expect(loginHtml).toContain('drop-shadow(2px 0 0 rgba(255,255,255,0.98))');

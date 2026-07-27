@@ -240,6 +240,28 @@ export interface CreateScriptVersionPayload {
   setCurrent?: boolean;
 }
 
+const SCRIPT_VERSION_SELECT_RETRY_DELAYS_MS = [
+  1000,
+  2000,
+  4000,
+  8000,
+  10000,
+  10000,
+  10000,
+];
+
+function isTransientScriptVersionSelectError(error: unknown): boolean {
+  const status = Number((error as { status?: unknown } | null)?.status);
+  if ([502, 503, 504].includes(status)) return true;
+  if ((error as { name?: string } | null)?.name === 'AbortError') return false;
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /(?:^|\D)(?:502|503|504)(?:\D|$)|failed to fetch|fetch failed|networkerror|network error|load failed|connection refused/i.test(message);
+}
+
+function waitForScriptVersionSelectRetry(delayMs: number): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, delayMs));
+}
+
 export async function createScriptVersion(
   episodeId: string,
   scriptId: string,
@@ -272,12 +294,25 @@ export async function selectScriptVersion(
   scriptId: string,
   versionId: string,
 ): Promise<ScriptStoryboardVersion> {
-  const response = await apiJson<any>(
-    `/api/episodes/${episodeId}/scripts/${scriptId}/versions/${versionId}/select`,
-    { method: 'PUT' },
-    'selectScriptVersion',
-  );
-  return mapVersion(response?.version);
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const response = await apiJson<any>(
+        `/api/episodes/${episodeId}/scripts/${scriptId}/versions/${versionId}/select`,
+        { method: 'PUT' },
+        'selectScriptVersion',
+      );
+      return mapVersion(response?.version);
+    } catch (error) {
+      const delayMs = SCRIPT_VERSION_SELECT_RETRY_DELAYS_MS[attempt];
+      if (delayMs === undefined || !isTransientScriptVersionSelectError(error)) {
+        throw error;
+      }
+      console.warn(
+        `selectScriptVersion 暂时不可用，${delayMs}ms 后重试 (${attempt + 1}/${SCRIPT_VERSION_SELECT_RETRY_DELAYS_MS.length})`,
+      );
+      await waitForScriptVersionSelectRetry(delayMs);
+    }
+  }
 }
 
 export async function updateScriptVersionMetadata(

@@ -120,9 +120,13 @@ describe('EpisodeHubPage', () => {
       dropEffect: '',
       setData: vi.fn(),
       getData: vi.fn(() => 'ep_8'),
+      setDragImage: vi.fn(),
     };
 
+    const draggedCard = screen.getByTestId('episode-card-ep_8');
+
     fireEvent.dragStart(screen.getByLabelText('第八期 拖动排序'), { dataTransfer });
+    expect(dataTransfer.setDragImage).toHaveBeenCalledWith(draggedCard, expect.any(Number), expect.any(Number));
     fireEvent.dragOver(screen.getByTestId('episode-card-ep_2'), { dataTransfer });
 
     await waitFor(() => {
@@ -185,14 +189,19 @@ describe('EpisodeHubPage', () => {
     expect((apiJson as any).mock.calls.filter((call: any[]) => call[0] === '/api/projects/proj_1/episodes/reorder')).toHaveLength(0);
   });
 
-  it('uses a white-only cover drag handle and places the EP badge beside the episode title', async () => {
+  it('makes the whole card draggable with a square white drag affordance beside the cover', async () => {
     renderEpisodeHub();
 
     await screen.findByText('第八期');
     const card = screen.getByTestId('episode-card-ep_8');
     const dragHandle = within(card).getByLabelText('第八期 拖动排序');
 
+    expect(card).toHaveAttribute('draggable', 'true');
+    expect(card).toHaveClass('cursor-grab');
+    expect(dragHandle).toHaveClass('rounded-md');
+    expect(dragHandle).toHaveClass('border-2');
     expect(dragHandle).toHaveClass('text-white');
+    expect(dragHandle.className).not.toContain('rounded-full');
     expect(dragHandle.className).not.toContain('bg-n800');
     expect(dragHandle).not.toHaveTextContent('EP');
     expect(within(card).getByTestId('episode-title-row-ep_8')).toHaveTextContent('EP 01第八期');

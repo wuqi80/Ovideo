@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   batchSaveScriptSegments,
   createEpisodeScript,
@@ -32,9 +32,31 @@ function mockJsonResponse(data: any) {
   };
 }
 
+function mockHtmlErrorResponse(status: number) {
+  return {
+    ok: false,
+    status,
+    headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+    text: async () => '<html><body>Bad Gateway</body></html>',
+  };
+}
+
+function mockJsonErrorResponse(status: number, detail: string) {
+  return {
+    ok: false,
+    status,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: async () => ({ detail }),
+  };
+}
+
 beforeEach(() => {
   mockFetch.mockReset();
   localStorage.setItem('auth_token', 'test-token');
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('script timeline service', () => {
@@ -181,6 +203,38 @@ describe('script timeline service', () => {
     expect(mockFetch.mock.calls[3][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions');
     expect(JSON.parse(mockFetch.mock.calls[3][1].body).storyboard_items[0].id).toBe('shot_1');
     expect(mockFetch.mock.calls[4][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions/ver_2/select');
+  });
+
+  it('retries a transient gateway outage when selecting an idempotent script version', async () => {
+    vi.useFakeTimers();
+    mockFetch
+      .mockResolvedValueOnce(mockHtmlErrorResponse(502))
+      .mockResolvedValueOnce(mockJsonResponse({
+        success: true,
+        version: {
+          version_id: 'ver_2',
+          script_id: 'script_1',
+          version_no: 2,
+          storyboard_items: [],
+        },
+      }));
+
+    const promise = selectScriptVersion('ep_1', 'script_1', 'ver_2');
+    const assertion = expect(promise).resolves.toEqual(expect.objectContaining({ id: 'ver_2' }));
+    await vi.advanceTimersByTimeAsync(1000);
+    await assertion;
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions/ver_2/select');
+    expect(mockFetch.mock.calls[1][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions/ver_2/select');
+  });
+
+  it('does not retry script version selection business errors', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonErrorResponse(422, 'version does not belong to script'));
+
+    await expect(selectScriptVersion('ep_1', 'script_1', 'ver_wrong')).rejects.toThrow(/422/);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('decodes jsonb strings returned by asyncpg for storyboard versions', async () => {

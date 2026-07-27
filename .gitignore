@@ -68,3 +68,7 @@ deploy/workflows.zip
 deploy/server_backups/
 deploy/new_html/pnpm-lock.yaml
 deploy/new_html/pnpm-workspace.yaml
+
+# Local Codex artifacts and detached scratch apps
+/.codex-screenshots/
+/sunstudio/

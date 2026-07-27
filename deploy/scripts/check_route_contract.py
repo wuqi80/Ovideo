@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 270
-DEFAULT_EXPECTED_OPERATIONS = 329
+DEFAULT_EXPECTED_PATHS = 274
+DEFAULT_EXPECTED_OPERATIONS = 333
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -771,8 +771,8 @@ def check_frontend_pages_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 26:
-        fail(f"routers/frontend_pages.py should own 26 frontend route registrations, found {route_count}")
+    if route_count != 30:
+        fail(f"routers/frontend_pages.py should own 30 frontend route registrations, found {route_count}")
     return route_count
 
 
