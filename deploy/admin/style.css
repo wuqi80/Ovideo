@@ -410,7 +410,7 @@ select.input {
 }
 
 /* ── Workflow Cards ── */
-.wf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 10px; }
+.wf-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 10px; }
 .wf-card {
   position: relative;
   display: flex; align-items: flex-start; gap: 14px;

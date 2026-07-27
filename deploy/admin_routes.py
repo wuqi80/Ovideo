@@ -123,6 +123,19 @@ _WORKFLOW_CATEGORY_MAP = {
     "transfer": "tool",
     "fusion": "tool",
 }
+_WORKFLOW_UPLOAD_DRAFT_FILES = {
+    # These legacy catalog entries used to point at empty/PlaceholderNode JSON
+    # files. Keep them visible in the admin catalog, but require an administrator
+    # to upload a complete executable workflow before creating a DB template.
+    "qwenN_lora_1": "qwenN_lora_1.json",
+    "qwenN_lora_2": "qwenN_lora_2.json",
+    "qwenN_lora_3": "qwenN_lora_3.json",
+    "qwenN_lora_4": "qwenN_lora_4.json",
+    "qwenN_lora_5": "qwenN_lora_5.json",
+    "qwenN_lora_6": "qwenN_lora_6.json",
+    "smooth_morph": "smooth_morph.json",
+    "dawasi_morph": "Dawasi_morph.json",
+}
 _WORKFLOW_PLACEHOLDER_RE = re.compile(r"^\{([A-Za-z0-9_]+)\}$")
 
 
@@ -492,34 +505,39 @@ async def admin_scan_disk_workflows():
     for key, cfg in WORKFLOW_CONFIGS.items():
         name = getattr(cfg, "name", None) or str(key)
         file_name = getattr(cfg, "file", None)
+        upload_draft_file = _WORKFLOW_UPLOAD_DRAFT_FILES.get(str(key))
+        display_file = file_name or upload_draft_file
         desc = getattr(cfg, "description", "") or ""
         placeholders = getattr(cfg, "placeholders", []) or []
-        has_file = bool(file_name and (wf_dir / file_name).is_file())
-        is_api = file_name is None
+        has_file = bool(display_file and (wf_dir / display_file).is_file())
+        is_api = display_file is None
         workflow_json: Dict[str, Any] = {}
         if has_file:
             try:
-                parsed = json.loads((wf_dir / file_name).read_text(encoding="utf-8"))
+                parsed = json.loads((wf_dir / display_file).read_text(encoding="utf-8"))
                 if isinstance(parsed, dict):
                     workflow_json = parsed
             except (OSError, json.JSONDecodeError) as exc:
-                logger.warning("扫描磁盘工作流失败 %s: %s", file_name, exc)
+                logger.warning("扫描磁盘工作流失败 %s: %s", display_file, exc)
         node_count = _workflow_executable_node_count(workflow_json)
-        if file_name:
-            configured_files.add(file_name)
+        is_executable = node_count > 0
+        requires_upload = bool(upload_draft_file and not is_executable)
+        if display_file:
+            configured_files.add(display_file)
 
         items.append({
             "key": key,
             "name": name,
-            "file": file_name,
+            "file": display_file,
             "description": desc,
             "placeholders": placeholders,
-            "category": _workflow_category_for(key, file_name, name),
+            "category": _workflow_category_for(key, display_file, name),
             "has_file": has_file,
             "is_api": is_api,
             "node_count": node_count,
-            "is_executable": node_count > 0,
-            "can_import": bool(has_file and node_count > 0),
+            "is_executable": is_executable,
+            "requires_upload": requires_upload,
+            "can_import": bool(is_executable or requires_upload),
             "imported": key in db_keys or name in db_names,
         })
 

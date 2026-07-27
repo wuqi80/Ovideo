@@ -274,19 +274,81 @@ async def test_import_one_workflow_only_imports_the_selected_key(monkeypatch, tm
     assert kwargs["description"] == "只导入这一条"
 
 
+@pytest.mark.asyncio
+async def test_scan_keeps_legacy_upload_drafts_visible_without_exposing_api_entries(
+    monkeypatch,
+    tmp_path,
+):
+    import admin_routes
+
+    upload_draft_cfg = type(
+        "FakeCfg",
+        (),
+        {
+            "name": "筑基二阶 2张参考图",
+            "file": None,
+            "description": "上传完整工作流后导入",
+            "placeholders": ["image_1", "image_2", "prompt", "seed"],
+        },
+    )()
+    api_cfg = type(
+        "FakeCfg",
+        (),
+        {
+            "name": "MiniMax API",
+            "file": None,
+            "description": "API only",
+            "placeholders": ["prompt"],
+        },
+    )()
+    fake_workflow_config = ModuleType("workflow_config")
+    fake_workflow_config.WORKFLOW_CONFIGS = {
+        "qwenN_lora_2": upload_draft_cfg,
+        "minimax_video": api_cfg,
+    }
+    monkeypatch.setitem(sys.modules, "workflow_config", fake_workflow_config)
+    monkeypatch.setattr(admin_routes, "_workflow_dir", lambda: tmp_path)
+    monkeypatch.setattr(admin_routes, "get_db_manager", lambda: object())
+
+    class FakeWorkflowTemplateDAO:
+        list_all = AsyncMock(return_value=[])
+
+    monkeypatch.setattr(admin_routes, "WorkflowTemplateDAO", FakeWorkflowTemplateDAO)
+
+    result = await admin_routes.admin_scan_disk_workflows()
+    items = {item["key"]: item for item in result["workflows"]}
+
+    upload_item = items["qwenN_lora_2"]
+    assert upload_item["file"] == "qwenN_lora_2.json"
+    assert upload_item["is_api"] is False
+    assert upload_item["has_file"] is False
+    assert upload_item["requires_upload"] is True
+    assert upload_item["can_import"] is True
+    assert upload_item["imported"] is False
+
+    api_item = items["minimax_video"]
+    assert api_item["is_api"] is True
+    assert api_item["requires_upload"] is False
+    assert api_item["can_import"] is False
+
+
 def test_legacy_workflow_pending_cards_render_single_import_action():
     app_js = (DEPLOY_DIR / "admin" / "app.js").read_text(encoding="utf-8")
     style_css = (DEPLOY_DIR / "admin" / "style.css").read_text(encoding="utf-8")
     index_html = (DEPLOY_DIR / "admin" / "index.html").read_text(encoding="utf-8")
 
     assert "function importWorkflowByKey(event, encodedKey)" in app_js
+    assert "function openWorkflowUploadImport(event, encodedKey)" in app_js
+    assert "workflowCatalogItems = items" in app_js
     assert "const canImportSingle = !w.imported && !w.is_api" in app_js
     assert "w.can_import !== false" in app_js
     assert "wf-import-btn" in app_js
     assert "导入此工作流 JSON 到数据库" in app_js
+    assert "上传完整工作流 JSON 后导入" in app_js
     assert ">导入</button>" in app_js
     assert "导入到数据库</button>" not in app_js
     assert "/api/admin/workflows/import-existing/${encodeURIComponent(key)}" in app_js
+    assert "workflow_key: document.getElementById('wf-key').value" in app_js
     assert "editWorkflowByName" in app_js
     assert '<div class="wf-actions">' in app_js
     assert "wf-card-has-actions" not in app_js
@@ -296,8 +358,12 @@ def test_legacy_workflow_pending_cards_render_single_import_action():
     assert "opacity: 0" not in actions_rule
     assert "pointer-events: none" not in actions_rule
     assert "flex-shrink: 0" in actions_rule
-    assert "style.css?v=20260727-workflow-import-v4" in index_html
-    assert "app.js?v=20260727-workflow-import-v4" in index_html
+    assert "repeat(auto-fill, minmax(min(320px, 100%), 1fr))" in style_css
+    assert "repeat(auto-fit, minmax(min(320px, 100%), 1fr))" not in style_css
+    assert 'id="wf-key"' in index_html
+    assert 'id="wf-json-file"' in index_html
+    assert "style.css?v=20260727-workflow-import-v5" in index_html
+    assert "app.js?v=20260727-workflow-import-v5" in index_html
 
 
 @pytest.mark.asyncio

@@ -11,6 +11,7 @@ let apiProviderRuntimeStatusList = [];
 let apiProviderRuntimeStatusMap = new Map();
 let apiProviderHealthMap = new Map();
 let apiProviderCatalogPromise = null;
+let workflowCatalogItems = [];
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({
@@ -600,6 +601,7 @@ async function fetchWorkflowsDisk() {
   try {
     const data = await apiCall('/api/admin/workflows/scan-disk');
     const items = (data.workflows || []).filter(w => !w.is_api);
+    workflowCatalogItems = items;
 
     const imported = items.filter(w => w.imported).length;
     const total = items.length;
@@ -655,11 +657,13 @@ function renderWorkflowCard(w, meta) {
     : '<span class="badge badge-gray" style="font-size:10px">JSON</span>';
   const encodedName = encodeURIComponent(w.name || '');
   const encodedKey = encodeURIComponent(w.key || w.name || '');
-  const canImportSingle = !w.imported && !w.is_api && w.has_file !== false && Boolean(w.key || w.name || w.file) && w.can_import !== false;
+  const canImportSingle = !w.imported && !w.is_api && Boolean(w.key || w.name || w.file) && w.can_import !== false;
   const actionHtml = w.imported
     ? `<button class="btn btn-ghost btn-xs" onclick="editWorkflowByName('${encodedName}')">编辑</button>`
     : (canImportSingle
-      ? `<button class="btn btn-success btn-xs wf-import-btn" onclick="importWorkflowByKey(event, '${encodedKey}')" title="导入此工作流 JSON 到数据库">导入</button>`
+      ? (w.requires_upload
+        ? `<button class="btn btn-success btn-xs wf-import-btn" onclick="openWorkflowUploadImport(event, '${encodedKey}')" title="上传完整工作流 JSON 后导入">导入</button>`
+        : `<button class="btn btn-success btn-xs wf-import-btn" onclick="importWorkflowByKey(event, '${encodedKey}')" title="导入此工作流 JSON 到数据库">导入</button>`)
       : '');
 
   return `
@@ -707,6 +711,27 @@ async function importWorkflowByKey(event, encodedKey) {
   } catch (_) {}
 }
 
+function openWorkflowUploadImport(event, encodedKey) {
+  if (event) event.stopPropagation();
+  const key = decodeURIComponent(encodedKey || '');
+  const item = workflowCatalogItems.find(w => String(w.key || w.name || '') === key);
+  if (!item) {
+    showToast('未找到待导入的工作流配置', 'warn');
+    return;
+  }
+  openWorkflowModal({
+    ...item,
+    workflow_key: key,
+    workflow_json: null,
+    _uploadImport: true,
+  });
+  const fileInput = document.getElementById('wf-json-file');
+  if (fileInput) {
+    fileInput.value = '';
+    fileInput.click();
+  }
+}
+
 async function editWorkflowByName(encodedName) {
   const name = decodeURIComponent(encodedName);
   const data = await apiCall('/api/admin/workflows');
@@ -719,15 +744,28 @@ async function editWorkflowByName(encodedName) {
 /* ── Workflow Modal (manual add/edit) ── */
 
 function openWorkflowModal(template = null) {
-  document.getElementById('wf-modal-title').textContent = template ? '编辑工作流' : '手动添加工作流';
+  const isUploadImport = Boolean(template?._uploadImport);
+  const uiCategories = new Set(['image', 'video', 'upscale', 'tool', 'other']);
+  const rawCategory = template?.category || 'image';
+  const workflowKey = template?.workflow_key
+    || template?.key
+    || (!uiCategories.has(rawCategory) ? rawCategory : '');
+  document.getElementById('wf-modal-title').textContent = isUploadImport
+    ? '导入工作流'
+    : (template ? '编辑工作流' : '手动添加工作流');
   document.getElementById('wf-id').value = template?.template_id || '';
+  document.getElementById('wf-key').value = workflowKey;
   document.getElementById('wf-name').value = template?.name || '';
-  document.getElementById('wf-category').value = template?.category || 'image';
+  document.getElementById('wf-category').value = uiCategories.has(rawCategory) ? rawCategory : 'other';
   document.getElementById('wf-desc').value = template?.description || '';
   const wj = template?.workflow_json;
   document.getElementById('wf-json').value = wj ? (typeof wj === 'string' ? wj : JSON.stringify(wj, null, 2)) : '';
   document.getElementById('wf-nodes').innerHTML = '<p style="font-size:12px;color:var(--text-3)">上传 JSON 后点击"解析节点"</p>';
   document.getElementById('json-status').textContent = '';
+  if (isUploadImport) {
+    document.getElementById('json-status').innerHTML =
+      '<span style="color:var(--text-2)">请选择完整、可执行的 ComfyUI 工作流 JSON；旧备份仅含占位内容，不会直接进入生产链路。</span>';
+  }
   if (template?.placeholders) {
     const ph = typeof template.placeholders === 'string' ? JSON.parse(template.placeholders) : template.placeholders;
     renderPlaceholders(ph);
@@ -830,6 +868,7 @@ async function saveWorkflow() {
     description: document.getElementById('wf-desc').value,
     workflow_json: wfJson,
     placeholders: collectPlaceholders(),
+    workflow_key: document.getElementById('wf-key').value,
   };
   if (id) {
     await apiCall(`/api/admin/workflows/${id}`, { method: 'PUT', body: JSON.stringify(body) });

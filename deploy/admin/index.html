@@ -6,7 +6,7 @@
   <title>MECHA.ONE · 管理后台</title>
   <link rel="icon" href="/static/favicon.ico" sizes="any">
   <link rel="icon" href="/static/favicon-32x32.png" type="image/png" sizes="32x32">
-  <link rel="stylesheet" href="style.css?v=20260727-workflow-import-v4">
+  <link rel="stylesheet" href="style.css?v=20260727-workflow-import-v5">
 </head>
 <body>
 <div id="app" class="flex" style="min-height:100vh">
@@ -168,6 +168,7 @@
     <div class="modal-body" style="display:flex;gap:0;padding:0">
       <div style="flex:1;padding:20px;overflow-y:auto;border-right:1px solid var(--border)">
         <input id="wf-id" type="hidden">
+        <input id="wf-key" type="hidden">
         <div class="grid-2 mb-3">
           <div>
             <label class="input-label">名称</label>
@@ -192,7 +193,7 @@
           <label class="input-label" style="margin-bottom:0">工作流 JSON</label>
           <div class="flex gap-2">
             <label class="btn btn-ghost btn-xs" style="cursor:pointer">
-              <input type="file" accept=".json" onchange="loadJsonFile(event)" style="display:none">上传 JSON
+              <input id="wf-json-file" type="file" accept=".json" onchange="loadJsonFile(event)" style="display:none">上传 JSON
             </label>
             <button class="btn btn-ghost btn-xs" onclick="parseJsonNodes()">解析节点</button>
           </div>
@@ -292,6 +293,6 @@
 <!-- Toast container -->
 <div id="toast-container" class="toast-container"></div>
 
-<script src="app.js?v=20260727-workflow-import-v4"></script>
+<script src="app.js?v=20260727-workflow-import-v5"></script>
 </body>
 </html>

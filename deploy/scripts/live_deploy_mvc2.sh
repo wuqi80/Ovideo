@@ -412,7 +412,8 @@ fi
 if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   mkdir -p '$REMOTE_DIR'
   mkdir -p '$REMOTE_DIR'/workflows
-  find '$REMOTE_DIR'/workflows -mindepth 1 -maxdepth 1 -type f -delete
+  # Overlay versioned workflows without deleting valid templates uploaded from
+  # the admin console. The remote backup remains available for rollback.
   tar -xzf '$BACKEND_TAR_REMOTE' -C '$REMOTE_DIR'
   rm -f '$BACKEND_TAR_REMOTE'
 "; then
