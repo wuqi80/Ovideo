@@ -17,6 +17,7 @@ describe('AdminSettingsPage category-specific model checks', () => {
     expect(source).toContain('aria-label={`${cardTitle} 详情`}');
     expect(source).toContain("const effectiveActionLabel = config.enabled === false ? '启用' : !isRuntimeActive ? '设为生效' : '禁用'");
     expect(source).toContain('onClick={handleEffectiveAction}');
+    expect(source.indexOf('onClick={handleEffectiveAction}')).toBeLessThan(source.indexOf('onClick={() => setDetailsOpen(true)}'));
     expect(source).toContain("min-w-[4.5rem]");
     expect(source).not.toContain('w-36 shrink-0');
   });

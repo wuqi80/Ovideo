@@ -2185,6 +2185,16 @@ const ApiConfigCard: React.FC<{
                 <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
                     <button
                         type="button"
+                        onClick={handleEffectiveAction}
+                        disabled={!config.config_id || (!isRuntimeActive && !configHasKey)}
+                        className={!isRuntimeActive ? API_CARD_ACTION_BUTTON_SUCCESS : API_CARD_ACTION_BUTTON_SECONDARY}
+                        title={effectiveActionTitle}
+                    >
+                        {!isRuntimeActive && <KeyRound className="w-3.5 h-3.5" />}
+                        {effectiveActionLabel}
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => setDetailsOpen(true)}
                         className={API_CARD_ACTION_BUTTON_SECONDARY}
                     >
@@ -2208,16 +2218,6 @@ const ApiConfigCard: React.FC<{
                     >
                         <Edit3 className="w-3.5 h-3.5" />
                         配置 / 修改 API Key
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleEffectiveAction}
-                        disabled={!config.config_id || (!isRuntimeActive && !configHasKey)}
-                        className={!isRuntimeActive ? API_CARD_ACTION_BUTTON_SUCCESS : API_CARD_ACTION_BUTTON_SECONDARY}
-                        title={effectiveActionTitle}
-                    >
-                        {!isRuntimeActive && <KeyRound className="w-3.5 h-3.5" />}
-                        {effectiveActionLabel}
                     </button>
                     <button
                         type="button"
