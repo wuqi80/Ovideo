@@ -112,9 +112,11 @@ describe('GenerationPage reference actions', () => {
     expect(source).not.toContain('disabled={references.length >= 6 || selectedShot?.isConfigConfirmed}');
   });
 
-  it('keeps all reference image actions visible inside narrow cards', () => {
+  it('keeps reference image actions available on hover inside narrow cards', () => {
     expect(source).toContain('data-testid="reference-image-actions"');
     expect(source).toContain('grid grid-cols-2 gap-1');
+    expect(source).toContain('pointer-events-none absolute right-1 top-1 z-10 grid grid-cols-2 gap-1 opacity-0');
+    expect(source).toContain('group-hover:pointer-events-auto group-hover:opacity-100');
     expect(source).toContain('inline-flex h-5 w-5 items-center justify-center');
   });
 
@@ -130,6 +132,10 @@ describe('GenerationPage reference actions', () => {
   it('uses the requested independent reference labels and preserves bottom scroll space', () => {
     expect(source).toContain('项目素材');
     expect(source).toContain('自动绑定');
+    expect(source).toContain('mt-1 text-[11px] font-normal text-n100">可拖拽图片到此');
+    expect(source).toContain('whitespace-nowrap rounded border border-primary bg-primary px-3 py-2 text-xs');
+    expect(source).toContain('whitespace-nowrap rounded border border-primary/30 bg-primary-light px-3 py-2 text-xs');
+    expect(source).not.toContain('<span className="font-normal text-n100 ml-2">可拖拽图片到此</span>');
     expect(source).not.toContain('从项目素材选择');
     expect(source).not.toContain('恢复绑定素材');
     expect(source).toContain('storyboard-config-pane min-h-0');

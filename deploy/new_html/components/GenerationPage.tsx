@@ -2999,23 +2999,25 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                       onDragLeave={handleRefDragLeave}
                       onDrop={handleRefDrop}
                   >
-                      <div className="flex items-center justify-between mb-3">
-                          <label className="text-xs font-bold text-n300">
-                              实际提交参考图片 ({referencePlan.references.length}/{referencePlan.maxReferences})
-                              <span className="font-normal text-n100 ml-2">可拖拽图片到此</span>
-                          </label>
-                          <div className="flex items-center gap-2">
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <label className="block text-xs font-bold text-n300">
+                                实际提交参考图片 ({referencePlan.references.length}/{referencePlan.maxReferences})
+                            </label>
+                            <div className="mt-1 text-[11px] font-normal text-n100">可拖拽图片到此</div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
                             <button
                               onClick={() => { setMaterialPickerFilter('shot'); setShowMaterialPicker(true); }}
                               disabled={references.length >= 6}
-                              className="text-[10px] flex items-center gap-1 bg-primary text-white px-2 py-1 rounded border border-primary hover:bg-primary-hover disabled:opacity-50"
+                              className="inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded border border-primary bg-primary px-3 py-2 text-xs text-white hover:bg-primary-hover disabled:opacity-50"
                             >
                                 <Library className="w-3 h-3" />
                                 项目素材
                             </button>
                             <button
                               onClick={handleAutoFill}
-                              className="text-[10px] flex items-center gap-1 bg-primary-light text-primary px-2 py-1 rounded border border-primary/30 hover:bg-primary-light disabled:opacity-50"
+                              className="inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded border border-primary/30 bg-primary-light px-3 py-2 text-xs text-primary hover:bg-primary-light disabled:opacity-50"
                             >
                                 <Wand2 className="w-3 h-3" />
                                 自动绑定
@@ -3055,7 +3057,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                   
                                 {/* Action Buttons */}
                                 <div
-                                  className="absolute right-1 top-1 z-10 grid grid-cols-2 gap-1 opacity-100"
+                                  className="pointer-events-none absolute right-1 top-1 z-10 grid grid-cols-2 gap-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
                                   data-testid="reference-image-actions"
                                 >
                                       <button 
