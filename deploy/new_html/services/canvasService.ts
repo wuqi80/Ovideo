@@ -9,15 +9,26 @@ export interface CanvasNodePayload {
   [key: string]: any;
 }
 
-export async function createCanvasBoard(projectId: string, name = '未命名画布', description = '') {
+export async function createCanvasBoard(
+  projectId: string,
+  name = '未命名画布',
+  description = '',
+  episodeId?: string,
+) {
   return apiJson<any>('/api/canvas/boards', {
     method: 'POST',
-    body: JSON.stringify({ project_id: projectId, name, description }),
+    body: JSON.stringify({
+      project_id: projectId,
+      name,
+      description,
+      ...(episodeId ? { episode_id: episodeId } : {}),
+    }),
   }, 'createCanvasBoard');
 }
 
-export async function getCanvasBoards(projectId: string) {
+export async function getCanvasBoards(projectId: string, episodeId?: string) {
   const qs = new URLSearchParams({ project_id: projectId });
+  if (episodeId) qs.set('episode_id', episodeId);
   return apiJson<any>(`/api/canvas/boards?${qs.toString()}`, { method: 'GET' }, 'getCanvasBoards');
 }
 

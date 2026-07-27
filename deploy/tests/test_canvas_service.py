@@ -22,20 +22,31 @@ class FakeCanvasBoardDAO:
     created = None
     updated = None
     deleted = []
+    episode_projects = {"ep_1": "proj_1", "ep_other": "proj_2"}
 
     @classmethod
-    async def create_board(cls, project_id, user_id, name, description):
+    async def get_episode_project_id(cls, episode_id):
+        return cls.episode_projects.get(episode_id)
+
+    @classmethod
+    async def create_board(cls, project_id, user_id, name, description, episode_id=None):
         cls.created = {
             "project_id": project_id,
             "user_id": user_id,
             "name": name,
             "description": description,
+            "episode_id": episode_id,
         }
         return {"board_id": "board_new", **cls.created}
 
     @classmethod
-    async def get_project_boards(cls, project_id):
-        return [board for board in cls.boards.values() if board["project_id"] == project_id]
+    async def get_project_boards(cls, project_id, episode_id=None):
+        return [
+            board
+            for board in cls.boards.values()
+            if board["project_id"] == project_id
+            and (episode_id is None or board.get("episode_id") == episode_id)
+        ]
 
     @classmethod
     async def get_board(cls, board_id):
@@ -148,6 +159,58 @@ async def test_create_canvas_board_requires_member_permission():
 
     assert result["board"]["board_id"] == "board_new"
     assert FakeProjectMemberDAO.calls == [("proj_1", "user_1", "member")]
+    assert FakeCanvasBoardDAO.created["episode_id"] is None
+
+
+async def test_create_canvas_board_forwards_episode_scope():
+    result = await canvas_service.create_canvas_board(
+        project_id="proj_1",
+        episode_id="ep_1",
+        user_id="user_1",
+        name="Studio",
+        description="Episode workspace",
+        project_member_dao=FakeProjectMemberDAO,
+        canvas_board_dao=FakeCanvasBoardDAO,
+    )
+
+    assert result["board"]["episode_id"] == "ep_1"
+    assert FakeCanvasBoardDAO.created["episode_id"] == "ep_1"
+
+
+async def test_create_canvas_board_rejects_episode_from_another_project():
+    with pytest.raises(canvas_service.CanvasEpisodeScopeMismatch):
+        await canvas_service.create_canvas_board(
+            project_id="proj_1",
+            episode_id="ep_other",
+            user_id="user_1",
+            name="Studio",
+            description="Episode workspace",
+            project_member_dao=FakeProjectMemberDAO,
+            canvas_board_dao=FakeCanvasBoardDAO,
+        )
+
+    assert FakeCanvasBoardDAO.created is None
+
+
+async def test_list_canvas_boards_forwards_episode_scope():
+    FakeCanvasBoardDAO.boards["board_ep"] = {
+        "board_id": "board_ep",
+        "project_id": "proj_1",
+        "episode_id": "ep_1",
+        "name": "Studio",
+    }
+    try:
+        result = await canvas_service.list_canvas_boards(
+            project_id="proj_1",
+            episode_id="ep_1",
+            user_id="user_1",
+            project_member_dao=FakeProjectMemberDAO,
+            canvas_board_dao=FakeCanvasBoardDAO,
+        )
+    finally:
+        FakeCanvasBoardDAO.boards.pop("board_ep", None)
+
+    assert [board["board_id"] for board in result["boards"]] == ["board_ep"]
 
 
 async def test_list_canvas_boards_raises_when_no_access():

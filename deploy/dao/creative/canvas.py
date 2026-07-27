@@ -12,22 +12,56 @@ class CanvasBoardDAO:
     """画布面板数据访问对象"""
     
     @staticmethod
+    async def get_episode_project_id(episode_id: str) -> Optional[str]:
+        db = get_db_manager()
+        value = await db.fetchval(
+            "SELECT project_id FROM episodes WHERE episode_id = $1",
+            episode_id,
+        )
+        return str(value) if value else None
+
+    @staticmethod
     async def create_board(
         project_id: str, user_id: str,
-        name: str = "未命名画布", description: str = ""
+        name: str = "未命名画布", description: str = "",
+        episode_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         db = get_db_manager()
         board_id = f"board_{uuid.uuid4().hex[:12]}"
         query = """
-            INSERT INTO canvas_boards (board_id, project_id, user_id, name, description)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO canvas_boards
+                (board_id, project_id, user_id, name, description, episode_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING *
         """
-        return await db.fetchrow(query, board_id, project_id, user_id, name, description)
+        return await db.fetchrow(
+            query,
+            board_id,
+            project_id,
+            user_id,
+            name,
+            description,
+            episode_id,
+        )
     
     @staticmethod
-    async def get_project_boards(project_id: str) -> List[Dict[str, Any]]:
+    async def get_project_boards(
+        project_id: str,
+        episode_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         db = get_db_manager()
+        if episode_id:
+            return await db.fetch(
+                """
+                    SELECT * FROM canvas_boards
+                    WHERE project_id = $1
+                      AND episode_id = $2
+                      AND is_deleted = FALSE
+                    ORDER BY updated_at DESC
+                """,
+                project_id,
+                episode_id,
+            )
         query = """
             SELECT * FROM canvas_boards
             WHERE project_id = $1 AND is_deleted = FALSE

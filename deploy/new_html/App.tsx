@@ -12,7 +12,7 @@
  *   /projects/:projectId/ep/:episodeId/workflow/generation → 流程化: 视频生成
  *   /projects/:projectId/ep/:episodeId/workflow/enhance   → 流程化: 视频增强
  *   /projects/:projectId/ep/:episodeId/workflow/history   → 流程化: 历史记录
- *   /projects/:projectId/ep/:episodeId/canvas            → 自由创作: 无限画布
+ *   /projects/:projectId/ep/:episodeId/canvas            → 自由创作: MECHA Studio
  *
  * 兼容旧路由 (向后兼容):
  *   /projects/:projectId/editor → redirect to ep/default/workflow/script
@@ -52,7 +52,7 @@ const FinalProductPage = React.lazy(() => import('./pages/FinalProductPage'));
 const StoryboardGenPage = React.lazy(() => import('./pages/StoryboardGenPage').then(m => ({ default: m.StoryboardGenPage })));
 const VideoGenPage = React.lazy(() => import('./pages/VideoGenPage').then(m => ({ default: m.VideoGenPage })));
 const HistoryPage = React.lazy(() => import('./pages/HistoryPage').then(m => ({ default: m.HistoryPage })));
-const CanvasPage = React.lazy(() => import('./pages/CanvasPage').then(m => ({ default: m.CanvasPage })));
+const StudioRedirectPage = React.lazy(() => import('./pages/StudioRedirectPage').then(m => ({ default: m.StudioRedirectPage })));
 const MediaLibraryPage = React.lazy(() => import('./pages/MediaLibraryPage'));
 const CreditsPage = React.lazy(() => import('./pages/CreditsPage'));
 const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
@@ -156,8 +156,8 @@ const App: React.FC = () => {
                                 <Route path="history" element={<HistoryPage />} />
                             </Route>
 
-                            {/* 自由创作 - 无限画布 */}
-                            <Route path="canvas" element={<CanvasPage />} />
+                            {/* 自由创作 - 独立 MECHA Studio */}
+                            <Route path="canvas" element={<StudioRedirectPage />} />
                         </Route>
 
                             <Route path="postprocess" element={<PostProcessPage />} />

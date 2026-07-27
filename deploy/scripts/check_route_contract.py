@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 266
-DEFAULT_EXPECTED_OPERATIONS = 325
+DEFAULT_EXPECTED_PATHS = 269
+DEFAULT_EXPECTED_OPERATIONS = 328
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -84,6 +84,9 @@ EXPECTED_ENDPOINTS = {
     ("/credits", "GET"): ("routers.frontend_pages", "credits_page"),
     ("/canvas", "GET"): ("routers.frontend_pages", "canvas_page"),
     ("/canvas/{path:path}", "GET"): ("routers.frontend_pages", "canvas_spa"),
+    ("/studio", "GET"): ("routers.frontend_pages", "studio_spa_root"),
+    ("/studio/", "GET"): ("routers.frontend_pages", "studio_spa_root"),
+    ("/studio/{path:path}", "GET"): ("routers.frontend_pages", "studio_spa"),
     ("/admin", "GET"): ("routers.frontend_pages", "admin_spa_root"),
     ("/admin/", "GET"): ("routers.frontend_pages", "admin_spa_root"),
     ("/admin/login", "GET"): ("routers.frontend_pages", "admin_spa_named"),
@@ -722,6 +725,9 @@ def check_frontend_pages_routes_extracted(root: Path) -> int:
         "/projects/{path:path}",
         "/canvas",
         "/canvas/{path:path}",
+        "/studio",
+        "/studio/",
+        "/studio/{path:path}",
         "/admin",
         "/admin/",
         "/admin/login",
@@ -761,8 +767,8 @@ def check_frontend_pages_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 23:
-        fail(f"routers/frontend_pages.py should own 23 frontend route registrations, found {route_count}")
+    if route_count != 26:
+        fail(f"routers/frontend_pages.py should own 26 frontend route registrations, found {route_count}")
     return route_count
 
 
@@ -6105,41 +6111,60 @@ def check_frontend_three_chunk_contract(root: Path) -> int:
 
 
 def check_frontend_flow_chunk_contract(root: Path) -> int:
-    """React Flow should stay in a cacheable chunk scoped to the Canvas route."""
+    """The retired React Flow canvas must be replaced by the isolated Studio app."""
     vite_config = root / "new_html" / "vite.config.ts"
-    canvas_page = root / "new_html" / "pages" / "CanvasPage.tsx"
+    package_json = root / "new_html" / "package.json"
+    app_path = root / "new_html" / "App.tsx"
+    redirect_page = root / "new_html" / "pages" / "StudioRedirectPage.tsx"
+    studio_root = root.parent / "studio"
+    studio_app = studio_root / "App.tsx"
+    studio_runtime = studio_root / "platform" / "dramaRuntime.ts"
     config_text = vite_config.read_text(encoding="utf-8")
-    canvas_text = canvas_page.read_text(encoding="utf-8")
+    package_text = package_json.read_text(encoding="utf-8")
+    app_text = app_path.read_text(encoding="utf-8")
+    redirect_text = redirect_page.read_text(encoding="utf-8")
+    studio_text = studio_app.read_text(encoding="utf-8")
+    runtime_text = studio_runtime.read_text(encoding="utf-8")
     required_snippets = [
-        (config_text, "'flow-vendor': ['@xyflow/react']", "Vite manualChunks splits React Flow"),
-        (canvas_text, "from '@xyflow/react';", "CanvasPage owns the React Flow workbench import"),
-        (canvas_text, "import '@xyflow/react/dist/style.css';", "CanvasPage owns the React Flow stylesheet"),
+        (app_text, "StudioRedirectPage", "Main app keeps the canvas route through StudioRedirectPage"),
+        (redirect_text, "window.location.replace(buildStudioUrl(projectId, episodeId))", "Canvas route redirects with episode scope"),
+        (studio_text, "useStudioRuntime", "Studio UI uses the Drama runtime boundary"),
+        (runtime_text, "submitSeedanceTask", "Studio video generation reuses the workflow model service"),
+        (runtime_text, "minimaxTTSSync", "Studio audio generation reuses the workflow TTS service"),
+        (runtime_text, "generateGeminiImageVariant", "Studio image generation reuses the workflow image service"),
     ]
 
-    new_html = root / "new_html"
     flow_import_violations: list[str] = []
     flow_import_re = re.compile(r"from\s+['\"]@xyflow/react['\"]|import\s+['\"]@xyflow/react")
-    for path in new_html.rglob("*"):
-        if path.suffix not in {".ts", ".tsx"}:
-            continue
-        if "node_modules" in path.parts or "dist" in path.parts:
-            continue
-        if path == canvas_page or "canvas" in path.parts:
-            continue
-        text = path.read_text(encoding="utf-8")
-        for idx, line in enumerate(text.splitlines(), start=1):
-            if flow_import_re.search(line):
-                flow_import_violations.append(f"{path.relative_to(root)}:{idx}: {line.strip()}")
+    for source_root in (root / "new_html", studio_root):
+        for path in source_root.rglob("*"):
+            if path.suffix not in {".ts", ".tsx"}:
+                continue
+            if "node_modules" in path.parts or "dist" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for idx, line in enumerate(text.splitlines(), start=1):
+                if flow_import_re.search(line):
+                    flow_import_violations.append(f"{path.relative_to(root.parent)}:{idx}: {line.strip()}")
 
-    checks = len(required_snippets) + 1
+    forbidden = [
+        (config_text, "'flow-vendor': ['@xyflow/react']", "obsolete React Flow Vite chunk"),
+        (package_text, '"@xyflow/react"', "obsolete React Flow dependency"),
+    ]
+    forbidden_hits = [f"{label}: still contains {snippet}" for text, snippet, label in forbidden if snippet in text]
+    if (root / "new_html" / "pages" / "CanvasPage.tsx").exists():
+        forbidden_hits.append("legacy pages/CanvasPage.tsx still exists")
+
+    checks = len(required_snippets) + len(forbidden) + 2
     missing = [f"{label}: missing {snippet}" for text, snippet, label in required_snippets if snippet not in text]
-    if missing or flow_import_violations:
+    if missing or forbidden_hits or flow_import_violations:
         fail(
-            "Frontend flow chunk contract failed:\n"
-            + "\n".join(missing + [
-                "Unexpected React Flow imports outside Canvas boundary:",
-                *flow_import_violations,
-            ] if flow_import_violations else missing)
+            "Frontend Studio replacement contract failed:\n"
+            + "\n".join([
+                *missing,
+                *forbidden_hits,
+                *(["Unexpected React Flow imports:", *flow_import_violations] if flow_import_violations else []),
+            ])
         )
     return checks
 

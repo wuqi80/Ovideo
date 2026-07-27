@@ -97,7 +97,6 @@ module.exports = {
     './App.tsx',
     './WorkspaceApp.tsx',
     './admin/**/*.{ts,tsx}',
-    './canvas/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',
     './contexts/**/*.{ts,tsx}',
     './hooks/**/*.{ts,tsx}',

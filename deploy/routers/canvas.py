@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from services.canvas_service import (
     CanvasBoardNotFound,
     CanvasInvalidConnection,
+    CanvasEpisodeScopeMismatch,
     CanvasObjectNotFound,
     CanvasPermissionDenied,
     create_canvas_board as create_canvas_board_service,
@@ -41,6 +42,7 @@ def create_canvas_router(
 
     class CanvasBoardCreate(BaseModel):
         project_id: str
+        episode_id: Optional[str] = None
         name: Optional[str] = "未命名画布"
         description: Optional[str] = ""
 
@@ -77,17 +79,21 @@ def create_canvas_router(
                 user_id=user_id,
                 name=data.name,
                 description=data.description,
+                episode_id=data.episode_id,
                 project_member_dao=ProjectMemberDAO,
                 canvas_board_dao=CanvasBoardDAO,
             )
         except CanvasPermissionDenied as exc:
             raise HTTPException(status_code=403, detail="无权操作") from exc
+        except CanvasEpisodeScopeMismatch as exc:
+            raise HTTPException(status_code=404, detail="Episode not found") from exc
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.get("/api/canvas/boards")
     async def get_canvas_boards(
         project_id: str,
+        episode_id: Optional[str] = None,
         user_id: str = Depends(get_current_user)
     ):
         """获取项目的画布列表"""
@@ -95,6 +101,7 @@ def create_canvas_router(
             return await list_canvas_boards(
                 project_id=project_id,
                 user_id=user_id,
+                episode_id=episode_id,
                 project_member_dao=ProjectMemberDAO,
                 canvas_board_dao=CanvasBoardDAO,
             )

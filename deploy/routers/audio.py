@@ -591,6 +591,21 @@ def create_audio_router(
         user_id: str = Depends(get_current_user),
     ):
         try:
+            if str(data.file_role or "").startswith("studio_"):
+                if not data.episode_id or data.entity_type != "episode" or data.entity_id != data.episode_id:
+                    raise HTTPException(status_code=400, detail="Invalid Studio episode scope")
+                try:
+                    episode_project_id = await require_audio_episode_access(
+                        data.episode_id,
+                        user_id,
+                        "member",
+                        episode_dao=EpisodeDAO,
+                        project_access_checker=project_access_checker,
+                    )
+                except AudioObjectAccessDenied as exc:
+                    raise HTTPException(status_code=404, detail="Studio episode not found") from exc
+                if data.project_id and data.project_id != episode_project_id:
+                    raise HTTPException(status_code=404, detail="Studio episode not found")
             if data.voice_id.startswith(("clone", "ttv-voice-")):
                 await reject_foreign_provider_object(
                     provider="minimax",

@@ -29,6 +29,33 @@ def _serve_spa():
     )
 
 
+def _studio_dist_dir() -> Path:
+    return Path(__file__).resolve().parents[2] / "studio" / "dist"
+
+
+def _serve_studio_spa():
+    """Return the independently-built Studio SPA entry."""
+    studio_index = _studio_dist_dir() / "index.html"
+    if studio_index.exists():
+        return FileResponse(
+            studio_index,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
+    return HTMLResponse(
+        """
+        <html><body style="font-family: sans-serif; padding: 40px; text-align: center;">
+        <h1>MECHA Studio is not built</h1>
+        <pre>cd ../studio &amp;&amp; npm run build</pre>
+        </body></html>
+        """,
+        status_code=503,
+    )
+
+
 def create_frontend_pages_router() -> APIRouter:
     router = APIRouter()
 
@@ -97,6 +124,15 @@ def create_frontend_pages_router() -> APIRouter:
     @router.get("/canvas/{path:path}")
     async def canvas_spa(path: str):
         return _serve_spa()
+
+    @router.get("/studio")
+    @router.get("/studio/")
+    async def studio_spa_root():
+        return _serve_studio_spa()
+
+    @router.get("/studio/{path:path}")
+    async def studio_spa(path: str):
+        return _serve_studio_spa()
 
     @router.get("/admin")
     @router.get("/admin/")

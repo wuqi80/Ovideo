@@ -63,6 +63,10 @@ from services.ai_proxy_reference_service import (
     prepare_gpt_image_reference_inputs,
 )
 from services.text_model_catalog_service import build_text_model_catalog
+from services.generation_access_service import (
+    GenerationAccessDenied,
+    require_generation_request_access,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +76,27 @@ def create_ai_proxy_router(
     require_auth_dependency,
     get_main_event_loop: Callable[[], Optional[asyncio.AbstractEventLoop]],
     get_redis_client: Callable[[], Optional[Any]],
+    file_dao: Any = None,
+    generation_access_checker: Any = require_generation_request_access,
 ) -> APIRouter:
     router = APIRouter()
+
+    async def _authorize_studio_request(request: Any, username: str, references: list[str]) -> None:
+        operation = str(getattr(request, "operation", "") or "")
+        file_role = str(getattr(request, "file_role", "") or "")
+        if operation != "studio_free_creation" and not file_role.startswith("studio_"):
+            return
+        if file_dao is None:
+            raise HTTPException(status_code=503, detail="Studio access validation is unavailable")
+        try:
+            await generation_access_checker(
+                request,
+                username,
+                references,
+                file_dao=file_dao,
+            )
+        except GenerationAccessDenied as exc:
+            raise HTTPException(status_code=404, detail="Studio scope or source not found") from exc
 
     text_operation_names = {
         "storyboard_script_generate": "分镜脚本生成",
@@ -322,6 +345,7 @@ def create_ai_proxy_router(
     @router.post("/api/gemini/text")
     async def gemini_text_chat(request: GeminiTextRequest, username: str = Depends(require_auth_dependency)):
         """Gemini文本生成接口（代理）"""
+        await _authorize_studio_request(request, username, [])
         task_context = _text_task_context(request, provider="gemini")
         task_id = await create_gemini_text_task(
             user_id=username,
@@ -387,6 +411,7 @@ def create_ai_proxy_router(
     @router.post("/api/gemini/text/stream")
     async def gemini_text_stream(request: GeminiTextRequest, username: str = Depends(require_auth_dependency)):
         """Gemini 文本流式生成接口，供需要首字实时展示的页面使用。"""
+        await _authorize_studio_request(request, username, [])
         try:
             stream_config = await resolve_gemini_stream_config(request.model)
         except AIProxyError as exc:
@@ -434,6 +459,7 @@ def create_ai_proxy_router(
     @router.post("/api/gemini/image")
     async def gemini_image_generate(request: GeminiImageRequest, username: str = Depends(require_auth_dependency)):
         """Gemini图像生成接口（代理）"""
+        await _authorize_studio_request(request, username, request.references)
         task_id = await start_ai_proxy_task(
             task_id_prefix="gemini_img",
             user_id=username,

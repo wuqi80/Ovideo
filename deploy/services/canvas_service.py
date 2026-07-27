@@ -24,6 +24,10 @@ class CanvasInvalidConnection(CanvasServiceError):
     pass
 
 
+class CanvasEpisodeScopeMismatch(CanvasServiceError):
+    pass
+
+
 async def _require_project_permission(
     project_id: str,
     user_id: str,
@@ -85,6 +89,7 @@ async def create_canvas_board(
     user_id: str,
     name: Optional[str],
     description: Optional[str],
+    episode_id: Optional[str] = None,
     project_member_dao: Any,
     canvas_board_dao: Any,
 ) -> Dict[str, Any]:
@@ -94,7 +99,17 @@ async def create_canvas_board(
         "member",
         project_member_dao=project_member_dao,
     )
-    board = await canvas_board_dao.create_board(project_id, user_id, name, description)
+    if episode_id:
+        episode_project_id = await canvas_board_dao.get_episode_project_id(episode_id)
+        if not episode_project_id or str(episode_project_id) != project_id:
+            raise CanvasEpisodeScopeMismatch("Episode does not belong to the selected project")
+    board = await canvas_board_dao.create_board(
+        project_id,
+        user_id,
+        name,
+        description,
+        episode_id=episode_id,
+    )
     return {"success": True, "board": board}
 
 
@@ -102,6 +117,7 @@ async def list_canvas_boards(
     *,
     project_id: str,
     user_id: str,
+    episode_id: Optional[str] = None,
     project_member_dao: Any,
     canvas_board_dao: Any,
 ) -> Dict[str, Any]:
@@ -111,7 +127,7 @@ async def list_canvas_boards(
         "readonly",
         project_member_dao=project_member_dao,
     )
-    boards = await canvas_board_dao.get_project_boards(project_id)
+    boards = await canvas_board_dao.get_project_boards(project_id, episode_id=episode_id)
     return {"success": True, "boards": boards}
 
 

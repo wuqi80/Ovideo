@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from routers.tasks import _should_prepare_workflow, create_task_router
 from schemas.generation import GenerateRequest
+from services.generation_access_service import GenerationAccessDenied
 
 
 @pytest.mark.parametrize("task_type", ["i2v", "morph", "upscale", "upscale_hd"])
@@ -65,6 +66,56 @@ async def test_generate_route_submits_i2v_with_prepare_enabled():
     assert response["success"] is True
     service.submit.assert_awaited_once()
     assert service.submit.call_args.kwargs["prepare"] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_route_rejects_unauthorized_studio_scope_before_enqueue():
+    async def require_auth():
+        return "u-test"
+
+    async def deny_access(*args, **kwargs):
+        raise GenerationAccessDenied("denied")
+
+    service = Mock()
+    service.submit = AsyncMock(return_value="should-not-submit")
+    task_service_module = Mock()
+    task_service_module.get.return_value = service
+    task_service_module.get_queue.return_value.get_queue_length = AsyncMock(return_value=0)
+
+    router = create_task_router(
+        require_auth_dependency=require_auth,
+        jwt_auth_module=Mock(),
+        task_service_module=task_service_module,
+        task_dao=Mock(),
+        file_dao=Mock(),
+        get_pubsub_redis_client=Mock(),
+        logger=Mock(),
+        generation_access_checker=deny_access,
+    )
+    create_generate_task = next(
+        route.endpoint
+        for route in router.routes
+        if getattr(route, "path", None) == "/api/generate"
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await create_generate_task(
+            GenerateRequest(
+                task_type="seedance_i2v",
+                entity_type="episode",
+                entity_id="ep-other",
+                episode_id="ep-other",
+                project_id="proj-1",
+                file_role="studio_video",
+                media_inputs=[
+                    {"kind": "image", "url": "/storage/private.png", "role": "first_frame"},
+                ],
+            ),
+            username="u-test",
+        )
+
+    assert exc.value.status_code == 404
+    service.submit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

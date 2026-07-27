@@ -1,9 +1,10 @@
 import asyncio
+import json
 from pathlib import Path
 
 from fastapi.responses import FileResponse
 
-from routers.frontend_pages import create_frontend_pages_router
+from routers.frontend_pages import _studio_dist_dir, create_frontend_pages_router
 
 
 DEPLOY_DIR = Path(__file__).resolve().parents[1]
@@ -31,3 +32,26 @@ def test_favicon_routes_serve_the_mecha_one_assets(monkeypatch):
 def test_mecha_one_favicon_files_have_valid_signatures():
     assert (DEPLOY_DIR / "static/favicon.ico").read_bytes()[:4] == b"\x00\x00\x01\x00"
     assert (DEPLOY_DIR / "static/favicon-32x32.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_studio_routes_serve_the_sibling_build_directory():
+    router = create_frontend_pages_router()
+    studio_paths = {
+        route.path
+        for route in router.routes
+        if route.path.startswith("/studio")
+    }
+
+    assert studio_paths == {"/studio", "/studio/", "/studio/{path:path}"}
+    assert _studio_dist_dir() == DEPLOY_DIR.parent / "studio" / "dist"
+
+
+def test_studio_build_toolchain_is_pinned_for_the_production_host():
+    package = json.loads(
+        (DEPLOY_DIR.parent / "studio" / "package.json").read_text(encoding="utf-8")
+    )
+    dev_dependencies = package["devDependencies"]
+
+    assert dev_dependencies["vite"] == "6.4.1"
+    assert dev_dependencies["vitest"] == "4.1.0"
+    assert dev_dependencies["rollup"] == "4.53.3"

@@ -38,8 +38,8 @@ describe('canvas service', () => {
       .mockResolvedValueOnce(mockJsonResponse({ success: true }))
       .mockResolvedValueOnce(mockJsonResponse({ success: true }));
 
-    await createCanvasBoard('proj_1', 'Board', 'Scene layout');
-    await getCanvasBoards('proj_1');
+    await createCanvasBoard('proj_1', 'Board', 'Scene layout', 'ep_1');
+    await getCanvasBoards('proj_1', 'ep_1');
     await getCanvasBoardDetail('board_1');
     await updateCanvasBoard('board_1', { name: 'Updated' });
     await deleteCanvasBoard('board_1');
@@ -50,8 +50,9 @@ describe('canvas service', () => {
       project_id: 'proj_1',
       name: 'Board',
       description: 'Scene layout',
+      episode_id: 'ep_1',
     });
-    expect(mockFetch.mock.calls[1][0]).toBe('/api/canvas/boards?project_id=proj_1');
+    expect(mockFetch.mock.calls[1][0]).toBe('/api/canvas/boards?project_id=proj_1&episode_id=ep_1');
     expect(mockFetch.mock.calls[1][1].method).toBe('GET');
     expect(mockFetch.mock.calls[2][0]).toBe('/api/canvas/boards/board_1');
     expect(mockFetch.mock.calls[3][0]).toBe('/api/canvas/boards/board_1');

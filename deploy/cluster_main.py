@@ -754,6 +754,19 @@ if os.path.exists(dist_dir):
     except Exception as e:
         logger.warning(f"无法挂载dist目录: {e}")
 
+studio_dist_dir = Path(__file__).resolve().parent.parent / "studio" / "dist"
+studio_assets_dir = studio_dist_dir / "assets"
+if studio_assets_dir.exists():
+    try:
+        app.mount(
+            "/studio/assets",
+            StaticFiles(directory=str(studio_assets_dir)),
+            name="studio-assets",
+        )
+        logger.info("✅ 已挂载 MECHA Studio 前端资源: %s", studio_dist_dir)
+    except Exception as e:
+        logger.warning("无法挂载 MECHA Studio 目录: %s", e)
+
 # 全局变量
 redis_client: Optional[redis.Redis] = None
 cluster_manager: Optional[ClusterManager] = None  # 保留用于兼容性（指向image_cluster）
@@ -832,6 +845,7 @@ app.include_router(
         require_auth_dependency=require_auth,
         get_main_event_loop=lambda: MAIN_EVENT_LOOP,
         get_redis_client=lambda: redis_client,
+        file_dao=FileDAO,
     )
 )
 logger.info("✅ AI Proxy API 路由已注册 (/api/deepseek, /api/minimax, /api/gemini, /api/gpt-image, /api/materials/doubao)")

@@ -51,7 +51,6 @@ export default defineConfig(({ mode }) => {
               vendor: ['react', 'react-dom'],
               'router-vendor': ['react-router-dom'],
               'query-vendor': ['@tanstack/react-query'],
-              'flow-vendor': ['@xyflow/react'],
               'three-vendor': ['three'],
               'icons-vendor': ['lucide-react'],
               'id-vendor': ['uuid']

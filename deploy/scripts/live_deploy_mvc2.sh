@@ -3,15 +3,21 @@ set -e
 
 REMOTE="${REMOTE:-root@43.98.197.227}"
 REMOTE_DIR="${REMOTE_DIR:-/home/Administrator/deploy}"
+STUDIO_LOCAL_DIR="${STUDIO_LOCAL_DIR:-../studio}"
+STUDIO_REMOTE_DIR="${STUDIO_REMOTE_DIR:-$(dirname "$REMOTE_DIR")/studio}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/google_compute_engine}"
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=no)
 SERVICE="${SERVICE:-drama.service}"
 FRONTEND_TAR_REMOTE="/tmp/mecha-new_html-src.tgz"
+STUDIO_TAR_REMOTE="/tmp/mecha-studio-src.tgz"
 BACKEND_TAR_REMOTE="/tmp/mecha-backend-src.tgz"
 FRONTEND_HASH_REMOTE="${FRONTEND_HASH_REMOTE:-$REMOTE_DIR/.new_html_build_source.sha256}"
 FRONTEND_DIST_HASH_REMOTE="${FRONTEND_DIST_HASH_REMOTE:-$REMOTE_DIR/dist/.new_html_build_source.sha256}"
+STUDIO_HASH_REMOTE="${STUDIO_HASH_REMOTE:-$STUDIO_REMOTE_DIR/.studio_build_source.sha256}"
+STUDIO_DIST_HASH_REMOTE="${STUDIO_DIST_HASH_REMOTE:-$STUDIO_REMOTE_DIR/dist/.studio_build_source.sha256}"
 RELEASE_METADATA_REMOTE_CANDIDATE="/tmp/mecha-release-metadata.json"
 FORCE_FRONTEND_BUILD="${FORCE_FRONTEND_BUILD:-0}"
+FORCE_STUDIO_BUILD="${FORCE_STUDIO_BUILD:-0}"
 RUN_REMOTE_CONTRACTS="${RUN_REMOTE_CONTRACTS:-1}"
 RUN_REMOTE_SMOKE="${RUN_REMOTE_SMOKE:-1}"
 REQUIRE_REMOTE_SMOKE="${REQUIRE_REMOTE_SMOKE:-1}"
@@ -22,6 +28,10 @@ GPU_AGENT_REMOTE_REL="persistent_storage/tools/$GPU_AGENT_SOURCE_NAME"
 
 if [ ! -f "cluster_main.py" ] || [ ! -d "routers" ] || [ ! -d "schemas" ] || [ ! -d "services" ] || [ ! -d "utils" ] || [ ! -d "new_html" ]; then
   echo "ERROR: run this script from the deploy/ directory"
+  exit 1
+fi
+if [ ! -f "$STUDIO_LOCAL_DIR/package.json" ] || [ ! -f "$STUDIO_LOCAL_DIR/vite.config.ts" ]; then
+  echo "ERROR: sibling Studio source is missing: $STUDIO_LOCAL_DIR"
   exit 1
 fi
 
@@ -195,7 +205,7 @@ cleanup() {
 trap cleanup EXIT
 
 rollback_remote() {
-  echo "Rolling back remote cluster_main.py and dist..."
+  echo "Rolling back remote cluster_main.py, main dist, and Studio dist..."
   ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
     latest=\$(ls -1t '$REMOTE_DIR'/cluster_main.py.bak.* 2>/dev/null | head -n 1 || true)
     if [ -n \"\$latest\" ]; then
@@ -205,7 +215,14 @@ rollback_remote() {
       rm -rf '$REMOTE_DIR'/dist
       cp -a '${DIST_BACKUP_PATH:-}' '$REMOTE_DIR'/dist
     fi
+    if [ -n '${STUDIO_DIST_BACKUP_PATH:-}' ] && [ -d '${STUDIO_DIST_BACKUP_PATH:-}' ]; then
+      rm -rf '$STUDIO_REMOTE_DIR'/dist
+      cp -a '${STUDIO_DIST_BACKUP_PATH:-}' '$STUDIO_REMOTE_DIR'/dist
+    elif [ -d '$STUDIO_REMOTE_DIR'/dist ]; then
+      rm -rf '$STUDIO_REMOTE_DIR'/dist
+    fi
     rm -f '$FRONTEND_HASH_REMOTE' '$RELEASE_METADATA_REMOTE_CANDIDATE'
+    rm -f '$STUDIO_HASH_REMOTE'
     chown Administrator:Administrator '$REMOTE_DIR'
     chmod 755 '$REMOTE_DIR'
     sudo systemctl restart '$SERVICE'
@@ -226,6 +243,24 @@ frontend_source_hash() {
     | sed -E 's/^([0-9a-f]+)[[:space:]]+\*?(.+)$/\1  \2/' \
     | sha256sum \
     | awk '{print $1}'
+}
+
+studio_source_hash() {
+  (
+    cd "$STUDIO_LOCAL_DIR"
+    find . -type f \
+      ! -path './node_modules/*' \
+      ! -path './.env' \
+      ! -path './.env.*' \
+      ! -path './coverage/*' \
+      ! -path './dist/*' \
+      -print0 \
+      | LC_ALL=C sort -z \
+      | xargs -0 sha256sum \
+      | sed -E 's/^([0-9a-f]+)[[:space:]]+\*?\.\/(.+)$/\1  \2/' \
+      | sha256sum \
+      | awk '{print $1}'
+  )
 }
 
 run_remote_architecture_contracts() {
@@ -299,16 +334,27 @@ BACKUP_INFO=$(
       dist_bak='$REMOTE_DIR'/dist.bak.\$ts
       cp -a '$REMOTE_DIR'/dist \"\$dist_bak\"
     fi
-    printf '%s\n%s\n' \"\$cluster_bak\" \"\$dist_bak\"
+    studio_dist_bak=''
+    if [ -d '$STUDIO_REMOTE_DIR'/dist ]; then
+      studio_dist_bak='$STUDIO_REMOTE_DIR'/dist.bak.\$ts
+      cp -a '$STUDIO_REMOTE_DIR'/dist \"\$studio_dist_bak\"
+    fi
+    printf '%s\n%s\n%s\n' \"\$cluster_bak\" \"\$dist_bak\" \"\$studio_dist_bak\"
   "
 )
 BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '1p')
 DIST_BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '2p')
+STUDIO_DIST_BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '3p')
 echo "cluster_main backup: $BACKUP_PATH"
 if [ -n "$DIST_BACKUP_PATH" ]; then
   echo "dist backup: $DIST_BACKUP_PATH"
 else
   echo "dist backup: skipped (remote dist missing)"
+fi
+if [ -n "$STUDIO_DIST_BACKUP_PATH" ]; then
+  echo "Studio dist backup: $STUDIO_DIST_BACKUP_PATH"
+else
+  echo "Studio dist backup: skipped (remote Studio dist missing)"
 fi
 
 for path in "${FILES[@]}"; do
@@ -472,10 +518,80 @@ fi
 fi
 fi
 
+STUDIO_SOURCE_HASH=$(studio_source_hash)
+REMOTE_STUDIO_HASH=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "if [ -f '$STUDIO_HASH_REMOTE' ]; then cat '$STUDIO_HASH_REMOTE'; fi")
+REMOTE_STUDIO_DIST_PRESENT=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "if [ -d '$STUDIO_REMOTE_DIR'/dist ]; then echo 1; else echo 0; fi")
+REMOTE_STUDIO_DIST_HASH=$(ssh "${SSH_OPTS[@]}" "$REMOTE" "if [ -f '$STUDIO_DIST_HASH_REMOTE' ]; then cat '$STUDIO_DIST_HASH_REMOTE'; fi")
+BUILD_STUDIO=0
+if [ "$FORCE_STUDIO_BUILD" = "1" ]; then
+  BUILD_STUDIO=1
+  echo "Studio build forced (FORCE_STUDIO_BUILD=1)"
+elif [ "$REMOTE_STUDIO_DIST_PRESENT" != "1" ]; then
+  BUILD_STUDIO=1
+  echo "Studio dist missing on remote; build required"
+elif [ "$STUDIO_SOURCE_HASH" != "$REMOTE_STUDIO_HASH" ]; then
+  BUILD_STUDIO=1
+  echo "Studio source changed: local=$STUDIO_SOURCE_HASH remote=${REMOTE_STUDIO_HASH:-missing}"
+elif [ "$STUDIO_SOURCE_HASH" != "$REMOTE_STUDIO_DIST_HASH" ]; then
+  BUILD_STUDIO=1
+  echo "Studio dist marker missing or stale"
+else
+  echo "Skipping Studio build: source hash unchanged ($STUDIO_SOURCE_HASH)"
+fi
+
+if [ "$BUILD_STUDIO" = "1" ]; then
+  tar \
+    --exclude='./node_modules' \
+    --exclude='./.env' \
+    --exclude='./.env.*' \
+    --exclude='./coverage' \
+    --exclude='./dist' \
+    -C "$STUDIO_LOCAL_DIR" \
+    -czf "$STAGING_DIR/studio-src.tgz" \
+    .
+
+  if ! scp "${SSH_OPTS[@]}" "$STAGING_DIR/studio-src.tgz" "$REMOTE:$STUDIO_TAR_REMOTE"; then
+    rollback_remote
+    echo "Deployment rolled back: Studio upload failed"
+    exit 1
+  fi
+
+  if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
+    mkdir -p '$STUDIO_REMOTE_DIR'
+    find '$STUDIO_REMOTE_DIR' -mindepth 1 -maxdepth 1 \
+      ! -name node_modules \
+      ! -name .env \
+      ! -name '.env.*' \
+      -exec rm -rf -- {} +
+    tar -xzf '$STUDIO_TAR_REMOTE' -C '$STUDIO_REMOTE_DIR'
+    rm -f '$STUDIO_TAR_REMOTE'
+    cd '$STUDIO_REMOTE_DIR'
+    npm run build || (npm ci && npm run build)
+    printf '%s\n' '$STUDIO_SOURCE_HASH' > '$STUDIO_HASH_REMOTE'
+    printf '%s\n' '$STUDIO_SOURCE_HASH' > '$STUDIO_DIST_HASH_REMOTE'
+  "; then
+    rollback_remote
+    echo "Deployment rolled back: Studio build failed"
+    exit 1
+  fi
+
+  if [ -n "$STUDIO_DIST_BACKUP_PATH" ]; then
+    if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
+      if [ -d '$STUDIO_DIST_BACKUP_PATH'/assets ] && [ -d '$STUDIO_REMOTE_DIR'/dist/assets ]; then
+        find '$STUDIO_DIST_BACKUP_PATH'/assets -maxdepth 1 -type f -exec cp -n {} '$STUDIO_REMOTE_DIR'/dist/assets/ \;
+      fi
+    "; then
+      rollback_remote
+      echo "preserving previous Studio assets failed"
+      exit 1
+    fi
+  fi
+fi
+
 RELEASED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 RELEASE_METADATA_LOCAL=$(mktemp)
 printf '%s\n' \
-  "{\"git_sha\":\"$RELEASE_GIT_SHA\",\"git_dirty\":$RELEASE_GIT_DIRTY,\"backend_source_sha256\":\"$BACKEND_SOURCE_HASH\",\"frontend_source_sha256\":\"$FRONTEND_SOURCE_HASH\",\"released_at\":\"$RELEASED_AT\"}" \
+  "{\"git_sha\":\"$RELEASE_GIT_SHA\",\"git_dirty\":$RELEASE_GIT_DIRTY,\"backend_source_sha256\":\"$BACKEND_SOURCE_HASH\",\"frontend_source_sha256\":\"$FRONTEND_SOURCE_HASH\",\"studio_source_sha256\":\"$STUDIO_SOURCE_HASH\",\"released_at\":\"$RELEASED_AT\"}" \
   > "$RELEASE_METADATA_LOCAL"
 if ! scp "${SSH_OPTS[@]}" "$RELEASE_METADATA_LOCAL" "$REMOTE:$RELEASE_METADATA_REMOTE_CANDIDATE"; then
   rollback_remote

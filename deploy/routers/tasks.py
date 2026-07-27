@@ -26,6 +26,10 @@ from services.video_enhancement_service import (
 )
 from services.video_interpolation_service import prepare_video_interpolation_task
 from external_api.video.minimax import normalize_minimax_generation_options
+from services.generation_access_service import (
+    GenerationAccessDenied,
+    require_generation_request_access,
+)
 
 
 def _should_prepare_workflow(task_type: str) -> bool:
@@ -42,6 +46,7 @@ def create_task_router(
     file_dao: Any,
     get_pubsub_redis_client: Any,
     logger: logging.Logger,
+    generation_access_checker: Any = require_generation_request_access,
 ) -> APIRouter:
     router = APIRouter()
     FileDAO = file_dao
@@ -50,6 +55,31 @@ def create_task_router(
     async def create_generate_task(request: GenerateRequest, username: str = Depends(require_auth_dependency)):
         """创建生成任务"""
         try:
+            if str(request.file_role or "").startswith("studio_"):
+                references = [
+                    str(value)
+                    for value in (
+                        request.image_path,
+                        request.image_path_end,
+                        request.video_filename,
+                        request.audio_filename,
+                    )
+                    if value
+                ]
+                references.extend(
+                    str(item.get("url"))
+                    for item in (request.media_inputs or [])
+                    if isinstance(item, dict) and item.get("url")
+                )
+                try:
+                    await generation_access_checker(
+                        request,
+                        username,
+                        references,
+                        file_dao=FileDAO,
+                    )
+                except GenerationAccessDenied as exc:
+                    raise HTTPException(status_code=404, detail="Studio scope or source not found") from exc
             task_data = request.model_dump()
             if request.entity_type:
                 task_data["entity_type"] = request.entity_type
