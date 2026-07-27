@@ -7,6 +7,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { EpisodeHubPage } from '../../pages/EpisodeHubPage';
 import { apiJson } from '../../services/httpClient';
 import { uploadEntityFile } from '../../services/entityFileService';
+import { prepareCoverUploadFile } from '../../utils/coverImage';
 
 vi.mock('../../services/httpClient', () => ({
   apiJson: vi.fn(),
@@ -15,6 +16,10 @@ vi.mock('../../services/httpClient', () => ({
 
 vi.mock('../../services/entityFileService', () => ({
   uploadEntityFile: vi.fn(),
+}));
+
+vi.mock('../../utils/coverImage', () => ({
+  prepareCoverUploadFile: vi.fn(),
 }));
 
 vi.mock('../../admin/crmUI', () => ({
@@ -78,6 +83,9 @@ describe('EpisodeHubPage', () => {
       fileId: 'file_episode_cover',
       fileUrl: '/api/files/file_episode_cover/download',
     });
+    (prepareCoverUploadFile as any).mockImplementation(async (file: File) => (
+      new File(['optimized-episode-cover'], `small-${file.name}.jpg`, { type: 'image/jpeg' })
+    ));
   });
 
   it('places the back action in the tab row and the create action in the list toolbar', async () => {
@@ -177,7 +185,15 @@ describe('EpisodeHubPage', () => {
     fireEvent.change(screen.getByLabelText('选择分集封面图片'), { target: { files: [file] } });
 
     await waitFor(() => {
-      expect(uploadEntityFile).toHaveBeenCalledWith(file, 'episode', 'ep_8', 'cover');
+      expect(prepareCoverUploadFile).toHaveBeenCalledWith(file);
+      expect(uploadEntityFile).toHaveBeenCalled();
+    });
+    const optimizedCover = (uploadEntityFile as any).mock.calls[0][0] as File;
+    expect(optimizedCover).not.toBe(file);
+    expect(optimizedCover.type).toBe('image/jpeg');
+    expect(uploadEntityFile).toHaveBeenCalledWith(optimizedCover, 'episode', 'ep_8', 'cover');
+
+    await waitFor(() => {
       expect(apiJson).toHaveBeenCalledWith(
         '/api/episodes/ep_8',
         {

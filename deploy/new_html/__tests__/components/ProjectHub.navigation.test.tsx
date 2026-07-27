@@ -7,6 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import ProjectHub from '../../components/ProjectHub';
 import { apiJson } from '../../services/httpClient';
 import { uploadEntityFile } from '../../services/entityFileService';
+import { prepareCoverUploadFile } from '../../utils/coverImage';
 import {
   addProjectMember,
   getProjectMembers,
@@ -30,6 +31,10 @@ vi.mock('../../services/shareService', () => ({
 
 vi.mock('../../services/entityFileService', () => ({
   uploadEntityFile: vi.fn(),
+}));
+
+vi.mock('../../utils/coverImage', () => ({
+  prepareCoverUploadFile: vi.fn(),
 }));
 
 vi.mock('../../services/projectWorkflowService', () => ({
@@ -116,6 +121,9 @@ describe('ProjectHub navigation and filters', () => {
       fileId: 'file_cover',
       fileUrl: '/api/files/file_cover/download',
     });
+    (prepareCoverUploadFile as any).mockImplementation(async (file: File) => (
+      new File(['optimized-project-cover'], `small-${file.name}.jpg`, { type: 'image/jpeg' })
+    ));
     (updateProject as any).mockResolvedValue({ success: true });
     (getProjectMembers as any).mockResolvedValue({
       success: true,
@@ -209,7 +217,15 @@ describe('ProjectHub navigation and filters', () => {
     fireEvent.change(screen.getByLabelText('选择项目封面图片'), { target: { files: [file] } });
 
     await waitFor(() => {
-      expect(uploadEntityFile).toHaveBeenCalledWith(file, 'project', 'active-1', 'cover');
+      expect(prepareCoverUploadFile).toHaveBeenCalledWith(file);
+      expect(uploadEntityFile).toHaveBeenCalled();
+    });
+    const optimizedCover = (uploadEntityFile as any).mock.calls[0][0] as File;
+    expect(optimizedCover).not.toBe(file);
+    expect(optimizedCover.type).toBe('image/jpeg');
+    expect(uploadEntityFile).toHaveBeenCalledWith(optimizedCover, 'project', 'active-1', 'cover');
+
+    await waitFor(() => {
       expect(updateProject).toHaveBeenCalledWith('active-1', {
         cover_url: '/api/files/file_cover/download',
       });

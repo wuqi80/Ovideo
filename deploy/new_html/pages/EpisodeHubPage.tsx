@@ -28,6 +28,7 @@ import type { Episode } from '../types';
 import { BrandLogo } from '../components/BrandLogo';
 import AccountMenu from '../components/AccountMenu';
 import { crmConfirm, crmMessage } from '../admin/crmUI';
+import { prepareCoverUploadFile } from '../utils/coverImage';
 
 type EpisodeCard = Episode & { coverUrl?: string };
 type EpisodeStatus = Episode['status'];
@@ -225,7 +226,8 @@ export const EpisodeHubPage: React.FC = () => {
 
     setUploadingCoverEpisodeId(episodeId);
     try {
-      const uploaded = await uploadEntityFile(file, 'episode', episodeId, 'cover');
+      const coverFile = await prepareCoverUploadFile(file);
+      const uploaded = await uploadEntityFile(coverFile, 'episode', episodeId, 'cover');
       nextSettings.cover_url = uploaded.fileUrl;
       await updateEpisode(episodeId, { settings: nextSettings });
       setEpisodes(prev => prev.map(item =>

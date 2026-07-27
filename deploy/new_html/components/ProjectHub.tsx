@@ -18,6 +18,7 @@ import type { ProjectInfo } from '../types';
 import { crmMessage, crmConfirm } from '../admin/crmUI';
 import { BrandLogo } from './BrandLogo';
 import AccountMenu from './AccountMenu';
+import { prepareCoverUploadFile } from '../utils/coverImage';
 
 type SortKey = 'updated' | 'created' | 'name';
 type ProjectTab = 'all' | 'archived';
@@ -245,7 +246,8 @@ const ProjectHub: React.FC = () => {
 
         setUploadingCoverProjectId(projectId);
         try {
-            const uploaded = await uploadEntityFile(file, 'project', projectId, 'cover');
+            const coverFile = await prepareCoverUploadFile(file);
+            const uploaded = await uploadEntityFile(coverFile, 'project', projectId, 'cover');
             await updateProject(projectId, { cover_url: uploaded.fileUrl });
             setProjects(prev => prev.map(project =>
                 project.projectId === projectId
@@ -745,7 +747,7 @@ const ProjectHub: React.FC = () => {
                                     />
                                 </div>
                                 <div className="rounded-lg border border-n40 bg-n10 p-3 text-xs text-n200">
-                                    封面可从项目卡片右上角菜单的「上传封面」单独更新；图片展示使用居中裁剪，不会拉伸变形。
+                                    封面可从项目卡片右上角菜单的「上传封面」单独更新；上传时会自动裁剪压缩为 16:9 小封面，不会拉伸变形。
                                 </div>
                                 <div className="flex justify-end">
                                     <button
