@@ -1622,6 +1622,9 @@ async def test_video_reverse_uses_runtime_gemini_text_model(monkeypatch, tmp_pat
     result = await video_reverse_service.analyze_segment_frames([str(frame)])
 
     assert result["description"] == "shot frame"
+    assert result["script_text"] == "shot frame"
+    assert result["storyboard_description"] == "shot frame"
+    assert result["shot_design"] == "shot frame"
     assert calls[0]["url"] == "https://text-runtime.example.test/v1/chat/completions"
     assert calls[0]["json"]["model"] == "gemini-video-reverse-runtime-model"
     assert calls[0]["json"]["temperature"] == 0.3

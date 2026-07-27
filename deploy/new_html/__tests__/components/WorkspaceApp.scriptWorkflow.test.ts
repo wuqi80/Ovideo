@@ -59,6 +59,8 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('onGenerateVideoScript={handleGenerateVideoScript}');
     expect(source).toContain('onExtractStoryboardPrompts={handleExtractStoryboardPrompts}');
     expect(source).toContain('onRunThreeStage={handleRunThreeStagePipeline}');
+    expect(source).toContain('const videoReverseToolDialog = videoReverseOpen ?');
+    expect(source).toContain('onOpenVideoReverse={() => setVideoReverseOpen(true)}');
     expect(source).toContain('onEditVersion={handleConversationEditVersion}');
     expect(source).toContain('handleConversationGenerateDesign(version, { openDrawer: false })');
     expect(source).toContain('version={quickPipelineVersion}');

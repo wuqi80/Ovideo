@@ -272,7 +272,7 @@ async def analyze_segment_frames(
                 'dialogue': '',
             }
 
-        script_text = str(obj.get('script_text') or obj.get('script') or '')[:1500]
+        script_text = str(obj.get('script_text') or obj.get('script') or obj.get('description') or '')[:1500]
         storyboard_description = str(
             obj.get('storyboard_description') or obj.get('description') or script_text
         )[:1500]

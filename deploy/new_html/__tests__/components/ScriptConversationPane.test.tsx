@@ -74,6 +74,8 @@ describe('ScriptConversationPane workflow', () => {
     expect(workspace).toContain('await loadEpisodeData(scriptId)');
     expect(videoReversePage).toContain('onCandidateCreated?: (scriptId: string) => Promise<void> | void');
     expect(videoReversePage).toContain('await onCandidateCreated(scriptId)');
+    expect(videoReversePage).toContain('createScriptVersion(episodeId, scriptId');
+    expect(videoReversePage).toContain('buildVideoReverseStoryboardItems(selectedTask, segments)');
     expect(workflowLayout).not.toContain("path: 'video-reverse'");
     expect(app).toContain('<Navigate to="../script" replace />');
   });

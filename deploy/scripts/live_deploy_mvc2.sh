@@ -129,6 +129,7 @@ FILES=(
   "scripts/windows_gpu_task_repair.cmd"
   "scripts/windows_gpu_task_repair.ps1"
   scripts/check_*.py
+  tests/*.py
   tests/test_ai_proxy_image_persistence_service.py
   tests/test_ai_proxy_reference_service.py
   tests/test_ai_proxy_task_service.py
@@ -227,6 +228,10 @@ rollback_remote() {
       mkdir -p '$REMOTE_DIR'/workflows
       find '$REMOTE_DIR'/workflows -mindepth 1 -maxdepth 1 -type f -delete
       cp -a '${WORKFLOWS_BACKUP_PATH:-}'/. '$REMOTE_DIR'/workflows
+    fi
+    if [ -n '${TESTS_BACKUP_PATH:-}' ] && [ -d '${TESTS_BACKUP_PATH:-}' ]; then
+      rm -rf '$REMOTE_DIR'/tests
+      cp -a '${TESTS_BACKUP_PATH:-}' '$REMOTE_DIR'/tests
     fi
     rm -f '$FRONTEND_HASH_REMOTE' '$RELEASE_METADATA_REMOTE_CANDIDATE'
     rm -f '$STUDIO_HASH_REMOTE'
@@ -351,13 +356,19 @@ BACKUP_INFO=$(
       workflows_bak='$REMOTE_DIR'/workflows.bak.\$ts
       cp -a '$REMOTE_DIR'/workflows \"\$workflows_bak\"
     fi
-    printf '%s\n%s\n%s\n%s\n' \"\$cluster_bak\" \"\$dist_bak\" \"\$studio_dist_bak\" \"\$workflows_bak\"
+    tests_bak=''
+    if [ -d '$REMOTE_DIR'/tests ]; then
+      tests_bak='$REMOTE_DIR'/tests.bak.\$ts
+      cp -a '$REMOTE_DIR'/tests \"\$tests_bak\"
+    fi
+    printf '%s\n%s\n%s\n%s\n%s\n' \"\$cluster_bak\" \"\$dist_bak\" \"\$studio_dist_bak\" \"\$workflows_bak\" \"\$tests_bak\"
   "
 )
 BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '1p')
 DIST_BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '2p')
 STUDIO_DIST_BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '3p')
 WORKFLOWS_BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '4p')
+TESTS_BACKUP_PATH=$(printf "%s\n" "$BACKUP_INFO" | sed -n '5p')
 echo "cluster_main backup: $BACKUP_PATH"
 if [ -n "$DIST_BACKUP_PATH" ]; then
   echo "dist backup: $DIST_BACKUP_PATH"
@@ -373,6 +384,11 @@ if [ -n "$WORKFLOWS_BACKUP_PATH" ]; then
   echo "workflows backup: $WORKFLOWS_BACKUP_PATH"
 else
   echo "workflows backup: skipped (remote workflows missing)"
+fi
+if [ -n "$TESTS_BACKUP_PATH" ]; then
+  echo "tests backup: $TESTS_BACKUP_PATH"
+else
+  echo "tests backup: skipped (remote tests missing)"
 fi
 
 for path in "${FILES[@]}"; do
@@ -413,6 +429,7 @@ fi
 if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   mkdir -p '$REMOTE_DIR'
   mkdir -p '$REMOTE_DIR'/workflows
+  rm -rf '$REMOTE_DIR'/tests
   # Overlay versioned workflows without deleting valid templates uploaded from
   # the admin console. The remote backup remains available for rollback.
   tar -xzf '$BACKEND_TAR_REMOTE' -C '$REMOTE_DIR'

@@ -37,6 +37,7 @@ const baseProps = {
   onGenerateVideoScript: vi.fn().mockResolvedValue(true),
   onExtractStoryboardPrompts: vi.fn().mockResolvedValue(true),
   onRunThreeStage: vi.fn().mockResolvedValue(undefined),
+  onOpenVideoReverse: vi.fn(),
 };
 
 describe('QuickScriptSourceColumn', () => {
@@ -45,6 +46,7 @@ describe('QuickScriptSourceColumn', () => {
 
     expect(screen.getByTestId('quick-three-stage-panel')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '按三步生成' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '视频反推' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '拆分剧本' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成视频脚本' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成镜头设计' })).toBeInTheDocument();
@@ -71,6 +73,25 @@ describe('QuickScriptSourceColumn', () => {
     fireEvent.click(screen.getByRole('button', { name: '按三步生成' }));
 
     await waitFor(() => expect(onRunThreeStage).toHaveBeenCalledWith('script-1'));
+  });
+
+  it('opens video reverse in quick mode before source text exists', () => {
+    const onOpenVideoReverse = vi.fn();
+    render(
+      <QuickScriptSourceColumn
+        {...baseProps}
+        selectedFile={{ ...file, originalContent: '' } as ProjectFile}
+        onOpenVideoReverse={onOpenVideoReverse}
+      />,
+    );
+
+    const reverseButton = screen.getByRole('button', { name: '视频反推' });
+    expect(reverseButton).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '按三步生成' })).toBeDisabled();
+
+    fireEvent.click(reverseButton);
+
+    expect(onOpenVideoReverse).toHaveBeenCalledTimes(1);
   });
 
   it('runs each available master stage independently and shows its progress', async () => {

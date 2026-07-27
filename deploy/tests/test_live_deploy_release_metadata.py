@@ -35,7 +35,9 @@ def test_live_deploy_syncs_pipeline_and_preserves_admin_uploaded_workflows():
     assert "without deleting valid templates uploaded from" in upload_section
 
 
-def test_live_deploy_syncs_video_interpolation_regression_tests():
+def test_live_deploy_syncs_all_regression_tests_and_prunes_remote_stale_tests():
     script = (DEPLOY_DIR / "scripts" / "live_deploy_mvc2.sh").read_text(encoding="utf-8")
 
-    assert "tests/test_video_interpolation_service.py" in script
+    assert "tests/*.py" in script
+    assert "tests backup:" in script
+    assert "rm -rf '$REMOTE_DIR'/tests" in script
