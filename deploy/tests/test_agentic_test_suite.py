@@ -102,6 +102,18 @@ def test_smoke_test_uses_console_safe_status_markers():
     assert "❌" not in smoke_source
 
 
+def test_smoke_test_retries_public_register_security_probe():
+    smoke_source = (SCRIPTS_DIR / "smoke_test.py").read_text(encoding="utf-8")
+
+    register_probe = smoke_source.split('check("公开注册已关闭(403)"', 1)[0].rsplit(
+        "st, _ = ",
+        1,
+    )[1]
+    assert register_probe.startswith("req_with_network_retry(")
+    assert '"/api/auth/register"' in register_probe
+    assert 'check("公开注册已关闭(403)", st == 403' in smoke_source
+
+
 def test_browser_smoke_covers_supported_public_viewports():
     browser_source = (SCRIPTS_DIR / "browser_public_smoke.mjs").read_text(encoding="utf-8")
 

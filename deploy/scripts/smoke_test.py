@@ -118,7 +118,12 @@ def run():
     # 2. 安全项
     st, _ = req_with_network_retry("/api/debug/auth-status", timeout=15)
     check("debug 接口已移除(404)", st == 404, f"http={st}")
-    st, _ = req("/api/auth/register", "POST", {"username": "smoke_x", "password": "x"})
+    st, _ = req_with_network_retry(
+        "/api/auth/register",
+        method="POST",
+        body={"username": "smoke_x", "password": "x"},
+        timeout=15,
+    )
     check("公开注册已关闭(403)", st == 403, f"http={st}")
     st, _ = req_with_network_retry("/api/admin/dashboard", timeout=15)
     check("admin 无 token 被拒(401/403)", st in (401, 403), f"http={st}")
