@@ -16,7 +16,7 @@ const BRAND_ASSETS: Record<BrandLogoVariant, string> = {
 export const BrandLogo: React.FC<BrandLogoProps> = ({
   variant = 'lockup',
   className = '',
-  alt = 'MECHA.ONE',
+  alt = 'MECHA',
 }) => (
   <img
     src={BRAND_ASSETS[variant]}
