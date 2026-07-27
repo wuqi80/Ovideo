@@ -232,6 +232,26 @@ describe('three-stage video script contract', () => {
     expect(aiMocks.aiGenerateVideoScriptFromSegments).not.toHaveBeenCalled();
   });
 
+  it('accepts generated expansion without enforcing exact source coverage', async () => {
+    aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
+      { id: 'expanded', order: 0, sourceText: '孙悟空挥动金箍棒攻入南天门。', estimatedDurationSec: 15, status: 'done' },
+    ]);
+    aiMocks.aiGenerateVideoScriptFromSegments.mockResolvedValue([
+      '分段1',
+      '镜头1-1',
+      '时长（秒）：15',
+      '画面描述：孙悟空挥动金箍棒攻入南天门。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+    ].join('\n'));
+
+    const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '孙悟空大闹天宫');
+
+    expect(result.segments[0].sourceText).toContain('攻入南天门');
+    expect(aiMocks.aiReplanInvalidScriptSegments).not.toHaveBeenCalled();
+    expect(result.content).toContain('攻入南天门');
+  });
+
   it('silently replans an over-limit first-generation segment before publishing progress', async () => {
     aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
       { id: 's1', order: 0, sourceText: '单段原文', estimatedDurationSec: 15, status: 'done' },

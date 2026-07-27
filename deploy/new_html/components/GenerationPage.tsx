@@ -866,6 +866,25 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       if (!keyword) return otherStoryboardImageItems;
       return otherStoryboardImageItems.filter(item => item.searchText.includes(keyword));
   }, [materialPickerFilter, materialPickerSearch, otherStoryboardImageItems]);
+  const materialPickerFilterCounts = useMemo<Record<typeof materialPickerFilter, number>>(() => {
+      const counts = materialPickerItems.reduce(
+          (acc, item) => {
+              acc.all += 1;
+              if (item.isRelevant) acc.shot += 1;
+              acc[item.type] += 1;
+              return acc;
+          },
+          {
+              shot: 0,
+              'other-shot': otherStoryboardImageItems.length,
+              character: 0,
+              scene: 0,
+              prop: 0,
+              all: otherStoryboardImageItems.length,
+          },
+      );
+      return counts;
+  }, [materialPickerItems, otherStoryboardImageItems.length]);
 
   useEffect(() => {
       if (!selectAllAfterLoad || !selectedFile?.storyboard?.items.length) return;
@@ -3599,8 +3618,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
         {showMaterialPicker && (
           <div className="fixed inset-0 z-[140] bg-n900/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowMaterialPicker(false)}>
-            <div className="w-full max-w-5xl max-h-[86vh] bg-n0 border border-n40 rounded-lg shadow-bottom flex flex-col overflow-hidden" onClick={event => event.stopPropagation()}>
-              <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-n40">
+            <div className="w-[min(1024px,calc(100vw-32px))] h-[min(760px,calc(100vh-2rem))] bg-n0 border border-n40 rounded-lg shadow-bottom flex flex-col overflow-hidden" data-testid="material-picker-dialog" onClick={event => event.stopPropagation()}>
+              <div className="shrink-0 flex items-start justify-between gap-4 px-5 py-4 border-b border-n40">
                 <div>
                   <h3 className="text-sm font-bold text-n800 flex items-center gap-2"><Library className="w-4 h-4 text-primary" />项目素材</h3>
                   <p className="mt-1 text-[11px] text-n300">本镜头相关素材排在最前；可任意添加项目素材或其他分镜图片作为当前镜头参考。</p>
@@ -3609,7 +3628,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="px-5 py-3 border-b border-n40 flex flex-wrap items-center gap-2">
+              <div className="shrink-0 px-5 py-3 border-b border-n40 flex flex-wrap items-center gap-2">
                  {([
                    ['shot', '本镜头'],
                    ['other-shot', '其他分镜'],
@@ -3617,21 +3636,22 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                    ['scene', '场景'],
                    ['prop', '道具'],
                    ['all', '全部'],
-                 ] as const).map(([value, label]) => (
-                   <button
-                     key={value}
-                     onClick={() => void handleMaterialPickerFilterChange(value)}
-                     className={`h-8 px-3 inline-flex items-center gap-1.5 text-xs border rounded ${materialPickerFilter === value ? 'bg-primary text-white border-primary' : 'bg-n0 text-n700 border-n40 hover:bg-n20'}`}
-                   >
-                     {value === 'other-shot' && <Clapperboard className="w-3.5 h-3.5" />}
-                     {label}
-                     {value === 'other-shot' && otherStoryboardImageItems.length > 0 && (
+                 ] as const).map(([value, label]) => {
+                   const count = materialPickerFilterCounts[value];
+                   return (
+                     <button
+                       key={value}
+                       onClick={() => void handleMaterialPickerFilterChange(value)}
+                       className={`h-8 px-3 inline-flex items-center gap-1.5 text-xs border rounded ${materialPickerFilter === value ? 'bg-primary text-white border-primary' : 'bg-n0 text-n700 border-n40 hover:bg-n20'}`}
+                     >
+                       {value === 'other-shot' && <Clapperboard className="w-3.5 h-3.5" />}
+                       <span>{label}</span>
                        <span className={`min-w-4 h-4 px-1 inline-flex items-center justify-center rounded text-[9px] ${materialPickerFilter === value ? 'bg-white/20 text-white' : 'bg-n30 text-n500'}`}>
-                         {otherStoryboardImageItems.length}
+                         {count}
                        </span>
-                     )}
-                   </button>
-                 ))}
+                     </button>
+                   );
+                 })}
                 <label className="ml-auto min-w-[220px] h-8 flex items-center gap-2 px-3 border border-n40 rounded bg-n0">
                   <Search className="w-3.5 h-3.5 text-n100" />
                   <input
@@ -3642,7 +3662,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   />
                 </label>
               </div>
-              <div className="flex-1 overflow-y-auto p-5">
+              <div className="flex-1 min-h-0 overflow-y-auto p-5">
                 {isLoadingOtherShotImages && (materialPickerFilter === 'other-shot' || materialPickerFilter === 'all') ? (
                   <div className="h-56 flex flex-col items-center justify-center text-n300">
                     <RefreshCw className="w-6 h-6 mb-3 animate-spin text-primary" />
@@ -3762,7 +3782,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   </div>
                 )}
               </div>
-              <div className="px-5 py-3 border-t border-n40 flex items-center justify-between text-[11px] text-n300">
+              <div className="shrink-0 px-5 py-3 border-t border-n40 flex items-center justify-between gap-4 text-[11px] text-n300">
                 <span>参考图 {references.length}/6；其他分镜图片只建立当前镜头引用，不会修改来源镜头。</span>
                 <button onClick={() => setShowMaterialPicker(false)} className="h-8 px-4 rounded bg-primary text-white hover:bg-primary-hover">完成</button>
               </div>

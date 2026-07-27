@@ -104,10 +104,6 @@ function serializeSplitSegments(segments: ScriptSegment[]): string {
   ].join('\n')).join('\n---\n');
 }
 
-function normalizeCoverageText(value: string): string {
-  return String(value || '').replace(/\s/g, '');
-}
-
 function serializeStageOneSegments(segments: ScriptSegment[]): string {
   return segments.map((segment, index) => [
     `分段${index + 1}`,
@@ -116,7 +112,7 @@ function serializeStageOneSegments(segments: ScriptSegment[]): string {
   ].join('\n')).join('\n---\n');
 }
 
-function assertValidSplitSegments(segments: ScriptSegment[], originalContent: string): void {
+function assertValidSplitSegments(segments: ScriptSegment[]): void {
   if (segments.length === 0) failSplitScriptValidation('第一步未解析出有效剧本分段');
   const durations = segments.map(segment => segment.estimatedDurationSec);
   if (durations.some(duration => duration === null || duration < 4 || duration > 15)) {
@@ -127,10 +123,6 @@ function assertValidSplitSegments(segments: ScriptSegment[], originalContent: st
   const averageDuration = numericDurations.reduce((total, duration) => total + duration, 0) / numericDurations.length;
   if (denseSegmentRatio < 0.3 || averageDuration < 10) {
     failSplitScriptValidation('第一步分段未满足14-15秒占比≥30%且平均时长≥10秒的硬性要求');
-  }
-  const reconstructed = segments.map(segment => segment.sourceText).join('');
-  if (normalizeCoverageText(reconstructed) !== normalizeCoverageText(originalContent)) {
-    failSplitScriptValidation('第一步分段未100%覆盖原文，存在遗漏、重复或改写');
   }
 }
 
@@ -265,7 +257,7 @@ async function splitWithValidation(
   let segments = await aiSplitScriptIntoSegments(model, originalContent, undefined, taskContext);
   for (let attempt = 0; attempt <= MAX_SPLIT_REPLAN_ATTEMPTS; attempt += 1) {
     try {
-      assertValidSplitSegments(segments, originalContent);
+      assertValidSplitSegments(segments);
       return segments;
     } catch (error) {
       if (!(error instanceof SplitScriptValidationError)) throw error;

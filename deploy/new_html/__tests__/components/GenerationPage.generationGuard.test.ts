@@ -80,6 +80,17 @@ describe('GenerationPage other storyboard references', () => {
   });
 });
 
+describe('GenerationPage material picker modal', () => {
+  it('shows a stable count badge on every filter and keeps the dialog size fixed', () => {
+    expect(source).toContain('const materialPickerFilterCounts = useMemo');
+    expect(source).toContain('const count = materialPickerFilterCounts[value];');
+    expect(source).toContain('data-testid="material-picker-dialog"');
+    expect(source).toContain('w-[min(1024px,calc(100vw-32px))] h-[min(760px,calc(100vh-2rem))]');
+    expect(source).toContain('flex-1 min-h-0 overflow-y-auto p-5');
+    expect(source).not.toContain("value === 'other-shot' && otherStoryboardImageItems.length > 0");
+  });
+});
+
 describe('GenerationPage external reference persistence', () => {
   it('keeps current manual references during unrelated updates and saves edits immediately', () => {
     expect(source).toContain('activeReferenceShotIdRef.current');
