@@ -97,6 +97,11 @@ function failSplitScriptValidation(message: string): never {
   throw new SplitScriptValidationError(message);
 }
 
+function shouldEnforceDurationDensity(durations: number[]): boolean {
+  const totalDuration = durations.reduce((total, duration) => total + duration, 0);
+  return durations.length >= 3 && totalDuration >= 30;
+}
+
 function serializeSplitSegments(segments: ScriptSegment[]): string {
   return segments.map(segment => [
     segment.sourceText,
@@ -121,7 +126,7 @@ function assertValidSplitSegments(segments: ScriptSegment[]): void {
   const numericDurations = durations as number[];
   const denseSegmentRatio = numericDurations.filter(duration => duration >= 14).length / numericDurations.length;
   const averageDuration = numericDurations.reduce((total, duration) => total + duration, 0) / numericDurations.length;
-  if (denseSegmentRatio < 0.3 || averageDuration < 10) {
+  if (shouldEnforceDurationDensity(numericDurations) && (denseSegmentRatio < 0.3 || averageDuration < 10)) {
     failSplitScriptValidation('第一步分段未满足14-15秒占比≥30%且平均时长≥10秒的硬性要求');
   }
 }
@@ -177,7 +182,11 @@ export function assertValidVideoScript(
   });
   const denseGroupRatio = groupDurations.filter(duration => duration >= 14).length / groupDurations.length;
   const averageGroupDuration = groupDurations.reduce((total, duration) => total + duration, 0) / groupDurations.length;
-  if (enforceDurationDensity && (denseGroupRatio < 0.3 || averageGroupDuration < 10)) {
+  if (
+    enforceDurationDensity
+    && shouldEnforceDurationDensity(groupDurations)
+    && (denseGroupRatio < 0.3 || averageGroupDuration < 10)
+  ) {
     failVideoScriptValidation('第二步分段未保持14-15秒占比≥30%且平均时长≥10秒的硬性要求');
   }
 }

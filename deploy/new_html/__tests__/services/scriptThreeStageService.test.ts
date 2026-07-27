@@ -42,6 +42,15 @@ const validGroup = [
   `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
 ].join('\n');
 
+const shortSingleGroup = [
+  '分段1',
+  '镜头1-1',
+  '时长（秒）：8',
+  '画面描述：孙悟空立于云海之上，金箍棒横扫天门。',
+  `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+  `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+].join('\n');
+
 describe('three-stage video script contract', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -49,6 +58,10 @@ describe('three-stage video script contract', () => {
 
   it('accepts a valid hierarchical group', () => {
     expect(() => assertValidVideoScript(validGroup)).not.toThrow();
+  });
+
+  it('accepts a valid single short group when the entire source is brief', () => {
+    expect(() => assertValidVideoScript(shortSingleGroup)).not.toThrow();
   });
 
   it('rejects groups over the 15-second limit', () => {
@@ -123,6 +136,37 @@ describe('three-stage video script contract', () => {
       expect(countPromptCharacters(group.stabilityConstraint))
         .toBeGreaterThanOrEqual(MIN_STABILITY_CONSTRAINT_CHARACTERS);
     });
+  });
+
+  it('lets a brief one-line source pass split density and advance through stage two', async () => {
+    aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
+      { id: 'brief', order: 0, sourceText: '孙悟空大闹天宫', estimatedDurationSec: 8, status: 'done' },
+    ]);
+    aiMocks.aiGenerateVideoScriptFromSegments.mockResolvedValue(shortSingleGroup);
+
+    const progress: Array<{ stage: string; completed: number; total: number }> = [];
+    const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '孙悟空大闹天宫', {
+      onProgress: event => progress.push({
+        stage: event.stage,
+        completed: event.completed,
+        total: event.total,
+      }),
+    });
+
+    expect(aiMocks.aiReplanInvalidScriptSegments).not.toHaveBeenCalled();
+    expect(aiMocks.aiReplanInvalidVideoScript).not.toHaveBeenCalled();
+    expect(aiMocks.aiGenerateVideoScriptFromSegments).toHaveBeenCalledTimes(1);
+    expect(result.segments).toHaveLength(1);
+    expect(result.segments[0]).toEqual(expect.objectContaining({
+      sourceText: '孙悟空大闹天宫',
+      estimatedDurationSec: 8,
+      videoScript: expect.stringContaining('时长（秒）：8'),
+    }));
+    expect(result.content).toContain('孙悟空立于云海之上');
+    expect(progress).toEqual(expect.arrayContaining([
+      { stage: 'split', completed: 1, total: 1 },
+      { stage: 'videoScript', completed: 1, total: 1 },
+    ]));
   });
 
   it('keeps valid groups and repairs only the invalid group once', async () => {
