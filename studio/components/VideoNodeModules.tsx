@@ -35,7 +35,7 @@ export const VideoModeSelector: React.FC<VideoModeSelectorProps> = ({ currentMod
                 <button
                    key={item.mode}
                    onClick={(e) => { e.stopPropagation(); handleSelect(item.mode); }}
-                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all text-[10px] font-bold border ${currentMode === item.mode ? 'bg-white text-black border-white shadow-md' : 'bg-black/40 border-white/10 text-slate-400 hover:text-white hover:border-white/30 backdrop-blur-md opacity-70 hover:opacity-100'}`}
+                   className={`studio-node-mode-button flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-all text-[10px] font-bold backdrop-blur-md ${currentMode === item.mode ? 'studio-node-mode-button-active shadow-md' : 'opacity-70 hover:opacity-100'}`}
                    title={item.title}
                 >
                     <item.icon size={12} />
@@ -74,7 +74,7 @@ export const SceneDirectorOverlay: React.FC<SceneDirectorOverlayProps> = ({ visi
     return (
         <div
             ref={timelineRef}
-            className="absolute bottom-0 left-0 w-full h-9 bg-[#0a0a0a]/90 backdrop-blur-xl border-t border-white/10 flex items-center cursor-crosshair z-30 opacity-0 group-hover/media:opacity-100 transition-opacity duration-300"
+            className="studio-node-timeline absolute bottom-0 left-0 w-full h-9 backdrop-blur-xl flex items-center cursor-crosshair z-30 opacity-0 group-hover/media:opacity-100 transition-opacity duration-300"
             onMouseMove={(e) => {
                 if (!timelineRef.current || !videoRef.current) return;
                 const rect = timelineRef.current.getBoundingClientRect();
@@ -92,7 +92,7 @@ export const SceneDirectorOverlay: React.FC<SceneDirectorOverlayProps> = ({ visi
             }}
         >
             {hoverTime !== null && duration > 0 && <div className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 z-10 shadow-[0_0_8px_rgba(34,211,238,0.8)]" style={{ left: `${(hoverTime / duration) * 100}%` }} />}
-            <div className="w-full text-center text-[9px] text-slate-500 font-bold tracking-widest pointer-events-none">Scene Director Timeline</div>
+            <div className="w-full text-center text-[9px] font-bold tracking-widest pointer-events-none">Scene Director Timeline</div>
         </div>
     );
 };
