@@ -61,6 +61,7 @@ FILES=(
   "ARCHITECTURE.md"
   "Agent.md"
   "login.html"
+  db_migration_*.sql
   "admin"
   "static"
   "core"

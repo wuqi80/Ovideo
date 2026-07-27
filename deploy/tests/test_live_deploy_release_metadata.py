@@ -38,6 +38,7 @@ def test_live_deploy_syncs_pipeline_and_preserves_admin_uploaded_workflows():
 def test_live_deploy_syncs_all_regression_tests_and_prunes_remote_stale_tests():
     script = (DEPLOY_DIR / "scripts" / "live_deploy_mvc2.sh").read_text(encoding="utf-8")
 
+    assert "db_migration_*.sql" in script
     assert "scripts/*.py" in script
     assert "tests/*.py" in script
     assert "deploy-tests.bak." in script
