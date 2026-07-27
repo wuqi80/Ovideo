@@ -45,3 +45,14 @@ def test_live_deploy_syncs_all_regression_tests_and_prunes_remote_stale_tests():
     assert "tests backup:" in script
     assert "find '$REMOTE_DIR' -mindepth 1 -maxdepth 1 -type d -name 'tests.bak.*'" in script
     assert "rm -rf '$REMOTE_DIR'/tests" in script
+
+
+def test_live_deploy_uses_unique_remote_temp_artifacts_per_run():
+    script = (DEPLOY_DIR / "scripts" / "live_deploy_mvc2.sh").read_text(encoding="utf-8")
+
+    assert 'DEPLOY_RUN_ID="${DEPLOY_RUN_ID:-$(date +%Y%m%d%H%M%S)-$$}"' in script
+    assert '/tmp/mecha-new_html-src-$DEPLOY_RUN_ID.tgz' in script
+    assert '/tmp/mecha-studio-src-$DEPLOY_RUN_ID.tgz' in script
+    assert '/tmp/mecha-backend-src-$DEPLOY_RUN_ID.tgz' in script
+    assert '/tmp/mecha-release-metadata-$DEPLOY_RUN_ID.json' in script
+    assert 'RELEASE_METADATA_REMOTE_CANDIDATE="/tmp/mecha-release-metadata.json"' not in script
