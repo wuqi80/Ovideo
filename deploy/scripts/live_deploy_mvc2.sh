@@ -3,6 +3,7 @@ set -e
 
 REMOTE="${REMOTE:-root@43.98.197.227}"
 REMOTE_DIR="${REMOTE_DIR:-/home/Administrator/deploy}"
+REMOTE_PARENT_DIR="${REMOTE_PARENT_DIR:-$(dirname "$REMOTE_DIR")}"
 STUDIO_LOCAL_DIR="${STUDIO_LOCAL_DIR:-../studio}"
 STUDIO_REMOTE_DIR="${STUDIO_REMOTE_DIR:-$(dirname "$REMOTE_DIR")/studio}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/google_compute_engine}"
@@ -358,7 +359,7 @@ BACKUP_INFO=$(
     fi
     tests_bak=''
     if [ -d '$REMOTE_DIR'/tests ]; then
-      tests_bak='$REMOTE_DIR'/tests.bak.\$ts
+      tests_bak='$REMOTE_PARENT_DIR'/deploy-tests.bak.\$ts
       cp -a '$REMOTE_DIR'/tests \"\$tests_bak\"
     fi
     printf '%s\n%s\n%s\n%s\n%s\n' \"\$cluster_bak\" \"\$dist_bak\" \"\$studio_dist_bak\" \"\$workflows_bak\" \"\$tests_bak\"
@@ -429,6 +430,7 @@ fi
 if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   mkdir -p '$REMOTE_DIR'
   mkdir -p '$REMOTE_DIR'/workflows
+  find '$REMOTE_DIR' -mindepth 1 -maxdepth 1 -type d -name 'tests.bak.*' -exec rm -rf -- {} +
   rm -rf '$REMOTE_DIR'/tests
   # Overlay versioned workflows without deleting valid templates uploaded from
   # the admin console. The remote backup remains available for rollback.

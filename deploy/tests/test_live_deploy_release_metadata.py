@@ -39,5 +39,7 @@ def test_live_deploy_syncs_all_regression_tests_and_prunes_remote_stale_tests():
     script = (DEPLOY_DIR / "scripts" / "live_deploy_mvc2.sh").read_text(encoding="utf-8")
 
     assert "tests/*.py" in script
+    assert "deploy-tests.bak." in script
     assert "tests backup:" in script
+    assert "find '$REMOTE_DIR' -mindepth 1 -maxdepth 1 -type d -name 'tests.bak.*'" in script
     assert "rm -rf '$REMOTE_DIR'/tests" in script
