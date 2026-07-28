@@ -2025,7 +2025,6 @@ const ApiConfigCard: React.FC<{
     checking: boolean;
     testingConfig: boolean;
     realTestingConfig: boolean;
-    compactInactive?: boolean;
     onCheck: (provider: string, modelName?: string | null) => void;
     onTestConfig: (config: ApiConfig) => void;
     onRealTestConfig: (config: ApiConfig, categoryView?: string) => void;
@@ -2043,7 +2042,6 @@ const ApiConfigCard: React.FC<{
     checking,
     testingConfig,
     realTestingConfig,
-    compactInactive = false,
     onCheck,
     onTestConfig,
     onRealTestConfig,
@@ -2259,21 +2257,6 @@ const ApiConfigCard: React.FC<{
                         </button>
                     </div>
                     <div className="max-h-[calc(86vh-4rem)] overflow-y-auto p-4">
-                    {compactInactive ? (
-                        <div className="mt-2 rounded bg-n20 border border-n40 px-3 py-2 text-[11px] text-n100">
-                            <span className="font-semibold text-n700">已折叠</span>
-                            <span className="ml-2">同一 provider 存在多个 Key，当前只展开生效 Key。</span>
-                            <div className="mt-1 font-mono text-n700 break-all">{formatEndpoint(dbEndpoint || runtimeEndpoint)}</div>
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                                {modelBindings.map(binding => (
-                                    <span key={binding.operation} className="rounded border border-n40 bg-n0 px-1.5 py-0.5 text-n700">
-                                        {binding.label || binding.operation} → <span className="font-mono">{binding.model_name}</span>
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    ) : (
-                        <>
                     <section className="mt-3 border-y border-n40 py-3">
                         <div className="text-[10px] uppercase tracking-wider text-n100">前台操作与模型绑定</div>
                         <div className="mt-2 grid gap-2 md:grid-cols-2">
@@ -2390,8 +2373,8 @@ const ApiConfigCard: React.FC<{
                         </div>
                     )}
 
-                    <details className="mt-2 rounded border border-n40 bg-n20 px-3 py-2 text-[11px]">
-                        <summary className="cursor-pointer select-none font-semibold text-n700">高级测试</summary>
+                    <section className="mt-2 rounded border border-n40 bg-n20 px-3 py-2 text-[11px]">
+                        <div className="font-semibold text-n700">高级测试</div>
                         <div className="mt-2 flex flex-wrap gap-2">
                             <button
                                 type="button"
@@ -2426,7 +2409,7 @@ const ApiConfigCard: React.FC<{
                                 测运行时
                             </button>
                         </div>
-                    </details>
+                    </section>
 
                     {configTest && (
                         <div className={`mt-2 rounded border px-3 py-2 text-[11px] break-words ${configTestClass}`}>
@@ -2470,10 +2453,8 @@ const ApiConfigCard: React.FC<{
                     {meta?.notes && (
                         <div className="mt-2 text-[11px] text-n100 leading-relaxed break-words">{meta.notes}</div>
                     )}
-                    <ProviderOperationPaths meta={meta} runtime={runtime} collapsed />
+                    <ProviderOperationPaths meta={meta} runtime={runtime} />
                     <ProviderCredentialLinks meta={meta} endpoint={runtimeEndpoint || dbEndpoint} />
-                        </>
-                    )}
                     </div>
                 </div>
             </div>
@@ -4310,11 +4291,6 @@ const ApiConfigPanel: React.FC = () => {
                                 <div className="grid gap-3 p-3">
                                     {activeCategoryItems.map(config => {
                                         const provider = normalizeProvider(config.provider);
-                                        const providerConfigs = configsByProvider.get(provider) || [];
-                                        const providerRuntime = runtimeMap.get(provider);
-                                        const activeConfigId = providerRuntime?.db_effective_config_id
-                                            || bestConfigForProvider(providerConfigs, provider, providerRuntime)?.config_id
-                                            || '';
                                         const runtime = runtimeForConfig(config);
                                         const categoryBinding = bindingsForCategory(
                                             apiConfigModelBindings(config, providerMetaMap.get(provider)),
@@ -4336,7 +4312,6 @@ const ApiConfigPanel: React.FC = () => {
                                                 checking={Boolean(checking[providerHealthKey(provider, modelName)])}
                                                 testingConfig={testingAllConfigs || Boolean(testingConfig[config.config_id])}
                                                 realTestingConfig={Boolean(realTestingConfig[config.config_id])}
-                                                compactInactive={providerConfigs.length > 1 && Boolean(activeConfigId) && config.config_id !== activeConfigId}
                                                 onCheck={testProvider}
                                                 onTestConfig={testConfig}
                                                 onRealTestConfig={realTestConfig}

@@ -21,4 +21,17 @@ describe('AdminSettingsPage category-specific model checks', () => {
     expect(source).toContain("min-w-[4.5rem]");
     expect(source).not.toContain('w-36 shrink-0');
   });
+
+  it('shows the complete details for inactive API cards without collapsed modal sections', () => {
+    const cardSource = source.slice(
+      source.indexOf('const ApiConfigCard: React.FC'),
+      source.indexOf('const ProviderQuickCard: React.FC'),
+    );
+
+    expect(cardSource).not.toContain('compactInactive');
+    expect(cardSource).not.toContain('当前只展开生效 Key');
+    expect(cardSource).not.toContain('<summary');
+    expect(cardSource).toContain('<div className="font-semibold text-n700">高级测试</div>');
+    expect(cardSource).toContain('<ProviderOperationPaths meta={meta} runtime={runtime} />');
+  });
 });
