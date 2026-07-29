@@ -62,15 +62,7 @@ export const WorkflowLayout: React.FC = () => {
     <EpisodeProvider>
       <div className="workflow-shell layout-safe flex h-screen min-w-0 flex-col overflow-hidden bg-n0 text-n800">
         <header className="workflow-shell-header flex shrink-0 items-center border-b border-n40 bg-n0">
-          <div className="workflow-shell-brand flex shrink-0 items-center gap-2 border-r border-n40 px-4">
-            <button
-              onClick={() => navigate(`/projects/${projectId}/episodes`)}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-n40 text-n300 transition-colors hover:border-n100 hover:bg-n20 hover:text-n800"
-              title="返回分集管理"
-              aria-label="返回分集管理"
-            >
-              <ArrowLeft size={15} />
-            </button>
+          <div className="workflow-shell-brand flex shrink-0 items-center gap-2 px-4">
             <BrandLogo variant="mark" className="h-7 w-7" />
             <span className="hidden text-sm font-semibold tracking-[0.12em] text-n800 sm:inline">MECHA</span>
           </div>
@@ -78,6 +70,14 @@ export const WorkflowLayout: React.FC = () => {
             className="workflow-shell-nav flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-3 scrollbar-atlas"
             aria-label="流程化制作导航"
           >
+            <button
+              onClick={() => navigate(`/projects/${projectId}/episodes`)}
+              className="mr-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-n40 text-n300 transition-colors hover:border-n100 hover:bg-n20 hover:text-n800"
+              title="返回分集管理"
+              aria-label="返回分集管理"
+            >
+              <ArrowLeft size={15} />
+            </button>
             {NAV_ITEMS.map(item => {
               const Icon = item.icon;
               return (
@@ -100,7 +100,7 @@ export const WorkflowLayout: React.FC = () => {
               );
             })}
           </nav>
-          <div className="workflow-shell-account flex shrink-0 items-center gap-1 border-l border-n40 px-3">
+          <div className="workflow-shell-account flex shrink-0 items-center gap-1 px-3">
             <NavLink
               to={`/projects/${projectId}/ep/${episodeId}/canvas`}
               className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-xs font-medium text-n300 transition-colors hover:bg-t50 hover:text-teal"
@@ -109,7 +109,6 @@ export const WorkflowLayout: React.FC = () => {
             </NavLink>
             {/* 2026-05-20：通知铃铛（统一面板） */}
             <NotificationPanel compact />
-            <AccountMenu compact />
             <button
               type="button"
               onClick={() => navigate('/credits')}
@@ -120,6 +119,7 @@ export const WorkflowLayout: React.FC = () => {
               <Coins className="h-4 w-4 shrink-0 text-warning" />
               <span className="tabular-nums">{availableCredits === null ? '--' : availableCredits.toLocaleString()}</span>
             </button>
+            <AccountMenu compact />
           </div>
         </header>
         <main className="workflow-shell-workspace layout-safe min-h-0 min-w-0 flex-1 overflow-hidden bg-n20">

@@ -45,6 +45,26 @@ describe('WorkflowLayout visual workspace shell', () => {
     expect(source).toContain('className="workflow-shell-workspace');
   });
 
+  it('keeps the top bar continuous without vertical separators', () => {
+    const brandClass = source.match(/className="workflow-shell-brand\s+([^"]+)"/)?.[1] ?? '';
+    const accountClass = source.match(/className="workflow-shell-account\s+([^"]+)"/)?.[1] ?? '';
+
+    expect(brandClass).not.toMatch(/\bborder-r\b/);
+    expect(accountClass).not.toMatch(/\bborder-l\b/);
+  });
+
+  it('keeps the logo leftmost, the back action before script, and the account menu rightmost', () => {
+    const headerStart = source.indexOf('<header className="workflow-shell-header');
+    const headerEnd = source.indexOf('</header>', headerStart);
+    const headerSource = source.slice(headerStart, headerEnd);
+
+    expect(headerSource.indexOf('<BrandLogo')).toBeLessThan(headerSource.indexOf('<nav'));
+    expect(headerSource.indexOf('<nav')).toBeLessThan(headerSource.indexOf('<ArrowLeft'));
+    expect(headerSource.indexOf('<ArrowLeft')).toBeLessThan(headerSource.indexOf('{NAV_ITEMS.map'));
+    expect(headerSource.indexOf('<NotificationPanel compact />')).toBeLessThan(headerSource.indexOf('<Coins'));
+    expect(headerSource.indexOf('<Coins')).toBeLessThan(headerSource.indexOf('<AccountMenu compact />'));
+  });
+
   it('defines isolated white sidebar and gray canvas scroll regions', () => {
     expect(tokenSource).toMatch(/\.workflow-stage-layout\s*\{[\s\S]*?overflow:\s*hidden;/);
     expect(tokenSource).toMatch(/\.workflow-stage-sidebar\s*\{[\s\S]*?background:\s*var\(--n0\);/);
