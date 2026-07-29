@@ -155,7 +155,20 @@ async def main() -> int:
         dashscope_cards = [item for item in creates if item.get("provider") == "dashscope"]
         if len(dashscope_cards) != 1:
             fail(f"Expected one DashScope API card, got {len(dashscope_cards)}")
-        if len(dashscope_cards[0].get("model_bindings") or []) != len(registry.DASHSCOPE_DEFAULT_MODEL_MAP):
+        expected_dashscope_bindings = registry.get_provider_model_binding_options(
+            "dashscope",
+            include_scopes=True,
+        )
+        actual_dashscope_bindings = dashscope_cards[0].get("model_bindings") or []
+        expected_binding_keys = {
+            (item.get("scope"), item.get("operation"))
+            for item in expected_dashscope_bindings
+        }
+        actual_binding_keys = {
+            (item.get("scope"), item.get("operation"))
+            for item in actual_dashscope_bindings
+        }
+        if actual_binding_keys != expected_binding_keys:
             fail(f"DashScope API card did not receive all model bindings: {dashscope_cards[0]}")
         if copied["env_keys_imported"] != 1:
             fail(f"Expected one imported env key, got {copied['env_keys_imported']}")
