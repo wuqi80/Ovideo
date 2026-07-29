@@ -11,6 +11,7 @@ import { SonicStudio } from './components/SonicStudio';
 import { AppNode, NodeType, NodeStatus, Connection, ContextMenuState, Group, Workflow, SmartSequenceItem } from './types';
 import { getGenerationStrategy } from './services/videoStrategies';
 import { useStudioRuntime } from './services/runtime';
+import { STUDIO_IMAGE_MODEL_CONFIGURED, normalizeStudioImageModel } from './services/modelOptions';
 import {
     persistStudioCanvasTheme,
     readStudioCanvasTheme,
@@ -431,7 +432,7 @@ export const App = () => {
       const defaults: any = {
           model: type === NodeType.VIDEO_GENERATOR ? 'Seedance2Fast' :
                  type === NodeType.AUDIO_GENERATOR ? 'minimax-speech-2.6-hd' :
-                 type.includes('IMAGE') ? 'nanobanana' :
+                 type.includes('IMAGE') ? STUDIO_IMAGE_MODEL_CONFIGURED :
                  'gemini',
           generationMode: type === NodeType.VIDEO_GENERATOR ? 'DEFAULT' : undefined, // Initialize as DEFAULT (Off)
           ...safeInitialData
@@ -802,7 +803,7 @@ export const App = () => {
                                try {
                                    const res = await runtime.generateImage(
                                      n.data.prompt!,
-                                     n.data.model || 'nanobanana',
+                                     normalizeStudioImageModel(n.data.model),
                                      inputImages,
                                      {
                                        aspectRatio: n.data.aspectRatio,
@@ -824,7 +825,7 @@ export const App = () => {
                }
               const res = await runtime.generateImage(
                 prompt,
-                node.data.model || 'nanobanana',
+                normalizeStudioImageModel(node.data.model),
                 inputImages,
                 {
                   aspectRatio: node.data.aspectRatio || '16:9',
@@ -865,7 +866,7 @@ export const App = () => {
              inputs.forEach(n => { if (n?.data.image) inputImages.push(n.data.image); });
              const img = node.data.image || inputImages[0];
              if (!img) throw new Error('请先连接或上传一张待编辑图片');
-             const res = await runtime.editImage(img, prompt, node.data.model || 'nanobanana', node.id);
+             const res = await runtime.editImage(img, prompt, normalizeStudioImageModel(node.data.model), node.id);
              handleNodeUpdate(id, { image: res });
           }
           setNodes(p => p.map(n => n.id === id ? { ...n, status: NodeStatus.SUCCESS } : n));

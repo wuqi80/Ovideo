@@ -1,6 +1,7 @@
 import {
     buildComfyUIVideoTaskPayload,
     normalizeVideoMediaRef,
+    submitSeedanceTask,
     submitTask,
 } from '../../services/videoTaskService';
 
@@ -44,6 +45,27 @@ describe('MiniMax submission validation', () => {
         )).rejects.toThrow('1080P 仅支持 6 秒');
 
         expect(fetchSpy).not.toHaveBeenCalled();
+        fetchSpy.mockRestore();
+    });
+});
+
+describe('Seedance model scope submission', () => {
+    it('passes model_scope through to the backend task body', async () => {
+        localStorage.setItem('auth_token', 'test-token');
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(
+            JSON.stringify({ task_id: 'task_seedance_1' }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+        ));
+
+        await submitSeedanceTask({
+            sub_model: 'standard',
+            model_scope: 'studio',
+            prompt: 'make a shot',
+            media_inputs: [],
+        });
+
+        const [, options] = fetchSpy.mock.calls[0];
+        expect(JSON.parse(String(options?.body || '{}')).model_scope).toBe('studio');
         fetchSpy.mockRestore();
     });
 });

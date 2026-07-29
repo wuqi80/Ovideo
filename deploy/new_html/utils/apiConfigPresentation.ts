@@ -2,6 +2,8 @@ export interface ApiConfigBindingLike {
   operation?: string;
   label?: string;
   model_name?: string;
+  scope?: string;
+  scope_label?: string;
 }
 
 export interface ApiConfigCategoryLike {

@@ -159,9 +159,9 @@ export const DubbingPanel = forwardRef<DubbingPanelHandle, DubbingPanelProps>((p
   const generatedCount = clips.filter(c => localAudio[clipKeyFn(c)]?.url || c.audioUrl).length;
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-auto p-4 space-y-4">
+    <div ref={containerRef} className="workflow-stage-canvas workflow-stage-scroll flex-1 overflow-auto p-4 space-y-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-4 sticky top-0 bg-n20/90 backdrop-blur-sm z-10 pb-3 border-b border-n40">
+      <div className="workflow-stage-toolbar sticky top-0 z-10 -mx-4 -mt-4 flex items-center gap-4 border-b border-n40 bg-n0 px-4 py-2.5">
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-n0 border border-n40">
           <Clock size={14} className="text-primary" />
           <span className="text-xs text-n100">总时长</span>

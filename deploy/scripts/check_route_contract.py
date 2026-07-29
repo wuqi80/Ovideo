@@ -2549,8 +2549,8 @@ def check_video_capabilities_routes_extracted(root: Path) -> int:
     service_text = video_capability_service_path.read_text(encoding="utf-8")
     required_snippets = [
         (router_text, "from services.video_capability_service import get_video_capabilities", video_capabilities_path),
-        (router_text, "return await get_video_capabilities()", video_capabilities_path),
-        (service_text, 'resolve_seedance_model_name("standard")', video_capability_service_path),
+        (router_text, "return await get_video_capabilities(scope)", video_capabilities_path),
+        (service_text, 'resolve_seedance_model_name("standard", usage_scope=model_scope)', video_capability_service_path),
         (service_text, "list_agent_nodes()", video_capability_service_path),
     ]
     forbidden_snippets = [
@@ -3489,15 +3489,15 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "services" / "ai_proxy_gemini_image_service.py",
-            'config = resolve_provider("gemini-image", explicit_model)',
+            'resolve_provider("gemini-image", explicit_model, usage_scope=usage_scope)',
         ),
         (
             root / "services" / "ai_proxy_deepseek_service.py",
-            "def _deepseek_chat_url(model: Optional[str])",
+            "def _deepseek_chat_url(",
         ),
         (
             root / "services" / "ai_proxy_doubao_image_service.py",
-            'config = resolve_provider("doubao", model)',
+            'resolve_provider("doubao", model, usage_scope=usage_scope)',
         ),
         (
             root / "tests" / "test_api_provider_runtime_model_env.py",
@@ -3873,11 +3873,11 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "external_api" / "video" / "seedance.py",
-            "resolve_seedance_model_name(normalized_sub_model)",
+            "resolve_seedance_model_name(normalized_sub_model, usage_scope=usage_scope)",
         ),
         (
             root / "services" / "video_capability_service.py",
-            "resolve_seedance_model_name(\"standard\")",
+            "resolve_seedance_model_name(\"standard\", usage_scope=model_scope)",
         ),
         (
             root / "tests" / "test_api_provider_runtime_model_env.py",
@@ -3949,7 +3949,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         ),
         (
             root / "services" / "api_config_runtime_loader.py",
-            "dashscope_sub_model_for_model(model_name)",
+            "dashscope_sub_model_for_model(binding_model_name)",
         ),
         (
             root / "services" / "api_config_runtime_loader.py",
@@ -4258,7 +4258,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "_post_chat_completion_result(",
         "build_chat_payload(",
         "resolve_ai_proxy_provider(",
-        'config = resolve_provider("gemini-text", model)',
+        'config = resolve_provider("gemini-text", model, usage_scope=usage_scope)',
         'label="Gemini text",',
     ):
         if snippet not in ai_proxy_gemini_text_text:
@@ -4269,7 +4269,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "def parse_gemini_image_response(",
         "async def _post_gemini_image_generation(",
         "async def generate_gemini_images(",
-        'config = resolve_provider("gemini-image", explicit_model)',
+        'resolve_provider("gemini-image", explicit_model, usage_scope=usage_scope)',
         "normalize_gemini_image_model(requested_model)",
         "_post_json_request_async(",
         "parse_gemini_image_response(result)",
@@ -4291,7 +4291,7 @@ def check_api_provider_runtime_model_contract(root: Path) -> int:
         "def parse_doubao_image_response(",
         "async def _post_doubao_image_generation(",
         "async def generate_doubao_images(",
-        'config = resolve_provider("doubao", model)',
+        'resolve_provider("doubao", model, usage_scope=usage_scope)',
         "parse_openai_image_response(result)",
         "_post_json_request_async(",
         "config.url_for()",
@@ -5063,7 +5063,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_workflow_service, "import { apiJson } from './httpClient';"),
         (video_workflow_service, "return apiJson<any>(`/api/episodes/${episodeId}/video-segments`"),
         (video_workflow_service, "return apiJson<any>(`/api/video-segments/${segmentId}`"),
-        (video_workflow_service, "videoCapabilitiesPromise = apiJson<VideoCapabilityManifest>("),
+        (video_workflow_service, "promise = apiJson<VideoCapabilityManifest>("),
         (video_workflow_service, "return apiJson<any>(`/api/episodes/${episodeId}/video-takes`"),
         (video_workflow_service, "return apiJson<any>(`/api/episodes/${episodeId}/compose`"),
         (video_workflow_service, "return apiJson<any>(`/api/episodes/${episodeId}/compose/status`"),

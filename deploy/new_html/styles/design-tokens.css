@@ -285,9 +285,86 @@ code,
   min-height: 0;
 }
 
+/* 流程化制作：固定顶栏 + 左右独立工作区 */
+.workflow-shell {
+  height: 100dvh;
+  background: var(--n20);
+}
+
+.workflow-shell-header {
+  height: 60px;
+  min-height: 60px;
+  box-shadow: 0 1px 0 rgba(8, 8, 8, 0.02);
+  position: relative;
+  z-index: 40;
+}
+
+.workflow-shell-brand,
+.workflow-shell-account {
+  height: 100%;
+}
+
+.workflow-shell-nav {
+  height: 100%;
+  overscroll-behavior-x: contain;
+}
+
+.workflow-shell-workspace,
+.workflow-stage-layout,
+.workflow-stage-sidebar,
+.workflow-stage-canvas {
+  min-width: 0;
+  min-height: 0;
+}
+
+.workflow-stage-layout {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--n20);
+}
+
+.workflow-stage-sidebar {
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-color: var(--n40);
+  background: var(--n0);
+}
+
+.workflow-stage-canvas {
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: var(--n20);
+}
+
+.workflow-stage-toolbar {
+  min-height: 52px;
+  flex: 0 0 auto;
+  border-color: var(--n40);
+  background: var(--n0);
+}
+
+.workflow-stage-scroll {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 @media (max-width: 1180px) {
   .workspace-view-frame {
     min-width: 1180px;
+  }
+}
+
+@media (max-width: 992px) {
+  .workflow-shell-brand {
+    padding-inline: 10px;
+  }
+
+  .workflow-shell-account {
+    padding-inline: 8px;
   }
 }
 

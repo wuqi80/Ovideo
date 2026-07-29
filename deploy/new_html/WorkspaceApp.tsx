@@ -4151,7 +4151,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             <div style={{ display: currentView === AppView.Editor ? 'contents' : 'none' }}>
               {scriptWorkspaceMode === 'writing' ? (
                 <>
-                <div className="relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40">
+                <div className="workflow-stage-sidebar relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40">
                     <React.Suspense fallback={<LegacyColumnFallback label="files" />}>
                     <FileColumn 
                     files={files} 
@@ -4178,7 +4178,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     </React.Suspense>
                 </div>
 
-                <div className="relative flex h-full min-w-0 flex-1 overflow-hidden">
+                <div className="workflow-stage-canvas relative flex h-full min-w-0 flex-1 overflow-hidden">
                     <React.Suspense fallback={<LegacyColumnFallback label="conversation" />}>
                     <ScriptConversationPane
                         selectedFile={selectedFile}
@@ -4262,10 +4262,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                 </>
               ) : (
                 <div
-                  className="relative flex h-full min-h-0 w-full min-w-0 overflow-hidden bg-n0"
+                  className="workflow-stage-layout relative flex h-full min-h-0 w-full min-w-0 overflow-hidden"
                   data-testid="quick-script-workspace"
                 >
-                  <div className="relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40">
+                  <div className="workflow-stage-sidebar relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40">
                     <React.Suspense fallback={<LegacyColumnFallback label="files" />}>
                       <FileColumn
                         files={files}
@@ -4292,8 +4292,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     </React.Suspense>
                   </div>
 
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                    <header className="flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
+                  <div className="workflow-stage-canvas flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                    <header className="workflow-stage-toolbar flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
                       <FileText className="h-4 w-4 flex-shrink-0 text-primary" />
                       <div className="truncate text-sm font-semibold text-n800">
                         {selectedFile?.name || '请选择剧本任务'}
@@ -4524,7 +4524,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   }
 
   return (
-    <div className={`layout-safe flex flex-col ${hideHeader ? 'h-full' : 'h-screen'} bg-n0 text-n800 font-sans`}>
+    <div className={`layout-safe flex flex-col ${hideHeader ? 'h-full' : 'h-screen'} overflow-hidden bg-n20 text-n800 font-sans`}>
       {!hideHeader && (
         <Header 
           visibleColumns={visibleColumns} 
@@ -4543,8 +4543,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         />
       )}
       
-      <main className={`workspace-main flex-1 ${currentView === AppView.Admin ? 'flex' : 'flex'} relative`} ref={containerRef}>
-         <div className="workspace-view-frame w-full h-full flex">
+      <main className={`workspace-main relative flex-1 overflow-hidden ${currentView === AppView.Admin ? 'flex' : 'flex'}`} ref={containerRef}>
+         <div className="workspace-view-frame flex h-full w-full overflow-hidden">
          {renderAllViews()}
          </div>
       </main>

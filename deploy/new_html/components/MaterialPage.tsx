@@ -821,13 +821,13 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   };
 
   return (
-    <div className="layout-safe responsive-split flex-1 flex h-full w-full bg-n20 overflow-hidden relative">
+    <div className="workflow-stage-layout layout-safe responsive-split flex-1 flex h-full w-full bg-n20 overflow-hidden relative">
       {/* Resizable Sidebar: Shot List */}
       <div
         style={{ width: sidebarWidth }}
-        className="responsive-pane flex-shrink-0 border-r border-n40 bg-n0 flex flex-col relative"
+        className="workflow-stage-sidebar responsive-pane flex-shrink-0 border-r border-n40 bg-n0 flex flex-col relative"
       >
-        <div className="h-[52px] px-4 border-b border-n40 bg-n0 flex items-center justify-between flex-shrink-0">
+        <div className="workflow-stage-toolbar h-[52px] px-4 border-b border-n40 bg-n0 flex items-center justify-between flex-shrink-0">
           <h2 className="text-sm font-bold text-n700 uppercase tracking-wider flex items-center gap-2">
               <LayoutDashboard className="w-4 h-4 text-primary" />
               分镜列表
@@ -865,7 +865,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             <span className="text-xs text-n100 truncate max-w-[100px]">{selectedFile?.name || '未命名'}</span>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
+        <div className="workflow-stage-scroll flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
           {/* 🆕 显示追加来源文件列表 */}
           {(() => {
             const appendedSources = new Map<string, string>();
@@ -1005,9 +1005,9 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
       </div>
 
       {/* Right Content: Workspace */}
-      <div className="responsive-pane layout-safe flex-1 flex flex-col bg-n20 overflow-hidden relative">
+      <div className="workflow-stage-canvas responsive-pane layout-safe flex-1 flex flex-col bg-n20 overflow-hidden relative">
          {/* Top Bar */}
-         <div className="h-[52px] border-b border-n40 bg-n0 px-6 flex items-center justify-between flex-shrink-0 shadow-sm z-20">
+         <div className="workflow-stage-toolbar h-[52px] border-b border-n40 bg-n0 px-6 flex items-center justify-between flex-shrink-0 shadow-sm z-20">
              <div className="flex items-center gap-4">
                 <h3 className="font-bold text-n700 text-sm flex items-center gap-2">
                     <span className="w-1.5 h-4 bg-primary rounded-full"></span>

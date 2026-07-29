@@ -113,7 +113,7 @@ export const FinalProductPage: React.FC = () => {
   const rest = finals.slice(1).concat(others);
 
   return (
-    <div className="layout-safe flex-1 overflow-auto p-6 bg-n20">
+    <div className="layout-safe workflow-stage-canvas workflow-stage-scroll p-6">
       <header className="responsive-toolbar mb-5 flex items-center gap-2">
         <Clapperboard className="w-5 h-5 text-primary" />
         <h1 className="text-lg font-semibold text-n800">成品</h1>

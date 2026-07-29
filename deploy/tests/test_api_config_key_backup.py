@@ -45,6 +45,8 @@ async def test_export_api_config_keys_decrypts_key_and_omits_encrypted_field(mon
             "operation": "default",
             "label": "default",
             "model_name": "gemini-3.1-flash-tts-preview",
+            "scope": "workflow",
+            "scope_label": "流程化制作",
         }
     ]
     assert "api_key_encrypted" not in exported

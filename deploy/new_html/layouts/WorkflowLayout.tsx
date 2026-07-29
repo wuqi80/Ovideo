@@ -7,6 +7,7 @@ import { TaskBadge } from '../components/TaskBadge';
 import { NotificationPanel } from '../components/NotificationPanel';
 import { getCreditBalance } from '../services/creditService';
 import AccountMenu from '../components/AccountMenu';
+import BrandLogo from '../components/BrandLogo';
 
 // 2026-05-20 (Task System Overhaul M1)：每个 nav item 关联 sourcePage，用于 per-page TaskBadge。
 // 视频反推已整合到剧本对话工具栏；素材库保留为独立工作流阶段。
@@ -59,16 +60,24 @@ export const WorkflowLayout: React.FC = () => {
 
   return (
     <EpisodeProvider>
-      <div className="layout-safe flex flex-col h-screen min-w-0 overflow-hidden bg-n0 text-n800">
-        <nav className="responsive-toolbar flex items-center gap-1 px-4 border-b border-n40 bg-n0 shadow-card shrink-0 min-w-0 overflow-hidden">
-          <button
-            onClick={() => navigate(`/projects/${projectId}/episodes`)}
-            className="shrink-0 flex items-center gap-1.5 pr-4 mr-1 py-1.5 px-3 text-sm font-medium text-n300 hover:text-n800 rounded hover:bg-n20 transition-colors border-r border-n40"
-            title="返回分集管理"
+      <div className="workflow-shell layout-safe flex h-screen min-w-0 flex-col overflow-hidden bg-n0 text-n800">
+        <header className="workflow-shell-header flex shrink-0 items-center border-b border-n40 bg-n0">
+          <div className="workflow-shell-brand flex shrink-0 items-center gap-2 border-r border-n40 px-4">
+            <button
+              onClick={() => navigate(`/projects/${projectId}/episodes`)}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-n40 text-n300 transition-colors hover:border-n100 hover:bg-n20 hover:text-n800"
+              title="返回分集管理"
+              aria-label="返回分集管理"
+            >
+              <ArrowLeft size={15} />
+            </button>
+            <BrandLogo variant="mark" className="h-7 w-7" />
+            <span className="hidden text-sm font-semibold tracking-[0.12em] text-n800 sm:inline">MECHA</span>
+          </div>
+          <nav
+            className="workflow-shell-nav flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-3 scrollbar-atlas"
+            aria-label="流程化制作导航"
           >
-            <ArrowLeft size={15} /> 分集
-          </button>
-          <div className="flex flex-1 min-w-0 items-center gap-0.5 overflow-x-auto scrollbar-atlas">
             {NAV_ITEMS.map(item => {
               const Icon = item.icon;
               return (
@@ -76,7 +85,7 @@ export const WorkflowLayout: React.FC = () => {
                   key={item.path}
                   to={item.path}
                   className={({ isActive }) =>
-                    `relative shrink-0 flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium transition-colors ${
+                    `relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded px-3 text-sm font-medium transition-colors ${
                       isActive
                         ? 'text-primary bg-primary-light'
                         : 'text-n300 hover:text-n800 hover:bg-n20'
@@ -90,18 +99,16 @@ export const WorkflowLayout: React.FC = () => {
                 </NavLink>
               );
             })}
-          </div>
-          <NavLink
-            to={`/projects/${projectId}/ep/${episodeId}/canvas`}
-            className="shrink-0 ml-2 flex items-center gap-1.5 px-3 py-2 rounded text-sm font-medium text-n300 hover:text-teal hover:bg-t50 transition-colors"
-          >
-            <Brush size={15} /> 自由创作
-          </NavLink>
-          {/* 2026-05-20：通知铃铛（统一面板） */}
-          <div className="ml-1">
+          </nav>
+          <div className="workflow-shell-account flex shrink-0 items-center gap-1 border-l border-n40 px-3">
+            <NavLink
+              to={`/projects/${projectId}/ep/${episodeId}/canvas`}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-xs font-medium text-n300 transition-colors hover:bg-t50 hover:text-teal"
+            >
+              <Brush size={14} /> 自由创作
+            </NavLink>
+            {/* 2026-05-20：通知铃铛（统一面板） */}
             <NotificationPanel compact />
-          </div>
-          <div className="ml-1 flex shrink-0 items-center gap-1 border-l border-n40 pl-2">
             <AccountMenu compact />
             <button
               type="button"
@@ -114,8 +121,8 @@ export const WorkflowLayout: React.FC = () => {
               <span className="tabular-nums">{availableCredits === null ? '--' : availableCredits.toLocaleString()}</span>
             </button>
           </div>
-        </nav>
-        <main className="layout-safe flex-1 min-h-0 min-w-0 overflow-auto scrollbar-atlas">
+        </header>
+        <main className="workflow-shell-workspace layout-safe min-h-0 min-w-0 flex-1 overflow-hidden bg-n20">
           <Outlet />
         </main>
       </div>

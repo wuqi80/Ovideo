@@ -134,11 +134,11 @@ export const VoiceSidebar: React.FC<VoiceSidebarProps> = ({
   const [drawerRole, setDrawerRole] = useState<string | null>(null);
 
   return (
-    <div className="w-52 shrink-0 flex flex-col border-r border-n40 bg-n20">
-      <h3 className="text-xs font-bold text-n100 uppercase tracking-wider px-3 pt-4 pb-2">
+    <div className="workflow-stage-sidebar w-52 shrink-0 flex flex-col border-r border-n40 bg-n0">
+      <h3 className="workflow-stage-toolbar flex items-center px-3 text-xs font-bold text-n100 uppercase tracking-wider border-b border-n40">
         角色声音
       </h3>
-      <div className="flex-1 overflow-auto space-y-1 px-2">
+      <div className="workflow-stage-scroll flex-1 overflow-auto space-y-1 px-2 py-2">
         {roles.map(role => {
           const thumb = getAssetThumb(role.asset);
           return (

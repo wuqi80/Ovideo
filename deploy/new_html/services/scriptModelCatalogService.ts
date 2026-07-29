@@ -9,6 +9,7 @@ export interface ScriptModelOption {
   provider: string;
   runtime: string;
   failoverActive: boolean;
+  modelScope?: string;
 }
 
 interface TextModelCatalogResponse {
@@ -21,6 +22,7 @@ interface TextModelCatalogResponse {
     provider?: string;
     runtime_model_name?: string;
     failover_active?: boolean;
+    model_scope?: string;
   }>;
 }
 
@@ -92,13 +94,16 @@ export function normalizeScriptModelOptions(
       provider: String(row.provider || fallback.provider).trim(),
       runtime: String(row.runtime_model_name || fallback.runtime).trim(),
       failoverActive: Boolean(row.failover_active),
+      modelScope: String(row.model_scope || '').trim() || undefined,
     };
   });
 }
 
-export async function fetchScriptModelOptions(): Promise<readonly ScriptModelOption[]> {
+export async function fetchScriptModelOptions(scope: string = 'workflow'): Promise<readonly ScriptModelOption[]> {
+  const normalizedScope = String(scope || 'workflow').trim().toLowerCase() || 'workflow';
+  const query = normalizedScope === 'workflow' ? '' : `?scope=${encodeURIComponent(normalizedScope)}`;
   const response = await apiJson<TextModelCatalogResponse>(
-    '/api/ai/text-models',
+    `/api/ai/text-models${query}`,
     undefined,
     '文本模型配置',
   );

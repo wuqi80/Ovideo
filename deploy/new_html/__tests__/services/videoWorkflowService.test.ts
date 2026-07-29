@@ -100,6 +100,33 @@ describe('video workflow service', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps workflow and studio capability caches separated', async () => {
+    const { fetchVideoCapabilities } = await loadService();
+    mockFetch
+      .mockResolvedValueOnce(mockJsonResponse({
+        seedance_omni: false,
+        comfyui_available: false,
+        manifest_version: 'workflow-v1',
+        model_scope: 'workflow',
+        models: [],
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({
+        seedance_omni: true,
+        comfyui_available: false,
+        manifest_version: 'studio-v1',
+        model_scope: 'studio',
+        models: [],
+      }));
+
+    await expect(fetchVideoCapabilities()).resolves.toMatchObject({ manifest_version: 'workflow-v1' });
+    await expect(fetchVideoCapabilities('studio')).resolves.toMatchObject({ manifest_version: 'studio-v1', model_scope: 'studio' });
+    await expect(fetchVideoCapabilities('studio')).resolves.toMatchObject({ manifest_version: 'studio-v1' });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/video/capabilities');
+    expect(mockFetch.mock.calls[1][0]).toBe('/api/video/capabilities?scope=studio');
+  });
+
   it('loads video takes for the final compose picker', async () => {
     const { getVideoTakes } = await loadService();
     mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, shots: [] }));

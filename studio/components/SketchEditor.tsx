@@ -6,6 +6,11 @@ import {
     Activity, Wand2, Loader2, ChevronDown, Upload, Layers
 } from 'lucide-react';
 import { useStudioRuntime } from '../services/runtime';
+import {
+    STUDIO_IMAGE_MODEL_CONFIGURED,
+    STUDIO_IMAGE_MODEL_POSE_LABEL,
+    STUDIO_IMAGE_MODEL_SHORT_LABEL,
+} from '../services/modelOptions';
 
 interface SketchEditorProps {
     onClose: () => void;
@@ -211,7 +216,7 @@ export const SketchEditor: React.FC<SketchEditorProps> = ({ onClose, onGenerate 
                 Style: Minimalist stick figure or outline drawing, clear lines, no shading.
                 `;
 
-                const res = await runtime.generateImage(posePrompt, 'nanobanana', [], { aspectRatio: '16:9', count: 1 });
+                const res = await runtime.generateImage(posePrompt, STUDIO_IMAGE_MODEL_CONFIGURED, [], { aspectRatio: '16:9', count: 1 });
                 const imgUrl = res[0];
 
                 // 2. Draw Result onto Canvas
@@ -262,7 +267,7 @@ export const SketchEditor: React.FC<SketchEditorProps> = ({ onClose, onGenerate 
                     // Image (Sketch-to-Image)
                     const res = await runtime.generateImage(
                         prompt,
-                        'nanobanana',
+                        STUDIO_IMAGE_MODEL_CONFIGURED,
                         [compositeBase64],
                         { aspectRatio: '16:9', count: 1 }
                     );
@@ -429,7 +434,7 @@ export const SketchEditor: React.FC<SketchEditorProps> = ({ onClose, onGenerate 
                 {/* Settings & Generate */}
                 <div className="flex items-center gap-3">
                     <div className="h-11 px-4 flex items-center gap-2 bg-black/30 border border-white/10 rounded-xl text-xs text-slate-300 font-medium">
-                        <span>{activeMode === 'pose' ? 'NanoBanana 姿态' : activeMode === 'video' ? 'Seedance 2.0 Fast' : 'NanoBanana'}</span>
+                        <span>{activeMode === 'pose' ? STUDIO_IMAGE_MODEL_POSE_LABEL : activeMode === 'video' ? 'Seedance 2.0 Fast' : STUDIO_IMAGE_MODEL_SHORT_LABEL}</span>
                         <ChevronDown size={12} className="text-slate-500" />
                     </div>
 

@@ -22,12 +22,14 @@ import type {
   StudioSnapshot,
   StudioVideoOptions,
 } from '../services/runtime';
+import { STUDIO_IMAGE_MODEL_CONFIGURED, normalizeStudioImageModel, studioImageModelOverride } from '../services/modelOptions';
 import type { SmartSequenceItem, VideoGenerationMode } from '../types';
 
 const BOARD_NAME = 'MECHA Studio 自由创作';
 const STATE_NODE_TYPE = 'studio_state';
 const STUDIO_SCHEMA_VERSION = 1;
 const DEFAULT_VOICE_ID = 'male-qn-qingse';
+const STUDIO_MODEL_SCOPE = 'studio';
 
 type JsonRecord = Record<string, any>;
 
@@ -290,6 +292,7 @@ export function createDramaRuntime(input: {
             sourcePage: 'canvas',
             entityType: 'episode',
             entityId: episodeId,
+            modelScope: STUDIO_MODEL_SCOPE,
             suppressNotification: true,
           });
           if (!result.trim()) throw new Error('模型未返回内容');
@@ -313,15 +316,17 @@ export function createDramaRuntime(input: {
 
   const generateImage = async (
     prompt: string,
-    _model: string,
+    model: string,
     references: string[] = [],
     options: StudioImageOptions = {},
   ): Promise<string[]> => {
     const count = Math.max(1, Math.min(4, Math.round(options.count || 1)));
+    const normalizedModel = normalizeStudioImageModel(model);
+    const modelOverride = studioImageModelOverride(normalizedModel);
     const taskId = makeTaskId('image');
     const creditParams = {
       image_count: count,
-      model: 'gemini-2.5-flash-image',
+      model: modelOverride || STUDIO_IMAGE_MODEL_CONFIGURED,
       resolution: options.resolution || '2K',
       aspect_ratio: options.aspectRatio || '1:1',
     };
@@ -335,7 +340,8 @@ export function createDramaRuntime(input: {
           const generatedUrls: string[] = [];
           for (let index = 0; index < count; index += 1) {
             const results = await generateGeminiImageVariant({
-              model: 'gemini-2.5-flash-image',
+              ...(modelOverride ? { model: modelOverride } : {}),
+              modelScope: STUDIO_MODEL_SCOPE,
               prompt,
               references: normalizedReferences,
               aspectRatio: options.aspectRatio || '1:1',
@@ -371,7 +377,7 @@ export function createDramaRuntime(input: {
     model: string,
     options: StudioVideoOptions = {},
   ) => {
-    const capabilities = await fetchVideoCapabilities();
+    const capabilities = await fetchVideoCapabilities(STUDIO_MODEL_SCOPE);
     const wantedModelKey = model === 'Seedance2' ? 'Seedance2' : 'Seedance2Fast';
     const wantedSubModel = wantedModelKey === 'Seedance2' ? 'standard' : 'fast';
     const seedanceCapability = capabilities.models.find(item => item.key === wantedModelKey);
@@ -407,6 +413,7 @@ export function createDramaRuntime(input: {
     for (let index = 0; index < count; index += 1) {
       const submitted = await submitSeedanceTask({
         sub_model: wantedSubModel,
+        model_scope: STUDIO_MODEL_SCOPE,
         prompt,
         media_inputs: mediaInputs,
         resolution: '720p',
@@ -478,7 +485,8 @@ export function createDramaRuntime(input: {
           const result = await minimaxTTSSync({
             text,
             voice_id: options.voiceId || DEFAULT_VOICE_ID,
-            model: 'speech-2.6-hd',
+            model: 'speech-hd',
+            model_scope: STUDIO_MODEL_SCOPE,
             emotion: options.emotion,
             entity_type: 'episode',
             entity_id: episodeId,

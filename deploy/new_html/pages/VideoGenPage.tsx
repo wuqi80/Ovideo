@@ -589,7 +589,7 @@ export const VideoGenPage: React.FC = () => {
   }
 
   return (
-    <div className="layout-safe h-full flex flex-col bg-n20">
+    <div className="layout-safe workflow-stage-layout flex-col">
       {/* Import panel */}
       {workspaceChecked && showImportPanel && !importDone && (
         <div className="shrink-0 border-b border-n40 bg-n0 px-4 py-3">
@@ -663,7 +663,7 @@ export const VideoGenPage: React.FC = () => {
       )}
 
       {/* Navigation + 同步最新分镜图 */}
-      <div className="responsive-toolbar shrink-0 flex justify-between items-center px-4 py-1.5 border-b border-n40">
+      <div className="responsive-toolbar workflow-stage-toolbar shrink-0 flex justify-between items-center px-4 py-1.5">
         <div className="toolbar-group">
           {hasWorkspaceImport && (
             <button
@@ -702,7 +702,7 @@ export const VideoGenPage: React.FC = () => {
       </div>
 
       {/* Embedded old VideoPage */}
-      <div className="layout-safe flex-1 min-h-0 overflow-auto">
+      <div className="layout-safe workflow-stage-canvas">
         <React.Suspense fallback={<WorkflowChunkFallback label="加载视频工作台..." />}>
           {workspaceScopeReady ? <VideoPage
             isActive={true}

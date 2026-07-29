@@ -4371,7 +4371,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     }
     
     return (
-        <div className="layout-safe flex-1 flex flex-col bg-n20 text-n800 overflow-hidden">
+        <div className="layout-safe workflow-stage-layout flex-col text-n800">
             {/* Toast消息 */}
             {toast && (
                 <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 bg-n0 border border-n40 text-n800 rounded-lg shadow-bottom">
@@ -4380,7 +4380,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             )}
             
             {/* 工具栏 - 固定52px高度 */}
-            <div className="responsive-toolbar flex-shrink-0 px-4 border-b border-n40 bg-n30 flex items-center justify-between">
+            <div className="responsive-toolbar workflow-stage-toolbar flex-shrink-0 px-4 flex items-center justify-between">
                 <div className="toolbar-group">
                     {/* 上传按钮组 */}
                     <button
@@ -4505,14 +4505,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             {viewMode === 'list' ? (
                 /* 列表视图 - 双栏 */
                 <div 
-                    className="responsive-split flex-1 flex overflow-hidden"
+                    className="responsive-split workflow-stage-layout"
                     onDrop={handleDrop}
                     onDragOver={(e) => e.preventDefault()}
                 >
                     {/* 左侧列表 - 隐藏滚动条 */}
                     <div 
                         ref={leftPanelRef}
-                        className="responsive-pane w-1/2 p-4 overflow-y-auto border-r border-n40 scrollbar-hide"
+                        className="responsive-pane workflow-stage-sidebar workflow-stage-scroll w-1/2 p-4 scrollbar-hide"
                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                     >
                         {sortedTaskGroups.length === 0 ? (
@@ -4530,7 +4530,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {/* 右侧列表 - 显示滚动条 */}
                     <div 
                         ref={rightPanelRef}
-                        className="responsive-pane w-1/2 p-4 overflow-y-auto scrollbar-thin"
+                        className="responsive-pane workflow-stage-canvas workflow-stage-scroll w-1/2 p-4 scrollbar-thin"
                     >
                         {sortedTaskGroups.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-n100">
@@ -4548,14 +4548,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             ) : (
                 /* 卡片视图 - 双栏同步滚动 */
                 <div 
-                    className="responsive-split flex-1 flex overflow-hidden"
+                    className="responsive-split workflow-stage-layout"
                     onDrop={handleDrop}
                     onDragOver={(e) => e.preventDefault()}
                 >
                     {/* 左侧：分镜板 - 隐藏滚动条 */}
                     <div 
                         ref={leftPanelRef}
-                        className="responsive-pane w-1/2 p-4 overflow-y-auto border-r border-n40 scrollbar-hide"
+                        className="responsive-pane workflow-stage-sidebar workflow-stage-scroll w-1/2 p-4 scrollbar-hide"
                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                     >
                         {sortedTaskGroups.length === 0 ? (
@@ -4584,7 +4584,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {/* 右侧：结果队列 - 显示滚动条 */}
                     <div 
                         ref={rightPanelRef}
-                        className="responsive-pane w-1/2 p-4 overflow-y-auto scrollbar-thin"
+                        className="responsive-pane workflow-stage-canvas workflow-stage-scroll w-1/2 p-4 scrollbar-thin"
                     >
                         {sortedTaskGroups.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-n100">

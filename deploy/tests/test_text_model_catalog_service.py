@@ -7,15 +7,17 @@ from services import text_model_catalog_service
 
 @pytest.mark.asyncio
 async def test_catalog_keeps_stable_operations_and_reports_effective_runtime_models(monkeypatch):
-    async def fake_resolve_ai_proxy_provider(provider, model=None):
+    async def fake_resolve_ai_proxy_provider(provider, model=None, usage_scope="workflow"):
         assert provider == "gemini-text"
         assert model is None
+        assert usage_scope == "studio"
         return (
             SimpleNamespace(provider="deepseek", model_name="fallback-v4"),
             {"active": True},
         )
 
-    def fake_resolve_provider(provider, operation):
+    def fake_resolve_provider(provider, operation, usage_scope="workflow"):
+        assert usage_scope == "studio"
         if provider == "minimax":
             assert operation == "minimax-m3"
             return SimpleNamespace(provider="minimax", model_name="MiniMax-M3-plan")
@@ -39,7 +41,7 @@ async def test_catalog_keeps_stable_operations_and_reports_effective_runtime_mod
         fake_resolve_provider,
     )
 
-    models = await text_model_catalog_service.build_text_model_catalog()
+    models = await text_model_catalog_service.build_text_model_catalog("studio")
 
     assert [item["value"] for item in models] == [
         "minimax-m3",
@@ -62,4 +64,5 @@ async def test_catalog_keeps_stable_operations_and_reports_effective_runtime_mod
     assert models[0]["provider"] == "minimax"
     assert models[1]["provider"] == "deepseek"
     assert models[1]["failover_active"] is True
+    assert {item["model_scope"] for item in models} == {"studio"}
     assert all("api_key" not in item and "endpoint" not in item for item in models)

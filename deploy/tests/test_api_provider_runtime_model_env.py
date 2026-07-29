@@ -27,6 +27,7 @@ from services.api_provider_registry import (
     DOUBAO_IMAGE_LEGACY_MODEL,
     MINIMAX_DEFAULT_VIDEO_MODEL,
     MINIMAX_M3_MODEL,
+    MINIMAX_TTS_HD_MODEL,
     SORA2_DEFAULT_VIDEO_MODEL,
     VEO_DEFAULT_VIDEO_MODEL,
     get_deepseek_operation_model_env_key,
@@ -35,6 +36,7 @@ from services.api_provider_registry import (
     get_model_env_key,
     get_minimax_operation_model_env_key,
     get_provider_env_key,
+    get_scoped_model_env_key,
     get_seedance_sub_model_env_key,
     dashscope_vidu_reference_sub_model,
     dashscope_vidu_startend_sub_model,
@@ -51,6 +53,7 @@ from services.api_provider_runtime import (
     resolve_dashscope_default_model_name,
     resolve_dashscope_model_name,
     resolve_provider,
+    resolve_seedance_model_name,
 )
 def test_resolve_provider_uses_runtime_model_env(monkeypatch):
     env_key = get_provider_env_key("gemini-text")
@@ -178,6 +181,30 @@ def test_deepseek_frontend_operations_resolve_to_bound_v4_models(monkeypatch):
     assert chat.source["model"] == chat_env
 
 
+def test_deepseek_frontend_operations_resolve_scoped_studio_model_env(monkeypatch):
+    env_key = get_provider_env_key("deepseek")
+    assert env_key
+    chat_env = get_deepseek_operation_model_env_key("deepseek-chat")
+    chat_studio_env = get_scoped_model_env_key(chat_env, "studio")
+
+    monkeypatch.setenv(env_key, "shared-deepseek-key")
+    monkeypatch.setenv(chat_env, "deepseek-workflow-chat")
+    monkeypatch.setenv(chat_studio_env, "deepseek-studio-chat")
+
+    workflow = resolve_provider("deepseek", "deepseek-chat")
+    studio = resolve_provider("deepseek", "deepseek-chat", usage_scope="studio")
+
+    assert workflow.model_name == "deepseek-workflow-chat"
+    assert studio.model_name == "deepseek-studio-chat"
+    assert studio.model_env == chat_studio_env
+    assert studio.source["model_scope"] == "studio"
+
+    monkeypatch.delenv(chat_studio_env)
+    studio_fallback = resolve_provider("deepseek", "deepseek-chat", usage_scope="studio")
+    assert studio_fallback.model_name == "deepseek-workflow-chat"
+    assert studio_fallback.model_env == chat_env
+
+
 def test_minimax_text_operation_resolves_m3_without_using_video_primary(monkeypatch):
     env_key = get_provider_env_key("minimax")
     assert env_key
@@ -199,6 +226,36 @@ def test_minimax_text_operation_resolves_m3_without_using_video_primary(monkeypa
 
     monkeypatch.delenv(m3_env)
     assert resolve_provider("minimax", "minimax-m3").model_name == MINIMAX_M3_MODEL
+
+
+def test_minimax_speech_operation_resolves_scoped_runtime_model_env(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    speech_env = get_minimax_operation_model_env_key("speech-hd")
+    speech_studio_env = get_scoped_model_env_key(speech_env, "studio")
+
+    monkeypatch.setenv(env_key, "shared-minimax-key")
+    monkeypatch.setenv(speech_env, MINIMAX_TTS_HD_MODEL)
+    monkeypatch.setenv(speech_studio_env, "speech-studio-hd")
+
+    assert resolve_provider("minimax", "speech-hd").model_name == MINIMAX_TTS_HD_MODEL
+    studio = resolve_provider("minimax", "speech-hd", usage_scope="studio")
+    assert studio.model_name == "speech-studio-hd"
+    assert studio.model_env == speech_studio_env
+
+
+def test_seedance_sub_models_resolve_scoped_runtime_model_env(monkeypatch):
+    env_key = get_provider_env_key("seedance")
+    assert env_key
+    standard_env = get_seedance_sub_model_env_key("standard")
+    standard_studio_env = get_scoped_model_env_key(standard_env, "studio")
+
+    monkeypatch.setenv(env_key, "seedance-key")
+    monkeypatch.setenv(standard_env, "doubao-seedance-2-0-260128")
+    monkeypatch.setenv(standard_studio_env, "doubao-seedance-2-0-studio")
+
+    assert resolve_seedance_model_name("standard") == "doubao-seedance-2-0-260128"
+    assert resolve_seedance_model_name("standard", usage_scope="studio") == "doubao-seedance-2-0-studio"
 
 
 class _ImageResponse:
@@ -1507,8 +1564,9 @@ async def test_gemini_text_stream_resolver_preserves_provider_failover(monkeypat
     monkeypatch.setenv(endpoint_env, "https://fallback.example.test/v1")
     fallback_config = resolve_provider("deepseek", "deepseek-chat")
 
-    async def fake_resolve(provider, model=None):
+    async def fake_resolve(provider, model=None, usage_scope=None):
         assert provider == "gemini-text"
+        assert usage_scope is None
         return fallback_config, {
             "active": True,
             "requested_provider": "gemini-text",

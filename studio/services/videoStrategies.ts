@@ -1,6 +1,7 @@
 import type { AppNode, VideoGenerationMode } from '../types';
 import type { StudioRuntime } from './runtime';
 import { extractLastFrame, urlToBase64 } from './mediaUtils';
+import { STUDIO_IMAGE_MODEL_CONFIGURED } from './modelOptions';
 
 export interface StrategyResult {
   finalPrompt: string;
@@ -70,7 +71,7 @@ export async function getGenerationStrategy(
     }
     const [restored] = await runtime.generateImage(
       `保持原图构图、人物、机位与动作不变，仅修复清晰度和细节。补充要求：${prompt}`,
-      'nanobanana',
+      STUDIO_IMAGE_MODEL_CONFIGURED,
       [source],
       {
         aspectRatio: node.data.aspectRatio || '16:9',

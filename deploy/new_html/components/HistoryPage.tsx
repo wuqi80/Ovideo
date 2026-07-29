@@ -243,9 +243,9 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
   const meta = (file: EntityFile) => file.metadata as { prompt?: string; model?: string } | undefined;
 
   return (
-    <div className="flex flex-col h-full bg-n20">
+    <div className="workflow-stage-layout flex-col">
       {/* 头部 - 固定52px高度 */}
-      <div className="h-[52px] px-4 bg-n0 border-b border-n40 flex items-center justify-between flex-shrink-0">
+      <div className="workflow-stage-toolbar px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <History className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-bold text-n700 uppercase tracking-wider">生成历史</h2>
@@ -295,7 +295,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
       </div>
 
       {/* 内容区 */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="workflow-stage-canvas workflow-stage-scroll p-6">
         {activeTasks.length > 0 && (
           <div className="mb-4 p-3 bg-b50 border border-b75 rounded-lg">
             <h4 className="text-xs font-bold text-b400 mb-2 flex items-center gap-1">

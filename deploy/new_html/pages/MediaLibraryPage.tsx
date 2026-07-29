@@ -323,9 +323,9 @@ export const MediaLibraryPage: React.FC = () => {
   };
 
   return (
-    <div className="layout-safe flex flex-col h-screen bg-n0 text-n800">
+    <div className="layout-safe workflow-stage-layout flex-col text-n800">
       {/* 顶部工具栏 */}
-      <div className="responsive-toolbar flex items-center gap-3 px-4 py-3 border-b border-n40 bg-n0">
+      <div className="responsive-toolbar workflow-stage-toolbar flex items-center gap-3 px-4 py-3">
         <button
           onClick={() => navigate(`/projects/${projectId}/episodes`)}
           className="text-sm text-n300 hover:text-n800"
@@ -450,9 +450,9 @@ export const MediaLibraryPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="responsive-split flex flex-1 overflow-hidden">
+      <div className="responsive-split workflow-stage-layout">
         {/* 左侧分类 + 文件夹 */}
-        <aside className="responsive-pane w-56 border-r border-n40 bg-n0 p-2 flex flex-col gap-1 overflow-y-auto">
+        <aside className="responsive-pane workflow-stage-sidebar workflow-stage-scroll w-56 p-2 flex flex-col gap-1">
           {CATEGORIES.map(c => (
             <button
               key={c.key}
@@ -546,7 +546,7 @@ export const MediaLibraryPage: React.FC = () => {
         </aside>
 
         {/* 主区 */}
-        <main className="responsive-pane flex-1 overflow-auto p-4">
+        <main className="responsive-pane workflow-stage-canvas workflow-stage-scroll p-4">
           {error && (
             <div className="mb-3 p-2 text-xs text-danger bg-r50 border border-r75 rounded">
               {error}
@@ -595,7 +595,7 @@ export const MediaLibraryPage: React.FC = () => {
 
         {/* 右侧详情 */}
         {selected && (
-          <aside className="responsive-pane media-detail-pane border-l border-n40 bg-n0 overflow-auto">
+          <aside className="responsive-pane media-detail-pane workflow-stage-sidebar workflow-stage-scroll border-l border-r-0">
             <MediaDetailPanel
               item={selected}
               onClose={() => setSelectedId(null)}

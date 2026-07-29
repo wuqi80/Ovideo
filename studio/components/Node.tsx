@@ -5,6 +5,7 @@ import { RefreshCw, Play, Image as ImageIcon, Video as VideoIcon, Type, AlertCir
 import { VideoModeSelector, SceneDirectorOverlay } from './VideoNodeModules';
 import React, { memo, useRef, useState, useEffect, useCallback } from 'react';
 import { useStudioRuntime } from '../services/runtime';
+import { STUDIO_IMAGE_MODEL_OPTIONS, normalizeStudioImageModel } from '../services/modelOptions';
 
 // ... (keep constants and helper functions: arePropsEqual, safePlay, safePause, InputThumbnails, AudioVisualizer) ...
 
@@ -588,8 +589,9 @@ const NodeComponent: React.FC<NodeProps> = ({
      } else if (node.type === NodeType.AUDIO_GENERATOR) {
          models = [{l: 'MiniMax Speech 2.6 HD', v: 'minimax-speech-2.6-hd'}];
      } else {
-        models = [{l: '化神 · NanoBanana', v: 'nanobanana'}];
+        models = [...STUDIO_IMAGE_MODEL_OPTIONS];
      }
+     const selectedModel = node.type.includes('IMAGE') ? normalizeStudioImageModel(node.data.model) : node.data.model;
 
      return (
         <div className={`absolute top-full left-1/2 -translate-x-1/2 w-[98%] pt-2 z-50 flex flex-col items-center justify-start transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${isOpen ? `opacity-100 translate-y-0 scale-100` : 'opacity-0 translate-y-[-10px] scale-95 pointer-events-none'}`}>
@@ -604,8 +606,8 @@ const NodeComponent: React.FC<NodeProps> = ({
                 <div className="flex items-center justify-between px-2 pb-1 pt-1 relative z-20">
                     <div className="flex items-center gap-2">
                          <div className="relative group/model">
-                             <div className="studio-node-control-trigger flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[10px] font-bold"><span>{models.find(m => m.v === node.data.model)?.l || 'AI Model'}</span><ChevronDown size={10} /></div>
-                             <div className="absolute bottom-full left-0 pb-2 w-40 opacity-0 translate-y-2 pointer-events-none group-hover/model:opacity-100 group-hover/model:translate-y-0 group-hover/model:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{models.map(m => (<div key={m.v} onClick={() => onUpdate(node.id, { model: m.v })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${node.data.model === m.v ? 'studio-node-menu-item-active' : ''}`}>{m.l}</div>))}</div></div>
+                             <div className="studio-node-control-trigger flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[10px] font-bold"><span>{models.find(m => m.v === selectedModel)?.l || 'AI Model'}</span><ChevronDown size={10} /></div>
+                             <div className="absolute bottom-full left-0 pb-2 w-40 opacity-0 translate-y-2 pointer-events-none group-hover/model:opacity-100 group-hover/model:translate-y-0 group-hover/model:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{models.map(m => (<div key={m.v} onClick={() => onUpdate(node.id, { model: m.v })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${selectedModel === m.v ? 'studio-node-menu-item-active' : ''}`}>{m.l}</div>))}</div></div>
                          </div>
                          {node.type !== NodeType.VIDEO_ANALYZER && node.type !== NodeType.AUDIO_GENERATOR && (<div className="relative group/ratio"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[10px] font-bold"><Scaling size={12} /><span>{node.data.aspectRatio || '16:9'}</span></div><div className="absolute bottom-full left-0 pb-2 w-20 opacity-0 translate-y-2 pointer-events-none group-hover/ratio:opacity-100 group-hover/ratio:translate-y-0 group-hover/ratio:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('VIDEO') ? VIDEO_ASPECT_RATIOS : IMAGE_ASPECT_RATIOS).map(r => (<div key={r} onClick={() => handleAspectRatioSelect(r)} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${node.data.aspectRatio === r ? 'studio-node-menu-item-active' : ''}`}>{r}</div>))}</div></div></div>)}
                          {(node.type.includes('IMAGE') || node.type === NodeType.VIDEO_GENERATOR) && (<div className="relative group/resolution"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[10px] font-bold"><Monitor size={12} /><span>{node.data.resolution || (node.type.includes('IMAGE') ? '1k' : '720p')}</span></div><div className="absolute bottom-full left-0 pb-2 w-20 opacity-0 translate-y-2 pointer-events-none group-hover/resolution:opacity-100 group-hover/resolution:translate-y-0 group-hover/resolution:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('IMAGE') ? IMAGE_RESOLUTIONS : VIDEO_RESOLUTIONS).map(r => (<div key={r} onClick={() => onUpdate(node.id, { resolution: r })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${node.data.resolution === r ? 'studio-node-menu-item-active' : ''}`}>{r}</div>))}</div></div></div>)}

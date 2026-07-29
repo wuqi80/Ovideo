@@ -403,8 +403,13 @@ async def generate_doubao_images(
     sequential: str,
     count: int,
     model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
 ) -> List[str]:
-    config = resolve_provider("doubao", model)
+    config = (
+        resolve_provider("doubao", model, usage_scope=usage_scope)
+        if usage_scope is not None
+        else resolve_provider("doubao", model)
+    )
     resolved_model = normalize_doubao_image_model_for_endpoint(
         config.model_name or model or DOUBAO_IMAGE_DEFAULT_MODEL,
         config.endpoint,

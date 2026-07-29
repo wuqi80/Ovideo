@@ -8,15 +8,16 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
     monkeypatch.setattr(
         video_capability_service,
         "resolve_seedance_model_name",
-        lambda sub_model: "doubao-seedance-2-0-260128",
+        lambda sub_model, usage_scope="workflow": "doubao-seedance-2-0-260128",
     )
     monkeypatch.setattr(video_capability_service, "list_agent_nodes", fake_list_agent_nodes)
 
-    result = await video_capability_service.get_video_capabilities()
+    result = await video_capability_service.get_video_capabilities("studio")
 
     assert result["seedance_omni"] is True
     assert result["comfyui_available"] is True
     assert result["manifest_version"]
+    assert result["model_scope"] == "studio"
     minimax = next(model for model in result["models"] if model["key"] == "MINI")
     assert minimax["parameter_rules"]["normalization_policy"] == "reject"
     assert minimax["parameter_rules"]["valid_combinations"] == [
@@ -28,7 +29,7 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
 
 
 async def test_video_capabilities_degrade_safely(monkeypatch):
-    def broken_seedance_model(_sub_model: str) -> str:
+    def broken_seedance_model(_sub_model: str, usage_scope="workflow") -> str:
         raise RuntimeError("runtime unavailable")
 
     async def broken_list_agent_nodes():

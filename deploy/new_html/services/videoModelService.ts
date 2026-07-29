@@ -74,6 +74,7 @@ export interface SeedanceMediaInput {
 
 export interface SeedanceParams {
   sub_model: 'standard' | 'fast';
+  model_scope?: string;
   prompt: string;
   media_inputs: SeedanceMediaInput[];
   resolution?: '480p' | '720p' | '1080p';

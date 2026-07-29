@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, MutableMapping, Optional
 
+from services.api_provider_runtime import resolve_minimax_model_name
+
 
 SaveGeneratedFile = Callable[..., Awaitable[dict[str, Any]]]
 CreateMediaLibraryItem = Callable[..., Awaitable[Any]]
@@ -111,10 +113,14 @@ async def attach_local_generated_audio_file(
 
 
 def _build_minimax_tts_kwargs(data: Any) -> dict[str, Any]:
+    resolved_model, _model_env = resolve_minimax_model_name(
+        getattr(data, "model", None),
+        usage_scope=getattr(data, "model_scope", None) or "workflow",
+    )
     kwargs = {
         "text": data.text,
         "voice_id": data.voice_id,
-        "model": data.model,
+        "model": resolved_model or data.model,
         "speed": data.speed,
         "pitch": data.pitch,
     }

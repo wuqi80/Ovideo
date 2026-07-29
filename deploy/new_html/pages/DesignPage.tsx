@@ -865,8 +865,8 @@ export const DesignPage: React.FC = () => {
   const tabLabel = tab === 'character' ? '人物' : tab === 'scene' ? '场景' : '道具';
 
   return (
-    <div className="h-full min-h-0 bg-n20 text-n800 flex flex-col overflow-hidden">
-      <header className="shrink-0 min-h-[52px] bg-n0 border-b border-n40 flex items-stretch">
+    <div className="workflow-stage-layout h-full min-h-0 bg-n20 text-n800 flex flex-col overflow-hidden">
+      <header className="workflow-stage-toolbar shrink-0 min-h-[52px] bg-n0 border-b border-n40 flex items-stretch">
         <div className="w-80 shrink-0 px-4 py-2 border-r border-n40 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <Grid3X3 size={16} className="text-primary shrink-0" />
@@ -968,8 +968,8 @@ export const DesignPage: React.FC = () => {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
-        <aside className="w-full lg:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-n40 bg-n20 p-4 lg:overflow-y-auto custom-scrollbar">
+      <div className="workflow-stage-layout flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+        <aside className="workflow-stage-sidebar workflow-stage-scroll w-full lg:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-n40 bg-n0 p-4 lg:overflow-y-auto custom-scrollbar">
           <div className="bg-n0 rounded-md p-5 border border-n40 shadow-card">
             <div className="flex items-center gap-2 mb-4"><Plus size={18} className="text-primary" /><span className="font-semibold text-sm">新建{tabLabel}</span></div>
             <label className="block text-xs text-n100 mb-1.5">名称</label>
@@ -986,7 +986,7 @@ export const DesignPage: React.FC = () => {
           </div>
         </aside>
 
-        <section className="flex-1 min-w-0 p-4 lg:overflow-y-auto custom-scrollbar">
+        <section className="workflow-stage-canvas workflow-stage-scroll flex-1 min-w-0 p-4 lg:overflow-y-auto custom-scrollbar">
           {isLoading ? (
             <div className="flex items-center justify-center gap-3 py-16 text-n100 text-sm"><Loader size={20} className="animate-spin" /> 加载资产...</div>
           ) : filtered.length === 0 ? (

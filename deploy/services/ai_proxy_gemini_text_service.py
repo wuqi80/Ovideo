@@ -30,8 +30,15 @@ def _ensure_gemini_stream_config(config: Any) -> Any:
     return config
 
 
-async def resolve_gemini_stream_config(model: Optional[str] = None) -> Any:
-    config, _failover = await resolve_ai_proxy_provider("gemini-text", model)
+async def resolve_gemini_stream_config(
+    model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
+) -> Any:
+    config, _failover = await resolve_ai_proxy_provider(
+        "gemini-text",
+        model,
+        usage_scope=usage_scope,
+    )
     return _ensure_gemini_stream_config(config)
 
 
@@ -41,6 +48,7 @@ def stream_gemini_text(
     system_prompt: Optional[str] = None,
     temperature: float = 1.0,
     model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
     config: Optional[Any] = None,
     on_complete: Optional[Callable[[str], None]] = None,
     on_error: Optional[Callable[[str], None]] = None,
@@ -48,7 +56,7 @@ def stream_gemini_text(
     """Stream an OpenAI-compatible Gemini text response to the shared SSE client."""
     try:
         stream_config = _ensure_gemini_stream_config(
-            config or resolve_provider("gemini-text", model)
+            config or resolve_provider("gemini-text", model, usage_scope=usage_scope)
         )
         resolved_model = stream_config.model_name or model or "gemini-2.5-flash"
         payload = build_chat_payload(
@@ -149,10 +157,12 @@ async def generate_gemini_text_result(
     system_prompt: Optional[str] = None,
     temperature: float = 1.0,
     model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
 ) -> TextGenerationResult:
     config, failover = await resolve_ai_proxy_provider(
         "gemini-text",
         model,
+        usage_scope=usage_scope,
     )
     payload = build_chat_payload(
         model=config.model_name or model or "gemini-2.5-flash",
@@ -177,6 +187,7 @@ async def generate_gemini_chat_result(
     messages: List[Dict[str, Any]],
     temperature: float = 1.0,
     model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
     allow_failover: bool = True,
     label: str = "Gemini chat",
 ) -> TextGenerationResult:
@@ -184,9 +195,10 @@ async def generate_gemini_chat_result(
         config, failover = await resolve_ai_proxy_provider(
             "gemini-text",
             model,
+            usage_scope=usage_scope,
         )
     else:
-        config = resolve_provider("gemini-text", model)
+        config = resolve_provider("gemini-text", model, usage_scope=usage_scope)
         failover = {
             "active": False,
             "requested_provider": "gemini-text",
@@ -211,13 +223,14 @@ async def generate_gemini_text(
     system_prompt: Optional[str] = None,
     temperature: float = 1.0,
     model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
 ) -> str:
     result = await generate_gemini_text_result(
         prompt=prompt,
         system_prompt=system_prompt,
         temperature=temperature,
         model=model,
+        usage_scope=usage_scope,
     )
     return result.content
-
 

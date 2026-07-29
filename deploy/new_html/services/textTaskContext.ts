@@ -7,6 +7,7 @@ export interface TextTaskContext {
   sourceItemId?: string;
   entityType?: string;
   entityId?: string;
+  modelScope?: string;
   suppressNotification?: boolean;
 }
 
@@ -22,6 +23,7 @@ export function toTextTaskPayload(context?: TextTaskContext): Record<string, str
     ['source_item_id', context.sourceItemId],
     ['entity_type', context.entityType],
     ['entity_id', context.entityId],
+    ['model_scope', context.modelScope],
     ['suppress_notification', context.suppressNotification],
   ];
 

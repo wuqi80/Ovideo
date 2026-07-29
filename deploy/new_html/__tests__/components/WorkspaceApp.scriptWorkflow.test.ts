@@ -122,7 +122,7 @@ describe('WorkspaceApp script workflow persistence', () => {
 
   it('keeps the file rail fixed when switching between writing and quick mode', () => {
     expect(source).toContain('data-testid="quick-script-workspace"');
-    expect(source).toContain('className="relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40"');
-    expect(source).toContain('className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"');
+    expect(source).toContain('className="workflow-stage-sidebar relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40"');
+    expect(source).toContain('className="workflow-stage-canvas flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"');
   });
 });

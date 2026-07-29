@@ -546,7 +546,7 @@ export const StoryboardGenPage: React.FC = () => {
   }
 
   return (
-    <div className="layout-safe flex flex-col h-full">
+    <div className="layout-safe workflow-stage-layout flex-col">
       {durationWarnings.length > 0 && (
         <div className="shrink-0 px-4 py-2 bg-n30 border-b border-n40 text-warning text-sm flex items-center gap-2">
           <span>⚠ {durationWarnings.length} 个镜头的音频时长超过设计时长</span>

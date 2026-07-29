@@ -37,10 +37,15 @@ def test_deepseek_legacy_reasoner_card_is_completed_with_chat_binding():
         ],
     )
 
-    assert [(item["operation"], item["model_name"]) for item in bindings] == [
-        ("deepseek-reasoner", "deepseek-v4-pro"),
-        ("deepseek-chat", "deepseek-v4-flash"),
-    ]
+    assert {
+        (item["scope"], item["operation"], item["model_name"])
+        for item in bindings
+    } == {
+        ("workflow", "deepseek-reasoner", "deepseek-v4-pro"),
+        ("workflow", "deepseek-chat", "deepseek-v4-flash"),
+        ("studio", "deepseek-reasoner", "deepseek-v4-pro"),
+        ("studio", "deepseek-chat", "deepseek-v4-flash"),
+    }
 
 
 @pytest.mark.asyncio
@@ -51,6 +56,8 @@ async def test_one_enabled_deepseek_card_projects_all_bound_models(monkeypatch):
         "DEEPSEEK_API_KEY",
         "DEEPSEEK_MODEL_REASONER",
         "DEEPSEEK_MODEL_CHAT",
+        "DEEPSEEK_MODEL_REASONER_STUDIO",
+        "DEEPSEEK_MODEL_CHAT_STUDIO",
     ):
         monkeypatch.delenv(env_key, raising=False)
         monkeypatch.setitem(loader._BASE_API_ENV_VALUES, env_key, None)
@@ -91,6 +98,8 @@ async def test_one_enabled_deepseek_card_projects_all_bound_models(monkeypatch):
     assert loader.os.environ["DEEPSEEK_API_KEY"] == "key-1"
     assert loader.os.environ["DEEPSEEK_MODEL_REASONER"] == "deepseek-v4-pro"
     assert loader.os.environ["DEEPSEEK_MODEL_CHAT"] == "deepseek-v4-flash"
+    assert loader.os.environ["DEEPSEEK_MODEL_REASONER_STUDIO"] == "deepseek-v4-pro"
+    assert loader.os.environ["DEEPSEEK_MODEL_CHAT_STUDIO"] == "deepseek-v4-flash"
 
 
 def test_seedance_binding_options_are_explicit():
@@ -477,10 +486,15 @@ async def test_create_agent_plan_card_persists_plan_route_and_models(monkeypatch
     assert captured["endpoint"] == (
         "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
     )
-    assert [item["model_name"] for item in captured["model_bindings"]] == [
-        "doubao-seedance-1.5-pro",
-        "doubao-seedance-1.5-pro",
-    ]
+    assert {
+        (item["scope"], item["operation"], item["model_name"])
+        for item in captured["model_bindings"]
+    } == {
+        ("workflow", "standard", "doubao-seedance-1.5-pro"),
+        ("workflow", "fast", "doubao-seedance-1.5-pro"),
+        ("studio", "standard", "doubao-seedance-1.5-pro"),
+        ("studio", "fast", "doubao-seedance-1.5-pro"),
+    }
 
 
 @pytest.mark.asyncio
@@ -605,7 +619,12 @@ async def test_repair_absorbs_keyless_model_placeholders_into_real_card(monkeypa
     assert result["deleted_placeholder_config_ids"] == ["fast-placeholder"]
     assert [row["config_id"] for row in rows] == ["plan-card"]
     assert rows[0]["endpoint"] == "https://ark.cn-beijing.volces.com/api/plan/"
-    assert rows[0]["model_bindings"] == [
-        {"operation": "standard", "label": "飞升 (Seedance 2.0)", "model_name": "doubao-seedance-1.5-pro"},
-        {"operation": "fast", "label": "渡劫 (Seedance 2.0 Fast)", "model_name": "doubao-seedance-1.5-pro"},
-    ]
+    assert {
+        (item["scope"], item["operation"], item["model_name"])
+        for item in rows[0]["model_bindings"]
+    } == {
+        ("workflow", "standard", "doubao-seedance-1.5-pro"),
+        ("workflow", "fast", "doubao-seedance-1.5-pro"),
+        ("studio", "standard", "doubao-seedance-1.5-pro"),
+        ("studio", "fast", "doubao-seedance-1.5-pro"),
+    }

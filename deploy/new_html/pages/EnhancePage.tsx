@@ -896,12 +896,12 @@ export const EnhancePage: React.FC = () => {
   ]);
 
   return (
-    <div className="layout-safe flex flex-col h-full bg-n20 text-n800 overflow-hidden">
+    <div className="layout-safe workflow-stage-layout flex-col text-n800">
       {/* Top section: preview + settings */}
-      <div className="responsive-split flex-1 flex min-h-0 overflow-hidden">
+      <div className="responsive-split workflow-stage-layout lg:flex-row-reverse">
         {/* Preview area */}
-        <div className="responsive-pane flex-1 flex flex-col min-w-0">
-          <div className="responsive-toolbar px-4 border-b border-n40 flex items-center justify-between bg-n0 backdrop-blur-sm shrink-0">
+        <div className="responsive-pane workflow-stage-canvas">
+          <div className="responsive-toolbar workflow-stage-toolbar px-4 flex items-center justify-between">
             <div className="toolbar-group">
               <Wand2 size={16} className="text-primary" />
               <h2 className="text-sm font-semibold">视频美化</h2>
@@ -1003,11 +1003,11 @@ export const EnhancePage: React.FC = () => {
         </div>
 
         {/* Right settings panel */}
-        <div className="responsive-pane w-72 border-l border-n40 bg-n0 flex flex-col shrink-0">
-          <div className="h-12 px-4 border-b border-n40 flex items-center shrink-0">
+        <div className="responsive-pane workflow-stage-sidebar w-72 lg:border-r lg:border-l-0 flex flex-col shrink-0">
+          <div className="workflow-stage-toolbar px-4 flex items-center">
             <h2 className="text-sm font-semibold">片段美化选项</h2>
           </div>
-          <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+          <div className="workflow-stage-scroll flex-1 p-4 space-y-4">
             {selectedClip && selectedClip.type === 'video' ? (
               <>
                 <div className="text-[11px] text-n100 truncate">

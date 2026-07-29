@@ -159,8 +159,16 @@ class SeedanceClient:
         if not self.api_key:
             logger.warning("SEEDANCE_API_KEY and ARK_API_KEY are both missing")
 
-    def _refresh_runtime_config(self, model_name: Optional[str] = None) -> None:
-        config = resolve_provider("seedance", model_name)
+    def _refresh_runtime_config(
+        self,
+        model_name: Optional[str] = None,
+        usage_scope: Optional[str] = None,
+    ) -> None:
+        config = (
+            resolve_provider("seedance", model_name, usage_scope=usage_scope)
+            if usage_scope is not None
+            else resolve_provider("seedance", model_name)
+        )
         self._runtime_config = config
         self.api_key = self._explicit_api_key or config.api_key
         self.base_url = config.endpoint.rstrip("/")
@@ -187,11 +195,16 @@ class SeedanceClient:
         generate_audio: bool = True,
         camera_fixed: bool = False,
         tools: Optional[List[Dict[str, Any]]] = None,
+        usage_scope: Optional[str] = None,
     ) -> str:
         """Create a Seedance generation task and return the provider task id."""
         normalized_sub_model = normalize_seedance_sub_model(sub_model)
-        model_name = resolve_seedance_model_name(normalized_sub_model)
-        self._refresh_runtime_config(model_name)
+        model_name = (
+            resolve_seedance_model_name(normalized_sub_model, usage_scope=usage_scope)
+            if usage_scope is not None
+            else resolve_seedance_model_name(normalized_sub_model)
+        )
+        self._refresh_runtime_config(model_name, usage_scope=usage_scope)
         if _is_agent_plan_endpoint(self.base_url):
             if model_name != SEEDANCE_AGENT_PLAN_MODEL:
                 logger.info(

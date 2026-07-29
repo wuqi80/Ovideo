@@ -30,6 +30,7 @@ describe('geminiProxyService task context', () => {
       episodeId: 'ep_1',
       sourcePage: 'script',
       sourceItemId: 'script_1',
+      modelScope: 'studio',
     })).resolves.toBe('ok');
 
     const request = apiJson.mock.calls[0][1];
@@ -40,6 +41,7 @@ describe('geminiProxyService task context', () => {
       episode_id: 'ep_1',
       source_page: 'script',
       source_item_id: 'script_1',
+      model_scope: 'studio',
       model: 'gemini-model',
     });
   });

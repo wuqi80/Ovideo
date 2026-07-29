@@ -103,6 +103,7 @@ export async function minimaxDeleteVoice(voiceId: string, voiceType = 'voice_clo
 
 export async function minimaxTTS(data: {
     text: string; voice_id: string; model?: string;
+    model_scope?: string;
     speed?: number; pitch?: number; emotion?: string;
     entity_type?: string; entity_id?: string; file_role?: string; project_id?: string; episode_id?: string;
     bind_to_character_voice_id?: string;
@@ -118,6 +119,7 @@ export async function minimaxTTSSync(data: {
     text: string;
     voice_id: string;
     model?: string;
+    model_scope?: string;
     speed?: number;
     pitch?: number;
     emotion?: string;

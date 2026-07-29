@@ -93,7 +93,7 @@ def test_doubao_exposes_one_image_operation_binding() -> None:
 
 
 def test_doubao_legacy_model_binding_is_migrated_to_generate_operation() -> None:
-    assert normalize_model_bindings(
+    bindings = normalize_model_bindings(
         "doubao",
         [
             {
@@ -102,13 +102,15 @@ def test_doubao_legacy_model_binding_is_migrated_to_generate_operation() -> None
                 "model_name": DOUBAO_IMAGE_PAYG_MODEL,
             }
         ],
-    ) == [
-        {
-            "operation": "generate",
-            "label": "筑基境界",
-            "model_name": DOUBAO_IMAGE_PAYG_MODEL,
-        }
-    ]
+    )
+
+    assert {
+        (item["scope"], item["operation"], item["model_name"])
+        for item in bindings
+    } == {
+        ("workflow", "generate", DOUBAO_IMAGE_PAYG_MODEL),
+        ("studio", "generate", DOUBAO_IMAGE_DEFAULT_MODEL),
+    }
 
 
 def test_doubao_runtime_uses_agent_plan_model(monkeypatch) -> None:

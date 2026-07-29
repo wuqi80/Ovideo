@@ -24,6 +24,7 @@ export interface GeminiImageReferenceMetadata {
 
 export interface GeminiImageOptions {
     model?: string;
+    modelScope?: string;
     prompt: string;
     references?: string[];
     referenceMetadata?: GeminiImageReferenceMetadata[];
@@ -62,6 +63,7 @@ export const generateGeminiImageViaProxy = async (options: GeminiImageOptions): 
             body: JSON.stringify({
                 prompt,
                 ...(model ? { model } : {}),
+                ...(options.modelScope ? { model_scope: options.modelScope } : {}),
                 references,
                 reference_metadata: options.referenceMetadata || [],
                 aspectRatio,

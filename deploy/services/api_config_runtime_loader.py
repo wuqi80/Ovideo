@@ -37,10 +37,14 @@ from services.api_provider_registry import (
     get_provider_extra_env_keys,
     get_provider_env_key,
     get_proxy_mode_env_key,
+    get_scoped_model_env_key,
     get_seedance_sub_model_env_key,
+    MODEL_USAGE_SCOPES,
+    MODEL_USAGE_SCOPE_WORKFLOW,
     normalize_doubao_image_endpoint,
     normalize_doubao_image_model_for_endpoint,
     normalize_model_bindings,
+    normalize_model_usage_scope,
     normalize_provider,
     normalize_seedance_endpoint,
     normalize_seedance_model_for_endpoint,
@@ -94,6 +98,20 @@ def managed_api_env_keys() -> set[str]:
                 get_model_env_key(env_key),
             }
         )
+        for scope in MODEL_USAGE_SCOPES:
+            scoped_model_env = get_scoped_model_env_key(get_model_env_key(env_key), scope)
+            if scoped_model_env:
+                keys.add(scoped_model_env)
+    for operation_model_env in (
+        set(SEEDANCE_SUB_MODEL_ENV_MAP.values())
+        | set(DASHSCOPE_SUB_MODEL_ENV_MAP.values())
+        | set(DEEPSEEK_OPERATION_MODEL_ENV_MAP.values())
+        | set(MINIMAX_OPERATION_MODEL_ENV_MAP.values())
+    ):
+        for scope in MODEL_USAGE_SCOPES:
+            scoped_model_env = get_scoped_model_env_key(operation_model_env, scope)
+            if scoped_model_env:
+                keys.add(scoped_model_env)
     return keys
 
 
@@ -244,31 +262,36 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                         for binding in bindings
                     ],
                 )
-            primary_model = primary_model_name_for_bindings(bindings, model_name)
             model_env = get_model_env_key(env_key)
-            if primary_model:
-                new_env[model_env] = primary_model
-            else:
-                new_env[model_env] = None
+            for scope in MODEL_USAGE_SCOPES:
+                primary_model = primary_model_name_for_bindings(bindings, model_name, scope=scope)
+                target_model_env = get_scoped_model_env_key(model_env, scope)
+                if not target_model_env:
+                    continue
+                if primary_model:
+                    new_env[target_model_env] = primary_model
+                elif scope == MODEL_USAGE_SCOPE_WORKFLOW:
+                    new_env[target_model_env] = None
             for binding in bindings:
+                scope = normalize_model_usage_scope(binding.get("scope"))
                 operation = str(binding.get("operation") or "").strip().lower()
                 bound_model = str(binding.get("model_name") or "").strip()
                 if not operation or not bound_model:
                     continue
                 if provider_id == "seedance" and operation in SEEDANCE_SUB_MODEL_ENV_MAP:
                     sub_model = operation
-                    new_env[get_seedance_sub_model_env_key(sub_model)] = bound_model
+                    new_env[get_scoped_model_env_key(get_seedance_sub_model_env_key(sub_model), scope)] = bound_model
                 if provider_id == "deepseek" and operation in DEEPSEEK_OPERATION_MODEL_ENV_MAP:
-                    new_env[get_deepseek_operation_model_env_key(operation)] = bound_model
+                    new_env[get_scoped_model_env_key(get_deepseek_operation_model_env_key(operation), scope)] = bound_model
                 if provider_id == "minimax" and operation in MINIMAX_OPERATION_MODEL_ENV_MAP:
-                    new_env[get_minimax_operation_model_env_key(operation)] = bound_model
+                    new_env[get_scoped_model_env_key(get_minimax_operation_model_env_key(operation), scope)] = bound_model
                 if provider.strip().lower() == "dashscope":
-                    model_name = bound_model
-                    dashscope_sub_model = dashscope_sub_model_for_model(model_name)
+                    binding_model_name = bound_model
+                    dashscope_sub_model = dashscope_sub_model_for_model(binding_model_name)
                     if not dashscope_sub_model and operation in DASHSCOPE_SUB_MODEL_ENV_MAP:
                         dashscope_sub_model = operation
                     if dashscope_sub_model:
-                        new_env[get_dashscope_sub_model_env_key(dashscope_sub_model)] = bound_model
+                        new_env[get_scoped_model_env_key(get_dashscope_sub_model_env_key(dashscope_sub_model), scope)] = bound_model
 
         reset_managed_api_env_to_baseline()
         for key, value in new_env.items():

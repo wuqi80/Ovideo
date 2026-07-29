@@ -125,6 +125,7 @@ def create_ai_proxy_router(
             "source_item_id": getattr(request, "source_item_id", None),
             "entity_type": getattr(request, "entity_type", None),
             "entity_id": getattr(request, "entity_id", None),
+            "model_scope": getattr(request, "model_scope", None),
             "suppress_notification": bool(getattr(request, "suppress_notification", False)),
         }
         return {
@@ -210,6 +211,7 @@ def create_ai_proxy_router(
             "prompt": request.prompt,
             "provider": provider,
             "model": model,
+            "model_scope": getattr(request, "model_scope", None),
             "entity_type": request.entity_type,
             "entity_id": request.entity_id,
             "file_role": request.file_role,
@@ -228,18 +230,21 @@ def create_ai_proxy_router(
         return task_data
 
     @router.get("/api/ai/text-models")
-    async def get_text_models(_username: str = Depends(require_auth_dependency)):
+    async def get_text_models(
+        scope: str = "workflow",
+        _username: str = Depends(require_auth_dependency),
+    ):
         """Return the effective text models without exposing runtime secrets."""
         return {
             "success": True,
-            "models": await build_text_model_catalog(),
+            "models": await build_text_model_catalog(scope),
         }
 
     @router.post("/api/deepseek/chat")
     async def deepseek_chat(request: DeepseekChatRequest, username: str = Depends(require_auth_dependency)):
         """DeepSeek流式聊天接口"""
         try:
-            ensure_deepseek_configured(request.model)
+            ensure_deepseek_configured(request.model, usage_scope=request.model_scope)
         except AIProxyError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail)
 
@@ -261,6 +266,7 @@ def create_ai_proxy_router(
                     response_format=request.response_format,
                     temperature=request.temperature,
                     model=request.model,
+                    usage_scope=request.model_scope,
                     on_complete=lambda text: _schedule_text_result_save(
                         task_id,
                         text,
@@ -293,7 +299,7 @@ def create_ai_proxy_router(
     async def minimax_chat(request: MinimaxChatRequest, username: str = Depends(require_auth_dependency)):
         """MiniMax M3 流式聊天接口。"""
         try:
-            ensure_minimax_configured(request.model)
+            ensure_minimax_configured(request.model, usage_scope=request.model_scope)
         except AIProxyError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
@@ -314,6 +320,7 @@ def create_ai_proxy_router(
                     response_format=request.response_format,
                     temperature=request.temperature,
                     model=request.model,
+                    usage_scope=request.model_scope,
                     on_complete=lambda text: _schedule_text_result_save(
                         task_id,
                         text,
@@ -362,6 +369,7 @@ def create_ai_proxy_router(
                 system_prompt=request.system_prompt,
                 temperature=request.temperature,
                 model=request.model,
+                usage_scope=request.model_scope,
             )
             content = text_result.content
 
@@ -413,7 +421,7 @@ def create_ai_proxy_router(
         """Gemini 文本流式生成接口，供需要首字实时展示的页面使用。"""
         await _authorize_studio_request(request, username, [])
         try:
-            stream_config = await resolve_gemini_stream_config(request.model)
+            stream_config = await resolve_gemini_stream_config(request.model, usage_scope=request.model_scope)
         except AIProxyError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail)
         task_context = _text_task_context(request, provider="gemini")
@@ -432,6 +440,7 @@ def create_ai_proxy_router(
                 system_prompt=request.system_prompt,
                 temperature=request.temperature,
                 model=request.model,
+                usage_scope=request.model_scope,
                 config=stream_config,
                 on_complete=lambda text: _schedule_text_result_save(
                     task_id,
@@ -490,6 +499,7 @@ def create_ai_proxy_router(
                 requested_model=request.model,
                 aspect_ratio=request.aspectRatio,
                 image_size=request.imageSize,
+                usage_scope=request.model_scope,
             )
 
             logger.info("✅ 图像生成成功: %s 张图片, 用户: %s", len(images), username)
@@ -664,6 +674,7 @@ def create_ai_proxy_router(
                 sequential=request.sequential,
                 count=request.count,
                 model=request.model,
+                usage_scope=request.model_scope,
             )
             logger.info("✅ 豆包生成 %s 张图片, 用户: %s", len(images), username)
 

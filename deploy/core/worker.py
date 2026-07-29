@@ -1248,6 +1248,7 @@ class Worker:
             client = get_seedance_client()
 
             sub_model = task.data.get('sub_model', 'standard')
+            model_scope = task.data.get('model_scope') or 'workflow'
             prompt = task.data.get('prompt') or ''
             media_inputs = task.data.get('media_inputs') or []
 
@@ -1303,7 +1304,7 @@ class Worker:
                 logger.warning("⚠️ Seedance fast 不支持 1080p，自动降级到 720p")
                 kwargs['resolution'] = '720p'
 
-            ark_task_id = client.create_video_task(sub_model, contents, **kwargs)
+            ark_task_id = client.create_video_task(sub_model, contents, usage_scope=model_scope, **kwargs)
             await self.task_queue.update_progress(task.task_id, 5, "Seedance 任务已创建")
 
             # 轮询任务状态（最长 600s）

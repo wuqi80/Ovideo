@@ -2413,10 +2413,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   }
 
   return (
-      <div className="layout-safe flex-1 flex h-full w-full bg-n20 overflow-hidden relative">
+      <div className="workflow-stage-layout layout-safe flex-1 flex h-full w-full bg-n20 overflow-hidden relative">
           
           {/* Header Bar */}
-          <div className="storyboard-generation-toolbar absolute top-0 left-0 right-0 h-[52px] bg-n0 border-b border-n40 z-20 flex items-center justify-between px-4">
+          <div className="workflow-stage-toolbar storyboard-generation-toolbar absolute top-0 left-0 right-0 h-[52px] bg-n0 border-b border-n40 z-20 flex items-center justify-between px-4">
               <div className="flex items-center gap-4 min-w-0">
                   <h2 className="text-sm font-bold text-n700 uppercase tracking-wider flex items-center gap-2">
                       <LayoutDashboard className="w-4 h-4 text-primary" />
@@ -2561,9 +2561,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           {/* Resizable Sidebar: Shot List */}
           <div 
              style={{ width: sidebarWidth }} 
-             className="pt-[52px] border-r border-n40 bg-n0 flex flex-col z-10 flex-shrink-0 relative"
+             className="workflow-stage-sidebar pt-[52px] border-r border-n40 bg-n0 flex flex-col z-10 flex-shrink-0 relative"
           >
-               <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
+               <div className="workflow-stage-scroll flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
                    {hasStoryboard && visibleStoryboardItems.map((item, index) => {
                        const isSelected = item.id === selectedShotId;
                        const hasImage = (item.generatedImages && item.generatedImages.length > 0) || !!item.generatedImage;
@@ -2746,7 +2746,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           </div>
 
           {/* Main Content */}
-          <div className="storyboard-generation-main min-h-0 flex-1 flex overflow-hidden pt-[52px]">
+          <div className="workflow-stage-canvas storyboard-generation-main min-h-0 flex-1 flex overflow-hidden pt-[52px]">
               
             {/* Configuration Column */}
             <div className="storyboard-config-pane min-h-0 flex flex-col border-r border-n40 bg-n0 px-6 pt-6 pb-24 overflow-y-auto custom-scrollbar">

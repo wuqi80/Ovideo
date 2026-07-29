@@ -23,7 +23,7 @@ export const ScriptPage: React.FC = () => {
     }
   }, [forceReloadSlices]);
   return (
-    <div className="layout-safe h-full w-full overflow-auto">
+    <div className="workflow-stage-layout layout-safe h-full w-full overflow-hidden">
       <React.Suspense fallback={<ScriptWorkspaceFallback />}>
         <WorkspaceApp
           hideHeader

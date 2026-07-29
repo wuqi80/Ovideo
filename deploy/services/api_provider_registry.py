@@ -15,6 +15,14 @@ from services.api_provider_endpoints import derive_models_health_urls
 from utils.config_helpers import _config_get
 
 
+MODEL_USAGE_SCOPE_WORKFLOW = "workflow"
+MODEL_USAGE_SCOPE_STUDIO = "studio"
+MODEL_USAGE_SCOPES = (MODEL_USAGE_SCOPE_WORKFLOW, MODEL_USAGE_SCOPE_STUDIO)
+MODEL_USAGE_SCOPE_LABELS: Dict[str, str] = {
+    MODEL_USAGE_SCOPE_WORKFLOW: "流程化制作",
+    MODEL_USAGE_SCOPE_STUDIO: "自由创作",
+}
+
 PROVIDER_ENV_MAP: Dict[str, str] = {
     "gemini-text": "GEMINI_TEXT_API_KEY",
     "gemini-image": "GEMINI_IMAGE_API_KEY",
@@ -216,6 +224,8 @@ MINIMAX_M3_OPERATION = "minimax-m3"
 MINIMAX_M3_MODEL = "MiniMax-M3"
 MINIMAX_OPERATION_MODEL_ENV_MAP: Dict[str, str] = {
     MINIMAX_M3_OPERATION: "MINIMAX_MODEL_M3",
+    "speech-hd": "MINIMAX_MODEL_SPEECH_HD",
+    "speech-turbo": "MINIMAX_MODEL_SPEECH_TURBO",
 }
 MINIMAX_DOMESTIC_ENDPOINT = "https://api.minimaxi.com/v1"
 MINIMAX_INTERNATIONAL_ENDPOINT = "https://api.minimax.io/v1"
@@ -379,6 +389,60 @@ MINIMAX_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
         "model_name": MINIMAX_M3_MODEL,
     },
 ]
+
+
+def normalize_model_usage_scope(scope: Optional[str]) -> str:
+    normalized = (scope or MODEL_USAGE_SCOPE_WORKFLOW).strip().lower()
+    aliases = {
+        "flow": MODEL_USAGE_SCOPE_WORKFLOW,
+        "workflow-production": MODEL_USAGE_SCOPE_WORKFLOW,
+        "workflow_production": MODEL_USAGE_SCOPE_WORKFLOW,
+        "pipeline": MODEL_USAGE_SCOPE_WORKFLOW,
+        "free": MODEL_USAGE_SCOPE_STUDIO,
+        "free-creation": MODEL_USAGE_SCOPE_STUDIO,
+        "free_creation": MODEL_USAGE_SCOPE_STUDIO,
+        "canvas": MODEL_USAGE_SCOPE_STUDIO,
+        "mecha-studio": MODEL_USAGE_SCOPE_STUDIO,
+        "mecha_studio": MODEL_USAGE_SCOPE_STUDIO,
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in MODEL_USAGE_SCOPES else MODEL_USAGE_SCOPE_WORKFLOW
+
+
+def get_scoped_model_env_key(env_key: Optional[str], scope: Optional[str]) -> Optional[str]:
+    """Return the env key that stores a model override for one usage scope."""
+    if not env_key:
+        return None
+    normalized_scope = normalize_model_usage_scope(scope)
+    if normalized_scope == MODEL_USAGE_SCOPE_WORKFLOW:
+        return env_key
+    return f"{env_key}_{normalized_scope.upper()}"
+
+
+def scoped_model_env_candidates(env_key: Optional[str], scope: Optional[str]) -> List[str]:
+    if not env_key:
+        return []
+    scoped = get_scoped_model_env_key(env_key, scope)
+    if scoped and scoped != env_key:
+        return [scoped, env_key]
+    return [env_key]
+
+
+def _with_model_usage_scope(option: Dict[str, str], scope: str) -> Dict[str, str]:
+    normalized_scope = normalize_model_usage_scope(scope)
+    return {
+        **option,
+        "scope": normalized_scope,
+        "scope_label": MODEL_USAGE_SCOPE_LABELS[normalized_scope],
+    }
+
+
+def expand_model_binding_scope_options(options: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    return [
+        _with_model_usage_scope(option, scope)
+        for scope in MODEL_USAGE_SCOPES
+        for option in options
+    ]
 
 
 def normalize_seedance_sub_model(sub_model: Optional[str]) -> str:
@@ -1192,19 +1256,28 @@ def get_api_model_preset(provider: str, model_name: Optional[str] = None) -> Opt
     return matches[0] if matches else None
 
 
-def get_provider_model_binding_options(provider: str) -> List[Dict[str, str]]:
+def get_provider_model_binding_options(
+    provider: str,
+    *,
+    include_scopes: bool = False,
+) -> List[Dict[str, str]]:
     """Return the front-end operation/model choices supported by one API card."""
     provider_id = normalize_provider(provider)
     if provider_id == "deepseek":
-        return deepcopy(DEEPSEEK_MODEL_BINDING_OPTIONS)
+        options = deepcopy(DEEPSEEK_MODEL_BINDING_OPTIONS)
+        return expand_model_binding_scope_options(options) if include_scopes else options
     if provider_id == "doubao":
-        return deepcopy(DOUBAO_IMAGE_MODEL_BINDING_OPTIONS)
+        options = deepcopy(DOUBAO_IMAGE_MODEL_BINDING_OPTIONS)
+        return expand_model_binding_scope_options(options) if include_scopes else options
     if provider_id == "seedance":
-        return deepcopy(SEEDANCE_MODEL_BINDING_OPTIONS)
+        options = deepcopy(SEEDANCE_MODEL_BINDING_OPTIONS)
+        return expand_model_binding_scope_options(options) if include_scopes else options
     if provider_id == "dashscope":
-        return deepcopy(DASHSCOPE_MODEL_BINDING_OPTIONS)
+        options = deepcopy(DASHSCOPE_MODEL_BINDING_OPTIONS)
+        return expand_model_binding_scope_options(options) if include_scopes else options
     if provider_id == "minimax":
-        return deepcopy(MINIMAX_MODEL_BINDING_OPTIONS)
+        options = deepcopy(MINIMAX_MODEL_BINDING_OPTIONS)
+        return expand_model_binding_scope_options(options) if include_scopes else options
 
     options: List[Dict[str, str]] = []
     seen: set[str] = set()
@@ -1225,7 +1298,7 @@ def get_provider_model_binding_options(provider: str) -> List[Dict[str, str]]:
                 "model_name": model_name,
             }
         )
-    return options
+    return expand_model_binding_scope_options(options) if include_scopes else options
 
 
 def infer_model_binding_operation(provider: str, model_name: Optional[str]) -> str:
@@ -1260,10 +1333,10 @@ def normalize_model_bindings(
         raw_bindings = []
 
     option_labels = {
-        item["operation"]: item["label"]
-        for item in get_provider_model_binding_options(provider)
+        (normalize_model_usage_scope(item.get("scope")), item["operation"]): item["label"]
+        for item in get_provider_model_binding_options(provider, include_scopes=True)
     }
-    normalized: Dict[str, Dict[str, str]] = {}
+    normalized: Dict[tuple[str, str], Dict[str, str]] = {}
     for item in raw_bindings:
         if not isinstance(item, dict):
             continue
@@ -1272,23 +1345,26 @@ def normalize_model_bindings(
             continue
         if provider_id == "deepseek":
             model_name = normalize_deepseek_model_name(model_name)
+        scope = normalize_model_usage_scope(item.get("scope"))
         operation = str(item.get("operation") or "").strip().lower()
         inferred_operation = infer_model_binding_operation(provider, model_name)
         if provider_id == "doubao":
             operation = "generate"
-        elif provider_id == "gemini-image" and inferred_operation != "default" and operation not in option_labels:
+        elif provider_id == "gemini-image" and inferred_operation != "default" and (scope, operation) not in option_labels:
             operation = inferred_operation
         elif not operation or (operation == "default" and inferred_operation != "default"):
             operation = inferred_operation
         label = str(
-            option_labels.get(operation)
+            option_labels.get((scope, operation))
             if provider_id == "doubao"
-            else item.get("label") or option_labels.get(operation) or operation
+            else item.get("label") or option_labels.get((scope, operation)) or operation
         ).strip()
-        normalized[operation] = {
+        normalized[(scope, operation)] = {
             "operation": operation,
             "label": label,
             "model_name": model_name,
+            "scope": scope,
+            "scope_label": MODEL_USAGE_SCOPE_LABELS[scope],
         }
 
     fallback_model = str(legacy_model_name or "").strip()
@@ -1296,23 +1372,36 @@ def normalize_model_bindings(
         fallback_model = normalize_deepseek_model_name(fallback_model)
     if not normalized and fallback_model:
         operation = infer_model_binding_operation(provider, fallback_model)
-        normalized[operation] = {
+        scope = MODEL_USAGE_SCOPE_WORKFLOW
+        normalized[(scope, operation)] = {
             "operation": operation,
-            "label": option_labels.get(operation) or operation,
+            "label": option_labels.get((scope, operation)) or operation,
             "model_name": fallback_model,
+            "scope": scope,
+            "scope_label": MODEL_USAGE_SCOPE_LABELS[scope],
         }
-    if provider_id in {"gemini-image", "deepseek", "minimax"} and normalized:
-        for option in get_provider_model_binding_options(provider_id):
+    if provider_id in {"gemini-text", "gemini-image", "deepseek", "doubao", "seedance", "dashscope", "minimax"} and normalized:
+        for option in get_provider_model_binding_options(provider_id, include_scopes=True):
             operation = option["operation"]
-            if operation not in normalized:
-                normalized[operation] = deepcopy(option)
+            scope = normalize_model_usage_scope(option.get("scope"))
+            if (scope, operation) not in normalized:
+                normalized[(scope, operation)] = deepcopy(option)
     return list(normalized.values())
 
 
-def primary_model_name_for_bindings(bindings: Any, fallback: Optional[str] = None) -> str:
+def primary_model_name_for_bindings(
+    bindings: Any,
+    fallback: Optional[str] = None,
+    *,
+    scope: Optional[str] = MODEL_USAGE_SCOPE_WORKFLOW,
+) -> str:
+    target_scope = normalize_model_usage_scope(scope)
     if isinstance(bindings, list):
         for item in bindings:
             if isinstance(item, dict):
+                item_scope = normalize_model_usage_scope(item.get("scope"))
+                if item_scope != target_scope:
+                    continue
                 model_name = str(item.get("model_name") or "").strip()
                 if model_name:
                     return model_name
@@ -1371,7 +1460,11 @@ def get_api_provider_catalog() -> List[dict]:
                 if provider in PROVIDER_ENV_MAP
                 else None,
                 "extra_fields": get_provider_extra_fields(provider),
-                "model_binding_options": get_provider_model_binding_options(provider),
+                "model_binding_options": get_provider_model_binding_options(provider, include_scopes=True),
+                "model_usage_scopes": [
+                    {"scope": scope, "label": MODEL_USAGE_SCOPE_LABELS[scope]}
+                    for scope in MODEL_USAGE_SCOPES
+                ],
                 "access_modes": deepcopy(item.get("access_modes") or []),
                 "operation_paths": get_provider_operation_paths(provider),
                 "default_operation_url_templates": build_provider_operation_url_templates(

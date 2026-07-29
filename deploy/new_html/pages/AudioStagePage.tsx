@@ -672,9 +672,9 @@ export const AudioStagePage: React.FC = () => {
   // ─── Render ───────────────────────────────────────────────────
 
   return (
-    <div className="h-full bg-n20 text-n800 flex flex-col">
+    <div className="workflow-stage-layout h-full bg-n20 text-n800 flex flex-col">
       {/* Header */}
-      <header className="flex items-center gap-3 px-6 py-3 border-b border-n40 shrink-0">
+      <header className="workflow-stage-toolbar flex items-center gap-3 px-6 py-3 border-b border-n40 shrink-0">
         <Mic size={20} className="text-primary" />
         <h1 className="text-lg font-bold tracking-tight">声音与配音</h1>
         <span className="flex-1" />
@@ -689,7 +689,7 @@ export const AudioStagePage: React.FC = () => {
       </header>
 
       {/* Main: Sidebar + DubbingPanel */}
-      <div className="flex flex-1 min-h-0">
+      <div className="workflow-stage-layout flex flex-1 min-h-0">
         <VoiceSidebar
           assets={assets}
           characterVoices={characterVoices}

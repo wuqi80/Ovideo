@@ -20,6 +20,7 @@ export interface VideoCapabilityManifest {
   seedance_omni: boolean;
   comfyui_available: boolean;
   manifest_version: string;
+  model_scope?: string;
   models: VideoModelCapability[];
 }
 
@@ -32,38 +33,58 @@ const UNAVAILABLE_VIDEO_CAPABILITIES: VideoCapabilityManifest = {
 
 let videoCapabilitiesCache: VideoCapabilityManifest | null = null;
 let videoCapabilitiesPromise: Promise<VideoCapabilityManifest> | null = null;
+const scopedVideoCapabilitiesCache = new Map<string, VideoCapabilityManifest>();
+const scopedVideoCapabilitiesPromise = new Map<string, Promise<VideoCapabilityManifest>>();
 
-export function fetchVideoCapabilities(): Promise<VideoCapabilityManifest> {
-  if (videoCapabilitiesCache) return Promise.resolve(videoCapabilitiesCache);
-  if (!videoCapabilitiesPromise) {
-    videoCapabilitiesPromise = apiJson<VideoCapabilityManifest>(
-      '/api/video/capabilities',
+function normalizeCapabilityScope(scope?: string): string {
+  const value = String(scope || 'workflow').trim().toLowerCase();
+  return value || 'workflow';
+}
+
+export function fetchVideoCapabilities(scope: string = 'workflow'): Promise<VideoCapabilityManifest> {
+  const cacheKey = normalizeCapabilityScope(scope);
+  if (cacheKey === 'workflow' && videoCapabilitiesCache) return Promise.resolve(videoCapabilitiesCache);
+  const scopedCache = scopedVideoCapabilitiesCache.get(cacheKey);
+  if (scopedCache) return Promise.resolve(scopedCache);
+
+  let promise = cacheKey === 'workflow' ? videoCapabilitiesPromise : scopedVideoCapabilitiesPromise.get(cacheKey);
+  if (!promise) {
+    const query = cacheKey === 'workflow' ? '' : `?scope=${encodeURIComponent(cacheKey)}`;
+    promise = apiJson<VideoCapabilityManifest>(
+      `/api/video/capabilities${query}`,
       { method: 'GET' },
       'fetchVideoCapabilities',
     )
       .then((data) => {
-        videoCapabilitiesCache = {
+        const normalized: VideoCapabilityManifest = {
           seedance_omni: !!data.seedance_omni,
           comfyui_available: !!data.comfyui_available,
           manifest_version: String(data.manifest_version || 'legacy'),
+          model_scope: String(data.model_scope || cacheKey),
           models: Array.isArray(data.models) ? data.models : [],
         };
-        return videoCapabilitiesCache;
+        if (cacheKey === 'workflow') videoCapabilitiesCache = normalized;
+        scopedVideoCapabilitiesCache.set(cacheKey, normalized);
+        return normalized;
       })
       .catch(() => {
-        videoCapabilitiesCache = UNAVAILABLE_VIDEO_CAPABILITIES;
-        return videoCapabilitiesCache;
+        const unavailable = { ...UNAVAILABLE_VIDEO_CAPABILITIES, model_scope: cacheKey };
+        if (cacheKey === 'workflow') videoCapabilitiesCache = unavailable;
+        scopedVideoCapabilitiesCache.set(cacheKey, unavailable);
+        return unavailable;
       });
+    if (cacheKey === 'workflow') videoCapabilitiesPromise = promise;
+    scopedVideoCapabilitiesPromise.set(cacheKey, promise);
   }
-  return videoCapabilitiesPromise;
+  return promise;
 }
 
-export function fetchSeedanceOmni(): Promise<boolean> {
-  return fetchVideoCapabilities().then(data => data.seedance_omni);
+export function fetchSeedanceOmni(scope?: string): Promise<boolean> {
+  return fetchVideoCapabilities(scope).then(data => data.seedance_omni);
 }
 
-export function fetchComfyuiAvailable(): Promise<boolean> {
-  return fetchVideoCapabilities().then(data => data.comfyui_available);
+export function fetchComfyuiAvailable(scope?: string): Promise<boolean> {
+  return fetchVideoCapabilities(scope).then(data => data.comfyui_available);
 }
 
 export interface ComposeStatus {

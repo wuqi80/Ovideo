@@ -668,6 +668,7 @@ export async function submitSeedanceTask(
     const body: Record<string, any> = {
         task_type: taskType,
         sub_model: params.sub_model,
+        model_scope: params.model_scope,
         prompt: params.prompt,
         media_inputs: mediaInputs,
         resolution,

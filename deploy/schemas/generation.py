@@ -10,7 +10,7 @@ class GenerateRequest(BaseModel):
     # 进入 task.data 而不被 Pydantic 默认的 extra='ignore' 静默丢弃。这是 §G
     # silent-failure trap 的根因：层间约定缺一道字段就在 POST → task.data 之间断链。
     # 后续新增 DashScope 子模型字段无需再改 schema，worker 直接从 task.data 读取。
-    model_config = ConfigDict(extra='allow')
+    model_config = ConfigDict(extra='allow', protected_namespaces=())
 
     task_type: str = Field(..., description="i2v, morph, upscale, voice, wan26_i2v, seedance_*, kling_*, vidu_*, happyhorse_r2v")
     model: str = Field("Wan2", description="模型名称")
@@ -39,6 +39,7 @@ class GenerateRequest(BaseModel):
     preferred_node_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的集群节点")
     # Seedance 2.0 (飞升/渡劫) 专用字段
     sub_model: Optional[str] = Field(None, description="Seedance 子型号: standard|fast")
+    model_scope: Optional[str] = Field(None, description="model usage scope: workflow|studio")
     media_inputs: Optional[List[Dict[str, Any]]] = Field(None, description="Seedance 多模态输入: [{kind:image|video|audio, url, role?, file_id?}]")
     ratio: Optional[str] = Field("adaptive", description="Seedance 画面比例: adaptive|16:9|4:3|1:1|3:4|9:16|21:9")
     watermark: Optional[bool] = Field(False, description="Seedance 水印")
@@ -48,10 +49,13 @@ class GenerateRequest(BaseModel):
 
 
 class DeepseekChatRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     prompt: str = Field(..., description="要发送给 DeepSeek 的提示词")
     response_format: str = Field("text", pattern="^(text|json)$")
     temperature: float = Field(0.2, ge=0, le=1)
     model: Optional[str] = Field(None, description="DeepSeek model override; omitted uses admin runtime config")
+    model_scope: Optional[str] = Field(None, description="model usage scope: workflow|studio")
     operation: Optional[str] = Field(None, description="业务操作标识，用于通知展示")
     display_name: Optional[str] = Field(None, description="用户可读的任务名称")
     project_id: Optional[str] = None
@@ -64,10 +68,13 @@ class DeepseekChatRequest(BaseModel):
 
 
 class MinimaxChatRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     prompt: str = Field(..., description="要发送给 MiniMax M3 的提示词")
     response_format: str = Field("text", pattern="^(text|json)$")
     temperature: float = Field(0.2, ge=0, le=1)
     model: Optional[str] = Field(None, description="MiniMax text operation; omitted uses MiniMax M3")
+    model_scope: Optional[str] = Field(None, description="model usage scope: workflow|studio")
     operation: Optional[str] = Field(None, description="业务操作标识，用于通知展示")
     display_name: Optional[str] = Field(None, description="用户可读的任务名称")
     project_id: Optional[str] = None
@@ -91,8 +98,11 @@ class ImageReferenceMetadata(BaseModel):
 
 
 class DoubaoImageRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     prompt: str
     model: Optional[str] = Field(None, description="Doubao image model override; omitted uses admin runtime config")
+    model_scope: Optional[str] = Field(None, description="model usage scope: workflow|studio")
     references: List[str] = Field(default_factory=list)
     reference_metadata: List[ImageReferenceMetadata] = Field(default_factory=list)
     size: str = Field("2K")
@@ -106,10 +116,13 @@ class DoubaoImageRequest(BaseModel):
 
 
 class GeminiTextRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     prompt: str
     system_prompt: Optional[str] = None
     temperature: float = Field(1.0, ge=0, le=2)
     model: Optional[str] = Field(None, description="Gemini text model override; omitted uses admin runtime config")
+    model_scope: Optional[str] = Field(None, description="model usage scope: workflow|studio")
     operation: Optional[str] = Field(None, description="业务操作标识，用于通知展示")
     display_name: Optional[str] = Field(None, description="用户可读的任务名称")
     project_id: Optional[str] = None
@@ -133,8 +146,11 @@ class GeminiImageReferenceMetadata(BaseModel):
 
 
 class GeminiImageRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     prompt: str
     model: Optional[str] = Field(None, description="Gemini image model override; omitted uses admin runtime config")
+    model_scope: Optional[str] = Field(None, description="model usage scope: workflow|studio")
     references: List[str] = Field(default_factory=list)
     reference_metadata: List[GeminiImageReferenceMetadata] = Field(default_factory=list)
     aspectRatio: str = Field("1:1")
@@ -156,8 +172,11 @@ class GptImageRequest(BaseModel):
     references 为空 → /v1/images/generations（文生图，JSON）
     references 非空 → /v1/images/edits      （图改图，multipart/form-data）
     """
+    model_config = ConfigDict(protected_namespaces=())
+
     prompt: str
     tier: str = Field("vip", description="vip | official")
+    model_scope: Optional[str] = Field(None, description="model usage scope: workflow|studio")
     references: List[str] = Field(default_factory=list)
     reference_metadata: List[ImageReferenceMetadata] = Field(default_factory=list)
     size: str = Field("auto", description="1024x1024 / 1536x1024 / auto / etc，由前端按 ratio×K 推荐后透传")

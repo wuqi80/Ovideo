@@ -55,6 +55,8 @@ interface ApiModelBinding {
     operation: string;
     label?: string;
     model_name: string;
+    scope?: string;
+    scope_label?: string;
 }
 
 interface ApiConfig {
@@ -87,6 +89,7 @@ interface ProviderMeta {
     capabilities?: string[];
     extra_fields?: ProviderExtraField[];
     model_binding_options?: ApiModelBinding[];
+    model_usage_scopes?: ModelUsageScopeMeta[];
     access_modes?: ProviderAccessMode[];
     default_config_name?: string;
     default_endpoint?: string;
@@ -97,6 +100,11 @@ interface ProviderMeta {
     preset_categories?: string[];
     operation_paths?: Record<string, string>;
     default_operation_url_templates?: Record<string, string>;
+}
+
+interface ModelUsageScopeMeta {
+    scope: string;
+    label?: string;
 }
 
 interface ProviderAccessMode {
@@ -463,6 +471,33 @@ const RUNTIME_KEY_IMPORT_BODY = {
 
 function normalizeProvider(provider: string | undefined | null): string {
     return String(provider || '').trim().toLowerCase();
+}
+
+const DEFAULT_MODEL_USAGE_SCOPES: ModelUsageScopeMeta[] = [
+    { scope: 'workflow', label: '流程化制作' },
+    { scope: 'studio', label: '自由创作' },
+];
+
+function normalizeModelUsageScope(scope: string | undefined | null): string {
+    const value = String(scope || '').trim().toLowerCase();
+    if (['studio', 'free', 'free_creation', 'free-creation', 'canvas'].includes(value)) return 'studio';
+    return 'workflow';
+}
+
+function modelUsageScopeLabel(scope: string | undefined | null, scopes: ModelUsageScopeMeta[] = DEFAULT_MODEL_USAGE_SCOPES): string {
+    const normalized = normalizeModelUsageScope(scope);
+    return scopes.find(item => normalizeModelUsageScope(item.scope) === normalized)?.label
+        || DEFAULT_MODEL_USAGE_SCOPES.find(item => item.scope === normalized)?.label
+        || normalized;
+}
+
+function modelBindingKey(binding: Pick<ApiModelBinding, 'operation' | 'scope'>): string {
+    return `${normalizeModelUsageScope(binding.scope)}::${String(binding.operation || '').trim().toLowerCase()}`;
+}
+
+function modelBindingOptionMatches(option: ApiModelBinding, binding: ApiModelBinding): boolean {
+    return String(option.operation || '').trim().toLowerCase() === String(binding.operation || '').trim().toLowerCase()
+        && normalizeModelUsageScope(option.scope) === normalizeModelUsageScope(binding.scope);
 }
 
 function runtimeStatusKey(provider: string | undefined | null, modelName?: string | null): string {
@@ -929,6 +964,19 @@ function normalizeApiModelBindings(
     legacyModelName: string = '',
     options: ApiModelBinding[] = [],
 ): ApiModelBinding[] {
+    const findOption = (modelName: string, rawOperation: string, scope: string) => {
+        const optionByOperation = options.find(candidate => (
+            String(candidate.operation || '').trim().toLowerCase() === rawOperation
+            && normalizeModelUsageScope(candidate.scope) === scope
+        ));
+        const optionByModel = options.find(candidate => (
+            String(candidate.model_name || '').trim().toLowerCase() === modelName.toLowerCase()
+            && normalizeModelUsageScope(candidate.scope) === scope
+        ));
+        const legacyOption = options.find(candidate => String(candidate.operation || '').trim().toLowerCase() === rawOperation)
+            || options.find(candidate => String(candidate.model_name || '').trim().toLowerCase() === modelName.toLowerCase());
+        return optionByOperation || (!optionByOperation ? optionByModel : undefined) || legacyOption;
+    };
     const source = Array.isArray(bindings) && bindings.length
         ? bindings
         : legacyModelName
@@ -936,22 +984,26 @@ function normalizeApiModelBindings(
                 operation: options.find(item => item.model_name === legacyModelName)?.operation || 'default',
                 label: options.find(item => item.model_name === legacyModelName)?.label || '默认操作',
                 model_name: legacyModelName,
+                scope: 'workflow',
             }]
             : [];
     const normalized = new Map<string, ApiModelBinding>();
     source.forEach(item => {
         const modelName = String(item?.model_name || '').trim();
         const rawOperation = String(item?.operation || '').trim().toLowerCase();
+        const scope = normalizeModelUsageScope(item?.scope);
         if (!modelName || !rawOperation) return;
-        const optionByOperation = options.find(candidate => candidate.operation === rawOperation);
-        const optionByModel = options.find(candidate => candidate.model_name.toLowerCase() === modelName.toLowerCase());
-        const option = optionByOperation || (!optionByOperation ? optionByModel : undefined);
+        const option = findOption(modelName, rawOperation, scope);
+        const optionByOperation = Boolean(option && String(option.operation || '').trim().toLowerCase() === rawOperation);
         const operation = option && (rawOperation === 'default' || !optionByOperation) ? option.operation : rawOperation;
         if (!operation) return;
-        normalized.set(operation, {
+        const normalizedScope = normalizeModelUsageScope(option?.scope || scope);
+        normalized.set(`${normalizedScope}::${operation}`, {
             operation,
             label: String(item.label || option?.label || operation),
             model_name: modelName,
+            scope: normalizedScope,
+            scope_label: item.scope_label || option?.scope_label || modelUsageScopeLabel(normalizedScope),
         });
     });
     return Array.from(normalized.values());
@@ -962,15 +1014,16 @@ function mergeMissingKnownModelBindings(
     options: ApiModelBinding[] = [],
 ): ApiModelBinding[] {
     if (!options.length) return bindings;
-    const byOperation = new Map(bindings.map(binding => [binding.operation, binding]));
+    const byOperation = new Map(bindings.map(binding => [modelBindingKey(binding), binding]));
     options.forEach(option => {
-        if (!byOperation.has(option.operation)) byOperation.set(option.operation, option);
+        const key = modelBindingKey(option);
+        if (!byOperation.has(key)) byOperation.set(key, option);
     });
     return Array.from(byOperation.values());
 }
 
 function providerRequiresCompleteModelBindings(provider: string): boolean {
-    return ['deepseek', 'gemini-image', 'minimax'].includes(normalizeProvider(provider));
+    return ['deepseek', 'gemini-text', 'gemini-image', 'doubao', 'seedance', 'dashscope', 'minimax'].includes(normalizeProvider(provider));
 }
 
 function defaultModelBindings(meta?: ProviderMeta): ApiModelBinding[] {
@@ -1581,6 +1634,7 @@ const ApiConfigEditorModal: React.FC<{
     const selectedMeta = providers.find(item => normalizeProvider(item.provider) === selectedProvider);
     const extraFields = selectedMeta?.extra_fields || [];
     const bindingOptions = selectedMeta?.model_binding_options || [];
+    const usageScopes = selectedMeta?.model_usage_scopes?.length ? selectedMeta.model_usage_scopes : DEFAULT_MODEL_USAGE_SCOPES;
     const accessModes = selectedMeta?.access_modes || [];
     const activeAccessModeMeta = providerAccessModeForEndpoint(accessModes, form.endpoint);
     const activeAccessMode = activeAccessModeMeta?.mode || '';
@@ -1594,11 +1648,17 @@ const ApiConfigEditorModal: React.FC<{
         });
     };
     const addBinding = () => {
-        const used = new Set(form.model_bindings.map(item => item.operation));
-        const option = bindingOptions.find(item => !used.has(item.operation));
+        const used = new Set(form.model_bindings.map(item => modelBindingKey(item)));
+        const option = bindingOptions.find(item => !used.has(modelBindingKey(item)));
         const next = option
             ? { ...option }
-            : { operation: `operation-${form.model_bindings.length + 1}`, label: '自定义操作', model_name: '' };
+            : {
+                operation: `operation-${form.model_bindings.length + 1}`,
+                label: '自定义操作',
+                model_name: '',
+                scope: 'workflow',
+                scope_label: modelUsageScopeLabel('workflow', usageScopes),
+            };
         patch({ model_bindings: [...form.model_bindings, next] });
     };
     const removeBinding = (index: number) => {
@@ -1799,7 +1859,7 @@ const ApiConfigEditorModal: React.FC<{
                         <div className="flex items-center justify-between gap-3">
                             <div>
                                 <div className="text-xs font-semibold text-n700">前台操作与模型绑定</div>
-                                <div className="mt-0.5 text-[11px] text-n100">一张 API 卡可以绑定多个操作；同一个操作只能对应一个模型。</div>
+                                <div className="mt-0.5 text-[11px] text-n100">一张 API 卡可以分别绑定流程化制作和自由创作；同一场景下同一个操作只能对应一个模型。</div>
                             </div>
                             <button
                                 type="button"
@@ -1812,9 +1872,42 @@ const ApiConfigEditorModal: React.FC<{
                         </div>
                         <div className="mt-3 space-y-2">
                             {form.model_bindings.map((binding, index) => {
-                                const selectedOption = bindingOptions.find(item => item.operation === binding.operation);
+                                const bindingScope = normalizeModelUsageScope(binding.scope);
+                                const scopedBindingOptions = bindingOptions.filter(item => normalizeModelUsageScope(item.scope) === bindingScope);
+                                const selectableOptions = scopedBindingOptions.length ? scopedBindingOptions : bindingOptions;
+                                const selectedOption = selectableOptions.find(item => String(item.operation || '').trim().toLowerCase() === String(binding.operation || '').trim().toLowerCase())
+                                    || bindingOptions.find(item => modelBindingOptionMatches(item, binding));
                                 return (
-                                    <div key={`${binding.operation}-${index}`} className="grid grid-cols-1 gap-2 border border-n40 bg-n20 p-3 md:grid-cols-[minmax(180px,0.8fr)_minmax(0,1.4fr)_32px]">
+                                    <div key={`${modelBindingKey(binding)}-${index}`} className="grid grid-cols-1 gap-2 border border-n40 bg-n20 p-3 md:grid-cols-[minmax(140px,0.6fr)_minmax(180px,0.8fr)_minmax(0,1.4fr)_32px]">
+                                        <label className="block min-w-0">
+                                            <span className="block text-[11px] font-medium text-n300 mb-1">使用场景</span>
+                                            <select
+                                                value={bindingScope}
+                                                onChange={event => {
+                                                    const scope = normalizeModelUsageScope(event.target.value);
+                                                    const option = bindingOptions.find(item => (
+                                                        String(item.operation || '').trim().toLowerCase() === String(binding.operation || '').trim().toLowerCase()
+                                                        && normalizeModelUsageScope(item.scope) === scope
+                                                    ));
+                                                    updateBinding(index, {
+                                                        ...binding,
+                                                        scope,
+                                                        scope_label: modelUsageScopeLabel(scope, usageScopes),
+                                                        label: option?.label || binding.label,
+                                                        model_name: option?.model_name || binding.model_name,
+                                                    });
+                                                }}
+                                                className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 focus:border-primary focus:outline-none"
+                                            >
+                                                {usageScopes.map(scopeMeta => {
+                                                    const scope = normalizeModelUsageScope(scopeMeta.scope);
+                                                    return (
+                                                        <option key={scope} value={scope}>{scopeMeta.label || modelUsageScopeLabel(scope, usageScopes)}</option>
+                                                    );
+                                                })}
+                                            </select>
+                                            <span className="mt-1 block font-mono text-[10px] text-n100">{bindingScope}</span>
+                                        </label>
                                         <label className="block min-w-0">
                                             <span className="block text-[11px] font-medium text-n300 mb-1">前台操作</span>
                                             {selectedOption ? (
@@ -1822,17 +1915,19 @@ const ApiConfigEditorModal: React.FC<{
                                                     value={binding.operation}
                                                     onChange={event => {
                                                         const operation = event.target.value;
-                                                        const option = bindingOptions.find(item => item.operation === operation);
+                                                        const option = selectableOptions.find(item => item.operation === operation);
                                                         updateBinding(index, {
                                                             operation,
                                                             label: option?.label || operation,
                                                             model_name: option?.model_name || binding.model_name,
+                                                            scope: bindingScope,
+                                                            scope_label: modelUsageScopeLabel(bindingScope, usageScopes),
                                                         });
                                                     }}
                                                     className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 focus:border-primary focus:outline-none"
                                                 >
-                                                    {bindingOptions.map(option => (
-                                                        <option key={option.operation} value={option.operation}>{option.label || option.operation}</option>
+                                                    {selectableOptions.map(option => (
+                                                        <option key={modelBindingKey(option)} value={option.operation}>{option.label || option.operation}</option>
                                                     ))}
                                                 </select>
                                             ) : (
@@ -1843,6 +1938,8 @@ const ApiConfigEditorModal: React.FC<{
                                                         ...binding,
                                                         operation: event.target.value.trim().toLowerCase(),
                                                         label: event.target.value,
+                                                        scope: bindingScope,
+                                                        scope_label: modelUsageScopeLabel(bindingScope, usageScopes),
                                                     })}
                                                     className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 font-mono focus:border-primary focus:outline-none"
                                                     placeholder="operation-code"
@@ -2261,8 +2358,11 @@ const ApiConfigCard: React.FC<{
                         <div className="text-[10px] uppercase tracking-wider text-n100">前台操作与模型绑定</div>
                         <div className="mt-2 grid gap-2 md:grid-cols-2">
                             {modelBindings.map(binding => (
-                                <div key={binding.operation} className="min-w-0 border-l-2 border-primary pl-2">
-                                    <div className="text-xs font-medium text-n700">{binding.label || binding.operation}</div>
+                                <div key={modelBindingKey(binding)} className="min-w-0 border-l-2 border-primary pl-2">
+                                    <div className="text-xs font-medium text-n700">
+                                        <span className="mr-1 rounded bg-n20 px-1 py-0.5 text-[10px] text-n300">{binding.scope_label || modelUsageScopeLabel(binding.scope)}</span>
+                                        {binding.label || binding.operation}
+                                    </div>
                                     <div className="mt-0.5 font-mono text-[11px] text-n100 break-all">{binding.model_name}</div>
                                 </div>
                             ))}
@@ -2676,7 +2776,8 @@ const ProviderQuickCard: React.FC<{
                                             </div>
                                             <div className="mt-1 flex flex-wrap gap-1">
                                                 {bindings.map(binding => (
-                                                    <span key={binding.operation} className="rounded border border-n40 bg-n0 px-1.5 py-0.5 text-[10px] text-n700">
+                                                    <span key={modelBindingKey(binding)} className="rounded border border-n40 bg-n0 px-1.5 py-0.5 text-[10px] text-n700">
+                                                        <span className="mr-1 rounded bg-n20 px-1 text-n300">{binding.scope_label || modelUsageScopeLabel(binding.scope)}</span>
                                                         {binding.label || binding.operation} → <span className="font-mono">{binding.model_name}</span>
                                                     </span>
                                                 ))}
@@ -3743,10 +3844,10 @@ const ApiConfigPanel: React.FC = () => {
             return;
         }
         const rawOperations = editingForm.model_bindings
-            .map(item => item.operation.trim().toLowerCase())
+            .map(item => modelBindingKey(item))
             .filter(Boolean);
         if (new Set(rawOperations).size !== rawOperations.length) {
-            crmMessage.warning('同一张 API 卡中，一个前台操作只能绑定一次');
+            crmMessage.warning('同一张 API 卡中，同一使用场景下一个前台操作只能绑定一次');
             return;
         }
 

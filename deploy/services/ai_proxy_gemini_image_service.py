@@ -77,9 +77,14 @@ async def generate_gemini_images(
     requested_model: Optional[str],
     aspect_ratio: str,
     image_size: Optional[str] = None,
+    usage_scope: Optional[str] = None,
 ) -> tuple[List[str], str]:
     explicit_model = normalize_gemini_image_model(requested_model)
-    config = resolve_provider("gemini-image", explicit_model)
+    config = (
+        resolve_provider("gemini-image", explicit_model, usage_scope=usage_scope)
+        if usage_scope is not None
+        else resolve_provider("gemini-image", explicit_model)
+    )
     model = config.model_name or explicit_model or "gemini-2.5-flash-image"
     payload = build_gemini_image_payload(
         parts=parts,

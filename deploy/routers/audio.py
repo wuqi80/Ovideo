@@ -5,7 +5,7 @@ import logging
 from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from services.audio_access_service import (
     AudioObjectAccessDenied,
@@ -332,9 +332,12 @@ def create_audio_router(
         voice_id_prefix: str = "clone"
 
     class MinimaxTTSRequest(BaseModel):
+        model_config = ConfigDict(protected_namespaces=())
+
         text: str
         voice_id: str
         model: str = "speech-2.8-hd"
+        model_scope: Optional[str] = None
         speed: float = 1.0
         pitch: int = 0
         emotion: Optional[str] = None

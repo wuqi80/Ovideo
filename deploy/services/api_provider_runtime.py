@@ -15,7 +15,10 @@ from services.api_provider_registry import (
     DASHSCOPE_DEFAULT_MODEL_MAP,
     DEEPSEEK_DEFAULT_MODEL_MAP,
     MINIMAX_M3_MODEL,
+    MINIMAX_M3_OPERATION,
     MINIMAX_OPERATION_MODEL_ENV_MAP,
+    MINIMAX_TTS_HD_MODEL,
+    MINIMAX_TTS_TURBO_MODEL,
     PROVIDER_CATALOG,
     SEEDANCE_DEFAULT_MODEL_MAP,
     build_provider_operation_url_templates,
@@ -34,6 +37,7 @@ from services.api_provider_registry import (
     get_provider_env_key,
     get_proxy_mode_env_key,
     get_seedance_sub_model_env_key,
+    MODEL_USAGE_SCOPE_WORKFLOW,
     is_seedance_fast_model,
     normalize_doubao_image_model,
     normalize_doubao_image_endpoint,
@@ -41,10 +45,12 @@ from services.api_provider_registry import (
     normalize_deepseek_model_name,
     normalize_dashscope_sub_model,
     normalize_model_bindings,
+    normalize_model_usage_scope,
     normalize_seedance_sub_model,
     normalize_seedance_endpoint,
     normalize_seedance_model_for_endpoint,
     normalize_provider,
+    scoped_model_env_candidates,
     seedance_access_mode,
 )
 from utils.config_helpers import _config_get
@@ -224,6 +230,7 @@ def resolve_provider_with_failover(
     model_name: Optional[str] = None,
     *,
     provider_health: Optional[Any] = None,
+    usage_scope: Optional[str] = MODEL_USAGE_SCOPE_WORKFLOW,
 ) -> Tuple[ResolvedProviderConfig, Dict[str, Any]]:
     """Resolve provider config and select a registry-declared fallback if needed.
 
@@ -233,7 +240,8 @@ def resolve_provider_with_failover(
     diagnostics before deciding whether to use the fallback config.
     """
     provider_id = normalize_provider(provider)
-    primary = resolve_provider(provider_id, model_name)
+    model_scope = normalize_model_usage_scope(usage_scope)
+    primary = resolve_provider(provider_id, model_name, usage_scope=model_scope)
     primary_reasons = _candidate_skip_reasons(
         primary,
         provider_health=provider_health,
@@ -270,7 +278,7 @@ def resolve_provider_with_failover(
             continue
         fallback_provider = normalize_provider(str(entry.get("provider") or ""))
         fallback_model = str(entry.get("model_name") or "") or None
-        fallback = resolve_provider(fallback_provider, fallback_model)
+        fallback = resolve_provider(fallback_provider, fallback_model, usage_scope=model_scope)
         fallback_reasons = _candidate_skip_reasons(
             fallback,
             provider_health=health_map,
@@ -398,7 +406,12 @@ def build_effective_provider_config_sources(configs: Optional[List[Any]]) -> Dic
     return sources
 
 
-def resolve_seedance_model_name(sub_model: str, model_name: Optional[str] = None) -> str:
+def resolve_seedance_model_name(
+    sub_model: str,
+    model_name: Optional[str] = None,
+    *,
+    usage_scope: Optional[str] = MODEL_USAGE_SCOPE_WORKFLOW,
+) -> str:
     """Resolve Seedance standard/fast model names without import-time env caching."""
     normalized_sub_model = normalize_seedance_sub_model(sub_model)
     provider_env = get_provider_env_key("seedance")
@@ -413,7 +426,7 @@ def resolve_seedance_model_name(sub_model: str, model_name: Optional[str] = None
         )
 
     sub_model_env = get_seedance_sub_model_env_key(normalized_sub_model)
-    sub_model_value = (os.getenv(sub_model_env) or "").strip()
+    sub_model_value, _sub_model_env_source = _first_env(scoped_model_env_candidates(sub_model_env, usage_scope))
     if sub_model_value:
         return normalize_seedance_model_for_endpoint(
             sub_model_value,
@@ -422,7 +435,7 @@ def resolve_seedance_model_name(sub_model: str, model_name: Optional[str] = None
         )
 
     generic_model_env = get_model_env_key(provider_env) if provider_env else ""
-    generic_model = (os.getenv(generic_model_env) or "").strip() if generic_model_env else ""
+    generic_model, _generic_model_env_source = _first_env(scoped_model_env_candidates(generic_model_env, usage_scope))
     if generic_model:
         generic_is_fast = is_seedance_fast_model(generic_model)
         if normalized_sub_model == "fast" and generic_is_fast:
@@ -437,7 +450,12 @@ def resolve_seedance_model_name(sub_model: str, model_name: Optional[str] = None
 # 保持与原 seedance_error_is_non_retryable / seedance_user_facing_error 同等行为）。
 
 
-def resolve_dashscope_model_name(sub_model: str, model_name: Optional[str] = None) -> str:
+def resolve_dashscope_model_name(
+    sub_model: str,
+    model_name: Optional[str] = None,
+    *,
+    usage_scope: Optional[str] = MODEL_USAGE_SCOPE_WORKFLOW,
+) -> str:
     """Resolve DashScope family model names without sharing one generic model env."""
     normalized_sub_model = normalize_dashscope_sub_model(sub_model)
     explicit_model = (model_name or "").strip()
@@ -445,13 +463,13 @@ def resolve_dashscope_model_name(sub_model: str, model_name: Optional[str] = Non
         return explicit_model
 
     sub_model_env = get_dashscope_sub_model_env_key(normalized_sub_model)
-    sub_model_value = (os.getenv(sub_model_env) or "").strip()
+    sub_model_value, _sub_model_env_source = _first_env(scoped_model_env_candidates(sub_model_env, usage_scope))
     if sub_model_value:
         return sub_model_value
 
     provider_env = get_provider_env_key("dashscope")
     generic_model_env = get_model_env_key(provider_env) if provider_env else ""
-    generic_model = (os.getenv(generic_model_env) or "").strip() if generic_model_env else ""
+    generic_model, _generic_model_env_source = _first_env(scoped_model_env_candidates(generic_model_env, usage_scope))
     if generic_model and dashscope_model_matches_sub_model(normalized_sub_model, generic_model):
         return generic_model
 
@@ -466,36 +484,57 @@ def resolve_dashscope_default_model_name(model_name: str) -> str:
     return model_name
 
 
-def resolve_deepseek_model_name(model_name: Optional[str], runtime_model_name: Optional[str] = None) -> tuple[str, Optional[str]]:
+def resolve_deepseek_model_name(
+    model_name: Optional[str],
+    runtime_model_name: Optional[str] = None,
+    *,
+    usage_scope: Optional[str] = MODEL_USAGE_SCOPE_WORKFLOW,
+) -> tuple[str, Optional[str]]:
     """Resolve stable front-end operations through their configured provider model."""
     requested = str(model_name or "").strip()
     operation = requested.lower()
     if operation in DEEPSEEK_DEFAULT_MODEL_MAP:
         operation_env = get_deepseek_operation_model_env_key(operation)
-        configured = (os.getenv(operation_env) or "").strip()
+        configured, configured_env = _first_env(scoped_model_env_candidates(operation_env, usage_scope))
         return (
             normalize_deepseek_model_name(configured or DEEPSEEK_DEFAULT_MODEL_MAP[operation]),
-            operation_env if configured else None,
+            configured_env if configured else None,
         )
 
     selected = requested or str(runtime_model_name or "").strip()
     return normalize_deepseek_model_name(selected), None
 
 
-def resolve_minimax_model_name(model_name: Optional[str], runtime_model_name: Optional[str] = None) -> tuple[str, Optional[str]]:
+def resolve_minimax_model_name(
+    model_name: Optional[str],
+    runtime_model_name: Optional[str] = None,
+    *,
+    usage_scope: Optional[str] = MODEL_USAGE_SCOPE_WORKFLOW,
+) -> tuple[str, Optional[str]]:
     """Resolve the stable MiniMax text operation without disturbing video/audio defaults."""
     requested = str(model_name or "").strip()
     operation = requested.lower()
     if operation in MINIMAX_OPERATION_MODEL_ENV_MAP:
         operation_env = get_minimax_operation_model_env_key(operation)
-        configured = (os.getenv(operation_env) or "").strip()
-        return configured or MINIMAX_M3_MODEL, operation_env if configured else None
+        configured, configured_env = _first_env(scoped_model_env_candidates(operation_env, usage_scope))
+        fallback_model = {
+            MINIMAX_M3_OPERATION: MINIMAX_M3_MODEL,
+            "speech-hd": MINIMAX_TTS_HD_MODEL,
+            "speech-turbo": MINIMAX_TTS_TURBO_MODEL,
+        }.get(operation, MINIMAX_M3_MODEL)
+        return configured or fallback_model, configured_env if configured else None
 
     return requested or str(runtime_model_name or "").strip(), None
 
 
-def resolve_provider(provider: str, model_name: Optional[str] = None) -> ResolvedProviderConfig:
+def resolve_provider(
+    provider: str,
+    model_name: Optional[str] = None,
+    *,
+    usage_scope: Optional[str] = MODEL_USAGE_SCOPE_WORKFLOW,
+) -> ResolvedProviderConfig:
     provider_id = normalize_provider(provider)
+    model_scope = normalize_model_usage_scope(usage_scope)
     preset = get_api_model_preset(provider_id, model_name) or {}
     catalog = PROVIDER_CATALOG.get(provider_id, {})
 
@@ -541,9 +580,9 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
     custom_proxy, custom_proxy_env = _first_env(custom_proxy_envs)
 
     model_envs = _unique(
-        [
-            get_model_env_key(primary_env) if primary_env else None,
-        ]
+        scoped_model_env_candidates(get_model_env_key(primary_env), model_scope)
+        if primary_env
+        else []
     )
     runtime_model_name, model_env = _first_env(model_envs)
     resolved_model_name = model_name or runtime_model_name or preset.get("model_name") or ""
@@ -555,6 +594,7 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
         resolved_model_name, operation_model_env = resolve_deepseek_model_name(
             model_name,
             runtime_model_name or preset.get("model_name"),
+            usage_scope=model_scope,
         )
         if operation_model_env:
             model_env = operation_model_env
@@ -564,6 +604,7 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
         resolved_model_name, operation_model_env = resolve_minimax_model_name(
             model_name,
             runtime_model_name or preset.get("model_name"),
+            usage_scope=model_scope,
         )
         if minimax_operation_request:
             model_env = operation_model_env
@@ -612,6 +653,7 @@ def resolve_provider(provider: str, model_name: Optional[str] = None) -> Resolve
             "proxy_mode": proxy_mode_env or "preset",
             "custom_proxy": custom_proxy_env or "",
             "model": resolved_model_source,
+            "model_scope": model_scope,
             "extra": extra_sources,
         },
     )

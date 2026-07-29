@@ -7,6 +7,8 @@ from typing import Any, Dict
 from services.api_provider_registry import (
     MINIMAX_DEFAULT_VIDEO_MODEL,
     MINIMAX_FAST_VIDEO_MODEL,
+    MODEL_USAGE_SCOPE_WORKFLOW,
+    normalize_model_usage_scope,
 )
 from services.api_provider_runtime import resolve_seedance_model_name
 from services.cluster_node_service import list_agent_nodes
@@ -59,10 +61,12 @@ def build_video_model_manifest(
     fast_seedance_model: str,
     seedance_omni: bool,
     comfyui_available: bool,
+    model_scope: str = MODEL_USAGE_SCOPE_WORKFLOW,
 ) -> Dict[str, Any]:
     """Build the versioned, secret-free capability contract consumed by the UI."""
     return {
         "manifest_version": "2026-07-18.1",
+        "model_scope": model_scope,
         "models": [
             _seedance_manifest(
                 standard_seedance_model,
@@ -112,11 +116,14 @@ def build_video_model_manifest(
     }
 
 
-async def get_video_capabilities() -> Dict[str, Any]:
+async def get_video_capabilities(
+    usage_scope: str = MODEL_USAGE_SCOPE_WORKFLOW,
+) -> Dict[str, Any]:
     """Return legacy feature flags plus a versioned model capability manifest."""
+    model_scope = normalize_model_usage_scope(usage_scope)
     try:
-        standard_seedance_model = resolve_seedance_model_name("standard")
-        fast_seedance_model = resolve_seedance_model_name("fast")
+        standard_seedance_model = resolve_seedance_model_name("standard", usage_scope=model_scope)
+        fast_seedance_model = resolve_seedance_model_name("fast", usage_scope=model_scope)
     except Exception as exc:
         logger.debug("video capability Seedance model probe failed: %s", exc)
         standard_seedance_model = ""
@@ -133,5 +140,6 @@ async def get_video_capabilities() -> Dict[str, Any]:
             fast_seedance_model=fast_seedance_model,
             seedance_omni=seedance_omni,
             comfyui_available=comfyui_available,
+            model_scope=model_scope,
         ),
     }

@@ -39,6 +39,7 @@ async def resolve_ai_proxy_provider(
     model: Optional[str] = None,
     *,
     health_providers: Optional[List[str]] = None,
+    usage_scope: Optional[str] = "workflow",
 ) -> tuple[Any, Dict[str, Any]]:
     """Resolve a provider with registry-declared failover and cached health.
 
@@ -56,6 +57,7 @@ async def resolve_ai_proxy_provider(
         provider,
         model,
         provider_health=provider_health,
+        usage_scope=usage_scope,
     )
     if failover.get("active"):
         logger.warning(

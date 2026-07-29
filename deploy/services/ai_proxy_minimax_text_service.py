@@ -21,8 +21,11 @@ MINIMAX_KEEPALIVE_SECONDS = 5.0
 MINIMAX_MAX_OUTPUT_TOKENS = 16384
 
 
-def _resolve_minimax_config(model: Optional[str] = None) -> Any:
-    config = resolve_provider("minimax", model or MINIMAX_M3_OPERATION)
+def _resolve_minimax_config(
+    model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
+) -> Any:
+    config = resolve_provider("minimax", model or MINIMAX_M3_OPERATION, usage_scope=usage_scope)
     if not config.api_key:
         raise AIProxyConfigError(
             "MiniMax 服务未配置，请在管理后台 (Admin → API 配置) 添加 minimax 提供商的 API Key 后重试",
@@ -33,8 +36,11 @@ def _resolve_minimax_config(model: Optional[str] = None) -> Any:
     return config
 
 
-def ensure_minimax_configured(model: Optional[str] = None) -> None:
-    _resolve_minimax_config(model)
+def ensure_minimax_configured(
+    model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
+) -> None:
+    _resolve_minimax_config(model, usage_scope=usage_scope)
 
 
 def build_minimax_payload(
@@ -78,8 +84,11 @@ def minimax_anthropic_messages_url(endpoint: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, normalized_path, parsed.query, ""))
 
 
-def _minimax_chat_url(model: Optional[str]) -> tuple[str, Dict[str, Any], str]:
-    config = _resolve_minimax_config(model)
+def _minimax_chat_url(
+    model: Optional[str],
+    usage_scope: Optional[str] = None,
+) -> tuple[str, Dict[str, Any], str]:
+    config = _resolve_minimax_config(model, usage_scope=usage_scope)
     resolved_model = config.model_name or MINIMAX_M3_MODEL
     return minimax_anthropic_messages_url(config.endpoint), {
         "headers": {
@@ -97,6 +106,7 @@ def stream_minimax_chat(
     response_format: str = "text",
     temperature: float = 0.2,
     model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
     on_complete: Optional[Callable[[str], None]] = None,
     on_error: Optional[Callable[[str], None]] = None,
 ) -> Iterator[str]:
@@ -110,7 +120,7 @@ def stream_minimax_chat(
         full_content: List[str] = []
         stream_error: Optional[str] = None
         try:
-            url, request_kwargs, resolved_model = _minimax_chat_url(model)
+            url, request_kwargs, resolved_model = _minimax_chat_url(model, usage_scope=usage_scope)
             payload = build_minimax_payload(
                 prompt=prompt,
                 model=resolved_model,

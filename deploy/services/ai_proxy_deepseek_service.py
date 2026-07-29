@@ -16,8 +16,11 @@ logger = logging.getLogger(__name__)
 DEEPSEEK_SYSTEM_PROMPT = "You are a helpful assistant for storyboard generation tasks."
 
 
-def _resolve_deepseek_config(model: Optional[str] = None) -> Any:
-    config = resolve_provider("deepseek", model)
+def _resolve_deepseek_config(
+    model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
+) -> Any:
+    config = resolve_provider("deepseek", model, usage_scope=usage_scope)
     if not config.api_key:
         raise AIProxyConfigError(
             "DeepSeek 服务未配置，请在管理后台 (Admin → API 配置) 添加 deepseek 提供商的 API Key 后重试",
@@ -28,8 +31,11 @@ def _resolve_deepseek_config(model: Optional[str] = None) -> Any:
     return config
 
 
-def ensure_deepseek_configured(model: Optional[str] = None) -> None:
-    _resolve_deepseek_config(model)
+def ensure_deepseek_configured(
+    model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
+) -> None:
+    _resolve_deepseek_config(model, usage_scope=usage_scope)
 
 
 def build_deepseek_payload(
@@ -61,8 +67,11 @@ def _sse_event(payload: Dict[str, Any]) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
-def _deepseek_chat_url(model: Optional[str]) -> tuple[str, Dict[str, Any], str]:
-    config = _resolve_deepseek_config(model)
+def _deepseek_chat_url(
+    model: Optional[str],
+    usage_scope: Optional[str] = None,
+) -> tuple[str, Dict[str, Any], str]:
+    config = _resolve_deepseek_config(model, usage_scope=usage_scope)
     resolved_model = config.model_name or model or "deepseek-reasoner"
     return config.url_for_operation("chat_completions"), {
         "headers": {
@@ -88,8 +97,9 @@ def generate_deepseek_text(
     response_format: str = "text",
     temperature: float = 0.2,
     model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
 ) -> str:
-    config = _resolve_deepseek_config(model)
+    config = _resolve_deepseek_config(model, usage_scope=usage_scope)
     extra_payload: Dict[str, Any] = {
         "stream": False,
         "thinking": {"type": _deepseek_thinking_type(model) or "enabled"},
@@ -130,12 +140,13 @@ def stream_deepseek_chat(
     response_format: str = "text",
     temperature: float = 0.2,
     model: Optional[str] = None,
+    usage_scope: Optional[str] = None,
     on_complete: Optional[Callable[[str], None]] = None,
     on_error: Optional[Callable[[str], None]] = None,
 ) -> Iterator[str]:
     """Yield DeepSeek chat chunks in the route's existing SSE event format."""
     try:
-        url, request_kwargs, resolved_model = _deepseek_chat_url(model)
+        url, request_kwargs, resolved_model = _deepseek_chat_url(model, usage_scope=usage_scope)
         payload = build_deepseek_payload(
             prompt=prompt,
             model=resolved_model,
@@ -224,5 +235,4 @@ def stream_deepseek_chat(
         on_error(stream_error or "DeepSeek 返回空内容")
 
     yield "data: [DONE]\n\n"
-
 
