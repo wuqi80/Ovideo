@@ -13,15 +13,25 @@ describe('FileColumn workflow script control', () => {
     expect(source).not.toContain('title="设为本集后续流程采用剧本"');
   });
 
-  it('keeps narrow-column controls in dedicated rows', () => {
+  it('keeps file actions in the compact title row', () => {
     expect(source).toContain('data-testid="file-column-title-row"');
     expect(source).toContain('data-testid="file-column-action-row"');
     expect(source).toContain('data-testid="file-card-control-row"');
     expect(source).toContain('data-testid="file-card-content"');
     expect(source).toContain('aria-label="新建空白文件"');
     expect(source).toContain('aria-label="上传文件"');
-    expect(source).toContain('>\n            文件列表\n');
+    expect(source).toContain('文件列表');
     expect(source).not.toContain('1. 文件列表');
+  });
+
+  it('uses compact light-border cards without horizontal section dividers', () => {
+    expect(source).toContain('className="flex shrink-0 items-center justify-end gap-1"');
+    expect(source).toContain('className="flex flex-col gap-[5px]"');
+    expect(source).toContain("'border-primary bg-primary-light shadow-sm'");
+    expect(source).toContain("'border-n40 hover:border-n100 hover:bg-n20'");
+    expect(source).not.toContain('flex-shrink-0 border-b border-n40 bg-n0');
+    expect(source).not.toContain('border-t border-n40 px-4');
+    expect(source).not.toContain('p-3 border-t border-n40 bg-n0 sticky');
   });
 
   it('labels completed files as generated', () => {

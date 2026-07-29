@@ -173,26 +173,26 @@ export const FileColumn: React.FC<FileColumnProps> = ({
         </div>
       )}
 
-      {/* Header uses stable rows so narrow columns and macOS fonts never wrap controls. */}
-      <div className="flex-shrink-0 border-b border-n40 bg-n0">
+      {/* Keep the title and file actions in one compact row. */}
+      <div className="flex-shrink-0 bg-n0 px-3 pb-2 pt-3">
         <div
           data-testid="file-column-title-row"
-          className="flex h-11 min-w-0 items-center gap-2 px-4"
+          className="flex h-9 min-w-0 items-center gap-2"
         >
-          <h2 className="whitespace-nowrap text-sm font-semibold text-n700">
-            文件列表
-          </h2>
-          <span className="whitespace-nowrap font-mono text-xs text-n100">({files.length})</span>
-        </div>
-
-        <div
-          data-testid="file-column-action-row"
-          className="flex h-10 items-center justify-end gap-1 border-t border-n40 px-4"
-        >
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h2 className="whitespace-nowrap text-sm font-semibold text-n800">
+              文件列表
+            </h2>
+            <span className="whitespace-nowrap font-mono text-xs text-n100">({files.length})</span>
+          </div>
+          <div
+            data-testid="file-column-action-row"
+            className="flex shrink-0 items-center justify-end gap-1"
+          >
             <button
               type="button"
               onClick={onCreateBlankFile}
-              className="inline-flex h-8 w-8 items-center justify-center rounded text-n300 transition-colors hover:bg-success hover:text-white"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-n40 bg-n0 text-n300 transition-colors hover:border-success hover:bg-g50 hover:text-success"
               title="新建空白文件"
               aria-label="新建空白文件"
             >
@@ -201,17 +201,18 @@ export const FileColumn: React.FC<FileColumnProps> = ({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex h-8 w-8 items-center justify-center rounded text-n300 transition-colors hover:bg-primary hover:text-white"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-n40 bg-n0 text-n300 transition-colors hover:border-primary hover:bg-primary-light hover:text-primary"
               title="上传文件"
               aria-label="上传文件"
             >
               <Upload className="h-4 w-4" />
             </button>
+          </div>
         </div>
       </div>
       
       {/* Content */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar relative pb-10">
+      <div className="relative flex-1 overflow-y-auto px-2 pb-2 custom-scrollbar">
         {files.length === 0 ? (
           <div 
             onClick={() => fileInputRef.current?.click()}
@@ -227,7 +228,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
             </p>
           </div>
         ) : (
-          <div className="p-2 space-y-1">
+          <div className="flex flex-col gap-[5px]">
             {files.map((file, index) => (
               <div
                 key={file.id}
@@ -273,13 +274,10 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   setDragOverIndex(null);
                 }}
                 onClick={() => onFileSelect(file.id)}
-                className={`group relative flex flex-col gap-2 rounded-lg border p-2.5 cursor-pointer transition-all duration-200 ${
+                className={`group relative flex cursor-pointer flex-col gap-1.5 rounded-lg border bg-n0 px-2.5 py-2 transition-all duration-200 ${
                   selectedFileId === file.id
-                    ? 'bg-primary-light border-primary shadow-sm'
-                    : 'hover:bg-n20 border-transparent hover:border-n40'
-                } ${activeFileId === file.id
-                    ? 'ring-2 ring-success/30 border-success'
-                    : ''
+                    ? 'border-primary bg-primary-light shadow-sm'
+                    : 'border-n40 hover:border-n100 hover:bg-n20'
                 } ${draggedFileId === file.id ? 'border-primary shadow-sm ring-2 ring-primary/20' : ''} ${
                   dragOverIndex === index
                     ? 'border-primary bg-primary-light ring-2 ring-primary/20'
@@ -294,7 +292,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
               >
                 <div
                   data-testid="file-card-control-row"
-                  className="flex h-6 w-full min-w-0 items-center gap-2 pr-[132px]"
+                  className="flex h-6 w-full min-w-0 items-center gap-1.5 pr-[132px]"
                 >
                   {onReorderFiles && (
                     <div
@@ -314,24 +312,24 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                 </div>
 
                 <div data-testid="file-card-content" className="w-full min-w-0 select-none">
-                  <div className="mb-1 flex min-w-0 items-center gap-2">
-                    <h3 className={`min-w-0 flex-1 truncate text-sm font-medium ${selectedFileId === file.id ? 'text-n800' : 'text-n700 group-hover:text-n800'}`}>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <h3 className={`min-w-0 flex-1 truncate text-sm font-semibold ${selectedFileId === file.id ? 'text-n800' : 'text-n700 group-hover:text-n800'}`}>
                       {file.name}
                     </h3>
                     {activeFileId === file.id && (
-                      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded border border-success/40 bg-g50 px-2 py-1 text-[10px] font-semibold text-success">
+                      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded bg-g50 px-2 py-0.5 text-[10px] font-semibold text-success">
                         <CheckCircle2 className="h-3 w-3" />
                         当前主剧本
                       </span>
                     )}
                   </div>
-                  <p className="text-[10px] text-n100 line-clamp-2 font-serif leading-relaxed opacity-80 group-hover:opacity-100">
+                  <p className="mt-0.5 line-clamp-1 text-[10px] leading-4 text-n100">
                     {file.originalContent.slice(0, 60).replace(/\n/g, ' ')}...
                   </p>
-                  <div className="mt-2">
+                  <div className="mt-1.5">
                     {activeFileId === file.id ? (
-                      <div className="h-9 w-full inline-flex items-center justify-center gap-2 rounded border border-success/40 bg-g50 px-3 text-xs font-semibold text-success">
-                        <CheckCircle2 className="w-4 h-4" />
+                      <div className="inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-md bg-g50 px-2 text-[11px] font-medium text-success">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
                         本集后续流程使用此剧本
                       </div>
                     ) : (
@@ -350,10 +348,10 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                           }
                         }}
                         disabled={activatingFileId !== null}
-                        className="h-9 w-full inline-flex items-center justify-center gap-2 rounded bg-primary px-3 text-xs font-semibold text-white shadow-sm hover:bg-primary-hover disabled:cursor-wait disabled:opacity-50"
+                        className="inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary-light px-2 text-[11px] font-medium text-primary hover:border-primary hover:bg-primary hover:text-white disabled:cursor-wait disabled:opacity-50"
                         title="设为本集后续流程使用的主剧本"
                       >
-                        <CheckCircle2 className={`w-4 h-4 ${activatingFileId === file.id ? 'animate-pulse' : ''}`} />
+                        <CheckCircle2 className={`h-3.5 w-3.5 ${activatingFileId === file.id ? 'animate-pulse' : ''}`} />
                         {activatingFileId === file.id ? '正在设置...' : '设为本集主剧本'}
                       </button>
                     )}
@@ -411,7 +409,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
 
        {/* Footer Actions */}
        {files.length > 0 && (
-           <div className="p-3 border-t border-n40 bg-n0 sticky bottom-0 z-10">
+           <div className="sticky bottom-0 z-10 bg-n0 px-2 pb-2 pt-[5px]">
                <button
                 onClick={onExportProject}
                 className="w-full py-2 bg-n0 hover:bg-primary text-n300 hover:text-white rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2 border border-n40"
