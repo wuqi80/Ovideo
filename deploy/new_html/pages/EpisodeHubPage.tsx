@@ -13,7 +13,6 @@ import {
   Copy,
   Maximize2,
   Minimize2,
-  GripVertical,
   Upload,
 } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
@@ -138,9 +137,9 @@ export const EpisodeHubPage: React.FC = () => {
   const [uploadingCoverEpisodeId, setUploadingCoverEpisodeId] = useState<string | null>(null);
   const [activeStatusTab, setActiveStatusTab] = useState<EpisodeTab>('all');
   const [isWideLayout, setIsWideLayout] = useState(() => localStorage.getItem('episode_hub_layout') === 'wide');
-  const dragOriginEpisodesRef = useRef<EpisodeCard[] | null>(null);
-  const dragPreviewEpisodesRef = useRef<EpisodeCard[] | null>(null);
-  const dragCommittedRef = useRef(false);
+  const dragOverlayRef = useRef<HTMLElement | null>(null);
+  const transparentDragImageRef = useRef<HTMLElement | null>(null);
+  const dragPointerOffsetRef = useRef({ x: 0, y: 0 });
 
   const loadEpisodes = useCallback(async () => {
     if (!projectId) return;
@@ -158,6 +157,15 @@ export const EpisodeHubPage: React.FC = () => {
   }, [projectId]);
 
   useEffect(() => { loadEpisodes(); }, [loadEpisodes]);
+
+  const removeDragVisuals = useCallback(() => {
+    dragOverlayRef.current?.remove();
+    transparentDragImageRef.current?.remove();
+    dragOverlayRef.current = null;
+    transparentDragImageRef.current = null;
+  }, []);
+
+  useEffect(() => removeDragVisuals, [removeDragVisuals]);
 
   const toggleLayoutWidth = useCallback(() => {
     setIsWideLayout(prev => {
@@ -329,64 +337,104 @@ export const EpisodeHubPage: React.FC = () => {
       return;
     }
     const card = event.currentTarget;
+    const rect = card.getBoundingClientRect();
+    const pointerX = event.clientX || rect.left + rect.width / 2;
+    const pointerY = event.clientY || rect.top + Math.min(rect.height / 2, 120);
+    dragPointerOffsetRef.current = {
+      x: Math.max(0, pointerX - rect.left),
+      y: Math.max(0, pointerY - rect.top),
+    };
+
+    removeDragVisuals();
+    const overlay = card.cloneNode(true) as HTMLElement;
+    overlay.removeAttribute('data-testid');
+    overlay.querySelectorAll('[data-testid]').forEach(node => node.removeAttribute('data-testid'));
+    overlay.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.setAttribute('draggable', 'false');
+    overlay.dataset.episodeDragOverlay = 'true';
+    Object.assign(overlay.style, {
+      position: 'fixed',
+      left: `${rect.left}px`,
+      top: `${rect.top}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      zIndex: '9999',
+      pointerEvents: 'none',
+      opacity: '1',
+      margin: '0',
+      animation: 'none',
+      transition: 'none',
+      transform: 'scale(1.025) rotate(0.2deg)',
+      transformOrigin: 'center',
+      boxShadow: '0 28px 64px rgba(15, 23, 42, 0.28)',
+    });
+    document.body.appendChild(overlay);
+    dragOverlayRef.current = overlay;
+
+    const transparentDragImage = document.createElement('span');
+    Object.assign(transparentDragImage.style, {
+      position: 'fixed',
+      left: '0',
+      top: '0',
+      width: '1px',
+      height: '1px',
+      opacity: '0.001',
+      pointerEvents: 'none',
+    });
+    document.body.appendChild(transparentDragImage);
+    transparentDragImageRef.current = transparentDragImage;
+
     setDraggingEpisodeId(episodeId);
-    setDragOverEpisodeId(null);
-    dragOriginEpisodesRef.current = episodes;
-    dragPreviewEpisodesRef.current = episodes;
-    dragCommittedRef.current = false;
+    setDragOverEpisodeId(episodeId);
     setMenuOpen(null);
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', episodeId);
     if (typeof event.dataTransfer.setDragImage === 'function') {
-      const rect = card.getBoundingClientRect();
-      const offsetX = rect.width > 0 ? Math.round(rect.width / 2) : 24;
-      const offsetY = rect.height > 0 ? Math.round(Math.min(rect.height / 2, 120)) : 24;
-      event.dataTransfer.setDragImage(card, offsetX, offsetY);
+      event.dataTransfer.setDragImage(transparentDragImage, 0, 0);
     }
+  };
+
+  const handleDrag = (event: React.DragEvent<HTMLElement>) => {
+    const overlay = dragOverlayRef.current;
+    if (!overlay || (event.clientX === 0 && event.clientY === 0)) return;
+    overlay.style.left = `${event.clientX - dragPointerOffsetRef.current.x}px`;
+    overlay.style.top = `${event.clientY - dragPointerOffsetRef.current.y}px`;
   };
 
   const handleDragOver = (event: React.DragEvent<HTMLElement>, targetEpisodeId: string) => {
     const sourceId = draggingEpisodeId || event.dataTransfer.getData('text/plain');
-    if (!sourceId || sourceId === targetEpisodeId || reordering) return;
+    if (!sourceId || reordering) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
+    if (sourceId === targetEpisodeId) return;
     setDragOverEpisodeId(targetEpisodeId);
-    setEpisodes(prev => {
-      const nextEpisodes = previewEpisodeReorder(prev, sourceId, targetEpisodeId);
-      if (nextEpisodes === prev) return prev;
-      dragPreviewEpisodesRef.current = nextEpisodes;
-      return nextEpisodes;
-    });
   };
 
   const handleDrop = (event: React.DragEvent<HTMLElement>, targetEpisodeId: string) => {
     event.preventDefault();
     const sourceId = draggingEpisodeId || event.dataTransfer.getData('text/plain');
+    const effectiveTargetId = sourceId === targetEpisodeId
+      ? dragOverEpisodeId || targetEpisodeId
+      : targetEpisodeId;
+    const previousEpisodes = episodes;
+    const nextEpisodes = sourceId
+      ? previewEpisodeReorder(previousEpisodes, sourceId, effectiveTargetId)
+      : previousEpisodes;
+    removeDragVisuals();
     setDraggingEpisodeId(null);
     setDragOverEpisodeId(null);
     if (!sourceId || reordering) return;
+    if (!episodeOrderChanged(previousEpisodes, nextEpisodes)) return;
 
-    const previousEpisodes = dragOriginEpisodesRef.current || episodes;
-    const previewEpisodes = dragPreviewEpisodesRef.current || previewEpisodeReorder(episodes, sourceId, targetEpisodeId);
-    dragCommittedRef.current = true;
-    dragOriginEpisodesRef.current = null;
-    dragPreviewEpisodesRef.current = null;
-
-    if (!episodeOrderChanged(previousEpisodes, previewEpisodes)) return;
-
-    setEpisodes(previewEpisodes);
-    void persistEpisodeOrder(previewEpisodes, previousEpisodes);
+    setEpisodes(nextEpisodes);
+    void persistEpisodeOrder(nextEpisodes, previousEpisodes);
   };
 
   const handleDragEnd = () => {
-    if (!dragCommittedRef.current && dragOriginEpisodesRef.current) {
-      setEpisodes(dragOriginEpisodesRef.current);
-    }
+    removeDragVisuals();
     setDraggingEpisodeId(null);
     setDragOverEpisodeId(null);
-    dragOriginEpisodesRef.current = null;
-    dragPreviewEpisodesRef.current = null;
-    dragCommittedRef.current = false;
   };
 
   const goToWorkflow = (episodeId: string) => {
@@ -430,6 +478,22 @@ export const EpisodeHubPage: React.FC = () => {
       ? episodes
       : episodes.filter(ep => ep.status === activeStatusTab)
   ), [activeStatusTab, episodes]);
+
+  const dragPreviewEpisodes = useMemo(() => (
+    draggingEpisodeId && dragOverEpisodeId
+      ? previewEpisodeReorder(episodes, draggingEpisodeId, dragOverEpisodeId)
+      : episodes
+  ), [dragOverEpisodeId, draggingEpisodeId, episodes]);
+
+  const dragPreviewOrder = useMemo(() => new Map(
+    dragPreviewEpisodes
+      .filter(ep => activeStatusTab === 'all' || ep.status === activeStatusTab)
+      .map((ep, index) => [ep.episodeId, index])
+  ), [activeStatusTab, dragPreviewEpisodes]);
+
+  const dragPreviewNumbers = useMemo(() => new Map(
+    dragPreviewEpisodes.map((ep, index) => [ep.episodeId, index + 1])
+  ), [dragPreviewEpisodes]);
 
   const pageTitle = activeStatusTab === 'all' ? '全部分集' : episodeStatusLabels[activeStatusTab];
 
@@ -546,7 +610,8 @@ export const EpisodeHubPage: React.FC = () => {
             <div className={episodeGridClass}>
               {filteredEpisodes.map((ep, idx) => {
                 const displayIndex = episodes.findIndex(item => item.episodeId === ep.episodeId);
-                const displayNumber = displayIndex >= 0 ? displayIndex + 1 : idx + 1;
+                const displayNumber = dragPreviewNumbers.get(ep.episodeId) ?? (displayIndex >= 0 ? displayIndex + 1 : idx + 1);
+                const visualOrder = dragPreviewOrder.get(ep.episodeId) ?? idx;
                 const isDragging = draggingEpisodeId === ep.episodeId;
                 const isDropTarget = dragOverEpisodeId === ep.episodeId;
                 const canDragCard = !reordering && !editingId;
@@ -555,13 +620,16 @@ export const EpisodeHubPage: React.FC = () => {
                     key={ep.episodeId}
                     data-testid={`episode-card-${ep.episodeId}`}
                     data-dragging={isDragging ? 'true' : undefined}
+                    data-drop-placeholder={isDragging ? 'true' : undefined}
                     data-drop-target={isDropTarget ? 'true' : undefined}
                     title={canDragCard ? '拖动卡片调整分集顺序' : undefined}
+                    aria-label={canDragCard ? `${ep.episodeName || '未命名分集'} 拖动排序` : undefined}
                     draggable={canDragCard}
-                    className={`group relative overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-all duration-200 ease-out animate-slideUp ${canDragCard ? 'cursor-grab select-none active:cursor-grabbing' : 'cursor-default'} hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas ${isDragging ? 'z-30 scale-[1.02] rotate-[0.2deg] opacity-90 ring-2 ring-primary/35 shadow-[0_26px_60px_rgba(15,23,42,0.22)]' : ''} ${isDropTarget ? 'border-primary/70 outline outline-2 outline-primary/35 outline-offset-4 shadow-[0_18px_44px_rgba(25,103,255,0.16)]' : ''}`}
-                    style={{ animationDelay: `${idx * 60}ms` }}
+                    className={`group relative overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card transition-[border-color,box-shadow,opacity,filter] duration-150 ease-out animate-slideUp ${canDragCard ? 'cursor-grab select-none active:cursor-grabbing' : 'cursor-default'} hover:-translate-y-0.5 hover:border-n70 hover:shadow-atlas ${isDragging ? 'z-10 border-dashed border-primary/60 bg-primary-light opacity-25 shadow-none grayscale-[35%]' : ''}`}
+                    style={{ animationDelay: `${visualOrder * 60}ms`, order: visualOrder }}
                     onClick={event => event.stopPropagation()}
                     onDragStart={event => handleDragStart(event, ep.episodeId)}
+                    onDrag={handleDrag}
                     onDragEnd={handleDragEnd}
                     onDragEnter={event => handleDragOver(event, ep.episodeId)}
                     onDragOver={event => handleDragOver(event, ep.episodeId)}
@@ -569,7 +637,7 @@ export const EpisodeHubPage: React.FC = () => {
                   >
                   <div className="relative aspect-video overflow-visible bg-gradient-to-br from-n30 via-n20 to-primary-light">
                     {ep.coverUrl ? (
-                      <img src={coverImageSrc(ep.coverUrl)} alt={`${ep.episodeName || '未命名分集'} 封面`} className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02]" />
+                      <img draggable={false} src={coverImageSrc(ep.coverUrl)} alt={`${ep.episodeName || '未命名分集'} 封面`} className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-[1.02]" />
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
                         <BrandLogo variant="mark" className="h-24 w-24 opacity-[0.08]" alt="" />
@@ -580,15 +648,6 @@ export const EpisodeHubPage: React.FC = () => {
                         封面上传中...
                       </div>
                     )}
-                    <div className="absolute left-3 top-3 z-20">
-                      <div
-                        aria-label={`${ep.episodeName || '未命名分集'} 拖动排序`}
-                        data-testid={`episode-drag-handle-${ep.episodeId}`}
-                        className={`pointer-events-none flex h-8 w-8 items-center justify-center rounded-md border-2 border-white/90 bg-white/10 text-white shadow-card backdrop-blur transition-all group-hover:bg-white/20 ${isDragging ? 'scale-110 border-primary bg-primary/70' : ''}`}
-                      >
-                        <GripVertical size={16} strokeWidth={2.4} />
-                      </div>
-                    </div>
                     <div className="absolute right-3 top-3 z-20">
                       <button
                         type="button"
