@@ -24,11 +24,13 @@ describe('FileColumn workflow script control', () => {
     expect(source).not.toContain('1. 文件列表');
   });
 
-  it('uses compact light-border cards without horizontal section dividers', () => {
+  it('uses contiguous rows with a blue selected rail and tinted background', () => {
     expect(source).toContain('className="flex shrink-0 items-center justify-end gap-1"');
-    expect(source).toContain('className="flex flex-col gap-[5px]"');
-    expect(source).toContain("'border-primary bg-primary-light shadow-sm'");
-    expect(source).toContain("'border-n40 hover:border-n100 hover:bg-n20'");
+    expect(source).toContain('className="flex flex-col border-t border-n40"');
+    expect(source).toContain('border-b border-l-[3px] border-n40');
+    expect(source).toContain("'border-l-primary bg-primary-light'");
+    expect(source).toContain("'border-l-transparent bg-n0 hover:bg-n20'");
+    expect(source).not.toContain('rounded-lg border bg-n0 px-2.5 py-2');
     expect(source).not.toContain('flex-shrink-0 border-b border-n40 bg-n0');
     expect(source).not.toContain('border-t border-n40 px-4');
     expect(source).not.toContain('p-3 border-t border-n40 bg-n0 sticky');
@@ -52,8 +54,17 @@ describe('FileColumn workflow script control', () => {
     expect(source).toContain('<Trash2 className="h-3.5 w-3.5" /> 删除');
   });
 
+  it('renders the file settings panel through a portal to the right of the sidebar', () => {
+    expect(source).toContain("import { createPortal } from 'react-dom'");
+    expect(source).toContain('left: Math.min(rect.right + 8');
+    expect(source).toContain('style={{ left: menuPosition.left, top: menuPosition.top }}');
+    expect(source).toContain('className="fixed z-[130] w-[280px]');
+    expect(source).toContain('文件设置');
+    expect(source).toContain('aria-label="关闭文件设置"');
+  });
+
   it('shows a larger two-line muted preview with horizontal breathing room', () => {
-    expect(source).toContain('className="w-full min-w-0 select-none px-1"');
+    expect(source).toContain('className="mt-2 w-full min-w-0 select-none px-1"');
     expect(source).toContain('className="line-clamp-2 text-xs leading-[18px] text-n100"');
     expect(source).toContain('file.originalContent.slice(0, 100)');
   });

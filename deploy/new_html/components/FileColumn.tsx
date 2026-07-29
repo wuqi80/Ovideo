@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ProjectFile, FileStatus, FileVersion } from '../types';
 import { Upload, CheckCircle2, CircleDashed, AlertCircle, Trash2, ChevronUp, ChevronDown, History, Save, RotateCcw, X, Download, Edit2, FileDown, FilePlus, MoreVertical } from 'lucide-react';
 
@@ -55,6 +56,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [activatingFileId, setActivatingFileId] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Keep the dragged file identifiable while the parent reorders the array live.
@@ -84,6 +86,20 @@ export const FileColumn: React.FC<FileColumnProps> = ({
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
   }, [onFileUpload]);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const closeMenu = () => {
+      setOpenMenuId(null);
+      setMenuPosition(null);
+    };
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+    return () => {
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+    };
+  }, [openMenuId]);
 
   const handleDragOver = (e: React.DragEvent) => {
     if (!Array.from(e.dataTransfer.types).includes('Files')) return;
@@ -127,6 +143,30 @@ export const FileColumn: React.FC<FileColumnProps> = ({
 
   const activeFileForHistory = files.find(f => f.id === showHistoryModal);
   const deleteFile = files.find(f => f.id === deleteConfirmId);
+  const openMenuFile = files.find(f => f.id === openMenuId);
+
+  const closeFileMenu = () => {
+    setOpenMenuId(null);
+    setMenuPosition(null);
+  };
+
+  const toggleFileMenu = (e: React.MouseEvent<HTMLButtonElement>, fileId: string) => {
+    e.stopPropagation();
+    if (openMenuId === fileId) {
+      closeFileMenu();
+      return;
+    }
+    const card = e.currentTarget.closest<HTMLElement>('[data-file-card]');
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const panelWidth = 280;
+    const panelHeight = 260;
+    setMenuPosition({
+      left: Math.min(rect.right + 8, window.innerWidth - panelWidth - 8),
+      top: Math.max(8, Math.min(rect.top, window.innerHeight - panelHeight - 8)),
+    });
+    setOpenMenuId(fileId);
+  };
   
   const handleStartRename = (e: React.MouseEvent, file: ProjectFile) => {
     e.stopPropagation();
@@ -160,7 +200,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onClick={() => setOpenMenuId(null)}
+      onClick={closeFileMenu}
     >
       <input type="file" ref={fileInputRef} className="hidden" multiple accept=".txt,.md,.json" onChange={(e) => {
         if(e.target.files) { onFileUpload(e.target.files); e.target.value = ''; }
@@ -214,7 +254,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
       </div>
       
       {/* Content */}
-      <div className="relative flex-1 overflow-y-auto px-2 pb-2 custom-scrollbar">
+      <div className="relative flex-1 overflow-y-auto pb-2 custom-scrollbar">
         {files.length === 0 ? (
           <div 
             onClick={() => fileInputRef.current?.click()}
@@ -230,7 +270,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-[5px]">
+          <div className="flex flex-col border-t border-n40">
             {files.map((file, index) => (
               <div
                 key={file.id}
@@ -243,7 +283,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                     return;
                   }
                   e.stopPropagation();
-                  setOpenMenuId(null);
+                  closeFileMenu();
                   setDraggedFileId(file.id);
                   e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData('application/x-mecha-script-file', file.id);
@@ -282,13 +322,13 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   setDragOverIndex(null);
                 }}
                 onClick={() => onFileSelect(file.id)}
-                className={`group relative flex cursor-pointer flex-col gap-1.5 rounded-lg border bg-n0 px-2.5 py-2 transition-all duration-200 ${
+                className={`group relative flex cursor-pointer flex-col gap-1.5 border-b border-l-[3px] border-n40 px-3 py-3 transition-colors duration-150 ${
                   selectedFileId === file.id
-                    ? 'border-primary bg-primary-light shadow-sm'
-                    : 'border-n40 hover:border-n100 hover:bg-n20'
-                } ${draggedFileId === file.id ? 'border-primary shadow-sm ring-2 ring-primary/20' : ''} ${
+                    ? 'border-l-primary bg-primary-light'
+                    : 'border-l-transparent bg-n0 hover:bg-n20'
+                } ${draggedFileId === file.id ? 'bg-primary-light opacity-70' : ''} ${
                   dragOverIndex === index
-                    ? 'border-primary bg-primary-light ring-2 ring-primary/20'
+                    ? 'border-l-primary bg-primary-light'
                     : ''
                 }`}
                 onContextMenu={(e) => {
@@ -335,10 +375,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenMenuId(openMenuId === file.id ? null : file.id);
-                      }}
+                      onClick={(e) => toggleFileMenu(e, file.id)}
                       className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800"
                       title="更多操作"
                       aria-label={`${file.name} 更多操作`}
@@ -349,85 +386,11 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   </div>
                 </div>
 
-                <div data-testid="file-card-content" className="w-full min-w-0 select-none px-1">
+                <div data-testid="file-card-content" className="mt-2 w-full min-w-0 select-none px-1">
                   <p className="line-clamp-2 text-xs leading-[18px] text-n100">
                     {file.originalContent.slice(0, 100).replace(/\n/g, ' ')}...
                   </p>
                 </div>
-
-                {openMenuId === file.id && (
-                  <div
-                    data-testid="file-card-menu"
-                    className={`absolute right-2 z-40 min-w-[176px] overflow-hidden rounded-lg border border-n40 bg-n0 py-1 shadow-bottom ${
-                      index >= Math.max(0, files.length - 2) ? 'bottom-8' : 'top-9'
-                    }`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {file.status !== FileStatus.Idle && (
-                      <div className="flex min-h-8 items-center px-3 py-1.5">
-                        {getStatusIcon(file.status)}
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (activeFileId === file.id) return;
-                        setOpenMenuId(null);
-                        setActivatingFileId(file.id);
-                        try {
-                          await onActivateFile(file.id);
-                        } catch (error) {
-                          console.error('设置本集主剧本失败:', error);
-                          window.alert('设置本集主剧本失败，请稍后重试。');
-                        } finally {
-                          setActivatingFileId(null);
-                        }
-                      }}
-                      disabled={activeFileId === file.id || activatingFileId !== null}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-n700 hover:bg-n20 disabled:cursor-default disabled:text-success disabled:opacity-100"
-                    >
-                      <CheckCircle2 className={`h-3.5 w-3.5 ${activatingFileId === file.id ? 'animate-pulse' : ''}`} />
-                      {activeFileId === file.id
-                        ? '本集后续流程使用此剧本'
-                        : activatingFileId === file.id
-                          ? '正在设置...'
-                          : '设为本集主剧本'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        setOpenMenuId(null);
-                        handleStartRename(e, file);
-                      }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-n700 hover:bg-n20"
-                    >
-                      <Edit2 className="h-3.5 w-3.5" /> 重命名
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenMenuId(null);
-                        onDownloadFile(file.id);
-                      }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-n700 hover:bg-n20"
-                    >
-                      <FileDown className="h-3.5 w-3.5" /> 下载
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenMenuId(null);
-                        setDeleteConfirmId(file.id);
-                      }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-danger hover:bg-r50"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" /> 删除
-                    </button>
-                  </div>
-                )}
               </div>
             ))}
           </div>
@@ -447,6 +410,102 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                </button>
            </div>
        )}
+
+      {openMenuFile && menuPosition && typeof document !== 'undefined' && createPortal(
+        <div
+          data-testid="file-card-menu"
+          className="fixed z-[130] w-[280px] overflow-hidden rounded-lg border border-n40 bg-n0 shadow-bottom"
+          style={{ left: menuPosition.left, top: menuPosition.top }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex h-12 items-center justify-between px-3">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-n800">文件设置</div>
+              <div className="max-w-[210px] truncate text-[11px] text-n100">{openMenuFile.name}</div>
+            </div>
+            <button
+              type="button"
+              onClick={closeFileMenu}
+              className="inline-flex h-7 w-7 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800"
+              aria-label="关闭文件设置"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <div className="px-3 pb-3">
+            <div className="rounded-lg border border-n40 bg-n20 p-1">
+              {openMenuFile.status !== FileStatus.Idle && (
+                <div className="flex min-h-8 items-center px-2 py-1">
+                  {getStatusIcon(openMenuFile.status)}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (activeFileId === openMenuFile.id) return;
+                  closeFileMenu();
+                  setActivatingFileId(openMenuFile.id);
+                  try {
+                    await onActivateFile(openMenuFile.id);
+                  } catch (error) {
+                    console.error('设置本集主剧本失败:', error);
+                    window.alert('设置本集主剧本失败，请稍后重试。');
+                  } finally {
+                    setActivatingFileId(null);
+                  }
+                }}
+                disabled={activeFileId === openMenuFile.id || activatingFileId !== null}
+                className="flex min-h-9 w-full items-center gap-2 rounded px-2 text-left text-xs font-medium text-n700 hover:bg-n0 disabled:cursor-default disabled:text-success disabled:opacity-100"
+              >
+                <CheckCircle2 className={`h-3.5 w-3.5 ${activatingFileId === openMenuFile.id ? 'animate-pulse' : ''}`} />
+                {activeFileId === openMenuFile.id
+                  ? '本集后续流程使用此剧本'
+                  : activatingFileId === openMenuFile.id
+                    ? '正在设置...'
+                    : '设为本集主剧本'}
+              </button>
+            </div>
+
+            <div className="mt-2 space-y-0.5">
+              <button
+                type="button"
+                onClick={(e) => {
+                  closeFileMenu();
+                  handleStartRename(e, openMenuFile);
+                }}
+                className="flex min-h-9 w-full items-center gap-2 rounded px-2 text-left text-xs text-n700 hover:bg-n20"
+              >
+                <Edit2 className="h-3.5 w-3.5" /> 重命名
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeFileMenu();
+                  onDownloadFile(openMenuFile.id);
+                }}
+                className="flex min-h-9 w-full items-center gap-2 rounded px-2 text-left text-xs text-n700 hover:bg-n20"
+              >
+                <FileDown className="h-3.5 w-3.5" /> 下载
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeFileMenu();
+                  setDeleteConfirmId(openMenuFile.id);
+                }}
+                className="flex min-h-9 w-full items-center gap-2 rounded px-2 text-left text-xs text-danger hover:bg-r50"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> 删除
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {/* History Modal */}
       {showHistoryModal && activeFileForHistory && (
