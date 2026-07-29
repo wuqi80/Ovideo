@@ -39,8 +39,10 @@ from services.api_provider_registry import (
     get_proxy_mode_env_key,
     get_scoped_model_env_key,
     get_seedance_sub_model_env_key,
+    infer_model_binding_operation,
     MODEL_USAGE_SCOPES,
     MODEL_USAGE_SCOPE_WORKFLOW,
+    normalize_deepseek_model_name,
     normalize_doubao_image_endpoint,
     normalize_doubao_image_model_for_endpoint,
     normalize_model_bindings,
@@ -177,6 +179,54 @@ def _bindings_with_replaced_primary_model(config: Any, model_name: str) -> List[
     return updated
 
 
+def _explicit_runtime_binding_keys(
+    provider: str,
+    raw_bindings: Any,
+    legacy_model_name: str,
+) -> set[tuple[str, str]]:
+    """Identify bindings explicitly stored on one card, excluding registry defaults."""
+    if isinstance(raw_bindings, str):
+        try:
+            raw_bindings = json.loads(raw_bindings) if raw_bindings.strip() else []
+        except json.JSONDecodeError:
+            raw_bindings = []
+    items = raw_bindings if isinstance(raw_bindings, list) else []
+    provider_id = normalize_provider(provider)
+    keys: set[tuple[str, str]] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        model_name = str(item.get("model_name") or "").strip()
+        if not model_name:
+            continue
+        if provider_id == "deepseek":
+            model_name = normalize_deepseek_model_name(model_name)
+        raw_scope = item.get("scope")
+        scopes = (
+            MODEL_USAGE_SCOPES
+            if raw_scope is None or not str(raw_scope).strip()
+            else (normalize_model_usage_scope(raw_scope),)
+        )
+        operation = str(item.get("operation") or "").strip().lower()
+        inferred_operation = infer_model_binding_operation(provider, model_name)
+        if provider_id == "doubao":
+            operation = "generate"
+        elif not operation or (operation == "default" and inferred_operation != "default"):
+            operation = inferred_operation
+        keys.update((scope, operation) for scope in scopes)
+    if not keys and legacy_model_name:
+        fallback_model = legacy_model_name
+        if provider_id == "deepseek":
+            fallback_model = normalize_deepseek_model_name(fallback_model)
+        keys.add(
+            (
+                MODEL_USAGE_SCOPE_WORKFLOW,
+                infer_model_binding_operation(provider, fallback_model),
+            )
+        )
+    return keys
+
+
 async def load_api_configs_to_env() -> Dict[str, Any]:
     """Load enabled DB configs into managed env vars for resolve_provider()."""
     try:
@@ -228,9 +278,15 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                     new_env[extra_env_key] = extra_value or None
 
             model_name = str(_config_get(config, "model_name", "") or "").strip()
+            raw_bindings = _config_get(config, "model_bindings", [])
+            explicit_runtime_binding_keys = _explicit_runtime_binding_keys(
+                provider,
+                raw_bindings,
+                model_name,
+            )
             bindings = normalize_model_bindings(
                 provider,
-                _config_get(config, "model_bindings", []),
+                raw_bindings,
                 model_name,
             )
             if provider_id == "doubao":
@@ -277,6 +333,8 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                 operation = str(binding.get("operation") or "").strip().lower()
                 bound_model = str(binding.get("model_name") or "").strip()
                 if not operation or not bound_model:
+                    continue
+                if (scope, operation) not in explicit_runtime_binding_keys:
                     continue
                 if provider_id == "seedance" and operation in SEEDANCE_SUB_MODEL_ENV_MAP:
                     sub_model = operation

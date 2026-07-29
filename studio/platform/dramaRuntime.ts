@@ -22,7 +22,17 @@ import type {
   StudioSnapshot,
   StudioVideoOptions,
 } from '../services/runtime';
-import { STUDIO_IMAGE_MODEL_CONFIGURED, normalizeStudioImageModel, studioImageModelOverride } from '../services/modelOptions';
+import {
+  STUDIO_AUDIO_MODEL_SPEECH_HD,
+  STUDIO_IMAGE_MODEL_CONFIGURED,
+  STUDIO_TEXT_MODEL_CONFIGURED,
+  STUDIO_VIDEO_MODEL_STANDARD,
+  normalizeStudioAudioModel,
+  normalizeStudioImageModel,
+  normalizeStudioVideoModel,
+  studioImageModelOverride,
+  studioVideoCapabilityKey,
+} from '../services/modelOptions';
 import type { SmartSequenceItem, VideoGenerationMode } from '../types';
 
 const BOARD_NAME = 'MECHA Studio 自由创作';
@@ -277,7 +287,7 @@ export function createDramaRuntime(input: {
     const creditParams = {
       input_tokens: estimateTextTokens(`${systemPrompt}\n${prompt}`),
       output_tokens: 1200,
-      model: 'gemini',
+      model: STUDIO_TEXT_MODEL_CONFIGURED,
     };
     await assertEnoughCredits('prompt_optimize', creditParams);
     studioTaskRegistration(taskId, 'prompt-rewrite', displayName, projectId, episodeId);
@@ -378,8 +388,9 @@ export function createDramaRuntime(input: {
     options: StudioVideoOptions = {},
   ) => {
     const capabilities = await fetchVideoCapabilities(STUDIO_MODEL_SCOPE);
-    const wantedModelKey = model === 'Seedance2' ? 'Seedance2' : 'Seedance2Fast';
-    const wantedSubModel = wantedModelKey === 'Seedance2' ? 'standard' : 'fast';
+    const normalizedModel = normalizeStudioVideoModel(model);
+    const wantedModelKey = studioVideoCapabilityKey(normalizedModel);
+    const wantedSubModel = normalizedModel === STUDIO_VIDEO_MODEL_STANDARD ? 'standard' : 'fast';
     const seedanceCapability = capabilities.models.find(item => item.key === wantedModelKey);
     if (capabilities.models.length > 0 && seedanceCapability?.available === false) {
       throw new Error('当前 Seedance 模型不可用，请联系管理员检查运行时模型配置');
@@ -402,7 +413,7 @@ export function createDramaRuntime(input: {
     const count = Math.max(1, Math.min(4, Math.round(options.count || 1)));
     const creditParams = {
       video_count: count,
-      model: wantedSubModel === 'standard' ? 'Seedance2' : 'Seedance2Fast',
+      model: wantedSubModel,
       duration,
       resolution: '720p',
     };
@@ -473,9 +484,10 @@ export function createDramaRuntime(input: {
     options: { nodeId?: string; voiceId?: string; emotion?: string } = {},
   ): Promise<string> => {
     const taskId = makeTaskId('audio');
+    const audioModel = normalizeStudioAudioModel(STUDIO_AUDIO_MODEL_SPEECH_HD);
     const creditParams = {
       character_count: text.length,
-      model: 'minimax-speech-2.6-hd',
+      model: audioModel,
     };
     await assertEnoughCredits('audio_generation_tts', creditParams);
     studioTaskRegistration(taskId, 'minimax-tts', '自由创作语音合成', projectId, episodeId);
@@ -485,7 +497,7 @@ export function createDramaRuntime(input: {
           const result = await minimaxTTSSync({
             text,
             voice_id: options.voiceId || DEFAULT_VOICE_ID,
-            model: 'speech-hd',
+            model: audioModel,
             model_scope: STUDIO_MODEL_SCOPE,
             emotion: options.emotion,
             entity_type: 'episode',

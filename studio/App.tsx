@@ -11,7 +11,15 @@ import { SonicStudio } from './components/SonicStudio';
 import { AppNode, NodeType, NodeStatus, Connection, ContextMenuState, Group, Workflow, SmartSequenceItem } from './types';
 import { getGenerationStrategy } from './services/videoStrategies';
 import { useStudioRuntime } from './services/runtime';
-import { STUDIO_IMAGE_MODEL_CONFIGURED, normalizeStudioImageModel } from './services/modelOptions';
+import {
+    STUDIO_AUDIO_MODEL_SPEECH_HD,
+    STUDIO_IMAGE_MODEL_CONFIGURED,
+    STUDIO_TEXT_MODEL_CONFIGURED,
+    STUDIO_VIDEO_MODEL_FAST,
+    STUDIO_VIDEO_MODEL_STANDARD,
+    normalizeStudioImageModel,
+    normalizeStudioVideoModel,
+} from './services/modelOptions';
 import {
     persistStudioCanvasTheme,
     readStudioCanvasTheme,
@@ -430,10 +438,10 @@ export const App = () => {
       const initialStatus = initialData?.status as NodeStatus | undefined;
       const { status: _ignoredStatus, ...safeInitialData } = initialData || {};
       const defaults: any = {
-          model: type === NodeType.VIDEO_GENERATOR ? 'Seedance2Fast' :
-                 type === NodeType.AUDIO_GENERATOR ? 'minimax-speech-2.6-hd' :
+          model: type === NodeType.VIDEO_GENERATOR ? STUDIO_VIDEO_MODEL_FAST :
+                 type === NodeType.AUDIO_GENERATOR ? STUDIO_AUDIO_MODEL_SPEECH_HD :
                  type.includes('IMAGE') ? STUDIO_IMAGE_MODEL_CONFIGURED :
-                 'gemini',
+                 STUDIO_TEXT_MODEL_CONFIGURED,
           generationMode: type === NodeType.VIDEO_GENERATOR ? 'DEFAULT' : undefined, // Initialize as DEFAULT (Off)
           ...safeInitialData
       };
@@ -492,7 +500,7 @@ export const App = () => {
       try {
           const res = await runtime.generateVideo(
               complexPrompt,
-              'Seedance2',
+              STUDIO_VIDEO_MODEL_STANDARD,
               {
                 aspectRatio: '16:9',
                 count: 1,
@@ -842,7 +850,7 @@ export const App = () => {
 
               const res = await runtime.generateVideo(
                   strategy.finalPrompt,
-                  node.data.model || 'Seedance2Fast',
+                  normalizeStudioVideoModel(node.data.model),
                   {
                       aspectRatio: node.data.aspectRatio || '16:9',
                       count: node.data.videoCount || 1,

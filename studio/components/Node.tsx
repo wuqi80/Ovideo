@@ -5,7 +5,16 @@ import { RefreshCw, Play, Image as ImageIcon, Video as VideoIcon, Type, AlertCir
 import { VideoModeSelector, SceneDirectorOverlay } from './VideoNodeModules';
 import React, { memo, useRef, useState, useEffect, useCallback } from 'react';
 import { useStudioRuntime } from '../services/runtime';
-import { STUDIO_IMAGE_MODEL_OPTIONS, normalizeStudioImageModel } from '../services/modelOptions';
+import {
+    STUDIO_AUDIO_MODEL_OPTIONS,
+    STUDIO_IMAGE_MODEL_OPTIONS,
+    STUDIO_TEXT_MODEL_OPTIONS,
+    STUDIO_VIDEO_MODEL_OPTIONS,
+    normalizeStudioAudioModel,
+    normalizeStudioImageModel,
+    normalizeStudioTextModel,
+    normalizeStudioVideoModel,
+} from '../services/modelOptions';
 
 // ... (keep constants and helper functions: arePropsEqual, safePlay, safePause, InputThumbnails, AudioVisualizer) ...
 
@@ -580,18 +589,23 @@ const NodeComponent: React.FC<NodeProps> = ({
      const isOpen = (isHovered || isInputFocused);
      let models: {l: string, v: string}[] = [];
      if (node.type === NodeType.VIDEO_GENERATOR) {
-        models = [
-            {l: '渡劫 · Seedance 极速', v: 'Seedance2Fast'},
-            {l: '飞升 · Seedance 标准', v: 'Seedance2'},
-        ];
+        models = [...STUDIO_VIDEO_MODEL_OPTIONS];
      } else if (node.type === NodeType.VIDEO_ANALYZER) {
          models = [{l: '当前版本已停用', v: 'disabled'}];
      } else if (node.type === NodeType.AUDIO_GENERATOR) {
-         models = [{l: 'MiniMax Speech 2.6 HD', v: 'minimax-speech-2.6-hd'}];
-     } else {
+         models = [...STUDIO_AUDIO_MODEL_OPTIONS];
+     } else if (node.type === NodeType.IMAGE_GENERATOR || node.type === NodeType.IMAGE_EDITOR) {
         models = [...STUDIO_IMAGE_MODEL_OPTIONS];
+     } else {
+        models = [...STUDIO_TEXT_MODEL_OPTIONS];
      }
-     const selectedModel = node.type.includes('IMAGE') ? normalizeStudioImageModel(node.data.model) : node.data.model;
+     const selectedModel = node.type === NodeType.VIDEO_GENERATOR
+        ? normalizeStudioVideoModel(node.data.model)
+        : node.type === NodeType.AUDIO_GENERATOR
+            ? normalizeStudioAudioModel(node.data.model)
+            : (node.type === NodeType.IMAGE_GENERATOR || node.type === NodeType.IMAGE_EDITOR)
+                ? normalizeStudioImageModel(node.data.model)
+                : normalizeStudioTextModel(node.data.model);
 
      return (
         <div className={`absolute top-full left-1/2 -translate-x-1/2 w-[98%] pt-2 z-50 flex flex-col items-center justify-start transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${isOpen ? `opacity-100 translate-y-0 scale-100` : 'opacity-0 translate-y-[-10px] scale-95 pointer-events-none'}`}>

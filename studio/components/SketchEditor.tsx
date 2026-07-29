@@ -10,6 +10,8 @@ import {
     STUDIO_IMAGE_MODEL_CONFIGURED,
     STUDIO_IMAGE_MODEL_POSE_LABEL,
     STUDIO_IMAGE_MODEL_SHORT_LABEL,
+    STUDIO_VIDEO_MODEL_FAST,
+    STUDIO_VIDEO_MODEL_FAST_LABEL,
 } from '../services/modelOptions';
 
 interface SketchEditorProps {
@@ -255,7 +257,7 @@ export const SketchEditor: React.FC<SketchEditorProps> = ({ onClose, onGenerate 
                 if (activeMode === 'video') {
                     const res = await runtime.generateVideo(
                         prompt,
-                        'Seedance2Fast',
+                        STUDIO_VIDEO_MODEL_FAST,
                         {
                           aspectRatio: '16:9',
                           generationMode: 'DEFAULT',
@@ -434,7 +436,7 @@ export const SketchEditor: React.FC<SketchEditorProps> = ({ onClose, onGenerate 
                 {/* Settings & Generate */}
                 <div className="flex items-center gap-3">
                     <div className="h-11 px-4 flex items-center gap-2 bg-black/30 border border-white/10 rounded-xl text-xs text-slate-300 font-medium">
-                        <span>{activeMode === 'pose' ? STUDIO_IMAGE_MODEL_POSE_LABEL : activeMode === 'video' ? 'Seedance 2.0 Fast' : STUDIO_IMAGE_MODEL_SHORT_LABEL}</span>
+                        <span>{activeMode === 'pose' ? STUDIO_IMAGE_MODEL_POSE_LABEL : activeMode === 'video' ? STUDIO_VIDEO_MODEL_FAST_LABEL : STUDIO_IMAGE_MODEL_SHORT_LABEL}</span>
                         <ChevronDown size={12} className="text-slate-500" />
                     </div>
 
