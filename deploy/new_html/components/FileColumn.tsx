@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ProjectFile, FileStatus, FileVersion } from '../types';
-import { Upload, CheckCircle2, CircleDashed, AlertCircle, Trash2, ChevronUp, ChevronDown, History, Save, RotateCcw, X, Download, Edit2, FileDown, FilePlus, GripVertical } from 'lucide-react';
+import { Upload, CheckCircle2, CircleDashed, AlertCircle, Trash2, ChevronUp, ChevronDown, History, Save, RotateCcw, X, Download, Edit2, FileDown, FilePlus, MoreVertical } from 'lucide-react';
 
 interface FileColumnProps {
   files: ProjectFile[];
@@ -54,6 +54,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
   const [renameValue, setRenameValue] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [activatingFileId, setActivatingFileId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Keep the dragged file identifiable while the parent reorders the array live.
@@ -159,6 +160,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onClick={() => setOpenMenuId(null)}
     >
       <input type="file" ref={fileInputRef} className="hidden" multiple accept=".txt,.md,.json" onChange={(e) => {
         if(e.target.files) { onFileUpload(e.target.files); e.target.value = ''; }
@@ -233,9 +235,15 @@ export const FileColumn: React.FC<FileColumnProps> = ({
               <div
                 key={file.id}
                 data-file-card={file.id}
+                draggable={Boolean(onReorderFiles)}
                 onDragStart={(e) => {
                   if (!onReorderFiles) return;
+                  if ((e.target as HTMLElement).closest('button')) {
+                    e.preventDefault();
+                    return;
+                  }
                   e.stopPropagation();
+                  setOpenMenuId(null);
                   setDraggedFileId(file.id);
                   e.dataTransfer.effectAllowed = 'move';
                   e.dataTransfer.setData('application/x-mecha-script-file', file.id);
@@ -292,115 +300,134 @@ export const FileColumn: React.FC<FileColumnProps> = ({
               >
                 <div
                   data-testid="file-card-control-row"
-                  className="flex h-6 w-full min-w-0 items-center gap-1.5 pr-[132px]"
+                  className="flex min-h-7 w-full min-w-0 items-center gap-1.5"
                 >
-                  {onReorderFiles && (
-                    <div
-                      draggable
-                      className="cursor-grab text-n100 transition-colors hover:text-n300 active:cursor-grabbing"
-                      title="拖拽排序"
-                      aria-label={`拖动 ${file.name} 调整顺序`}
-                    >
-                      <GripVertical className="h-4 w-4" />
-                    </div>
-                  )}
-
                   <span className={`min-w-[20px] font-mono text-[10px] font-bold ${selectedFileId === file.id ? 'text-primary' : 'text-n100'}`}>
                     {(index + 1).toString().padStart(2, '0')}
                   </span>
-                  {getStatusIcon(file.status)}
+                  <h3 className={`min-w-0 flex-1 truncate text-sm font-semibold ${selectedFileId === file.id ? 'text-n800' : 'text-n700 group-hover:text-n800'}`}>
+                    {file.name}
+                  </h3>
+                  {activeFileId === file.id && (
+                    <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded bg-g50 px-1.5 py-0.5 text-[10px] font-semibold text-success">
+                      <CheckCircle2 className="h-3 w-3" />
+                      当前主剧本
+                    </span>
+                  )}
+                  <div data-testid="file-card-actions" className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onMoveFile(e, file.id, 'up'); }}
+                      disabled={index === 0}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800 disabled:cursor-not-allowed disabled:opacity-20"
+                      title="上移"
+                      aria-label={`${file.name} 上移`}
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onMoveFile(e, file.id, 'down'); }}
+                      disabled={index === files.length - 1}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800 disabled:cursor-not-allowed disabled:opacity-20"
+                      title="下移"
+                      aria-label={`${file.name} 下移`}
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(openMenuId === file.id ? null : file.id);
+                      }}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800"
+                      title="更多操作"
+                      aria-label={`${file.name} 更多操作`}
+                      aria-expanded={openMenuId === file.id}
+                    >
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
 
-                <div data-testid="file-card-content" className="w-full min-w-0 select-none">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <h3 className={`min-w-0 flex-1 truncate text-sm font-semibold ${selectedFileId === file.id ? 'text-n800' : 'text-n700 group-hover:text-n800'}`}>
-                      {file.name}
-                    </h3>
-                    {activeFileId === file.id && (
-                      <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded bg-g50 px-2 py-0.5 text-[10px] font-semibold text-success">
-                        <CheckCircle2 className="h-3 w-3" />
-                        当前主剧本
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 line-clamp-1 text-[10px] leading-4 text-n100">
-                    {file.originalContent.slice(0, 60).replace(/\n/g, ' ')}...
+                <div data-testid="file-card-content" className="w-full min-w-0 select-none px-1">
+                  <p className="line-clamp-2 text-xs leading-[18px] text-n100">
+                    {file.originalContent.slice(0, 100).replace(/\n/g, ' ')}...
                   </p>
-                  <div className="mt-1.5">
-                    {activeFileId === file.id ? (
-                      <div className="inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-md bg-g50 px-2 text-[11px] font-medium text-success">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        本集后续流程使用此剧本
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          setActivatingFileId(file.id);
-                          try {
-                            await onActivateFile(file.id);
-                          } catch (error) {
-                            console.error('设置本集主剧本失败:', error);
-                            window.alert('设置本集主剧本失败，请稍后重试。');
-                          } finally {
-                            setActivatingFileId(null);
-                          }
-                        }}
-                        disabled={activatingFileId !== null}
-                        className="inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-md border border-primary/30 bg-primary-light px-2 text-[11px] font-medium text-primary hover:border-primary hover:bg-primary hover:text-white disabled:cursor-wait disabled:opacity-50"
-                        title="设为本集后续流程使用的主剧本"
-                      >
-                        <CheckCircle2 className={`h-3.5 w-3.5 ${activatingFileId === file.id ? 'animate-pulse' : ''}`} />
-                        {activatingFileId === file.id ? '正在设置...' : '设为本集主剧本'}
-                      </button>
-                    )}
-                  </div>
                 </div>
 
-                {/* Actions stay visible so they are discoverable on touch devices and narrow layouts. */}
-                <div
-                  data-testid="file-card-actions"
-                  className="absolute right-2 top-2.5 z-30 flex items-center gap-0.5"
-                >
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleStartRename(e, file); }}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-primary-light hover:text-primary"
-                    title="重命名"
+                {openMenuId === file.id && (
+                  <div
+                    data-testid="file-card-menu"
+                    className={`absolute right-2 z-40 min-w-[176px] overflow-hidden rounded-lg border border-n40 bg-n0 py-1 shadow-bottom ${
+                      index >= Math.max(0, files.length - 2) ? 'bottom-8' : 'top-9'
+                    }`}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                      <Edit2 className="w-3 h-3" />
-                  </button>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onDownloadFile(file.id); }}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-g50 hover:text-success"
-                    title="下载"
-                  >
-                      <FileDown className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onMoveFile(e, file.id, 'up'); }}
-                    disabled={index === 0}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800 disabled:cursor-not-allowed disabled:opacity-20"
-                    title="上移"
-                  >
-                      <ChevronUp className="w-3 h-3" />
-                  </button>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); onMoveFile(e, file.id, 'down'); }}
-                    disabled={index === files.length - 1}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800 disabled:cursor-not-allowed disabled:opacity-20"
-                    title="下移"
-                  >
-                      <ChevronDown className="w-3 h-3" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(file.id); }}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded text-danger hover:bg-r50 hover:text-danger"
-                    title="删除"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
+                    {file.status !== FileStatus.Idle && (
+                      <div className="flex min-h-8 items-center px-3 py-1.5">
+                        {getStatusIcon(file.status)}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (activeFileId === file.id) return;
+                        setOpenMenuId(null);
+                        setActivatingFileId(file.id);
+                        try {
+                          await onActivateFile(file.id);
+                        } catch (error) {
+                          console.error('设置本集主剧本失败:', error);
+                          window.alert('设置本集主剧本失败，请稍后重试。');
+                        } finally {
+                          setActivatingFileId(null);
+                        }
+                      }}
+                      disabled={activeFileId === file.id || activatingFileId !== null}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-n700 hover:bg-n20 disabled:cursor-default disabled:text-success disabled:opacity-100"
+                    >
+                      <CheckCircle2 className={`h-3.5 w-3.5 ${activatingFileId === file.id ? 'animate-pulse' : ''}`} />
+                      {activeFileId === file.id
+                        ? '本集后续流程使用此剧本'
+                        : activatingFileId === file.id
+                          ? '正在设置...'
+                          : '设为本集主剧本'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        setOpenMenuId(null);
+                        handleStartRename(e, file);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-n700 hover:bg-n20"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" /> 重命名
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(null);
+                        onDownloadFile(file.id);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-n700 hover:bg-n20"
+                    >
+                      <FileDown className="h-3.5 w-3.5" /> 下载
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(null);
+                        setDeleteConfirmId(file.id);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-danger hover:bg-r50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> 删除
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

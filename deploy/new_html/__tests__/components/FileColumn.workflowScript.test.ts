@@ -39,21 +39,32 @@ describe('FileColumn workflow script control', () => {
     expect(source).toContain('已生成');
   });
 
-  it('keeps every file action visible without hover', () => {
-    expect(source).toContain('Actions stay visible');
+  it('keeps only ordering and the overflow trigger outside the file menu', () => {
     expect(source).toContain('data-testid="file-card-actions"');
-    expect(source).toContain('className="absolute right-2 top-2.5 z-30 flex items-center gap-0.5"');
-    expect(source).not.toContain('rounded-md border border-n40 bg-n0 px-1 py-0.5 opacity-100 shadow-bottom backdrop-blur-sm');
-    expect(source).not.toContain('w-px h-4 bg-n40 mx-0.5');
-    expect(source).not.toContain('group-focus-within:opacity-100 group-hover:opacity-100');
+    expect(source).toContain('aria-label={`${file.name} 上移`}');
+    expect(source).toContain('aria-label={`${file.name} 下移`}');
+    expect(source).toContain('aria-label={`${file.name} 更多操作`}');
+    expect(source).toContain('data-testid="file-card-menu"');
+    expect(source).toContain("'设为本集主剧本'");
+    expect(source).toContain("'本集后续流程使用此剧本'");
+    expect(source).toContain('<Edit2 className="h-3.5 w-3.5" /> 重命名');
+    expect(source).toContain('<FileDown className="h-3.5 w-3.5" /> 下载');
+    expect(source).toContain('<Trash2 className="h-3.5 w-3.5" /> 删除');
+  });
+
+  it('shows a larger two-line muted preview with horizontal breathing room', () => {
+    expect(source).toContain('className="w-full min-w-0 select-none px-1"');
+    expect(source).toContain('className="line-clamp-2 text-xs leading-[18px] text-n100"');
+    expect(source).toContain('file.originalContent.slice(0, 100)');
   });
 
   it('separates upload drops from live file reordering', () => {
     expect(source).toContain("includes('Files')");
     expect(source).toContain("setData('application/x-mecha-script-file', file.id)");
     expect(source).toContain('setDragImage(e.currentTarget, 18, 18)');
+    expect(source).toContain('draggable={Boolean(onReorderFiles)}');
+    expect(source).toContain("closest('button')");
     expect(source).toContain('onDragEnter={(e) => {');
     expect(source).toContain('onReorderFiles(fromIndex, index)');
-    expect(source).toContain('aria-label={`拖动 ${file.name} 调整顺序`}');
   });
 });
