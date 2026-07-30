@@ -64,9 +64,7 @@ export const LoadingOverlay: React.FC = () => {
         </div>
 
         {/* Text */}
-        <h2 className="text-xl font-semibold text-n800 tracking-tight mb-2">
-            SPTI<span className="text-primary">.</span>AI
-        </h2>
+        <BrandLogo className="mb-2 h-8 w-auto max-w-[132px]" />
         
         <div className="h-6 flex items-center justify-center">
              <p className="text-xs font-mono text-n100 uppercase tracking-widest animate-pulse">

@@ -36,4 +36,13 @@ describe('Studio light canvas element theme styles', () => {
     expect(app).toContain('studio-canvas-toolbar absolute');
     expect(videoNodeModules).toContain('studio-node-mode-button');
   });
+
+  it('switches only the free-canvas lockup between approved light and dark assets', () => {
+    const app = readStudioFile('App.tsx');
+
+    expect(app).toContain("const isDarkCanvas = canvasTheme === 'dark'");
+    expect(app).toContain("'/static/branding/spti-ai-logo-dark.png'");
+    expect(app).toContain("'/static/branding/spti-ai-logo-light.png'");
+    expect(app).toContain('alt="SPTI.AI"');
+  });
 });

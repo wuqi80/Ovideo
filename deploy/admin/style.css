@@ -76,19 +76,17 @@ body {
   padding: 20px 16px;
   border-bottom: 1px solid var(--border);
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
 }
-.sidebar-logo .logo-icon {
-  width: 32px; height: 32px;
-  display: flex; align-items: center; justify-content: center;
+.sidebar-logo .brand-lockup {
+  width: 142px;
+  height: auto;
+  display: block;
+  object-fit: contain;
 }
-.sidebar-logo .logo-icon img { width: 32px; height: 32px; object-fit: contain; display: block; }
-.sidebar-logo .logo-text h1 {
-  font-size: 13px; font-weight: 700; color: var(--text-0);
-  letter-spacing: -0.01em;
-}
-.sidebar-logo .logo-text span {
+.sidebar-logo .brand-context {
   font-size: 10px; color: var(--text-2);
   font-family: var(--font-mono); font-weight: 500;
   letter-spacing: 0.08em; text-transform: uppercase;

@@ -182,14 +182,6 @@ select {
   color: #0891b2;
 }
 
-.studio-welcome-title {
-  background-image: linear-gradient(to bottom, #0f172a, #334155, #64748b);
-}
-
-.studio-canvas[data-studio-theme="dark"] .studio-welcome-title {
-  background-image: linear-gradient(to bottom, #ffffff, #d4d4d8, #52525b);
-}
-
 .studio-welcome-actions {
   border: 1px solid var(--studio-header-border);
   background: var(--studio-welcome-surface);

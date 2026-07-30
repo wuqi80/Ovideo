@@ -129,8 +129,8 @@ export const AdminLoginPage: React.FC = () => {
             <div className="relative z-10 w-full max-w-md mx-4">
                 {/* 顶部品牌 */}
                 <div className="text-center mb-8">
-                    <BrandLogo variant="mark" className="mx-auto mb-3 h-14 w-14" />
-                    <h1 className="text-2xl font-bold tracking-tight text-n800">SPTI<span className="text-primary">.</span>AI · ADMIN</h1>
+                    <BrandLogo className="mx-auto mb-3 h-12 w-auto max-w-[220px]" />
+                    <h1 className="text-sm font-semibold tracking-[0.18em] text-n300">ADMIN CONSOLE</h1>
                     <p className="text-xs text-n100 mt-1.5 tracking-wider uppercase"
                       style={{ fontFamily: 'var(--font-mono)' }}>
                         Restricted · Authentication Required

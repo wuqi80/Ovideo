@@ -49,11 +49,12 @@ def test_spti_ai_favicon_files_have_valid_signatures():
     assert (DEPLOY_DIR / "static/apple-touch-icon.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_spti_brand_favicons_stay_clean_while_homepage_adds_white_outline():
+def test_spti_brand_favicons_and_mark_stay_clean_without_white_outline():
     login_html = (DEPLOY_DIR / "login.html").read_text(encoding="utf-8")
 
-    assert ".brand-panel .logo" in login_html
-    assert "drop-shadow(2px 0 0 rgba(255,255,255,0.98))" in login_html
+    assert "/static/branding/spti-ai-logo-dark.png" in login_html
+    assert "/static/branding/spti-ai-logo-light.png" in login_html
+    assert "drop-shadow(2px 0 0 rgba(255,255,255,0.98))" not in login_html
 
     for relative_path in [
         "static/branding/spti-ai-mark.png",
@@ -70,6 +71,25 @@ def test_spti_brand_favicons_stay_clean_while_homepage_adds_white_outline():
 
         assert visible_pixels > 0
         assert white_pixels / visible_pixels < 0.02
+
+
+def test_spti_final_logo_masters_are_backed_up_and_theme_ready():
+    repository_root = DEPLOY_DIR.parent
+    backup_dir = repository_root / "docs/brand-assets/spti-ai-final-20260730"
+    image_expectations = {
+        backup_dir / "spti-ai-logo-light-blue-master.png": (1327, 368),
+        backup_dir / "spti-ai-logo-dark-white-master.png": (1327, 368),
+        backup_dir / "spti-ai-mark-master.png": (368, 368),
+        DEPLOY_DIR / "static/branding/spti-ai-logo-light.png": (1327, 368),
+        DEPLOY_DIR / "static/branding/spti-ai-logo-dark.png": (1327, 368),
+        DEPLOY_DIR / "static/branding/spti-ai-mark.png": (368, 368),
+    }
+
+    for image_path, expected_size in image_expectations.items():
+        image = Image.open(image_path)
+        assert image.mode == "RGBA"
+        assert image.size == expected_size
+        assert image.getpixel((0, 0))[3] == 0
 
 
 def test_studio_routes_serve_the_sibling_build_directory():

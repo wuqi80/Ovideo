@@ -1,15 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <title>SPTI.AI mark</title>
-  <defs>
-    <linearGradient id="spti-mark-bg" x1="16" y1="14" x2="112" y2="114" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#07111F"/>
-      <stop offset=".56" stop-color="#0B2450"/>
-      <stop offset="1" stop-color="#146EF5"/>
-    </linearGradient>
-  </defs>
-  <rect x="8" y="8" width="112" height="112" rx="26" fill="url(#spti-mark-bg)"/>
-  <path d="M29 30h45c16 0 28 10 28 25 0 10-6 18-16 22l16 22H74L61 81H49v18H29V30Zm20 16v19h20c8 0 13-4 13-10s-5-9-13-9H49Z" fill="#EAF2FF"/>
-  <path d="M29 30h20v69H29V30Z" fill="#00D7FF"/>
-  <path d="M59 51 88 67 59 83V51Z" fill="#146EF5"/>
-  <circle cx="100" cy="27" r="8" fill="#00D722"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 368 368" role="img" aria-labelledby="title">
+  <title id="title">SPTI.AI mark</title>
+  <image href="spti-ai-mark.png" width="368" height="368" />
 </svg>

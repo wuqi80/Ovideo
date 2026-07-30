@@ -111,13 +111,17 @@ describe('Webflow design-system contract', () => {
   it('uses one SPTI.AI identity and favicon set across public shells', () => {
     const appHtml = readProjectFile('index.html');
     const loginHtml = readProjectFile('../login.html');
+    const legacyAdminHtml = readProjectFile('../admin/index.html');
+    const studioHtml = readProjectFile('../../studio/index.html');
     const header = readProjectFile('components/Header.tsx');
     const brandLogo = readProjectFile('components/BrandLogo.tsx');
     const accountMenu = readProjectFile('components/AccountMenu.tsx');
     const app = readProjectFile('App.tsx');
+    const studioApp = readProjectFile('../../studio/App.tsx');
 
     for (const assetPath of [
-      '../static/branding/spti-ai-logo.png',
+      '../static/branding/spti-ai-logo-light.png',
+      '../static/branding/spti-ai-logo-dark.png',
       '../static/branding/spti-ai-mark.png',
       '../static/favicon.ico',
       '../static/favicon-32x32.png',
@@ -126,8 +130,10 @@ describe('Webflow design-system contract', () => {
       expect(fs.statSync(path.join(projectRoot, assetPath)).size, assetPath).toBeGreaterThan(0);
     }
 
-    expect(brandLogo).toContain('/static/branding/spti-ai-logo.png');
+    expect(brandLogo).toContain('/static/branding/spti-ai-logo-light.png');
+    expect(brandLogo).toContain('/static/branding/spti-ai-logo-dark.png');
     expect(brandLogo).toContain('/static/branding/spti-ai-mark.png');
+    expect(brandLogo).toContain("tone = 'light'");
     expect(header).toContain('<BrandLogo');
     expect(header).not.toContain('<text x="14"');
     expect(accountMenu).toContain('个人中心');
@@ -136,17 +142,24 @@ describe('Webflow design-system contract', () => {
     expect(app).toContain('path="/profile"');
     expect(appHtml).toContain('<title>SPTI.AI 漫剧创作平台</title>');
     expect(appHtml).not.toContain('MECHA.ONE · AI 漫剧创作平台');
-    expect(appHtml).toContain('/favicon.ico?v=20260730-spti-icon-v1');
-    expect(appHtml).toContain('/favicon-32x32.png?v=20260730-spti-icon-v1');
-    expect(appHtml).toContain('/apple-touch-icon.png?v=20260730-spti-icon-v1');
-    expect(loginHtml).toContain('/favicon.ico?v=20260730-spti-icon-v1');
-    expect(loginHtml).toContain('/favicon-32x32.png?v=20260730-spti-icon-v1');
-    expect(loginHtml).toContain('/apple-touch-icon.png?v=20260730-spti-icon-v1');
-    expect(loginHtml).toContain('/static/branding/spti-ai-mark.png');
-    expect(loginHtml).toContain('<div class="brand-name">SPTI.AI</div>');
-    expect(loginHtml).toContain('drop-shadow(2px 0 0 rgba(255,255,255,0.98))');
+    expect(appHtml).toContain('/favicon.ico?v=20260730-spti-icon-v2');
+    expect(appHtml).toContain('/favicon-32x32.png?v=20260730-spti-icon-v2');
+    expect(appHtml).toContain('/apple-touch-icon.png?v=20260730-spti-icon-v2');
+    expect(loginHtml).toContain('/favicon.ico?v=20260730-spti-icon-v2');
+    expect(loginHtml).toContain('/favicon-32x32.png?v=20260730-spti-icon-v2');
+    expect(loginHtml).toContain('/apple-touch-icon.png?v=20260730-spti-icon-v2');
+    expect(loginHtml).toContain('/static/branding/spti-ai-logo-dark.png');
+    expect(loginHtml).toContain('/static/branding/spti-ai-logo-light.png');
+    expect(loginHtml).not.toContain('drop-shadow(2px 0 0 rgba(255,255,255,0.98))');
+    expect(legacyAdminHtml).toContain('/favicon.ico?v=20260730-spti-icon-v2');
+    expect(legacyAdminHtml).toContain('/static/branding/spti-ai-logo-dark.png');
+    expect(studioHtml).toContain('/favicon.ico?v=20260730-spti-icon-v2');
+    expect(studioHtml).toContain('/apple-touch-icon.png?v=20260730-spti-icon-v2');
     expect(loginHtml).not.toContain('MECHA<span class="brand-dot">.</span>ONE');
     expect(loginHtml).toContain('SPTI.ai（Story Production Technology Intelligence）意为“故事生产技术智能”，是一个基于 AI 能力打造的漫剧生产智能平台。');
+    expect(studioApp).toContain("isDarkCanvas");
+    expect(studioApp).toContain('/static/branding/spti-ai-logo-dark.png');
+    expect(studioApp).toContain('/static/branding/spti-ai-logo-light.png');
   });
 
   it('keeps project and episode hubs on the shared centered media-library shell', () => {

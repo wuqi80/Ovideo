@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="icon" href="/favicon.ico?v=20260730-spti-icon-v1" sizes="any" />
-    <link rel="icon" href="/favicon-32x32.png?v=20260730-spti-icon-v1" type="image/png" sizes="32x32" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260730-spti-icon-v1" />
+    <link rel="icon" href="/favicon.ico?v=20260730-spti-icon-v2" sizes="any" />
+    <link rel="icon" href="/favicon-32x32.png?v=20260730-spti-icon-v2" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260730-spti-icon-v2" />
     <title>SPTI.AI - 登录</title>
     <style>
         :root {
@@ -104,42 +104,15 @@
             gap: 12px;
         }
 
-        .logo {
-            width: 40px;
-            height: 40px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
+        .brand-lockup {
+            width: min(240px, 54vw);
+            height: auto;
+            display: block;
             object-fit: contain;
         }
 
-        .mobile-brand .logo {
-            width: 36px;
-            height: 36px;
-        }
-
-        .brand-name {
-            font-size: 20px;
-            line-height: 1;
-            font-weight: 600;
-            letter-spacing: -0.2px;
-        }
-
-        .brand-dot {
-            color: #146EF5;
-        }
-
-        .brand-panel .logo {
-            filter:
-                drop-shadow(2px 0 0 rgba(255,255,255,0.98))
-                drop-shadow(-2px 0 0 rgba(255,255,255,0.98))
-                drop-shadow(0 2px 0 rgba(255,255,255,0.98))
-                drop-shadow(0 -2px 0 rgba(255,255,255,0.98))
-                drop-shadow(1.4px 1.4px 0 rgba(255,255,255,0.98))
-                drop-shadow(-1.4px 1.4px 0 rgba(255,255,255,0.98))
-                drop-shadow(1.4px -1.4px 0 rgba(255,255,255,0.98))
-                drop-shadow(-1.4px -1.4px 0 rgba(255,255,255,0.98))
-                drop-shadow(0 2px 5px rgba(8,8,8,0.28));
+        .mobile-brand .brand-lockup {
+            width: min(196px, 62vw);
         }
 
         .brand-content {
@@ -430,8 +403,7 @@
     <main class="shell">
         <section class="brand-panel" aria-label="SPTI.AI 漫剧创作平台">
             <div class="brand-top">
-                <img class="logo" src="/static/branding/spti-ai-mark.png" alt="" />
-                <div class="brand-name">SPTI.AI</div>
+                <img class="brand-lockup" src="/static/branding/spti-ai-logo-dark.png" alt="SPTI.AI" />
             </div>
 
             <div class="brand-content">
@@ -474,8 +446,7 @@
         <section class="login-panel">
             <div class="login-card">
                 <div class="mobile-brand">
-                    <img class="logo" src="/static/branding/spti-ai-mark.png" alt="" />
-                    <div class="brand-name">SPTI.AI</div>
+                    <img class="brand-lockup" src="/static/branding/spti-ai-logo-light.png" alt="SPTI.AI" />
                 </div>
 
                 <h2>欢迎回来</h2>

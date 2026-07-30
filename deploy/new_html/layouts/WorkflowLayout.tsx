@@ -63,8 +63,7 @@ export const WorkflowLayout: React.FC = () => {
       <div className="workflow-shell layout-safe flex h-screen min-w-0 flex-col overflow-hidden bg-n0 text-n800">
         <header className="workflow-shell-header flex shrink-0 items-center border-b border-n40 bg-n0">
           <div className="workflow-shell-brand flex shrink-0 items-center gap-2 px-4">
-            <BrandLogo variant="mark" className="h-7 w-7" />
-            <span className="hidden text-sm font-semibold tracking-[0.12em] text-n800 sm:inline">SPTI.AI</span>
+            <BrandLogo className="h-7 w-auto max-w-[112px]" />
           </div>
           <nav
             className="workflow-shell-nav flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-3 scrollbar-atlas"
