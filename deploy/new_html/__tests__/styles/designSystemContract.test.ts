@@ -103,7 +103,8 @@ describe('Webflow design-system contract', () => {
     expect(login).toContain('--n40: #D8D8D8');
     expect(login).toContain('"WF Visual Sans Variable"');
     expect(login).toContain('var(--shadow-cascade)');
-    expect(login).toContain('transform: translateX(6px)');
+    expect(login).not.toContain('transform: translateX(6px)');
+    expect(login).toContain('transition: background-color 150ms ease, box-shadow 150ms ease');
     expect(login).toContain('@media (max-width: 479px)');
     expect(login).not.toMatch(/#0052CC|#0065FF|#0747A6|#172B4D/i);
   });

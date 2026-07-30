@@ -297,16 +297,14 @@
             font-weight: 500;
             cursor: pointer;
             box-shadow: var(--shadow-cascade);
-            transition: background-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+            transition: background-color 150ms ease, box-shadow 150ms ease;
         }
 
         .login-button:hover {
             background: var(--primary-hover);
-            transform: translateX(6px);
         }
 
         .login-button:active {
-            transform: translateX(6px) scale(0.99);
             background: var(--primary-active);
         }
 
@@ -390,11 +388,6 @@
             *::after {
                 animation-duration: 0.01ms !important;
                 transition-duration: 0.01ms !important;
-            }
-
-            .login-button:hover,
-            .login-button:active {
-                transform: none;
             }
         }
     </style>
