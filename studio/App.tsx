@@ -1060,7 +1060,7 @@ export const App = () => {
                 {/* ... (Welcome Screen) ... */}
                 <div className="flex flex-col items-center justify-center mb-10 select-none animate-in fade-in slide-in-from-bottom-8 duration-1000">
                     <div className="relative">
-                        <h1 className="studio-welcome-title text-6xl md:text-8xl font-black tracking-tighter text-transparent bg-clip-text drop-shadow-sm px-4 pb-2">MECHA STUDIO</h1>
+                        <h1 className="studio-welcome-title text-6xl md:text-8xl font-black tracking-tighter text-transparent bg-clip-text drop-shadow-sm px-4 pb-2">SPTI STUDIO</h1>
                         <div className="absolute -inset-10 bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-blue-500/20 blur-[60px] opacity-20 pointer-events-none mix-blend-screen"></div>
                     </div>
                     <div className="flex items-center gap-4 mt-4">

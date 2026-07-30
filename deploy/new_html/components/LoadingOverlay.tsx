@@ -65,7 +65,7 @@ export const LoadingOverlay: React.FC = () => {
 
         {/* Text */}
         <h2 className="text-xl font-semibold text-n800 tracking-tight mb-2">
-            MECHA<span className="text-primary">.</span>ONE
+            SPTI<span className="text-primary">.</span>AI
         </h2>
         
         <div className="h-6 flex items-center justify-center">

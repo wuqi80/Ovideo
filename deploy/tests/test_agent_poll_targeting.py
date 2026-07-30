@@ -62,7 +62,7 @@ def test_agent_file_download_urls_are_scoped_to_claimed_task():
         {
             "param": "image_path",
             "filename": "input.png",
-            "url": "https://mecha.one/api/files/file_input123/download",
+            "url": "https://spti.ai/api/files/file_input123/download",
         },
         {
             "param": "mask",
@@ -75,7 +75,7 @@ def test_agent_file_download_urls_are_scoped_to_claimed_task():
 
     assert scoped[0]["url"] == "/api/agent/tasks/task_1/files/file_input123"
     assert scoped[1]["url"] == "https://assets.example.test/mask.png"
-    assert files[0]["url"] == "https://mecha.one/api/files/file_input123/download"
+    assert files[0]["url"] == "https://spti.ai/api/files/file_input123/download"
 
 
 def test_agent_file_scope_only_accepts_task_declared_legacy_files():

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 
 DEFAULT_CORS_ALLOW_ORIGINS = (
-    "https://mecha.one,"
+    "https://spti.ai,"
     "http://localhost:6006,"
     "http://127.0.0.1:6006,"
     "http://localhost:5173,"

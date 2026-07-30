@@ -16,7 +16,7 @@ def _route_endpoint(path: str):
     return next(route.endpoint for route in router.routes if route.path == path)
 
 
-def test_favicon_routes_serve_the_mecha_one_assets(monkeypatch):
+def test_favicon_routes_serve_the_spti_ai_assets(monkeypatch):
     monkeypatch.chdir(DEPLOY_DIR)
 
     ico_response = asyncio.run(_route_endpoint("/favicon.ico")())
@@ -43,20 +43,20 @@ def test_favicon_routes_serve_the_mecha_one_assets(monkeypatch):
         assert response.headers["expires"] == "0"
 
 
-def test_mecha_one_favicon_files_have_valid_signatures():
+def test_spti_ai_favicon_files_have_valid_signatures():
     assert (DEPLOY_DIR / "static/favicon.ico").read_bytes()[:4] == b"\x00\x00\x01\x00"
     assert (DEPLOY_DIR / "static/favicon-32x32.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     assert (DEPLOY_DIR / "static/apple-touch-icon.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_mecha_brand_favicons_stay_clean_while_homepage_adds_white_outline():
+def test_spti_brand_favicons_stay_clean_while_homepage_adds_white_outline():
     login_html = (DEPLOY_DIR / "login.html").read_text(encoding="utf-8")
 
     assert ".brand-panel .logo" in login_html
     assert "drop-shadow(2px 0 0 rgba(255,255,255,0.98))" in login_html
 
     for relative_path in [
-        "static/branding/mecha-one-mark.png",
+        "static/branding/spti-ai-mark.png",
         "static/favicon-32x32.png",
     ]:
         image = Image.open(DEPLOY_DIR / relative_path).convert("RGBA")

@@ -182,7 +182,7 @@ export const ProfilePage: React.FC = () => {
                 <ArrowLeft size={18} />
               </button>
               <div className="flex min-w-0 items-center gap-2">
-                <BrandLogo className="h-8 w-auto max-w-[170px]" alt="MECHA 漫剧创作平台" />
+                <BrandLogo className="h-8 w-auto max-w-[170px]" alt="SPTI.AI 漫剧创作平台" />
               </div>
               <div className="hidden h-8 w-px shrink-0 bg-n40 sm:block" />
               <h1 className="truncate text-xl font-bold tracking-tight text-n800 sm:text-2xl">个人中心</h1>
@@ -227,7 +227,7 @@ export const ProfilePage: React.FC = () => {
                     <CardHeader
                       icon={<PencilLine className="h-5 w-5" />}
                       title="个人信息"
-                      description="管理你在 MECHA 中显示的账号信息。"
+                      description="管理你在 SPTI.AI 中显示的账号信息。"
                     />
                     <div className="space-y-4 border-t border-n40 p-6">
                       <label className="block">

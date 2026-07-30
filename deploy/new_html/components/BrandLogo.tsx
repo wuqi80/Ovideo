@@ -9,14 +9,14 @@ interface BrandLogoProps {
 }
 
 const BRAND_ASSETS: Record<BrandLogoVariant, string> = {
-  lockup: '/static/branding/mecha-one-logo.png',
-  mark: '/static/branding/mecha-one-mark.png',
+  lockup: '/static/branding/spti-ai-logo.png',
+  mark: '/static/branding/spti-ai-mark.png',
 };
 
 export const BrandLogo: React.FC<BrandLogoProps> = ({
   variant = 'lockup',
   className = '',
-  alt = 'MECHA',
+  alt = 'SPTI.AI',
 }) => (
   <img
     src={BRAND_ASSETS[variant]}

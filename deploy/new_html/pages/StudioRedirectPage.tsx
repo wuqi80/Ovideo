@@ -20,7 +20,7 @@ export const StudioRedirectPage: React.FC = () => {
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-n20 text-sm text-n300">
-      正在打开 MECHA Studio…
+      正在打开 SPTI Studio…
     </div>
   );
 };

@@ -86,7 +86,7 @@ async def test_readiness_reports_legacy_agent_next_step(monkeypatch, capsys):
     assert code == 2
     assert "ready=false" in out
     assert "GPU Agent is still legacy" in out
-    assert "curl -fsSL https://mecha.one/storage/tools/comfyui_agent.py" in out
+    assert "curl -fsSL https://spti.ai/storage/tools/comfyui_agent.py" in out
 
 
 @pytest.mark.asyncio

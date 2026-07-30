@@ -18,20 +18,20 @@ describe('hasStoredVideoResult', () => {
   it('adds a DB fallback video without hiding the latest failed attempt', () => {
     const merged = mergeStoredVideoResult(
       { state: 'failed', progress: 0, error: 'latest generation failed' },
-      'https://mecha.one/storage/video/u/p/e/202607/ok.mp4?token=x',
+      'https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=x',
     );
 
     expect(merged.state).toBe('failed');
     expect(merged.progress).toBe(0);
-    expect(merged.result).toBe('https://mecha.one/storage/video/u/p/e/202607/ok.mp4?token=x');
-    expect(merged.videos).toEqual(['https://mecha.one/storage/video/u/p/e/202607/ok.mp4?token=x']);
+    expect(merged.result).toBe('https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=x');
+    expect(merged.videos).toEqual(['https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=x']);
     expect(merged.keepResult).toBe(true);
   });
 
   it('deduplicates the same stored video across absolute and relative URLs', () => {
     const original = {
       state: 'done' as const,
-      videos: ['https://mecha.one/storage/video/u/p/e/202607/ok.mp4?token=old'],
+      videos: ['https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=old'],
     };
     const merged = mergeStoredVideoResult(original, '/storage/video/u/p/e/202607/ok.mp4');
 

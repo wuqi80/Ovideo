@@ -20,7 +20,7 @@ Run the suite from `deploy`:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_agentic_test_suite.py `
-  --base-url https://mecha.one
+  --base-url https://spti.ai
 ```
 
 Reports are written to `deploy/logs/` and are intentionally ignored by Git.

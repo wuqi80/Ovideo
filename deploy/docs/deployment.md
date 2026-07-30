@@ -383,7 +383,7 @@ sudo systemctl status my2
 |------|------|
 | `JWT_SECRET_KEY` | 生产环境必须更换为强随机字符串 |
 | `DB_PASSWORD` | 不要使用默认密码，使用强密码 |
-| CORS | 默认白名单为 `https://mecha.one` 与本地开发地址；生产如需扩展用 `CORS_ALLOW_ORIGINS` 配置，禁止 `["*"] + credentials` |
+| CORS | 默认白名单为 `https://spti.ai` 与本地开发地址；生产如需扩展用 `CORS_ALLOW_ORIGINS` 配置，禁止 `["*"] + credentials` |
 | HTTPS | 生产环境必须通过 Nginx + Let's Encrypt 配置 HTTPS |
 | 文件存储 | `persistent_storage/` 目录需定期备份 |
 | API Key | 不要将 Key 提交到 Git；使用环境变量或管理后台管理 |

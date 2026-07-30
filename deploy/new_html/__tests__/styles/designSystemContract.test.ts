@@ -108,7 +108,7 @@ describe('Webflow design-system contract', () => {
     expect(login).not.toMatch(/#0052CC|#0065FF|#0747A6|#172B4D/i);
   });
 
-  it('uses one MECHA.ONE identity and favicon set across public shells', () => {
+  it('uses one SPTI.AI identity and favicon set across public shells', () => {
     const appHtml = readProjectFile('index.html');
     const loginHtml = readProjectFile('../login.html');
     const header = readProjectFile('components/Header.tsx');
@@ -117,8 +117,8 @@ describe('Webflow design-system contract', () => {
     const app = readProjectFile('App.tsx');
 
     for (const assetPath of [
-      '../static/branding/mecha-one-logo.png',
-      '../static/branding/mecha-one-mark.png',
+      '../static/branding/spti-ai-logo.png',
+      '../static/branding/spti-ai-mark.png',
       '../static/favicon.ico',
       '../static/favicon-32x32.png',
       '../static/apple-touch-icon.png',
@@ -126,26 +126,28 @@ describe('Webflow design-system contract', () => {
       expect(fs.statSync(path.join(projectRoot, assetPath)).size, assetPath).toBeGreaterThan(0);
     }
 
-    expect(brandLogo).toContain('/static/branding/mecha-one-logo.png');
-    expect(brandLogo).toContain('/static/branding/mecha-one-mark.png');
+    expect(brandLogo).toContain('/static/branding/spti-ai-logo.png');
+    expect(brandLogo).toContain('/static/branding/spti-ai-mark.png');
     expect(header).toContain('<BrandLogo');
     expect(header).not.toContain('<text x="14"');
     expect(accountMenu).toContain('个人中心');
     expect(accountMenu).toContain("window.location.href = '/profile'");
     expect(app).toContain("const ProfilePage");
     expect(app).toContain('path="/profile"');
-    expect(appHtml).toContain('<title>MECHA 漫剧创作平台</title>');
+    expect(appHtml).toContain('<title>SPTI.AI 漫剧创作平台</title>');
     expect(appHtml).not.toContain('MECHA.ONE · AI 漫剧创作平台');
-    expect(appHtml).toContain('/favicon.ico?v=20260727-mecha-icon-v2');
-    expect(appHtml).toContain('/favicon-32x32.png?v=20260727-mecha-icon-v2');
-    expect(appHtml).toContain('/apple-touch-icon.png?v=20260727-mecha-icon-v2');
-    expect(loginHtml).toContain('/favicon.ico?v=20260727-mecha-icon-v2');
-    expect(loginHtml).toContain('/favicon-32x32.png?v=20260727-mecha-icon-v2');
-    expect(loginHtml).toContain('/apple-touch-icon.png?v=20260727-mecha-icon-v2');
-    expect(loginHtml).toContain('/static/branding/mecha-one-mark.png');
-    expect(loginHtml).toContain('<div class="brand-name">MECHA</div>');
+    expect(appHtml).toContain('/favicon.ico?v=20260730-spti-icon-v1');
+    expect(appHtml).toContain('/favicon-32x32.png?v=20260730-spti-icon-v1');
+    expect(appHtml).toContain('/apple-touch-icon.png?v=20260730-spti-icon-v1');
+    expect(loginHtml).toContain('/favicon.ico?v=20260730-spti-icon-v1');
+    expect(loginHtml).toContain('/favicon-32x32.png?v=20260730-spti-icon-v1');
+    expect(loginHtml).toContain('/apple-touch-icon.png?v=20260730-spti-icon-v1');
+    expect(loginHtml).toContain('/static/branding/spti-ai-mark.png');
+    expect(loginHtml).toContain('<div class="brand-name">SPTI.AI</div>');
     expect(loginHtml).toContain('drop-shadow(2px 0 0 rgba(255,255,255,0.98))');
     expect(loginHtml).not.toContain('MECHA<span class="brand-dot">.</span>ONE');
+    expect(loginHtml).toContain('Story Production Technology Intelligence');
+    expect(loginHtml).toContain('故事生产技术智能');
   });
 
   it('keeps project and episode hubs on the shared centered media-library shell', () => {
@@ -162,8 +164,8 @@ describe('Webflow design-system contract', () => {
 
     expect(projectHub).toContain('全部项目');
     expect(projectHub).toContain('已归档');
-    expect(projectHub).toContain('title="MECHA 漫剧创作平台"');
-    expect(projectHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="MECHA 漫剧创作平台" />');
+    expect(projectHub).toContain('title="SPTI.AI 漫剧创作平台"');
+    expect(projectHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="SPTI.AI 漫剧创作平台" />');
     expect(projectHub).not.toContain('MECHA <span className="text-primary">·</span> 漫剧创作平台');
     expect(projectHub).toContain('include_archived: \'true\'');
     expect(projectHub).toContain('<AccountMenu');
@@ -176,8 +178,8 @@ describe('Webflow design-system contract', () => {
     expect(episodeHub).toContain('制作中');
     expect(episodeHub).toContain('已完成');
     expect(episodeHub).toContain('已发布');
-    expect(episodeHub).toContain('title="MECHA 漫剧创作平台"');
-    expect(episodeHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="MECHA 漫剧创作平台" />');
+    expect(episodeHub).toContain('title="SPTI.AI 漫剧创作平台"');
+    expect(episodeHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="SPTI.AI 漫剧创作平台" />');
     expect(episodeHub).not.toContain('MECHA <span className="text-primary">·</span> 漫剧创作平台');
     expect(episodeHub).toContain('app-modal-backdrop');
     expect(episodeHub).toContain('aria-modal="true"');

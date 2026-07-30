@@ -130,7 +130,7 @@ export const AdminLoginPage: React.FC = () => {
                 {/* 顶部品牌 */}
                 <div className="text-center mb-8">
                     <BrandLogo variant="mark" className="mx-auto mb-3 h-14 w-14" />
-                    <h1 className="text-2xl font-bold tracking-tight text-n800">MECHA<span className="text-primary">.</span>ONE · ADMIN</h1>
+                    <h1 className="text-2xl font-bold tracking-tight text-n800">SPTI<span className="text-primary">.</span>AI · ADMIN</h1>
                     <p className="text-xs text-n100 mt-1.5 tracking-wider uppercase"
                       style={{ fontFamily: 'var(--font-mono)' }}>
                         Restricted · Authentication Required

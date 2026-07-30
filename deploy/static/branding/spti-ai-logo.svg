@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 128">
+  <title>SPTI.AI logo</title>
+  <rect x="8" y="8" width="112" height="112" rx="26" fill="#07111F"/>
+  <path d="M29 30h45c16 0 28 10 28 25 0 10-6 18-16 22l16 22H74L61 81H49v18H29V30Zm20 16v19h20c8 0 13-4 13-10s-5-9-13-9H49Z" fill="#EAF2FF"/>
+  <path d="M29 30h20v69H29V30Z" fill="#00D7FF"/>
+  <path d="M59 51 88 67 59 83V51Z" fill="#146EF5"/>
+  <circle cx="100" cy="27" r="8" fill="#00D722"/>
+  <text x="148" y="62" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="800" letter-spacing="1.5" fill="#07111F">SPTI.AI</text>
+  <text x="150" y="94" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700" letter-spacing="2.4" fill="#146EF5">DRAMA CREATION PLATFORM</text>
+  <path d="M148 108h304" stroke="#D8D8D8" stroke-width="2" stroke-linecap="round"/>
+</svg>

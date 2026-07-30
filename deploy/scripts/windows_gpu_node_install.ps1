@@ -1,6 +1,6 @@
 param(
     [string]$InstallRoot = "E:\MECHA-GPU",
-    [string]$ServerUrl = "https://mecha.one"
+    [string]$ServerUrl = "https://spti.ai"
 )
 
 $ErrorActionPreference = "Stop"
@@ -181,7 +181,7 @@ chcp 65001 >nul
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 set MECHA_GPU_ROOT=E:\MECHA-GPU
-set MECHA_SERVER_URL=https://mecha.one
+set MECHA_SERVER_URL=https://spti.ai
 set MECHA_COMFYUI_PORTS=8188
 E:\MECHA-GPU\ComfyUI_windows_portable\python_embeded\python.exe -s E:\MECHA-GPU\agent\windows_gpu_agent_runner.py >> E:\MECHA-GPU\logs\agent.log 2>&1
 endlocal

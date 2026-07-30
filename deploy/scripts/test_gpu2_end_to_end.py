@@ -281,7 +281,7 @@ def _upload_input(
 
 def main() -> int:
     args = _parse_args()
-    base_url = os.environ.get("MECHA_BASE_URL", "https://mecha.one").rstrip("/")
+    base_url = os.environ.get("MECHA_BASE_URL", "https://spti.ai").rstrip("/")
     password = os.environ.get("ADMIN_PASSWORD", "").strip()
     agent_id = args.agent_id.strip()
     if not password or not agent_id:

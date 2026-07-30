@@ -1179,7 +1179,7 @@ def main() -> None:
     if not token:
         raise RuntimeError(f"Agent token is empty: {TOKEN_FILE}")
 
-    server_url = os.environ.get("MECHA_SERVER_URL", "https://mecha.one")
+    server_url = os.environ.get("MECHA_SERVER_URL", "https://spti.ai")
     ports = [
         int(value.strip())
         for value in os.environ.get("MECHA_COMFYUI_PORTS", "8188").split(",")

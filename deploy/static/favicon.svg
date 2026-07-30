@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <title>MECHA.ONE</title>
-  <path fill="#146EF5" d="M7 9h15l10 10L42 9h15v17l-7 7 7 7v15H40l-8-8-8 8H7V40l7-7-7-7V9Zm8 8v7l8 8-8 8v7h6l11-11v-8L21 17h-6Z"/>
-  <path fill="#080808" d="M32 19 42 9h15v17l-7 7 7 7v15H40l-8-8V36l11 11h6v-7l-8-8 8-8v-7h-6L32 28v-9Z"/>
-  <path fill="#fff" d="m25 24 15 9-15 9z"/>
+  <title>SPTI.AI</title>
+  <rect width="64" height="64" rx="14" fill="#07111F"/>
+  <path fill="#146EF5" d="M14 15h22c8 0 14 5 14 12 0 5-3 9-8 11l8 11H36l-7-9H24v9H14V15Zm10 8v9h10c4 0 6-2 6-5s-2-4-6-4H24Z"/>
+  <path fill="#00D7FF" d="M14 15h10v34H14z" opacity=".88"/>
+  <path fill="#EAF2FF" d="M29 25 43 33 29 41z"/>
+  <circle cx="49" cy="15" r="4" fill="#00D722"/>
 </svg>

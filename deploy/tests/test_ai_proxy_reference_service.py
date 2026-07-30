@@ -97,7 +97,7 @@ def test_prepare_gemini_image_parts_accepts_absolute_same_origin_storage_url(tmp
 
     parts = prepare_gemini_image_parts(
         prompt="draw",
-        references=["https://mecha.one/storage/assets/character.png?version=2"],
+        references=["https://spti.ai/storage/assets/character.png?version=2"],
         reference_metadata=[{
             "type": "character",
             "name": "主角",

@@ -1697,18 +1697,18 @@ def check_cors_allowlist_contract(root: Path) -> int:
     """CORS defaults must be explicit allowlists, not wildcard credentials."""
     required_snippets = [
         (root / "cluster_config.py", 'DEFAULT_CORS_ALLOW_ORIGINS = ('),
-        (root / "cluster_config.py", '"https://mecha.one,"'),
+        (root / "cluster_config.py", '"https://spti.ai,"'),
         (root / "cluster_config.py", 'def parse_cors_allow_origins(value: str | None = None) -> list[str]:'),
         (root / "cluster_config.py", 'os.getenv("CORS_ALLOW_ORIGINS", DEFAULT_CORS_ALLOW_ORIGINS)'),
         (root / "cluster_config.py", "ALLOW_ORIGINS = parse_cors_allow_origins()"),
         (root / "config.py", 'DEFAULT_CORS_ALLOW_ORIGINS = ('),
-        (root / "config.py", '"https://mecha.one,"'),
+        (root / "config.py", '"https://spti.ai,"'),
         (root / "config.py", "ALLOW_ORIGINS = parse_cors_allow_origins()"),
         (root / "cluster_config_generated.py", 'DEFAULT_CORS_ALLOW_ORIGINS = ('),
-        (root / "cluster_config_generated.py", '"https://mecha.one,"'),
+        (root / "cluster_config_generated.py", '"https://spti.ai,"'),
         (root / "cluster_config_generated.py", "ALLOW_ORIGINS = parse_cors_allow_origins()"),
         (root / "auto_deploy_cluster.py", 'DEFAULT_CORS_ALLOW_ORIGINS = ('),
-        (root / "auto_deploy_cluster.py", '"https://mecha.one,"'),
+        (root / "auto_deploy_cluster.py", '"https://spti.ai,"'),
         (root / "auto_deploy_cluster.py", "ALLOW_ORIGINS = parse_cors_allow_origins()"),
         (root / "cluster_main.py", "allow_origins=SystemConfig.ALLOW_ORIGINS"),
     ]

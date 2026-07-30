@@ -74,7 +74,7 @@ export const SonicStudio: React.FC<SonicStudioProps> = ({
             <AudioLines size={18} className="text-purple-300" />
           </div>
           <div>
-            <div className="text-sm font-bold text-white">MECHA 声音工厂</div>
+            <div className="text-sm font-bold text-white">SPTI 声音工厂</div>
             <div className="text-[10px] text-slate-500">使用流程化制作相同的 MiniMax TTS 通道</div>
           </div>
         </div>
