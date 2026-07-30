@@ -146,8 +146,7 @@ describe('Webflow design-system contract', () => {
     expect(loginHtml).toContain('<div class="brand-name">SPTI.AI</div>');
     expect(loginHtml).toContain('drop-shadow(2px 0 0 rgba(255,255,255,0.98))');
     expect(loginHtml).not.toContain('MECHA<span class="brand-dot">.</span>ONE');
-    expect(loginHtml).toContain('Story Production Technology Intelligence');
-    expect(loginHtml).toContain('故事生产技术智能');
+    expect(loginHtml).toContain('SPTI.ai（Story Production Technology Intelligence）意为“故事生产技术智能”，是一个基于 AI 能力打造的漫剧生产智能平台。');
   });
 
   it('keeps project and episode hubs on the shared centered media-library shell', () => {
