@@ -24,12 +24,12 @@ describe('FileColumn workflow script control', () => {
     expect(source).not.toContain('1. 文件列表');
   });
 
-  it('uses contiguous rows with a blue selected rail and tinted background', () => {
+  it('uses compact separated cards with a blue selected rail and tinted background', () => {
     expect(source).toContain('className="flex shrink-0 items-center justify-end gap-1"');
-    expect(source).toContain('className="flex flex-col border-t border-n40"');
-    expect(source).toContain('border-b border-l-[3px] border-n40');
+    expect(source).toContain('className="flex flex-col gap-[6px] px-2 py-2"');
+    expect(source).toContain('rounded-md border border-l-[3px] border-n40');
     expect(source).toContain("'border-l-primary bg-primary-light'");
-    expect(source).toContain("'border-l-transparent bg-n0 hover:bg-n20'");
+    expect(source).toContain("'border-l-transparent bg-n0 hover:border-n100 hover:bg-n20'");
     expect(source).not.toContain('rounded-lg border bg-n0 px-2.5 py-2');
     expect(source).not.toContain('flex-shrink-0 border-b border-n40 bg-n0');
     expect(source).not.toContain('border-t border-n40 px-4');
@@ -52,6 +52,11 @@ describe('FileColumn workflow script control', () => {
     expect(source).toContain('<Edit2 className="h-3.5 w-3.5" /> 重命名');
     expect(source).toContain('<FileDown className="h-3.5 w-3.5" /> 下载');
     expect(source).toContain('<Trash2 className="h-3.5 w-3.5" /> 删除');
+  });
+
+  it('shows a light square hover surface around both ordering arrows', () => {
+    const arrowHoverClass = 'rounded-md border border-transparent text-n300 transition-colors hover:border-n40 hover:bg-n30 hover:text-n800';
+    expect(source.match(new RegExp(arrowHoverClass, 'g'))).toHaveLength(2);
   });
 
   it('renders the file settings panel through a portal to the right of the sidebar', () => {

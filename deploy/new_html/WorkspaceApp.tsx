@@ -4292,7 +4292,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     </React.Suspense>
                   </div>
 
-                  <div className="workflow-stage-canvas flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                  <div
+                    className="workflow-stage-canvas flex min-h-0 min-w-0 max-w-none flex-col overflow-hidden"
+                    data-testid="quick-script-canvas"
+                    style={{ width: 0, flex: '1 1 0%' }}
+                  >
                     <header className="workflow-stage-toolbar flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
                       <FileText className="h-4 w-4 flex-shrink-0 text-primary" />
                       <div className="truncate text-sm font-semibold text-n800">
@@ -4307,8 +4311,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                       </span>
                     </header>
 
-                    <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
-                      <div className="flex h-full min-w-[900px] overflow-hidden">
+                    <div className="min-h-0 w-full min-w-0 max-w-none flex-1 overflow-x-auto overflow-y-hidden">
+                      <div
+                        className="flex h-full w-full min-w-[900px] max-w-none overflow-hidden"
+                        data-testid="quick-script-columns"
+                      >
 
                       <div
                         style={{ flex: `${colWidths[1]} 0 0%` }}

@@ -270,7 +270,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
             </p>
           </div>
         ) : (
-          <div className="flex flex-col border-t border-n40">
+          <div className="flex flex-col gap-[6px] px-2 py-2">
             {files.map((file, index) => (
               <div
                 key={file.id}
@@ -322,10 +322,10 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   setDragOverIndex(null);
                 }}
                 onClick={() => onFileSelect(file.id)}
-                className={`group relative flex cursor-pointer flex-col gap-1.5 border-b border-l-[3px] border-n40 px-3 py-3 transition-colors duration-150 ${
+                className={`group relative flex cursor-pointer flex-col gap-1.5 rounded-md border border-l-[3px] border-n40 px-3 py-3 transition-colors duration-150 ${
                   selectedFileId === file.id
                     ? 'border-l-primary bg-primary-light'
-                    : 'border-l-transparent bg-n0 hover:bg-n20'
+                    : 'border-l-transparent bg-n0 hover:border-n100 hover:bg-n20'
                 } ${draggedFileId === file.id ? 'bg-primary-light opacity-70' : ''} ${
                   dragOverIndex === index
                     ? 'border-l-primary bg-primary-light'
@@ -358,7 +358,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                     <button
                       onClick={(e) => { e.stopPropagation(); onMoveFile(e, file.id, 'up'); }}
                       disabled={index === 0}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800 disabled:cursor-not-allowed disabled:opacity-20"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-n300 transition-colors hover:border-n40 hover:bg-n30 hover:text-n800 disabled:cursor-not-allowed disabled:opacity-20"
                       title="上移"
                       aria-label={`${file.name} 上移`}
                     >
@@ -367,7 +367,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                     <button
                       onClick={(e) => { e.stopPropagation(); onMoveFile(e, file.id, 'down'); }}
                       disabled={index === files.length - 1}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded text-n300 hover:bg-n20 hover:text-n800 disabled:cursor-not-allowed disabled:opacity-20"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-n300 transition-colors hover:border-n40 hover:bg-n30 hover:text-n800 disabled:cursor-not-allowed disabled:opacity-20"
                       title="下移"
                       aria-label={`${file.name} 下移`}
                     >
