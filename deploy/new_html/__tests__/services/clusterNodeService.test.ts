@@ -41,8 +41,8 @@ describe('GPU cluster routing', () => {
   });
 
   it('persists a manual GPU2 preference', async () => {
-    setPreferredGpuNodeId('GPU2');
-    expect(getPreferredGpuNodeId()).toBe('GPU2');
+    setPreferredGpuNodeId('agent_gpu2');
+    expect(getPreferredGpuNodeId()).toBe('agent_gpu2');
     mockFetch.mockResolvedValueOnce(response({
       success: true,
       nodes: [
@@ -53,6 +53,34 @@ describe('GPU cluster routing', () => {
 
     const routing = await resolveGpuTaskRouting();
     expect(routing.preferredAgentId).toBe('agent_gpu2');
+  });
+
+  it('keeps default routing stable when the GPU display name changes', async () => {
+    mockFetch.mockResolvedValueOnce(response({
+      success: true,
+      nodes: [
+        {
+          id: 'agent_gpu1',
+          agent_id: 'agent_gpu1',
+          name: '主渲染机',
+          routing_name: 'GPU1',
+          status: 'online',
+        },
+        {
+          id: 'agent_gpu2',
+          agent_id: 'agent_gpu2',
+          name: '备用渲染机',
+          routing_name: 'GPU2',
+          status: 'online',
+        },
+      ],
+    }));
+
+    const routing = await resolveGpuTaskRouting();
+
+    expect(routing.preferredAgentId).toBe('agent_gpu1');
+    expect(routing.node?.name).toBe('主渲染机');
+    expect(getPreferredGpuNodeId()).toBe('agent_gpu1');
   });
 
   it('falls back to GPU1 when the selected node is offline', async () => {

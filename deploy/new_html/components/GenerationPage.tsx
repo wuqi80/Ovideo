@@ -29,6 +29,7 @@ import { saveRunningTask, removeRunningTask, getRecoverableTasks } from '../serv
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
 import {
+  clusterNodePreferenceId,
   DEFAULT_GPU_NODE_NAME,
   fetchClusterNodes,
   isClusterNodeUsable,
@@ -536,8 +537,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const selectedClusterNode = useMemo(
     () => clusterNodes.find((node) => (
       node.id === selectedClusterNodeId
+      || node.nodeId === selectedClusterNodeId
       || node.agentId === selectedClusterNodeId
       || node.name === selectedClusterNodeId
+      || node.routingName === selectedClusterNodeId
     )),
     [clusterNodes, selectedClusterNodeId],
   );
@@ -558,6 +561,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   useEffect(() => {
     loadClusterNodeOptions();
   }, [loadClusterNodeOptions]);
+  useEffect(() => {
+    if (!selectedClusterNode) return;
+    const stableId = clusterNodePreferenceId(selectedClusterNode);
+    if (stableId !== selectedClusterNodeId) {
+      setSelectedClusterNodeId(stableId);
+    }
+    setPreferredGpuNodeId(stableId);
+  }, [selectedClusterNode, selectedClusterNodeId, setSelectedClusterNodeId]);
   const [shotModels, setShotModels] = usePersistedPageState<Record<string, GenerationModel>>({
     page: 'GenerationPage:shotModels',
     episodeId,
@@ -1862,7 +1873,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         const sourceDimensions = await probeImageDimensions(imageUrl);
         const outputDimensions = fitAngleOutputDimensions(sourceDimensions);
         const routing = await resolveGpuTaskRouting(selectedClusterNodeId);
-        const actualNodeId = routing.node?.name || routing.preferredAgentId || routing.preferredNodeId;
+        const actualNodeId = routing.node
+          ? clusterNodePreferenceId(routing.node)
+          : routing.preferredAgentId || routing.preferredNodeId;
         if (actualNodeId && actualNodeId !== selectedClusterNodeId) {
           setSelectedClusterNodeId(actualNodeId);
           setPreferredGpuNodeId(actualNodeId);
@@ -2903,7 +2916,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                         <option value={DEFAULT_GPU_NODE_NAME}>{DEFAULT_GPU_NODE_NAME} · offline</option>
                                     )}
                                     {clusterNodes.map((node) => (
-                                        <option key={node.id} value={node.name}>
+                                        <option key={node.id} value={clusterNodePreferenceId(node)}>
                                             {node.name} · {node.status}{node.tasks != null && node.maxConcurrent != null ? ` · ${node.tasks}/${node.maxConcurrent}` : ''}
                                         </option>
                                     ))}
@@ -3947,7 +3960,7 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
                                     <option value={DEFAULT_GPU_NODE_NAME}>{DEFAULT_GPU_NODE_NAME} · offline</option>
                                 )}
                                 {clusterNodes.map((node) => (
-                                    <option key={node.id} value={node.name} disabled={!isClusterNodeUsable(node)}>
+                                    <option key={node.id} value={clusterNodePreferenceId(node)} disabled={!isClusterNodeUsable(node)}>
                                         {node.name} · {node.status}
                                         {node.tasks != null && node.maxConcurrent != null ? ` · ${node.tasks}/${node.maxConcurrent}` : ''}
                                     </option>

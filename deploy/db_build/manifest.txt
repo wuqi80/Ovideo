@@ -58,6 +58,7 @@ sql/db_migration_media_library_folders.sql  # REF projects; ALTER media_library_
 
 # ---- 6. 管理后台表 ----
 sql/db_migration_admin.sql                  # 建 comfyui_agents/workflow_templates/api_configurations/system_settings
+sql/db_migration_gpu_agent_display_name.sql # ALTER comfyui_agents; display-only rename
 sql/db_migration_workflow_template_recovery.sql # repair legacy placeholder GPU workflow rows
 sql/db_migration_api_config_category.sql    # ALTER api_configurations
 sql/db_migration_api_config_model_bindings.sql # ALTER api_configurations

@@ -18,6 +18,7 @@ import { apiFetch, secureApiUrl } from '../services/httpClient';
 import { syncTimelineAudioPlayback } from '../utils/enhanceTimelineAudio';
 import LazyVideo from '../components/LazyVideo';
 import {
+  clusterNodePreferenceId,
   DEFAULT_GPU_NODE_NAME,
   fetchClusterNodes,
   getPreferredGpuNodeId,
@@ -282,7 +283,7 @@ export const EnhancePage: React.FC = () => {
   const selectedClusterNode = useMemo(() => {
     const selectedKey = selectedClusterNodeId.trim().toLowerCase();
     return clusterNodes.find(node => (
-      [node.id, node.nodeId, node.agentId, node.name]
+      [node.id, node.nodeId, node.agentId, node.name, node.routingName]
         .filter(Boolean)
         .some(value => String(value).trim().toLowerCase() === selectedKey)
     ));
@@ -297,16 +298,18 @@ export const EnhancePage: React.FC = () => {
       const usableNodes = result.nodes.filter(isClusterNodeUsable);
       const requested = getPreferredGpuNodeId().trim().toLowerCase();
       const requestedNode = result.nodes.find(node => (
-        [node.id, node.nodeId, node.agentId, node.name]
+        [node.id, node.nodeId, node.agentId, node.name, node.routingName]
           .filter(Boolean)
           .some(value => String(value).trim().toLowerCase() === requested)
       ));
-      if (!requestedNode) {
-        const fallback = usableNodes.find(node => node.name === DEFAULT_GPU_NODE_NAME) || usableNodes[0];
-        if (fallback) {
-          setSelectedClusterNodeId(fallback.name);
-          setPreferredGpuNodeId(fallback.name);
-        }
+      const fallback = usableNodes.find(node => (
+        node.routingName === DEFAULT_GPU_NODE_NAME || node.name === DEFAULT_GPU_NODE_NAME
+      )) || usableNodes[0];
+      const nextNode = requestedNode || fallback;
+      if (nextNode) {
+        const stableId = clusterNodePreferenceId(nextNode);
+        setSelectedClusterNodeId(stableId);
+        setPreferredGpuNodeId(stableId);
       }
     } catch (error) {
       console.warn('[EnhancePage] cluster nodes unavailable:', error);
@@ -1040,7 +1043,7 @@ export const EnhancePage: React.FC = () => {
                       <option value={selectedClusterNodeId}>{selectedClusterNodeId} · offline</option>
                     )}
                     {clusterNodes.map(node => (
-                      <option key={node.id} value={node.name}>
+                      <option key={node.id} value={clusterNodePreferenceId(node)}>
                         {node.name} · {node.status}{node.tasks != null && node.maxConcurrent != null ? ` · ${node.tasks}/${node.maxConcurrent}` : ''}
                       </option>
                     ))}

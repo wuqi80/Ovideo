@@ -46,7 +46,7 @@ describe('GpuNodeSelector', () => {
       preferredAgentId: 'agent_gpu2',
       preferredNodeId: 'node_gpu2',
     }));
-    expect(localStorage.getItem('mecha:preferred-gpu-node-id')).toBe('GPU2');
+    expect(localStorage.getItem('mecha:preferred-gpu-node-id')).toBe('agent_gpu2');
   });
 
   it('marks an explicitly selected offline GPU as unavailable', async () => {

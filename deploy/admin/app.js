@@ -525,6 +525,8 @@ async function fetchAgents() {
     return;
   }
   document.getElementById('agent-list').innerHTML = agents.map(a => {
+    const displayName = a.display_name || a.name || a.agent_id;
+    const encodedDisplayName = encodeURIComponent(displayName).replace(/'/g, '%27');
     const instances = (typeof a.comfyui_instances === 'string' ? JSON.parse(a.comfyui_instances) : a.comfyui_instances) || [];
     const stats = (typeof a.stats === 'string' ? JSON.parse(a.stats) : a.stats) || {};
     let systemInfo = {};
@@ -541,7 +543,7 @@ async function fetchAgents() {
       <div class="agent-card">
         <div class="agent-left">
           <span class="dot ${dotClass}"></span>
-          <span class="agent-name">${a.name}</span>
+          <span class="agent-name">${escapeHtml(displayName)}</span>
           <span class="badge ${statusBadge}">${a.status}</span>
           ${!a.enabled ? '<span class="badge badge-red">暂停</span>' : ''}
         </div>
@@ -557,6 +559,7 @@ async function fetchAgents() {
           ${a.last_heartbeat ? `<span style="font-family:var(--font-mono);font-size:11px">${new Date(a.last_heartbeat).toLocaleTimeString('zh-CN')}</span>` : ''}
         </div>
         <div class="agent-actions">
+          <button class="btn btn-ghost btn-xs" onclick="renameAgent('${a.agent_id}', '${encodedDisplayName}')">改名</button>
           <button class="btn btn-ghost btn-xs" onclick="showAgentCommand('${a.agent_id}')">命令</button>
           <button class="btn btn-ghost btn-xs" onclick="toggleAgent('${a.agent_id}')">${a.enabled ? '暂停' : '启用'}</button>
           <button class="btn btn-danger btn-xs" onclick="deleteAgent('${a.agent_id}')">移除</button>
@@ -574,6 +577,24 @@ python comfyui_agent.py \\
         </div>
       </div>`;
   }).join('');
+}
+
+async function renameAgent(id, encodedCurrentName) {
+  const currentName = decodeURIComponent(encodedCurrentName || '');
+  const requestedName = window.prompt('请输入新的 GPU 显示名称', currentName);
+  if (requestedName === null) return;
+  const name = requestedName.trim();
+  if (!name) {
+    showToast('名称不能为空', 'error');
+    return;
+  }
+  if (name === currentName) return;
+  await apiCall(`/api/admin/agents/${id}/name`, {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  });
+  showToast('GPU 名称已更新', 'success');
+  fetchAgents();
 }
 
 async function toggleAgent(id) {

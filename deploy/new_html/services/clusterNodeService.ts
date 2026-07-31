@@ -8,6 +8,7 @@ export interface ClusterNodeOption {
   nodeId: string;
   agentId?: string;
   name: string;
+  routingName?: string;
   status: ClusterNodeStatus;
   kind?: string;
   host?: string;
@@ -62,6 +63,7 @@ export function normalizeClusterNode(row: Record<string, any>, index = 0): Clust
     nodeId: String(row.node_id ?? id),
     agentId: row.agent_id ? String(row.agent_id) : undefined,
     name,
+    routingName: row.routing_name ? String(row.routing_name) : undefined,
     status,
     kind: row.kind ?? row.type,
     host: row.host ?? row.ip,
@@ -78,9 +80,13 @@ export function isClusterNodeUsable(node: ClusterNodeOption): boolean {
 
 function matchesClusterNode(node: ClusterNodeOption, requested: string): boolean {
   const requestedKey = requested.trim().toLowerCase();
-  return [node.id, node.nodeId, node.agentId, node.name]
+  return [node.id, node.nodeId, node.agentId, node.name, node.routingName]
     .filter(Boolean)
     .some((value) => String(value).trim().toLowerCase() === requestedKey);
+}
+
+export function clusterNodePreferenceId(node: ClusterNodeOption): string {
+  return node.agentId || node.nodeId || node.id;
 }
 
 function clusterNodeLoad(node: ClusterNodeOption): number {
@@ -160,6 +166,10 @@ export async function resolveGpuTaskRouting(explicitNodeId?: string): Promise<Gp
     const message = 'GPU 集群当前没有可用节点，请检查节点状态后重试。';
     crmMessage.warning(message);
     throw new Error(message);
+  }
+
+  if (!explicitNodeId && requestedNode) {
+    setPreferredGpuNodeId(clusterNodePreferenceId(requestedNode));
   }
 
   if (!requestedNode || !hasClusterNodeCapacity(requestedNode)) {

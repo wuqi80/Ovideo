@@ -386,6 +386,10 @@ class AgentCreateBody(BaseModel):
     name: str = Field(..., min_length=1)
 
 
+class AgentRenameBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+
+
 @router.post("/agents", status_code=status.HTTP_201_CREATED)
 async def admin_create_agent(body: AgentCreateBody):
     _require_db()
@@ -411,6 +415,18 @@ async def admin_get_agent(agent_id: str):
     if not row:
         raise HTTPException(status_code=404, detail="Agent not found")
     return {"success": True, "agent": _row_to_jsonable(row)}
+
+
+@router.put("/agents/{agent_id}/name")
+async def admin_rename_agent(agent_id: str, body: AgentRenameBody):
+    _require_db()
+    display_name = body.name.strip()
+    if not display_name:
+        raise HTTPException(status_code=400, detail="Agent name cannot be empty")
+    updated = await AgentDAO.rename_display_name(agent_id, display_name)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {"success": True, "agent": _row_to_jsonable(updated)}
 
 
 @router.put("/agents/{agent_id}/toggle")

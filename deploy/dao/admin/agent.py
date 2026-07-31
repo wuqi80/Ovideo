@@ -193,6 +193,27 @@ class AgentDAO:
         )
 
     @staticmethod
+    async def rename_display_name(
+        agent_id: str, display_name: str
+    ) -> Optional[Dict[str, Any]]:
+        """Rename the operator-facing label without changing routing identity."""
+        db = get_db_manager()
+        if not db:
+            return None
+        return _decode_json_fields(
+            await db.fetchrow(
+                """
+                UPDATE comfyui_agents
+                SET display_name = $2
+                WHERE agent_id = $1
+                RETURNING *
+                """,
+                agent_id,
+                display_name,
+            )
+        )
+
+    @staticmethod
     async def delete(agent_id: str) -> bool:
         db = get_db_manager()
         if not db:

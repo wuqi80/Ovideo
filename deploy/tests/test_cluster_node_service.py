@@ -14,6 +14,7 @@ async def test_list_agent_nodes_filters_and_normalizes(monkeypatch):
                 {
                     "agent_id": "agent_online",
                     "name": "GPU1",
+                    "display_name": "主渲染机",
                     "status": "online",
                     "enabled": True,
                     "comfyui_instances": [{"host": "10.0.0.2", "port": 8188, "status": "healthy"}],
@@ -29,7 +30,8 @@ async def test_list_agent_nodes_filters_and_normalizes(monkeypatch):
     nodes = await cluster_node_service.list_agent_nodes()
 
     assert [node["agent_id"] for node in nodes] == ["agent_online", "agent_busy"]
-    assert nodes[0]["name"] == "GPU1"
+    assert nodes[0]["name"] == "主渲染机"
+    assert nodes[0]["routing_name"] == "GPU1"
     assert nodes[0]["url"] == "http://10.0.0.2:8188"
     assert nodes[0]["tasks"] == 1
     assert nodes[0]["max_concurrent"] == 1

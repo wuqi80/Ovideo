@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Server } from 'lucide-react';
 import {
+  clusterNodePreferenceId,
   DEFAULT_GPU_NODE_NAME,
   fetchClusterNodes,
   getPreferredGpuNodeId,
@@ -25,7 +26,7 @@ interface GpuNodeSelectorProps {
 
 function matchesNode(node: ClusterNodeOption, value: string): boolean {
   const key = value.trim().toLowerCase();
-  return [node.id, node.nodeId, node.agentId, node.name]
+  return [node.id, node.nodeId, node.agentId, node.name, node.routingName]
     .filter(Boolean)
     .some(candidate => String(candidate).trim().toLowerCase() === key);
 }
@@ -59,7 +60,7 @@ export const GpuNodeSelector: React.FC<GpuNodeSelectorProps> = ({
   const selectNode = useCallback((node: ClusterNodeOption | undefined, persist = false) => {
     setSelectedId(node?.id || '');
     onSelectionChange(node ? toGpuNodeSelection(node) : null);
-    if (node && persist) setPreferredGpuNodeId(node.name);
+    if (node && persist) setPreferredGpuNodeId(clusterNodePreferenceId(node));
   }, [onSelectionChange]);
 
   const loadNodes = useCallback(async () => {
@@ -72,11 +73,13 @@ export const GpuNodeSelector: React.FC<GpuNodeSelectorProps> = ({
       const requested = getPreferredGpuNodeId();
       const requestedNode = result.nodes.find(node => matchesNode(node, requested));
       const usableNodes = result.nodes.filter(isClusterNodeUsable);
-      const fallback = usableNodes.find(node => node.name === DEFAULT_GPU_NODE_NAME)
+      const fallback = usableNodes.find(node => (
+        node.routingName === DEFAULT_GPU_NODE_NAME || node.name === DEFAULT_GPU_NODE_NAME
+      ))
         || usableNodes[0]
         || result.nodes[0];
       const next = requestedNode || fallback;
-      selectNode(next, Boolean(next && !requestedNode));
+      selectNode(next, Boolean(next));
     } catch (error) {
       console.warn('[GpuNodeSelector] cluster nodes unavailable:', error);
       setNodes([]);
