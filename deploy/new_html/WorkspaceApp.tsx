@@ -3420,8 +3420,30 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     const segs = file.scriptSegments || [];
     if (segs.length === 0) { alert('请先拆分剧本'); return false; }
 
-    setStage(file.id, 'videoScript', { status: 'running', total: segs.length, completed: 0, errorMessage: '' });
     const ordered = [...segs].sort((a, b) => a.order - b.order);
+    const modelInfo = getScriptModelInfo(aiModel, scriptModelOptions);
+    const requestId = `quick_video_script_${uuidv4()}`;
+    const forecastInputText = [
+      file.originalContent,
+      ordered.map(segment => [
+        segment.sourceText,
+        segment.estimatedDurationSec === null ? '' : `时长：${segment.estimatedDurationSec}秒`,
+      ].filter(Boolean).join('\n')).join('\n---\n'),
+    ].join('\n\n');
+    let estimatedCreditCost = 0;
+    try {
+      const creditQuote = await assertEnoughCredits('script_model_call', {
+        input_tokens: estimateTextTokens(forecastInputText),
+        output_tokens: Math.max(1000, estimateTextTokens(file.originalContent) * 3, ordered.length * 700),
+        model: modelInfo.billingModel,
+      });
+      estimatedCreditCost = Number(creditQuote.estimated_cost || 0);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '积分校验失败');
+      return false;
+    }
+
+    setStage(file.id, 'videoScript', { status: 'running', total: segs.length, completed: 0, errorMessage: '' });
     try {
       const pipelineService = await loadScriptThreeStageService();
       const result = await pipelineService.generateVideoScriptForSegments(
@@ -3446,10 +3468,30 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       );
       const fullScript = normalizeGeneratedVideoScript(result.content);
       const parsedItems = parseStoryboardVersionContent(fullScript);
-      const modelInfo = getScriptModelInfo(aiModel, scriptModelOptions);
-      const requestId = `quick_video_script_${uuidv4()}`;
+      const billingParams = {
+        input_tokens: estimateTextTokens(result.inputTexts.join('\n')),
+        output_tokens: estimateTextTokens(result.outputTexts.join('\n') || fullScript),
+        model: modelInfo.billingModel,
+      };
+      const credit = await consumeCredits({
+        featureKey: 'script_model_call',
+        taskId: requestId,
+        params: billingParams,
+        projectId: urlProjectId,
+        metadata: {
+          episode_id: propEpisodeId,
+          script_id: file.id,
+          operation: 'quick_video_script',
+        },
+      });
       const metadata = {
         requestId,
+        estimatedCreditCost,
+        creditCharged: true,
+        creditCost: Number(credit.charged_credits || 0),
+        creditTransactionId: credit.transaction_id,
+        creditFeatureKey: credit.feature_key,
+        creditUsage: billingParams,
         scriptPipeline: {
           version: 3,
           mode: 'quick',

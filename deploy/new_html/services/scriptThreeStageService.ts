@@ -25,8 +25,6 @@ const loadAiModelService = () => import('./aiModelService');
 const MAX_SPLIT_REPLAN_ATTEMPTS = 1;
 const MAX_VIDEO_SCRIPT_REPLAN_ATTEMPTS = 1;
 const MAX_STORYBOARD_EXTRACTION_REPLAN_ATTEMPTS = 1;
-const VIDEO_SCRIPT_REPAIR_CONCURRENCY = 3;
-const STORYBOARD_GROUP_GENERATION_CONCURRENCY = 4;
 const STORYBOARD_LOCAL_REPAIR_CONCURRENCY = 4;
 const SAFE_SPLIT_REPLAN_FAILURE_MESSAGE = '剧本拆分未完成，系统已自动重新规划，请稍后再试';
 const SAFE_REPLAN_FAILURE_MESSAGE = '视频脚本生成未完成，系统已自动重新规划，请稍后再试';
@@ -157,14 +155,6 @@ function normalizeBriefSingleSegmentPlan(
 
 function serializeSplitSegments(segments: ScriptSegment[]): string {
   return segments.map(segment => [
-    segment.sourceText,
-    segment.estimatedDurationSec === null ? '时长：缺失' : `时长：${segment.estimatedDurationSec}秒`,
-  ].join('\n')).join('\n---\n');
-}
-
-function serializeStageOneSegments(segments: ScriptSegment[]): string {
-  return segments.map((segment, index) => [
-    `分段${index + 1}`,
     segment.sourceText,
     segment.estimatedDurationSec === null ? '时长：缺失' : `时长：${segment.estimatedDurationSec}秒`,
   ].join('\n')).join('\n---\n');
@@ -413,58 +403,39 @@ export async function generateVideoScriptForSegments(
   const orderedSegments = [...segments].sort((a, b) => a.order - b.order);
   inputTexts.push(...orderedSegments.map(segment => segment.sourceText));
 
-  const { aiGenerateVideoScriptFromSegments } = await loadAiModelService();
-  const initialVideoScript = await aiGenerateVideoScriptFromSegments(
-    model,
-    orderedSegments,
-    options.taskContext,
-  );
-  let normalizedVideoScript = ensureVideoScriptPromptLengths(
-    combineVideoScriptOutputs([initialVideoScript]),
-  );
-  if (parseVideoScriptGroups(normalizedVideoScript).length !== orderedSegments.length) {
-    normalizedVideoScript = await validateOrReplanVideoScript(model, normalizedVideoScript, {
-      originalScript: serializeStageOneSegments(orderedSegments),
-      instruction: '保持第一步全部原文分段及其顺序不变，重新输出一一对应的完整视频脚本',
-      conversationContext: '这是首次生成的完整第二步结果',
-      scopeRequirements: [
-        `必须输出且仅输出${orderedSegments.length}个分段，与第一步输入一一对应。`,
-        '不得合并、拆开、遗漏或调换第一步分段。',
-        '每个分段的镜头累计时长必须与第一步标注时长完全一致。',
-      ].join('\n'),
-      enforceDurationDensity: true,
-      validateContent: content => assertVideoScriptMatchesStageOneSegments(content, orderedSegments),
-      taskContext: options.taskContext,
+  let completed = 0;
+  options.onProgress?.({
+    stage: 'videoScript',
+    completed,
+    total: orderedSegments.length,
+  });
+
+  const { aiGenerateVideoScriptFromSegment } = await loadAiModelService();
+  for (const segment of orderedSegments) {
+    const initialDraft = await aiGenerateVideoScriptFromSegment(
+      model,
+      segment,
+      undefined,
+      {
+        ...options.taskContext,
+        suppressNotification: true,
+      },
+    );
+    const output = await validateOrRepairGeneratedSegment(
+      model,
+      segment,
+      initialDraft,
+      options.taskContext,
+    );
+    outputs.push(output);
+    outputTexts.push(output);
+    completed += 1;
+    options.onProgress?.({
+      stage: 'videoScript',
+      completed,
+      total: orderedSegments.length,
     });
   }
-
-  const generatedGroups = parseVideoScriptGroups(normalizedVideoScript);
-  let completed = 0;
-  const repairedOutputs = await runWithConcurrencyInOrder(
-    orderedSegments,
-    VIDEO_SCRIPT_REPAIR_CONCURRENCY,
-    async (segment, index) => {
-      const group = generatedGroups[index];
-      const standaloneDraft = group
-        ? combineVideoScriptOutputs([group.rawGroup])
-        : '';
-      const output = await validateOrRepairGeneratedSegment(
-        model,
-        segment,
-        standaloneDraft,
-        options.taskContext,
-      );
-      completed += 1;
-      options.onProgress?.({
-        stage: 'videoScript',
-        completed,
-        total: orderedSegments.length,
-      });
-      return output;
-    },
-  );
-  outputs.push(...repairedOutputs);
-  outputTexts.push(...repairedOutputs);
 
   const content = combineVideoScriptOutputs(outputs);
   try {

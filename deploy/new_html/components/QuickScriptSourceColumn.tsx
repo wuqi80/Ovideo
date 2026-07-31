@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { BookOpen, ChevronDown, Film, LoaderCircle, Wand2, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { BookOpen, ChevronDown, Coins, Film, LoaderCircle, Wand2, X } from 'lucide-react';
 import type { AiModel, ProjectFile, ScriptStoryboardVersion } from '../types';
 import {
   formatScriptModelSelectLabel,
+  getScriptModelBillingKey,
   getScriptModelOption,
   type ScriptModelOption,
 } from '../services/scriptModelCatalogService';
+import { estimateCredits, estimateTextTokens } from '../services/creditService';
 
 interface QuickScriptSourceColumnProps {
   selectedFile: ProjectFile | undefined;
@@ -41,6 +43,8 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
   onOpenVideoReverse,
 }) => {
   const [requestError, setRequestError] = useState('');
+  const [estimatedCreditCost, setEstimatedCreditCost] = useState<number | null>(null);
+  const [isEstimatingCredits, setIsEstimatingCredits] = useState(false);
 
   useEffect(() => {
     setRequestError('');
@@ -68,6 +72,74 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
   const isBusy = isLoading || isSending || isStageRunning;
   const selectedModelOption = getScriptModelOption(aiModel, modelOptions);
   const selectedModelHint = selectedModelOption.hint.trim();
+  const creditEstimateParams = useMemo(() => {
+    if (!selectedFile?.originalContent?.trim()) return null;
+    const sourceText = selectedFile.originalContent;
+    const sourceTokens = estimateTextTokens(sourceText);
+    const segmentTexts = selectedFile.scriptSegments?.map(segment => segment.sourceText).join('\n') || '';
+    const currentVideoScript = selectedFile.scriptContent || selectedFile.scriptSegments
+      ?.map(segment => segment.videoScript || '')
+      .filter(Boolean)
+      .join('\n\n')
+      || '';
+    const segmentCountEstimate = Math.max(
+      1,
+      selectedFile.scriptSegments?.length || Math.ceil(sourceTokens / 120),
+    );
+    const sourceShotCountEstimate = Math.max(
+      1,
+      selectedFile.storyboard?.items?.length
+        || (currentVideoScript ? Math.ceil(estimateTextTokens(currentVideoScript) / 180) : segmentCountEstimate),
+    );
+    const model = getScriptModelBillingKey(selectedModelOption);
+
+    return {
+      script: {
+        input_tokens: estimateTextTokens([sourceText, segmentTexts || sourceText].join('\n')),
+        output_tokens: Math.max(1000, sourceTokens * 3, segmentCountEstimate * 700),
+        model,
+      },
+      design: {
+        shot_count: sourceShotCountEstimate,
+        input_tokens: estimateTextTokens(currentVideoScript || sourceText),
+        output_tokens: Math.max(500, sourceShotCountEstimate * 500),
+        model,
+      },
+    };
+  }, [selectedFile?.id, selectedFile?.originalContent, selectedFile?.scriptContent, selectedFile?.scriptSegments, selectedFile?.storyboard?.items, selectedModelOption]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!creditEstimateParams || isBusy) {
+      setEstimatedCreditCost(null);
+      setIsEstimatingCredits(false);
+      return undefined;
+    }
+    setIsEstimatingCredits(true);
+    const timer = window.setTimeout(() => {
+      void Promise.all([
+        estimateCredits('script_model_call', creditEstimateParams.script),
+        estimateCredits('storyboard_design_generation', creditEstimateParams.design),
+      ])
+        .then(([scriptEstimate, designEstimate]) => {
+          if (cancelled) return;
+          setEstimatedCreditCost(
+            (scriptEstimate.enabled ? scriptEstimate.estimated_cost : 0)
+            + (designEstimate.enabled ? designEstimate.estimated_cost : 0),
+          );
+        })
+        .catch(() => {
+          if (!cancelled) setEstimatedCreditCost(null);
+        })
+        .finally(() => {
+          if (!cancelled) setIsEstimatingCredits(false);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [creditEstimateParams, isBusy]);
 
   const statusText = (stage: NonNullable<ProjectFile['generationStages']>[keyof NonNullable<ProjectFile['generationStages']>]) => {
     if (stage?.status === 'running') return `进行中 ${stage.completed ?? 0}/${stage.total ?? '?'}`;
@@ -216,10 +288,20 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
                   {row.label}
                 </button>
                 <span className="min-w-0 flex-1 truncate text-[10px] text-n300">{row.metric}</span>
-                <span className={`flex-shrink-0 text-[10px] ${statusClass(stage)}`}>{statusText(stage)}</span>
+                <span className={`inline-flex flex-shrink-0 items-center gap-1 text-[10px] ${statusClass(stage)}`}>
+                  {stage?.status === 'running' && <LoaderCircle className="h-3 w-3 animate-spin" />}
+                  {statusText(stage)}
+                </span>
               </div>
             );
           })}
+          <div className="mt-2 flex items-center gap-1.5 border-t border-n40 pt-2 text-[10px] font-medium text-warning">
+            <Coins className="h-3.5 w-3.5 flex-shrink-0" />
+            <span title="按当前输入、所选模型和预计镜头规模估算，实际以成功生成后的用量为准">
+              预计消耗积分：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
+            </span>
+            <span className="text-n100">· 成功后扣除</span>
+          </div>
         </div>
       )}
     </section>

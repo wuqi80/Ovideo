@@ -128,6 +128,12 @@ describe('StoryboardScriptColumn', () => {
     expect(designColumnSource).not.toContain("target.tagName === 'INPUT'");
   });
 
+  it('uses a visible waiting pill while quick mode is generating design shots', () => {
+    expect(designColumnSource).toContain('正在生成镜头设计');
+    expect(designColumnSource).toContain('等待镜头设计生成…');
+    expect(designColumnSource).toContain('LoaderCircle className="h-3.5 w-3.5 animate-spin"');
+  });
+
   it('shows explicit segment numbers and restarts shot numbering per segment', () => {
     const segmentedFile = {
       ...file,

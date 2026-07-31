@@ -124,6 +124,30 @@ describe('QuickScriptVersionColumn', () => {
     expect(onSelectVersion).toHaveBeenCalledWith('version-1');
   });
 
+  it('shows an active waiting pill while the quick video script is running', () => {
+    render(
+      <QuickScriptVersionColumn
+        selectedFile={{
+          ...file,
+          generationStages: {
+            videoScript: { status: 'running', total: 5, completed: 2 },
+          },
+        }}
+        version={undefined}
+        isSending={true}
+        error={null}
+        highlightedItemIds={new Set()}
+        onDismissError={vi.fn()}
+        onSelectItemIds={vi.fn()}
+        onEditVersion={vi.fn()}
+        onGenerateDesign={vi.fn()}
+        onExportVersion={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('正在生成分镜脚本 2/5')).toBeInTheDocument();
+  });
+
   it('maps one script storyboard card to multiple generated design shots', () => {
     const onSelectItemIds = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'scrollTo', {

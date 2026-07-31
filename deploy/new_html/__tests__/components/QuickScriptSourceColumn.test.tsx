@@ -7,6 +7,19 @@ import { QuickScriptSourceColumn } from '../../components/QuickScriptSourceColum
 import { AiModel, FileStatus, type ProjectFile } from '../../types';
 import { DEFAULT_SCRIPT_MODEL_OPTIONS } from '../../services/scriptModelCatalogService';
 
+vi.mock('../../services/creditService', async () => {
+  const actual = await vi.importActual<typeof import('../../services/creditService')>('../../services/creditService');
+  return {
+    ...actual,
+    estimateCredits: vi.fn().mockResolvedValue({
+      enabled: true,
+      estimated_cost: 8,
+      enough: true,
+      balance: 1000,
+    }),
+  };
+});
+
 afterEach(cleanup);
 
 const file = {
@@ -76,6 +89,13 @@ describe('QuickScriptSourceColumn', () => {
     fireEvent.click(screen.getByRole('button', { name: '按三步生成' }));
 
     await waitFor(() => expect(onRunThreeStage).toHaveBeenCalledWith('script-1'));
+  });
+
+  it('shows the estimated credit cost in the quick three-stage panel', () => {
+    render(<QuickScriptSourceColumn {...baseProps} />);
+
+    expect(screen.getByText(/预计消耗积分：/)).toBeInTheDocument();
+    expect(screen.getByText('· 成功后扣除')).toBeInTheDocument();
   });
 
   it('opens video reverse in quick mode before source text exists', () => {

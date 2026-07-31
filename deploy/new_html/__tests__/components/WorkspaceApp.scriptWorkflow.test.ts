@@ -113,6 +113,9 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('splitScriptIntoValidatedSegments(aiModel, file.originalContent');
     expect(source).toContain("if (progress.stage === 'split')");
     expect(source).toContain('generateVideoScriptForSegments(');
+    expect(source).toContain("await assertEnoughCredits('script_model_call'");
+    expect(source).toContain("featureKey: 'script_model_call'");
+    expect(source).toContain("operation: 'quick_video_script'");
     expect(source).toContain('createScriptVersion(propEpisodeId, file.id');
     expect(source).toContain('setCurrent: false');
     expect(source).toContain('clearActiveStoryboardDesign(file.id');

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ProjectFile, StoryboardItem, FileVersion, ScriptStoryboardVersion } from '../types';
-import { LayoutDashboard, Film, Image as ImageIcon, Copy, Users, MapPin, Download, RefreshCw, Lock, Unlock, Trash2, PlusCircle, AlertOctagon, MessageSquare, Edit2, Check, X, Undo2, Redo2, ArrowRight, Save, History, Clock, Plus, FolderInput, Sparkles, CheckCircle, Box, Coins } from 'lucide-react';
+import { LayoutDashboard, Film, Image as ImageIcon, Copy, Users, MapPin, Download, RefreshCw, Lock, Unlock, Trash2, PlusCircle, AlertOctagon, MessageSquare, Edit2, Check, X, Undo2, Redo2, ArrowRight, Save, History, Clock, Plus, FolderInput, Sparkles, CheckCircle, Box, Coins, LoaderCircle } from 'lucide-react';
 import { buildStoryboardSegmentGroups, buildStoryboardSegmentLookup } from '../utils/storyboardSegments';
 import { getVersionStoryboardSnapshots } from '../utils/storyboardSnapshots';
 import { formatScriptModelHistoryLabel } from '../services/scriptModelCatalogService';
@@ -369,6 +369,8 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
     ),
     [selectedFile?.scriptSegments, selectedFile?.storyboard?.items],
   );
+  const storyboardPromptStage = selectedFile?.generationStages?.storyboardPrompt;
+  const isStoryboardPromptRunning = storyboardPromptStage?.status === 'running';
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-n0">
@@ -453,7 +455,22 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
             )}
           </div>
         ) : (
-          <div className="w-full text-center text-xs text-n100">等待分镜生成...</div>
+          <div className="flex w-full items-center justify-center">
+            <div
+              className={`inline-flex min-w-[190px] items-center justify-center gap-2 rounded-full border px-3 py-1.5 text-xs ${
+                isStoryboardPromptRunning
+                  ? 'border-primary/30 bg-primary-light text-primary shadow-sm'
+                  : 'border-n40 bg-n20 text-n100'
+              }`}
+            >
+              {isStoryboardPromptRunning && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
+              <span>
+                {isStoryboardPromptRunning
+                  ? `正在生成镜头设计 ${storyboardPromptStage?.completed ?? 0}/${storyboardPromptStage?.total ?? '?'}`
+                  : '等待镜头设计生成…'}
+              </span>
+            </div>
+          </div>
         )}
       </div>
 

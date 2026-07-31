@@ -64,6 +64,14 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
   }, [version, versions]);
 
   const scriptItems = version?.storyboardItems || [];
+  const splitStage = selectedFile?.generationStages?.split;
+  const videoScriptStage = selectedFile?.generationStages?.videoScript;
+  const pendingStage = videoScriptStage?.status === 'running' ? videoScriptStage : splitStage?.status === 'running' ? splitStage : undefined;
+  const pendingLabel = videoScriptStage?.status === 'running'
+    ? '正在生成分镜脚本'
+    : splitStage?.status === 'running'
+      ? '正在拆分剧本'
+      : '等待分镜脚本生成';
   const versionModelLabel = formatScriptModelHistoryLabel(version?.modelName, version?.modelAlias);
   const normalizedText = (value?: string | null) => String(value || '').replace(/\s+/g, '').trim();
   const getSourceKey = (item: StoryboardItem): string => (
@@ -207,7 +215,21 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
             </button>
           </>
         ) : (
-          <div className="w-full text-center text-xs text-n100">等待分镜脚本生成…</div>
+          <div className="flex w-full items-center justify-center">
+            <div
+              className={`inline-flex min-w-[190px] items-center justify-center gap-2 rounded-full border px-3 py-1.5 text-xs ${
+                pendingStage
+                  ? 'border-primary/30 bg-primary-light text-primary shadow-sm'
+                  : 'border-n40 bg-n20 text-n100'
+              }`}
+            >
+              {pendingStage && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
+              <span>
+                {pendingLabel}
+                {pendingStage ? ` ${pendingStage.completed ?? 0}/${pendingStage.total ?? '?'}` : '…'}
+              </span>
+            </div>
+          </div>
         )}
       </div>
 
