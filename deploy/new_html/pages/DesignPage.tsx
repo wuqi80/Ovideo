@@ -29,6 +29,7 @@ import { useScriptModelOptions } from '../hooks/useScriptModelOptions';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
 import {
   formatScriptModelSelectLabel,
+  getScriptModelBillingKey,
   getScriptModelOption,
   type ScriptModelOption,
 } from '../services/scriptModelCatalogService';
@@ -68,6 +69,8 @@ import {
   DESIGN_CREDIT_FEATURES,
   designImageCreditParams,
   designOperationCreditParams,
+  designPromptRefinementCreditParams,
+  designPromptRefinementFallbackCost,
   newDesignCreditUsageId,
 } from '../utils/designCredits';
 
@@ -1112,7 +1115,7 @@ export const DesignPage: React.FC = () => {
         </div>
       )}
 
-      {aiModal && <UnifiedAIModal asset={aiModal.asset} scriptText={scriptText} modelOptions={scriptModelOptions} onClose={() => setAiModal(null)} onSubmit={handleAIGeneration} />}
+      {aiModal && <UnifiedAIModal asset={aiModal.asset} scriptText={scriptText} modelOptions={scriptModelOptions} projectId={projectId} episodeId={episodeId} onClose={() => setAiModal(null)} onSubmit={handleAIGeneration} />}
       {cameraModal && <CameraModal asset={cameraModal.asset} materials={cameraModal.materials} onClose={() => setCameraModal(null)} onSubmit={(p) => handleCameraGenerate({ ...p, assetId: cameraModal.asset.assetId })} />}
       {processModal && <ProcessModal asset={processModal.asset} materials={processModal.materials} workflow={processModal.workflow} onClose={() => setProcessModal(null)} onSubmit={handleProcessSubmit} />}
       {batchModal && <BatchGenerateModal assets={designAssets} selectedIds={selectedIds} scriptText={scriptText} modelOptions={scriptModelOptions} onClose={() => setBatchModal(false)} onSubmit={handleBatchGenerate} />}
@@ -1261,9 +1264,9 @@ const SyncExistingDesignModal: React.FC<{
 
 /* ======================== Unified AI Modal ======================== */
 const UnifiedAIModal: React.FC<{
-  asset: AssetItem; scriptText: string; modelOptions: readonly ScriptModelOption[]; onClose: () => void;
+  asset: AssetItem; scriptText: string; modelOptions: readonly ScriptModelOption[]; projectId?: string | null; episodeId?: string | null; onClose: () => void;
   onSubmit: (p: { assetId: string; engine: MaterialAIEngine; geminiModel: string; prompt: string; references: string[]; aspectRatio: string; resolution: '1K' | '2K' | '4K'; sequential: string; count: number }) => void;
-}> = ({ asset, scriptText, modelOptions, onClose, onSubmit }) => {
+}> = ({ asset, scriptText, modelOptions, projectId, episodeId, onClose, onSubmit }) => {
   const { forceReloadSlices } = useEpisode();
   const initialPrompt = useMemo(
     () => (asset.styleParams?.ai_prompt as string) || asset.description || asset.name,
@@ -1294,9 +1297,17 @@ const UnifiedAIModal: React.FC<{
     () => findDesignImageModel(engine, geminiModel),
     [engine, geminiModel],
   );
-  const refineModelOptions = useMemo(
-    () => [AiModel.DeepseekChat, AiModel.Gemini].map(model => getScriptModelOption(model, modelOptions)),
-    [modelOptions],
+  const refineModelOptions = modelOptions;
+  const refinementModel = useMemo(
+    () => getScriptModelOption(refineModel, refineModelOptions),
+    [refineModel, refineModelOptions],
+  );
+  const refinementCreditParams = useMemo(
+    () => designPromptRefinementCreditParams(getScriptModelBillingKey(refinementModel)),
+    [refinementModel],
+  );
+  const refinementFallbackCost = designPromptRefinementFallbackCost(
+    getScriptModelBillingKey(refinementModel),
   );
   const maxRefs = generationModel.maxReferences;
   const imageToImageEnabled = canUseDesignImageReferences(
@@ -1406,15 +1417,40 @@ const UnifiedAIModal: React.FC<{
   const handleRefine = async () => {
     setIsRefining(true);
     try {
+      await assertEnoughCredits(
+        DESIGN_CREDIT_FEATURES.promptRefinement,
+        refinementCreditParams,
+      );
       const p = buildRefinePrompt(asset.assetType, asset.name, prompt, scriptText);
       const result = await callAI(refineModel, { system: p.system, user: p.user });
       if (result && typeof result === 'string') {
         const refined = result.trim();
+        if (!refined) throw new Error('润色未返回内容，本次不扣积分');
         setPrompt(refined);
         savePrefs({ refineModel });
-        persistPrompt(refined);
+        await persistPrompt(refined);
+        try {
+          const settlement = await consumeCredits({
+            featureKey: DESIGN_CREDIT_FEATURES.promptRefinement,
+            taskId: newDesignCreditUsageId('design-prompt-refinement'),
+            params: refinementCreditParams,
+            projectId,
+            metadata: {
+              episode_id: episodeId || null,
+              asset_id: asset.assetId,
+              model: getScriptModelBillingKey(refinementModel),
+              source: 'design_workspace',
+            },
+          });
+          crmMessage.success(`润色完成，已扣除 ${settlement.charged_credits} 积分`);
+        } catch (error: any) {
+          console.error('Design prompt refinement credit settlement failed', error);
+          crmMessage.warning(`润色已完成，但积分结算失败：${error?.message || String(error)}`);
+        }
+      } else {
+        throw new Error('润色未返回内容，本次不扣积分');
       }
-    } catch (err) { console.error('AI润色失败:', err); crmMessage.error('AI润色失败，请重试'); }
+    } catch (err: any) { console.error('AI润色失败:', err); crmMessage.error(err?.message || 'AI润色失败，本次不扣积分'); }
     finally { setIsRefining(false); }
   };
 
@@ -1508,6 +1544,12 @@ const UnifiedAIModal: React.FC<{
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] font-bold text-n100 uppercase">提示词</span>
               <div className="flex items-center gap-1">
+                <InlineCreditEstimate
+                  featureKey={DESIGN_CREDIT_FEATURES.promptRefinement}
+                  params={refinementCreditParams}
+                  fallbackCost={refinementFallbackCost}
+                  className="mr-2 whitespace-nowrap"
+                />
                 <button
                   type="button"
                   onClick={handleRefine}
@@ -1525,7 +1567,7 @@ const UnifiedAIModal: React.FC<{
                     className="h-8 min-w-[210px] appearance-none rounded-r-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
                   >
                     {refineModelOptions.map(option => (
-                      <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
+                      <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)} · {designPromptRefinementFallbackCost(getScriptModelBillingKey(option))}积分</option>
                     ))}
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
@@ -1696,10 +1738,7 @@ const BatchGenerateModal: React.FC<{
     () => findDesignImageModel(engine, geminiModel),
     [engine, geminiModel],
   );
-  const refineModelOptions = useMemo(
-    () => [AiModel.DeepseekChat, AiModel.Gemini].map(model => getScriptModelOption(model, modelOptions)),
-    [modelOptions],
-  );
+  const refineModelOptions = modelOptions;
 
   const toggle = (id: string) => setChecked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const charCount = assets.filter(a => a.assetType === 'character' && checked.has(a.assetId)).length;

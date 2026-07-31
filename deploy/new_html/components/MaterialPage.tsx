@@ -26,6 +26,7 @@ import { IMAGE_QUALITY_SUFFIX } from '../prompts/imagePrompts';
 import { useScriptModelOptions } from '../hooks/useScriptModelOptions';
 import {
   formatScriptModelSelectLabel,
+  getScriptModelBillingKey,
   getScriptModelOption,
 } from '../services/scriptModelCatalogService';
 import { InlineCreditEstimate } from './InlineCreditEstimate';
@@ -43,6 +44,8 @@ import {
   DESIGN_CREDIT_DEFAULTS,
   DESIGN_CREDIT_FEATURES,
   designImageCreditParams,
+  designPromptRefinementCreditParams,
+  designPromptRefinementFallbackCost,
   newDesignCreditUsageId,
 } from '../utils/designCredits';
 import { assertEnoughCredits, consumeCredits } from '../services/creditService';
@@ -1412,6 +1415,8 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
       {aiModalConfig && (
         <MaterialAIModal
             config={aiModalConfig}
+            projectId={projectId}
+            episodeId={selectedFileId}
             onClose={() => setAiModalConfig(null)}
             onSubmit={handleMaterialAIGeneration}
         />
@@ -1963,9 +1968,11 @@ const MaterialCard: React.FC<{
 
 const MaterialAIModal: React.FC<{
     config: MaterialAIModalConfig;
+    projectId?: string | null;
+    episodeId?: string | null;
     onClose: () => void;
     onSubmit: (payload: MaterialAIGenerationPayload) => void;
-}> = ({ config, onClose, onSubmit }) => {
+}> = ({ config, projectId, episodeId, onClose, onSubmit }) => {
     const modelOptions = useScriptModelOptions();
     const savedEngine = materialAIPrefs.get('design_ai_engine', 'nanobanana') as MaterialAIEngine;
     const savedGeminiModel = materialAIPrefs.get('design_ai_gemini_model', 'gemini-2.5-flash-image');
@@ -2001,9 +2008,17 @@ const MaterialAIModal: React.FC<{
         () => findDesignImageModel(engine, geminiModel),
         [engine, geminiModel],
     );
-    const refineModelOptions = useMemo(
-        () => [AiModel.DeepseekChat, AiModel.Gemini].map(model => getScriptModelOption(model, modelOptions)),
-        [modelOptions],
+    const refineModelOptions = modelOptions;
+    const refinementModel = useMemo(
+        () => getScriptModelOption(refineModel, refineModelOptions),
+        [refineModel, refineModelOptions],
+    );
+    const refinementCreditParams = useMemo(
+        () => designPromptRefinementCreditParams(getScriptModelBillingKey(refinementModel)),
+        [refinementModel],
+    );
+    const refinementFallbackCost = designPromptRefinementFallbackCost(
+        getScriptModelBillingKey(refinementModel),
     );
     const maxRefs = generationModel.maxReferences;
     const imageToImageEnabled = canUseDesignImageReferences(
@@ -2127,16 +2142,40 @@ const MaterialAIModal: React.FC<{
     const handleRefine = async () => {
         setIsRefining(true);
         try {
+            await assertEnoughCredits(
+                DESIGN_CREDIT_FEATURES.promptRefinement,
+                refinementCreditParams,
+            );
             const refinePrompt = buildMaterialRefinePrompt(config.type, config.tagName, prompt);
             const result = await callAI(refineModel, refinePrompt);
             if (typeof result === 'string' && result.trim()) {
                 setPrompt(result.trim());
                 materialAIPrefs.set(materialPromptStorageKey(config), result.trim());
                 materialAIPrefs.set('design_ai_refine_model', refineModel);
+                try {
+                    const settlement = await consumeCredits({
+                        featureKey: DESIGN_CREDIT_FEATURES.promptRefinement,
+                        taskId: newDesignCreditUsageId('material-prompt-refinement'),
+                        params: refinementCreditParams,
+                        projectId,
+                        metadata: {
+                            episode_id: episodeId || null,
+                            tag_name: config.tagName,
+                            model: getScriptModelBillingKey(refinementModel),
+                            source: 'material_workspace',
+                        },
+                    });
+                    crmMessage.success(`润色完成，已扣除 ${settlement.charged_credits} 积分`);
+                } catch (error: any) {
+                    console.error('Material prompt refinement credit settlement failed', error);
+                    crmMessage.warning(`润色已完成，但积分结算失败：${error?.message || String(error)}`);
+                }
+            } else {
+                throw new Error('润色未返回内容，本次不扣积分');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('素材提示词 AI 润色失败:', error);
-            crmMessage.error('AI 润色失败，请重试');
+            crmMessage.error(error?.message || 'AI 润色失败，本次不扣积分');
         } finally {
             setIsRefining(false);
         }
@@ -2239,6 +2278,12 @@ const MaterialAIModal: React.FC<{
                         <div className="mb-1.5 flex items-center justify-between">
                             <span className="text-[11px] font-bold uppercase text-n100">提示词</span>
                             <div className="flex items-center gap-1">
+                                <InlineCreditEstimate
+                                    featureKey={DESIGN_CREDIT_FEATURES.promptRefinement}
+                                    params={refinementCreditParams}
+                                    fallbackCost={refinementFallbackCost}
+                                    className="mr-2 whitespace-nowrap"
+                                />
                                 <button
                                     type="button"
                                     onClick={handleRefine}
@@ -2256,7 +2301,7 @@ const MaterialAIModal: React.FC<{
                                         className="h-8 min-w-[210px] appearance-none rounded-r-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
                                     >
                                         {refineModelOptions.map(option => (
-                                            <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
+                                            <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)} · {designPromptRefinementFallbackCost(getScriptModelBillingKey(option))}积分</option>
                                         ))}
                                     </select>
                                     <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />

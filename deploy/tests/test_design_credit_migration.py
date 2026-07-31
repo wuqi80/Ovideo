@@ -66,3 +66,45 @@ def test_design_image_credit_tiers_cost_40_to_100_per_image():
     assert credit_service.compute_cost(rule, {"image_count": 1, "model": "image_tier_2"}) == 100
     assert credit_service.compute_cost(rule, {"image_count": 1, "model": "image_tier_3"}) == 60
     assert credit_service.compute_cost(rule, {"image_count": 2, "model": "image_tier_1"}) == 80
+
+
+def test_design_prompt_refinement_credit_rule_mirror_manifest_and_costs():
+    root = DEPLOY_DIR / "db_migration_design_prompt_refinement_credit_rule.sql"
+    mirror = DEPLOY_DIR / "sql" / "db_migration_design_prompt_refinement_credit_rule.sql"
+    manifest = (DEPLOY_DIR / "db_build" / "manifest.txt").read_text(encoding="utf-8")
+
+    assert root.read_bytes() == mirror.read_bytes()
+    assert "sql/db_migration_design_prompt_refinement_credit_rule.sql" in manifest
+
+    sql = root.read_text(encoding="utf-8")
+    assert "design_prompt_refinement" in sql
+    assert '"value":"script_tier_1","multiplier":1' in sql
+    assert '"value":"script_tier_2","multiplier":2' in sql
+    assert '"value":"script_tier_3","multiplier":3' in sql
+    assert '"value":"script_tier_4","multiplier":4' in sql
+    assert "失败不扣积分" in sql
+
+    rule = {
+        "feature_key": "design_prompt_refinement",
+        "base_cost": 1,
+        "min_cost": 1,
+        "max_cost": 4,
+        "factors": [
+            {
+                "key": "model",
+                "type": "enum",
+                "rules": [
+                    {"value": "script_tier_1", "multiplier": 1},
+                    {"value": "script_tier_2", "multiplier": 2},
+                    {"value": "script_tier_3", "multiplier": 3},
+                    {"value": "script_tier_4", "multiplier": 4},
+                ],
+                "default_multiplier": 1,
+            },
+        ],
+    }
+
+    assert credit_service.compute_cost(rule, {"model": "script_tier_1"}) == 1
+    assert credit_service.compute_cost(rule, {"model": "script_tier_2"}) == 2
+    assert credit_service.compute_cost(rule, {"model": "script_tier_3"}) == 3
+    assert credit_service.compute_cost(rule, {"model": "script_tier_4"}) == 4

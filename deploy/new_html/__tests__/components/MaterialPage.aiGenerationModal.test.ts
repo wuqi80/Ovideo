@@ -17,6 +17,10 @@ describe('MaterialPage AI generation modal', () => {
     expect(source).toContain('generationModel.hint');
     expect(source).toContain('<option key={option.id} value={option.id}>{option.label}</option>');
     expect(source).not.toContain('{option.label} · {option.runtime}');
+    expect(source).toContain('const refineModelOptions = modelOptions');
+    expect(source).toContain('designPromptRefinementFallbackCost(getScriptModelBillingKey(option))');
+    expect(source).toContain('DESIGN_CREDIT_FEATURES.promptRefinement');
+    expect(source).toContain("taskId: newDesignCreditUsageId('material-prompt-refinement')");
   });
 
   it('keeps the design modal sizing and removes the legacy engine sidebar', () => {

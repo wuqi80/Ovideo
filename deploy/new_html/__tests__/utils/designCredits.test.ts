@@ -4,6 +4,8 @@ import {
   DESIGN_CREDIT_FEATURES,
   designImageCreditParams,
   designOperationCreditParams,
+  designPromptRefinementCreditParams,
+  designPromptRefinementFallbackCost,
   newDesignCreditUsageId,
 } from '../../utils/designCredits';
 
@@ -11,14 +13,27 @@ describe('designCredits', () => {
   it('defines independently configurable design feature keys and defaults', () => {
     expect(DESIGN_CREDIT_FEATURES).toEqual({
       imageGeneration: 'design_image_generation',
+      promptRefinement: 'design_prompt_refinement',
       angleAdjustment: 'design_angle_adjustment',
       upscaleHd: 'design_upscale_hd',
     });
     expect(DESIGN_CREDIT_DEFAULTS).toEqual({
       imageGenerationPerImage: 40,
+      promptRefinement: 1,
       angleAdjustment: 5,
       upscaleHd: 5,
     });
+  });
+
+  it('keeps prompt refinement within four credits across public writing tiers', () => {
+    expect(designPromptRefinementCreditParams('script_tier_3')).toEqual({
+      model: 'script_tier_3',
+    });
+    expect(designPromptRefinementFallbackCost('script_tier_1')).toBe(1);
+    expect(designPromptRefinementFallbackCost('script_tier_2')).toBe(2);
+    expect(designPromptRefinementFallbackCost('script_tier_3')).toBe(3);
+    expect(designPromptRefinementFallbackCost('script_tier_4')).toBe(4);
+    expect(designPromptRefinementFallbackCost('unknown')).toBe(1);
   });
 
   it('normalizes image counts while retaining model parameters', () => {

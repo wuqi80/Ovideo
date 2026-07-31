@@ -1,14 +1,23 @@
 export const DESIGN_CREDIT_FEATURES = {
   imageGeneration: 'design_image_generation',
+  promptRefinement: 'design_prompt_refinement',
   angleAdjustment: 'design_angle_adjustment',
   upscaleHd: 'design_upscale_hd',
 } as const;
 
 export const DESIGN_CREDIT_DEFAULTS = {
   imageGenerationPerImage: 40,
+  promptRefinement: 1,
   angleAdjustment: 5,
   upscaleHd: 5,
 } as const;
+
+const DESIGN_PROMPT_REFINEMENT_TIER_COSTS: Record<string, number> = {
+  script_tier_1: 1,
+  script_tier_2: 2,
+  script_tier_3: 3,
+  script_tier_4: 4,
+};
 
 export function designImageCreditParams(options: {
   imageCount: number;
@@ -29,6 +38,15 @@ export function designOperationCreditParams(workflow: 'angle_adjustment' | 'upsc
     operation_count: 1,
     workflow,
   };
+}
+
+export function designPromptRefinementCreditParams(model: string) {
+  return { model };
+}
+
+export function designPromptRefinementFallbackCost(model: string): number {
+  return DESIGN_PROMPT_REFINEMENT_TIER_COSTS[model]
+    || DESIGN_CREDIT_DEFAULTS.promptRefinement;
 }
 
 export function newDesignCreditUsageId(prefix: string): string {

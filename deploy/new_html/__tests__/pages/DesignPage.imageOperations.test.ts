@@ -60,10 +60,13 @@ describe('DesignPage image operation modals', () => {
     expect(source).toContain("sequential: imageToImageEnabled ? 'auto' : 'disabled'");
   });
 
-  it('defaults refinement to the fast tier and lists it before the all-round tier', () => {
+  it('defaults refinement to the fast tier and exposes all four public writing tiers', () => {
     expect(source).toContain("LS.get('design_ai_refine_model', AiModel.DeepseekChat)");
-    expect(source).toContain('[AiModel.DeepseekChat, AiModel.Gemini].map');
+    expect(source).toContain('const refineModelOptions = modelOptions');
     expect(source).toContain('formatScriptModelSelectLabel(option)');
+    expect(source).toContain('designPromptRefinementFallbackCost(getScriptModelBillingKey(option))');
+    expect(source).toContain('DESIGN_CREDIT_FEATURES.promptRefinement');
+    expect(source).toContain("taskId: newDesignCreditUsageId('design-prompt-refinement')");
   });
 
   it('uses public image model labels and billing tiers without exposing runtimes', () => {
