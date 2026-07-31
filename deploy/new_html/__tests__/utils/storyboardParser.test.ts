@@ -51,6 +51,24 @@ describe('storyboard dialogue duration', () => {
     expect(parsed.completedBlocks.map(block => block.segmentNo)).toEqual([1, 1, 2]);
   });
 
+  it('parses stage-two 分镜 headers without dropping the block', () => {
+    const parsed = parseStreamingBlocks([
+      '分段01',
+      '分镜1-1',
+      '时长（秒）：8',
+      '画面描述：孙悟空挥棒破开云海。',
+      '分镜生成提示词：近景，仰拍，孙悟空挥动金箍棒，云海金光撕裂。',
+      '---CUT---',
+    ].join('\n'));
+    const item = convertToStoryboardItem(parsed.completedBlocks[0]);
+
+    expect(parsed.completedBlocks).toHaveLength(1);
+    expect(parsed.completedBlocks[0].shotId).toBe('分镜1-1');
+    expect(item.shotNumber).toBe('分镜1-1');
+    expect(item.sourceVideoShotNo).toBe('分镜1-1');
+    expect(item.scriptSegment).toContain('孙悟空挥棒');
+  });
+
   it('does not merge segment prompt cards into the last shot field', () => {
     const parsed = parseStreamingBlocks([
       '分段1',

@@ -137,9 +137,38 @@ describe('storyboard segment normalization', () => {
     )).not.toMatch(/^镜头1-1/m);
   });
 
+  it('restores stage-two 分镜 version content into display cards', () => {
+    const content = [
+      '分段1',
+      '分镜1-1',
+      '时长（秒）：8',
+      '画面描述：孙悟空挥棒破开云海。',
+      '光影色调：云海金光与暗蓝天幕对冲。',
+      '分镜1-2',
+      '时长（秒）：6',
+      '画面描述：南天门牌匾震颤，天兵后退。',
+      '光影色调：金色冲击波照亮白玉门柱。',
+    ].join('\n');
+
+    const merged = mergeStoryboardDisplayItems(content, []);
+
+    expect(merged).toHaveLength(2);
+    expect(merged[0].sourceVideoShotNo).toBe('分镜1-1');
+    expect(merged[1].sourceVideoShotNo).toBe('分镜1-2');
+    expect(merged[0].originalText).toContain('孙悟空挥棒破开云海');
+  });
+
   it('removes the shot heading already rendered by the shot card', () => {
     expect(cleanStoryboardShotCardText([
       '镜头2-1',
+      '时长（秒）：8',
+      '画面描述：角色推门进入。',
+    ].join('\n'))).toBe([
+      '时长（秒）：8',
+      '画面描述：角色推门进入。',
+    ].join('\n'));
+    expect(cleanStoryboardShotCardText([
+      '分镜2-1',
       '时长（秒）：8',
       '画面描述：角色推门进入。',
     ].join('\n'))).toBe([

@@ -8,6 +8,7 @@ import { StoryboardItem } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import {
   formatHierarchicalShotNumber,
+  formatVideoScriptShotNumber,
   parseHierarchicalShotNumber,
 } from './scriptPipelineParsers';
 
@@ -87,11 +88,11 @@ export function parseStreamingBlocks(buffer: string): {
   let continueFrom: string | undefined;
 
   // 检查 CONTINUE_FROM 标记
-  const continueMatch = buffer.match(/<<<CONTINUE_FROM\s+(镜头\d+(?:-\d+)?)>>>/);
+  const continueMatch = buffer.match(/<<<CONTINUE_FROM\s+((?:镜头|分镜)\d+(?:-\d+)?)>>>/);
   if (continueMatch) {
     continueFrom = continueMatch[1];
     // 从显示文本中移除
-    remainingBuffer = buffer.replace(/<<<CONTINUE_FROM\s+镜头\d+(?:-\d+)?>>>\s*/, '');
+    remainingBuffer = buffer.replace(/<<<CONTINUE_FROM\s+(?:镜头|分镜)\d+(?:-\d+)?>>>\s*/, '');
   }
 
   // 按 ---CUT--- 分割
@@ -190,17 +191,20 @@ export function parseBlockFields(blockText: string): ShotBlockFields | null {
       continue;
     }
 
-    // 检查是否是镜头ID行（新格式“镜头1-1”，兼容历史“镜头01”）。
-    const shotIdMatch = line.match(/^镜头\s*(\d+)(?:\s*[-－—]\s*(\d+))?/);
+    // 检查是否是镜头/分镜ID行（新格式“分镜1-1”，兼容历史“镜头01”）。
+    const shotIdMatch = line.match(/^(镜头|分镜)\s*(\d+)(?:\s*[-－—]\s*(\d+))?/);
     if (shotIdMatch) {
       // 保存之前的字段
       if (currentField && currentValue.length > 0) {
         (fields as any)[currentField] = currentValue.join('\n');
       }
 
-      fields.shotId = shotIdMatch[2]
-        ? formatHierarchicalShotNumber(Number(shotIdMatch[1]), Number(shotIdMatch[2]))
-        : `镜头${shotIdMatch[1].padStart(2, '0')}`;
+      const isVideoScriptStoryboard = shotIdMatch[1] === '分镜';
+      fields.shotId = shotIdMatch[3]
+        ? isVideoScriptStoryboard
+          ? formatVideoScriptShotNumber(Number(shotIdMatch[2]), Number(shotIdMatch[3]))
+          : formatHierarchicalShotNumber(Number(shotIdMatch[2]), Number(shotIdMatch[3]))
+        : `${isVideoScriptStoryboard ? '分镜' : '镜头'}${shotIdMatch[2].padStart(2, '0')}`;
       const parsedShotNo = parseHierarchicalShotNumber(fields.shotId);
       if (!fields.segmentNo && parsedShotNo?.segmentNo) fields.segmentNo = parsedShotNo.segmentNo;
       currentField = null;

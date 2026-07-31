@@ -41,6 +41,19 @@ describe('script iteration helpers', () => {
     expect(normalized).toContain('时间：2秒\n---CUT---\n镜头02');
   });
 
+  it('restores missing CUT delimiters between stage-two storyboard headers', () => {
+    const normalized = ensureStoryboardCutSeparators([
+      '分镜1-1',
+      '时长（秒）：8',
+      '画面描述：孙悟空挥棒破云。',
+      '分镜1-2',
+      '时长（秒）：6',
+      '画面描述：南天门震颤。',
+    ].join('\n'));
+
+    expect(normalized).toContain('画面描述：孙悟空挥棒破云。\n---CUT---\n分镜1-2');
+  });
+
   it('places a missing CUT before a new segment heading', () => {
     const normalized = ensureStoryboardCutSeparators([
       '分段01',

@@ -47,7 +47,7 @@ export function ensureStoryboardCutSeparators(value: string): string {
   let hasShot = false;
 
   lines.forEach((line) => {
-    const isShotHeader = /^\s*镜头\s*\d+(?:\s*[-－—]\s*\d+)?\s*$/.test(line);
+    const isShotHeader = /^\s*(?:镜头|分镜)\s*\d+(?:\s*[-－—]\s*\d+)?\s*$/.test(line);
     const isSegmentHeader = /^\s*(?:分段|段落)\s*\d+\s*$/.test(line);
     if ((isShotHeader || isSegmentHeader) && hasShot) {
       const previous = [...output].reverse().find(item => item.trim())?.trim();

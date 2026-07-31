@@ -92,6 +92,10 @@ export function formatHierarchicalShotNumber(segmentNo: number, localShotNo: num
     return `镜头${segmentNo}-${localShotNo}`;
 }
 
+export function formatVideoScriptShotNumber(segmentNo: number, localShotNo: number): string {
+    return `分镜${segmentNo}-${localShotNo}`;
+}
+
 /** 从单个镜头正文中移除分段级提示词，分段提示词由独立卡片展示和持久化。 */
 export function stripVideoScriptGroupPromptSections(value: string): string {
     const text = String(value || '');
@@ -112,7 +116,7 @@ export function findVideoScriptShotBlock(content: string, shotNumber: string): s
 
     const bodyStart = match.index + match[0].length;
     const remaining = content.slice(bodyStart);
-    const nextHeader = /^[ \t]*镜头\s*\d+(?:\s*[-－—]\s*\d+)?/m.exec(remaining);
+    const nextHeader = /^[ \t]*(?:镜头|分镜)\s*\d+(?:\s*[-－—]\s*\d+)?/m.exec(remaining);
     const end = nextHeader ? bodyStart + nextHeader.index : content.length;
     return stripVideoScriptGroupPromptSections(content.slice(match.index, end));
 }
@@ -122,7 +126,7 @@ export function normalizeShotHeader(line: string): string | null {
     const match = line.match(SHOT_HEADER_PATTERN) || line.match(SHOT_HEADER_WITH_CONTENT_PATTERN);
     if (!match) return null;
     return match[2]
-        ? formatHierarchicalShotNumber(Number(match[1]), Number(match[2]))
+        ? formatVideoScriptShotNumber(Number(match[1]), Number(match[2]))
         : `镜头${Number(match[1])}`;
 }
 
@@ -171,9 +175,9 @@ function extractBracketSection(text: string, label: string): string {
 }
 
 function shotRange(blocks: VideoScriptBlock[], groupNo: number): string {
-    if (blocks.length === 0) return formatHierarchicalShotNumber(groupNo, 1);
-    const first = formatHierarchicalShotNumber(groupNo, 1);
-    const last = formatHierarchicalShotNumber(groupNo, blocks.length);
+    if (blocks.length === 0) return formatVideoScriptShotNumber(groupNo, 1);
+    const first = formatVideoScriptShotNumber(groupNo, 1);
+    const last = formatVideoScriptShotNumber(groupNo, blocks.length);
     return first === last ? first : `${first}至${last}`;
 }
 
@@ -238,7 +242,7 @@ function renumberVideoScriptGroup(rawGroup: string, segmentNo: number): string {
         /^(\s*)(?:镜头|分镜)\s*\d+(?:\s*[-－—]\s*\d+)?(\s*[:：]?\s*.*)$/gm,
         (_full, indent: string, suffix: string) => {
             localShotNo += 1;
-            return `${indent}${formatHierarchicalShotNumber(segmentNo, localShotNo)}${suffix}`;
+            return `${indent}${formatVideoScriptShotNumber(segmentNo, localShotNo)}${suffix}`;
         },
     );
     return `分段${segmentNo}\n${body.trim()}`;
@@ -247,7 +251,7 @@ function renumberVideoScriptGroup(rawGroup: string, segmentNo: number): string {
 /**
  * 合并 Stage 2 输出，并同时收口两个强契约：
  * - 分段号全局连续；
- * - 镜头号统一为“镜头{分段号}-{段内镜头号}”，不会跨段重复。
+ * - 分镜号统一为“分镜{分段号}-{段内分镜号}”，不会跨段重复。
  */
 export function combineVideoScriptOutputs(outputs: string[]): string {
     let groupNo = 0;

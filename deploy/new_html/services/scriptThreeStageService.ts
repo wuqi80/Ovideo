@@ -10,6 +10,7 @@ import {
   combineVideoScriptOutputs,
   ensureVideoScriptPromptLengths,
   formatHierarchicalShotNumber,
+  formatVideoScriptShotNumber,
   parseVideoScriptGroups,
 } from '../utils/scriptPipelineParsers';
 import {
@@ -113,6 +114,23 @@ function estimateBriefSegmentDurationSec(sourceText: string): number {
   return 15;
 }
 
+function isBriefCreativeSeed(originalContent: string, segments: ScriptSegment[]): boolean {
+  return segments.length === 1 && countContentCharacters(originalContent) <= BRIEF_SOURCE_MAX_CHARACTERS;
+}
+
+function segmentForVideoScriptGeneration(
+  segment: ScriptSegment,
+  originalContent: string,
+  allSegments: ScriptSegment[],
+): ScriptSegment {
+  if (!isBriefCreativeSeed(originalContent, allSegments)) return segment;
+  // A one-line idea such as “孙悟空大闹天宫（黑悟空风格）” is a creative seed,
+  // not an 8-second locked production segment. Keep the normalized duration in
+  // stage-one state, but do not pass it into stage two where it would prevent
+  // the model from expanding the seed into multiple 15s-or-less storyboard groups.
+  return { ...segment, estimatedDurationSec: null };
+}
+
 function normalizeBriefSingleSegmentPlan(
   segments: ScriptSegment[],
   originalContent: string,
@@ -184,15 +202,15 @@ export function assertValidVideoScript(
   enforcePromptLength = true,
 ): void {
   const groups = parseVideoScriptGroups(content);
-  if (groups.length === 0) failVideoScriptValidation('第二步未解析出有效分段和镜头');
+  if (groups.length === 0) failVideoScriptValidation('第二步未解析出有效分段和分镜');
   const groupDurations: number[] = [];
   groups.forEach((group) => {
     if (group.blocks.length > 5) {
-      failVideoScriptValidation(`分段${group.groupNo}包含${group.blocks.length}个镜头，超过每组5个镜头上限`);
+      failVideoScriptValidation(`分段${group.groupNo}包含${group.blocks.length}个分镜，超过每组5个分镜上限`);
     }
     const durations = group.blocks.map(block => block.durationSec);
     if (durations.some(duration => duration === null || duration <= 0 || !Number.isInteger(duration))) {
-      failVideoScriptValidation(`分段${group.groupNo}存在缺失或非正整数镜头时长`);
+      failVideoScriptValidation(`分段${group.groupNo}存在缺失或非正整数分镜时长`);
     }
     const totalDuration = (durations as number[]).reduce((total, duration) => total + duration, 0);
     if (totalDuration > 15) {
@@ -221,9 +239,9 @@ export function assertValidVideoScript(
       }
     }
     group.blocks.forEach((block, index) => {
-      const expected = formatHierarchicalShotNumber(group.groupNo, index + 1);
+      const expected = formatVideoScriptShotNumber(group.groupNo, index + 1);
       if (block.shotNo !== expected) {
-        failVideoScriptValidation(`分段${group.groupNo}镜头编号不连续：应为${expected}，实际为${block.shotNo}`);
+        failVideoScriptValidation(`分段${group.groupNo}分镜编号不连续：应为${expected}，实际为${block.shotNo}`);
       }
     });
   });
@@ -236,31 +254,6 @@ export function assertValidVideoScript(
   ) {
     failVideoScriptValidation('第二步分段未保持14-15秒占比≥30%且平均时长≥10秒的硬性要求');
   }
-}
-
-function assertVideoScriptMatchesStageOneSegments(
-  content: string,
-  segments: ScriptSegment[],
-): void {
-  const groups = parseVideoScriptGroups(content);
-  if (groups.length !== segments.length) {
-    failVideoScriptValidation(
-      `第二步生成了${groups.length}个分段，应与第一步的${segments.length}个分段一一对应`,
-    );
-  }
-  groups.forEach((group, index) => {
-    const plannedDuration = segments[index].estimatedDurationSec;
-    if (plannedDuration === null) return;
-    const totalDuration = group.blocks.reduce(
-      (total, block) => total + Number(block.durationSec || 0),
-      0,
-    );
-    if (totalDuration !== plannedDuration) {
-      failVideoScriptValidation(
-        `分段${index + 1}镜头累计${totalDuration}秒，应与第一步规划的${plannedDuration}秒一致`,
-      );
-    }
-  });
 }
 
 async function validateOrReplanVideoScript(
@@ -364,28 +357,12 @@ async function validateOrRepairGeneratedSegment(
     instruction: '保持本段原文剧情不变，重新规划镜头与时长',
     conversationContext: '这是首次生成中的单个原文分段',
     scopeRequirements: [
-      '只重新规划当前这一个原文分段，不扩写为额外剧情分段。',
-      `镜头累计时长必须精确等于第一步规划的${segment.estimatedDurationSec ?? 15}秒，不是尽量接近，且绝对不得超过15秒。`,
+      '围绕当前输入文本生成可拍摄的完整分镜脚本；如果当前输入是一句创意种子，允许扩展为多个连续剧情分段。',
+      '每个最终分段的分镜累计时长必须小于或等于15秒，绝对不得超过15秒；如果自然表演超过15秒，必须继续拆成新的连续分段。',
+      '不要被第一步的估算时长锁死；第一步时长只作为拆分参考，不作为第二步扩展上限。',
       '不单独要求这一段满足全剧14-15秒占比或全剧平均时长指标。',
     ].join('\n'),
     enforceDurationDensity: false,
-    validateContent: (content) => {
-      const groups = parseVideoScriptGroups(content);
-      if (groups.length !== 1) {
-        failVideoScriptValidation(`当前原文分段生成了${groups.length}个视频分段，应保持为1个分段`);
-      }
-      if (segment.estimatedDurationSec !== null) {
-        const totalDuration = groups[0].blocks.reduce(
-          (total, block) => total + Number(block.durationSec || 0),
-          0,
-        );
-        if (totalDuration !== segment.estimatedDurationSec) {
-          failVideoScriptValidation(
-            `当前分段镜头累计${totalDuration}秒，应与第一步规划的${segment.estimatedDurationSec}秒一致`,
-          );
-        }
-      }
-    },
     taskContext,
   });
 }
@@ -416,9 +393,14 @@ export async function generateVideoScriptForSegments(
 
   const { aiGenerateVideoScriptFromSegment } = await loadAiModelService();
   for (const segment of orderedSegments) {
+    const generationSegment = segmentForVideoScriptGeneration(
+      segment,
+      originalContent,
+      orderedSegments,
+    );
     const initialDraft = await aiGenerateVideoScriptFromSegment(
       model,
-      segment,
+      generationSegment,
       undefined,
       {
         ...options.taskContext,
@@ -444,7 +426,6 @@ export async function generateVideoScriptForSegments(
   const content = combineVideoScriptOutputs(outputs);
   try {
     assertValidVideoScript(content);
-    assertVideoScriptMatchesStageOneSegments(content, orderedSegments);
   } catch (error) {
     if (error instanceof VideoScriptValidationError) {
       throw new Error(SAFE_REPLAN_FAILURE_MESSAGE);
@@ -710,7 +691,7 @@ export async function generateStoryboardDesignForVersion(
       block,
       group,
       localShotNo: localIndex + 1,
-      canonicalShotNo: formatHierarchicalShotNumber(group.groupNo, localIndex + 1),
+      canonicalShotNo: block.shotNo || formatVideoScriptShotNumber(group.groupNo, localIndex + 1),
     }))
   ));
   const { aiExtractStoryboardPromptFromVideoShot } = await loadAiModelService();
@@ -763,8 +744,8 @@ export async function generateStoryboardDesignForVersion(
   const localShotCountByGroup = new Map<number, number>();
   const items = extractionResults.flatMap((result) => {
     const { shot, extractions } = result;
-    const firstShot = formatHierarchicalShotNumber(shot.group.groupNo, 1);
-    const lastShot = formatHierarchicalShotNumber(
+    const firstShot = formatVideoScriptShotNumber(shot.group.groupNo, 1);
+    const lastShot = formatVideoScriptShotNumber(
       shot.group.groupNo,
       Math.max(1, shot.group.blocks.length),
     );

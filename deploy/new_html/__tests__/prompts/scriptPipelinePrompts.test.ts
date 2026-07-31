@@ -44,10 +44,12 @@ describe('latest three-step script prompts', () => {
 
   it('generates all stage-one segments in one stage-two request', () => {
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('{segmentsText}');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('正常情况下输入有多少个分段，输出必须有且仅有多少个分段');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('允许把该输入分段拆成多个连续输出分段');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('不要求输出分段数量与输入分段数量一一相等');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('一句话创意种子');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('必须把它扩展/拆分成多个连续输出分段');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('绝对不得超过15秒');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('发现局部不合格时只修正该段');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.system).not.toContain('逐段一一转换');
   });
 
   it('merges revisions with both stage-one and full stage-two constraints', () => {

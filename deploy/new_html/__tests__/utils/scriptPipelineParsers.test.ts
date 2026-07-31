@@ -139,9 +139,9 @@ describe('parseVideoScriptBlocks', () => {
         expect(blocks[0].durationSec).toBe(6);
     });
 
-    it('accepts 分镜 headings while keeping canonical downstream shot numbers', () => {
+    it('accepts 分镜 headings while keeping stage-two canonical shot numbers', () => {
         const blocks = parseVideoScriptBlocks('分段1\n分镜1-1\n时间：6秒\n画面描述：主角抬头。');
-        expect(blocks[0].shotNo).toBe('镜头1-1');
+        expect(blocks[0].shotNo).toBe('分镜1-1');
         expect(blocks[0].rawBlock).toContain('分镜1-1');
         expect(findVideoScriptShotBlock('分段1\n分镜1-1\n画面描述：主角抬头。', '镜头1-1'))
             .toContain('主角抬头');
@@ -180,7 +180,7 @@ describe('parseVideoScriptGroups', () => {
 
     it('builds one shared video prompt from the group range and long constraints', () => {
         const [group] = parseVideoScriptGroups(grouped);
-        expect(group.sharedVideoPrompt).toContain('镜头1-1至镜头1-2');
+        expect(group.sharedVideoPrompt).toContain('分镜1-1至分镜1-2');
         expect(group.sharedVideoPrompt).toContain('【视觉风格】都市写实');
         expect(group.sharedVideoPrompt).toContain('【正向稳定约束】角色形象固定');
     });
@@ -190,14 +190,14 @@ describe('parseVideoScriptGroups', () => {
             '分段01\n镜头1\n时长（秒）：3',
             '分段01\n镜头1\n时长（秒）：4',
         ]);
-        expect(combined).toContain('分段1\n镜头1-1');
-        expect(combined).toContain('分段2\n镜头2-1');
+        expect(combined).toContain('分段1\n分镜1-1');
+        expect(combined).toContain('分段2\n分镜2-1');
         expect(combined.match(/分段1/g)).toHaveLength(1);
     });
 
     it('parses hierarchical shot numbers without collapsing the separator', () => {
         const blocks = parseVideoScriptBlocks('分段12\n镜头12-3\n时长（秒）：5');
-        expect(blocks[0].shotNo).toBe('镜头12-3');
+        expect(blocks[0].shotNo).toBe('分镜12-3');
     });
 
     it('silently pads short segment prompts while preserving shot content', () => {

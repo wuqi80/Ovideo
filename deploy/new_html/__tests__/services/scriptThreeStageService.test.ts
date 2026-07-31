@@ -88,7 +88,7 @@ describe('three-stage video script contract', () => {
 
   it('rejects duplicate or discontinuous hierarchical numbers', () => {
     expect(() => assertValidVideoScript(validGroup.replace('镜头1-2', '镜头1-1')))
-      .toThrow('镜头编号不连续');
+      .toThrow('分镜编号不连续');
   });
 
   it('runs stage one before stage two and canonicalizes all returned groups', async () => {
@@ -124,9 +124,9 @@ describe('three-stage video script contract', () => {
       { suppressNotification: true },
     );
     expect(aiMocks.aiReplanInvalidVideoScript).not.toHaveBeenCalled();
-    expect(result.content).toContain('分段1\n镜头1-1');
-    expect(result.content).toContain('分段2\n镜头2-1');
-    expect(result.content).toContain('分段3\n镜头3-1');
+    expect(result.content).toContain('分段1\n分镜1-1');
+    expect(result.content).toContain('分段2\n分镜2-1');
+    expect(result.content).toContain('分段3\n分镜3-1');
     expect(progress.at(-1)).toBe(result.content);
     parseVideoScriptGroups(result.content).forEach((group) => {
       expect(countPromptCharacters(group.visualStyle)).toBeGreaterThanOrEqual(MIN_VISUAL_STYLE_CHARACTERS);
@@ -135,11 +135,24 @@ describe('three-stage video script contract', () => {
     });
   });
 
-  it('lets a brief one-line source pass split density and advance through stage two', async () => {
+  it('lets a brief one-line source expand into multiple stage-two groups', async () => {
     aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
       { id: 'brief', order: 0, sourceText: '孙悟空大闹天宫', estimatedDurationSec: 8, status: 'done' },
     ]);
-    aiMocks.aiGenerateVideoScriptFromSegment.mockResolvedValue(shortSingleGroup);
+    aiMocks.aiGenerateVideoScriptFromSegment.mockResolvedValue([
+      '分段1',
+      '分镜1-1',
+      '时长（秒）：8',
+      '画面描述：孙悟空立于云海之上，金箍棒横扫天门。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+      '分段2',
+      '分镜2-1',
+      '时长（秒）：7',
+      '画面描述：天兵在南天门前列阵，云层被金光撕开。',
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+    ].join('\n'));
 
     const progress: Array<{ stage: string; completed: number; total: number }> = [];
     const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '孙悟空大闹天宫', {
@@ -153,12 +166,22 @@ describe('three-stage video script contract', () => {
     expect(aiMocks.aiReplanInvalidScriptSegments).not.toHaveBeenCalled();
     expect(aiMocks.aiReplanInvalidVideoScript).not.toHaveBeenCalled();
     expect(aiMocks.aiGenerateVideoScriptFromSegment).toHaveBeenCalledTimes(1);
+    expect(aiMocks.aiGenerateVideoScriptFromSegment).toHaveBeenCalledWith(
+      AiModel.DeepseekChat,
+      expect.objectContaining({
+        sourceText: '孙悟空大闹天宫',
+        estimatedDurationSec: null,
+      }),
+      undefined,
+      expect.objectContaining({ suppressNotification: true }),
+    );
     expect(result.segments).toHaveLength(1);
     expect(result.segments[0]).toEqual(expect.objectContaining({
       sourceText: '孙悟空大闹天宫',
       estimatedDurationSec: 8,
-      videoScript: expect.stringContaining('时长（秒）：8'),
+      videoScript: expect.stringContaining('天兵在南天门前列阵'),
     }));
+    expect(parseVideoScriptGroups(result.content)).toHaveLength(2);
     expect(result.content).toContain('孙悟空立于云海之上');
     expect(progress).toEqual(expect.arrayContaining([
       { stage: 'split', completed: 1, total: 1 },
@@ -221,7 +244,7 @@ describe('three-stage video script contract', () => {
     expect(aiMocks.aiReplanInvalidVideoScript).not.toHaveBeenCalled();
     expect(result.segments).toHaveLength(4);
     expect(result.content).toContain('分段4');
-    expect(result.content).toContain('镜头4-1');
+    expect(result.content).toContain('分镜4-1');
   });
 
 
@@ -230,12 +253,15 @@ describe('three-stage video script contract', () => {
       { id: 'brief-low', order: 0, sourceText: '孙悟空大闹天宫', estimatedDurationSec: 3, status: 'done' },
     ]);
     aiMocks.aiGenerateVideoScriptFromSegment.mockImplementation(async (_model, segment) => {
-      const duration = segment.estimatedDurationSec;
+      expect(segment.estimatedDurationSec).toBeNull();
       return [
         '分段1',
-        '镜头1-1',
-        `时长（秒）：${duration}`,
+        '分镜1-1',
+        '时长（秒）：8',
         '画面描述：孙悟空站在云海之上，金箍棒横扫天门。',
+        '分镜1-2',
+        '时长（秒）：6',
+        '画面描述：南天门牌匾震颤，天兵举盾后退。',
         `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
         `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
       ].join('\n');
@@ -256,7 +282,7 @@ describe('three-stage video script contract', () => {
       order: 0,
       sourceText: '孙悟空大闹天宫',
       estimatedDurationSec: 8,
-      videoScript: expect.stringContaining('时长（秒）：8'),
+      videoScript: expect.stringContaining('分镜1-2'),
     }));
     expect(progress).toEqual(expect.arrayContaining([
       { stage: 'split', completed: 1, total: 1 },
@@ -275,10 +301,10 @@ describe('three-stage video script contract', () => {
         return [
           '分段1',
           '镜头1-1',
-          '时长（秒）：6',
+          '时长（秒）：8',
           '画面描述：第二段待修内容前半。',
           '镜头1-2',
-          '时长（秒）：5',
+          '时长（秒）：9',
           '画面描述：第二段待修内容后半。',
           `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
           `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
@@ -313,8 +339,8 @@ describe('three-stage video script contract', () => {
       AiModel.DeepseekChat,
       '第二段',
       expect.stringContaining('第二段待修内容'),
-      '当前分段镜头累计11秒，应与第一步规划的10秒一致',
-      expect.stringContaining('只重新规划当前这一个原文分段'),
+      '分段1累计17秒，超过15秒上限',
+      expect.stringContaining('绝对不得超过15秒'),
       expect.any(String),
       expect.any(String),
       undefined,
@@ -440,7 +466,7 @@ describe('three-stage video script contract', () => {
     expect(() => assertValidVideoScript(result.content)).not.toThrow();
   });
 
-  it('replans a segment whose stage-two duration drifts from the stage-one plan', async () => {
+  it('accepts stage-two duration drift from the stage-one estimate', async () => {
     aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
       { id: 's1', order: 0, sourceText: '单段原文', estimatedDurationSec: 15, status: 'done' },
     ]);
@@ -452,28 +478,10 @@ describe('three-stage video script contract', () => {
       `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
       `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
     ].join('\n'));
-    aiMocks.aiReplanInvalidVideoScript.mockResolvedValue([
-      '分段1',
-      '镜头1-1',
-      '时长（秒）：15',
-      '画面描述：时长对齐合格稿。',
-      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
-      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
-    ].join('\n'));
-
     const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '单段原文');
 
-    expect(aiMocks.aiReplanInvalidVideoScript).toHaveBeenCalledWith(
-      AiModel.DeepseekChat,
-      '单段原文',
-      expect.stringContaining('时长偏离草稿'),
-      '当前分段镜头累计13秒，应与第一步规划的15秒一致',
-      expect.any(String),
-      expect.any(String),
-      expect.any(String),
-      undefined,
-    );
-    expect(result.content).toContain('时长对齐合格稿');
+    expect(aiMocks.aiReplanInvalidVideoScript).not.toHaveBeenCalled();
+    expect(result.content).toContain('时长偏离草稿');
   });
 
   it('silently completes short prompts in a revised version before returning it', async () => {
@@ -575,12 +583,12 @@ describe('three-stage video script contract', () => {
     expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).toHaveBeenCalledWith(
       AiModel.DeepseekChat,
       expect.stringContaining('镜头1-1'),
-      '镜头1-1',
+      '分镜1-1',
       expect.objectContaining({ suppressNotification: true }),
     );
     expect(result.items).toHaveLength(1);
     expect(result.items[0].shotNumber).toBe('镜头1-1');
-    expect(result.items[0].sourceVideoShotNo).toBe('镜头1-1');
+    expect(result.items[0].sourceVideoShotNo).toBe('分镜1-1');
     expect(result.items[0].imagePrompt).toContain('主角推门');
   });
 
@@ -621,7 +629,7 @@ describe('three-stage video script contract', () => {
     ].join('\n'));
 
     expect(result.items.map(item => item.shotNumber)).toEqual(['镜头1-1', '镜头1-2']);
-    expect(result.items.map(item => item.sourceVideoShotNo)).toEqual(['镜头1-1', '镜头1-1']);
+    expect(result.items.map(item => item.sourceVideoShotNo)).toEqual(['分镜1-1', '分镜1-1']);
     expect(result.items.map(item => item.plannedDurationMs)).toEqual([5000, 10000]);
   });
 
@@ -637,7 +645,7 @@ describe('three-stage video script contract', () => {
       maxActive = Math.max(maxActive, active);
       await new Promise(resolve => setTimeout(
         resolve,
-        canonicalShotNo === '镜头1-1' ? 20 : 1,
+        canonicalShotNo === '分镜1-1' ? 20 : 1,
       ));
       active -= 1;
       return [{
@@ -728,9 +736,9 @@ describe('three-stage video script contract', () => {
     expect(aiMocks.aiReplanInvalidStoryboardExtraction).toHaveBeenCalledWith(
       AiModel.DeepseekChat,
       expect.stringContaining('主角推门进入办公室'),
-      '镜头1-1',
+      '分镜1-1',
       expect.stringContaining('不完整草稿'),
-      '镜头1-1第1个镜头设计缺少画面描述、分镜生成提示词或有效时长',
+      '分镜1-1第1个镜头设计缺少画面描述、分镜生成提示词或有效时长',
       expect.objectContaining({ suppressNotification: true }),
     );
     expect(result.items[0].imagePrompt).toContain('主角推门');

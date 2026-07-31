@@ -2,6 +2,7 @@ import type { ScriptSegment, StoryboardItem } from '../types';
 import { parseStoryboardScript } from './storyboardParser';
 import {
   formatHierarchicalShotNumber,
+  formatVideoScriptShotNumber,
   parseHierarchicalShotNumber,
   stripVideoScriptGroupPromptSections,
 } from './scriptPipelineParsers';
@@ -120,7 +121,7 @@ function parseStoryboardDisplayItems(content: string): StoryboardItem[] {
       flush();
       return;
     }
-    if (/^镜头\s*\d+(?:\s*[-－—]\s*\d+)?\s*$/.test(trimmed)) {
+    if (/^(?:镜头|分镜)\s*\d+(?:\s*[-－—]\s*\d+)?\s*$/.test(trimmed)) {
       flush();
       const parsedShotNo = parseHierarchicalShotNumber(trimmed);
       currentSegmentNo = activeSegmentNo || parsedShotNo?.segmentNo || undefined;
@@ -139,6 +140,9 @@ function parseStoryboardDisplayItems(content: string): StoryboardItem[] {
     const segmentNo = block.segmentNo || parsedShotNo?.segmentNo || 1;
     const localShotNo = parsedShotNo?.localShotNo || index + 1;
     const shotNumber = formatHierarchicalShotNumber(segmentNo, localShotNo);
+    const sourceShotNumber = /^\s*分镜/.test(block.text.trim())
+      ? formatVideoScriptShotNumber(segmentNo, localShotNo)
+      : shotNumber;
     const fallback: StoryboardItem = {
       id: `storyboard-display-${index + 1}`,
       originalText: block.text,
@@ -148,13 +152,13 @@ function parseStoryboardDisplayItems(content: string): StoryboardItem[] {
       dialogue: '',
       characters: [],
       shotNumber,
-      sourceVideoShotNo: shotNumber,
+      sourceVideoShotNo: sourceShotNumber,
     };
     return {
       ...(parsed || fallback),
       originalText: block.text,
       shotNumber,
-      sourceVideoShotNo: shotNumber,
+      sourceVideoShotNo: sourceShotNumber,
       scriptSegmentId: segmentNo
         ? `storyboard-segment-${segmentNo}`
         : parsed?.scriptSegmentId,
@@ -218,8 +222,8 @@ function replaceShotHeader(value: string, segmentNo: number, localShotNo: number
   const label = formatHierarchicalShotNumber(segmentNo, localShotNo);
   const text = String(value || '').trim();
   if (!text) return label;
-  return /^\s*镜头\s*\d+(?:\s*[-－—]\s*\d+)?/m.test(text)
-    ? text.replace(/^\s*镜头\s*\d+(?:\s*[-－—]\s*\d+)?/m, label)
+  return /^\s*(?:镜头|分镜)\s*\d+(?:\s*[-－—]\s*\d+)?/m.test(text)
+    ? text.replace(/^\s*(?:镜头|分镜)\s*\d+(?:\s*[-－—]\s*\d+)?/m, label)
     : `${label}\n${text}`;
 }
 
@@ -358,7 +362,7 @@ export function cleanStoryboardShotCardText(value: string): string {
   const firstContentLine = lines.findIndex(line => line.trim());
   if (
     firstContentLine >= 0
-    && /^镜头\s*\d+(?:\s*[-－—–]\s*\d+)?\s*$/.test(cleanStoryboardDisplayLine(lines[firstContentLine]))
+    && /^(?:镜头|分镜)\s*\d+(?:\s*[-－—–]\s*\d+)?\s*$/.test(cleanStoryboardDisplayLine(lines[firstContentLine]))
   ) {
     lines.splice(firstContentLine, 1);
   }
