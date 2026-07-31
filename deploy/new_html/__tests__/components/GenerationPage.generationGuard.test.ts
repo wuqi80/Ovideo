@@ -70,6 +70,17 @@ describe('GenerationPage progress feedback', () => {
   });
 });
 
+describe('GenerationPage storyboard rail layout', () => {
+  it('matches the script file rail with a compact title row and blue active edge', () => {
+    expect(source).toContain('data-testid="storyboard-shot-list-title-row"');
+    expect(source).toContain('({storyboardTotalCount})');
+    expect(source).toContain('data-testid="storyboard-shot-card"');
+    expect(source).toContain('border-b border-l-[3px]');
+    expect(source).toContain("? 'border-l-primary bg-primary-light'");
+    expect(source).toContain('line-clamp-2 min-h-10');
+  });
+});
+
 describe('GenerationPage other storyboard references', () => {
   it('offers other storyboard images without changing the source shot', () => {
     expect(source).toContain("['other-shot', '其他分镜']");

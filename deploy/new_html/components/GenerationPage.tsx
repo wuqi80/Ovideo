@@ -2430,29 +2430,32 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       <div className="workflow-stage-layout layout-safe flex-1 flex h-full w-full bg-n20 overflow-hidden relative">
           
           {/* Header Bar */}
-          <div className="workflow-stage-toolbar storyboard-generation-toolbar absolute top-0 left-0 right-0 h-[52px] bg-n0 border-b border-n40 z-20 flex items-center justify-between px-4">
-              <div className="flex items-center gap-4 min-w-0">
-                  <h2 className="text-sm font-bold text-n700 uppercase tracking-wider flex items-center gap-2">
-                      <LayoutDashboard className="w-4 h-4 text-primary" />
-                      画面分镜列表
-                  </h2>
-                  <div className="h-4 w-px bg-n40"></div>
-                  <div className="flex items-center gap-2">
+          <div className="workflow-stage-toolbar storyboard-generation-toolbar absolute left-0 right-0 top-0 z-20 flex h-[52px] items-center border-b border-n40 bg-n0">
+              <div
+                  data-testid="storyboard-shot-list-title-row"
+                  style={{ width: sidebarWidth }}
+                  className="flex h-full flex-shrink-0 items-center gap-2 border-r border-n40 px-3"
+              >
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <h2 className="truncate text-sm font-semibold text-n800">画面分镜列表</h2>
+                    <span className="whitespace-nowrap font-mono text-xs text-n100">({storyboardTotalCount})</span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
                       <button 
                         onClick={toggleSelectAll}
                         disabled={isLoadingAllShotsForSelection}
-                        className="text-xs text-n300 hover:text-n800 flex items-center gap-1 disabled:opacity-50 disabled:cursor-wait"
+                        className="inline-flex h-8 items-center gap-1 rounded-md border border-n40 bg-n0 px-2 text-[10px] text-n300 transition-colors hover:bg-n20 hover:text-n800 disabled:cursor-wait disabled:opacity-50"
                       >
                          {isLoadingAllShotsForSelection ? <CircleDashed className="w-4 h-4 animate-spin" /> : allStoryboardItemsSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
                          {isLoadingAllShotsForSelection ? '加载全部...' : '全选'}
                       </button>
-                      <span className="text-xs text-n100">
-                          已选 {selectedShotIds.size} 项
+                      <span className="whitespace-nowrap text-[10px] text-n100">
+                          已选 {selectedShotIds.size}
                       </span>
                   </div>
               </div>
 
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex min-w-0 flex-1 items-center justify-end gap-3 px-4">
                   {onAssetScopeModeChange && (
                     <div className="flex items-center gap-1 p-0.5 rounded-md border border-n40 bg-n20" title="素材引用范围">
                       <button
@@ -2577,7 +2580,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
              style={{ width: sidebarWidth }} 
              className="workflow-stage-sidebar pt-[52px] border-r border-n40 bg-n0 flex flex-col z-10 flex-shrink-0 relative"
           >
-               <div className="workflow-stage-scroll flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
+               <div className="workflow-stage-scroll flex-1 overflow-y-auto custom-scrollbar pb-2">
                    {hasStoryboard && visibleStoryboardItems.map((item, index) => {
                        const isSelected = item.id === selectedShotId;
                        const hasImage = (item.generatedImages && item.generatedImages.length > 0) || !!item.generatedImage;
@@ -2594,30 +2597,91 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                        const thumb = rawThumb ? getImageThumbnailUrl(rawThumb, 144, 96) : undefined;
 
                        return (
-                           <div 
+                           <div
                                key={item.id}
+                               data-testid="storyboard-shot-card"
                                onClick={() => {
                                    setSelectedShotId(item.id);
                                }}
                                onDragOver={(e) => handleShotImageDragOver(e, item.id)}
                                onDragLeave={(e) => handleShotImageDragLeave(e, item.id)}
                                onDrop={(e) => void handleShotImageDrop(e, item)}
-                               className={`p-2 rounded-lg cursor-pointer border transition-all flex gap-2 group ${
+                               className={`group relative flex min-h-[112px] cursor-pointer flex-col justify-center border-b border-l-[3px] border-n40 px-4 py-4 transition-colors duration-150 ${
                                    imageDropTargetShotId === item.id
-                                   ? 'bg-success/10 border-success ring-2 ring-success/30'
+                                   ? 'border-l-success bg-success/10'
                                    : isSelected
-                                     ? 'bg-primary-light border-primary'
-                                     : 'bg-n0 border-n40 hover:bg-n20'
+                                     ? 'border-l-primary bg-primary-light'
+                                     : 'border-l-transparent bg-n0 hover:bg-n20'
                                }`}
                            >
-                               <div 
-                                    onClick={(e) => toggleShotSelection(e, item.id)}
-                                    className="flex items-center justify-center w-5 flex-shrink-0 text-n100 hover:text-n800"
-                               >
-                                   {isChecked ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4" />}
+                               <div className="flex min-h-7 w-full min-w-0 items-center gap-1.5">
+                                 <button
+                                      type="button"
+                                      onClick={(e) => toggleShotSelection(e, item.id)}
+                                      className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-transparent text-n100 transition-colors hover:border-n40 hover:bg-n30 hover:text-n800"
+                                      aria-label={`选择镜头 ${String(index + 1).padStart(2, '0')}`}
+                                 >
+                                     {isChecked ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4" />}
+                                 </button>
+                                 <span className={`min-w-0 flex-1 truncate text-sm font-semibold ${isSelected ? 'text-n800' : 'text-n700 group-hover:text-n800'}`}>
+                                     镜头 {String(index + 1).padStart(2, '0')}
+                                 </span>
+                                 <div className="flex shrink-0 items-center gap-1">
+                                   {/* Model Indicator */}
+                                   <button
+                                       type="button"
+                                       className="relative"
+                                       onClick={(e) => {
+                                           e.stopPropagation();
+                                           const currentModel = shotModels[item.id] || globalModel;
+                                           const models: GenerationModel[] = ['nanobanana', 'qwen', 'qwen_lora', 'kontext', 'qwenN', 'qwenN_lora', 'gpt_image_vip', 'gpt_image_official'];
+                                           const currentIndex = models.indexOf(currentModel);
+                                           const nextModel = models[(currentIndex + 1) % models.length];
+                                           setShotModels(prev => ({ ...prev, [item.id]: nextModel }));
+                                       }}
+                                       title="点击切换模型"
+                                   >
+                                     <span className={`inline-flex h-5 min-w-[36px] items-center justify-center rounded px-1.5 text-[8px] font-medium transition-colors ${
+                                         (shotModels[item.id] || globalModel) === 'nanobanana'
+                                             ? 'bg-y50 text-warning'
+                                             : (shotModels[item.id] || globalModel) === 'qwen'
+                                             ? 'bg-primary-light text-primary'
+                                             : (shotModels[item.id] || globalModel) === 'qwen_lora'
+                                             ? 'bg-g50 text-success'
+                                             : (shotModels[item.id] || globalModel) === 'qwenN'
+                                             ? 'bg-r50 text-danger'
+                                             : (shotModels[item.id] || globalModel) === 'gpt_image_vip'
+                                             ? 'bg-purple-50 text-purple-600'
+                                             : (shotModels[item.id] || globalModel) === 'gpt_image_official'
+                                             ? 'bg-rose-50 text-rose-600'
+                                             : 'bg-primary-light text-primary'
+                                     }`}>
+                                       {(shotModels[item.id] || globalModel) === 'nanobanana' ? '化神' :
+                                        (shotModels[item.id] || globalModel) === 'qwen' ? '练气一阶' :
+                                        (shotModels[item.id] || globalModel) === 'qwen_lora' ? '筑基一阶' :
+                                        (shotModels[item.id] || globalModel) === 'qwenN' ? 'K神' :
+                                        (shotModels[item.id] || globalModel) === 'qwenN_lora' ? '筑基二阶' :
+                                        (shotModels[item.id] || globalModel) === 'kontext' ? '练气二阶' :
+                                        (shotModels[item.id] || globalModel) === 'gpt_image_vip' ? '天劫一' :
+                                        (shotModels[item.id] || globalModel) === 'gpt_image_official' ? '天劫二' : '未知'}
+                                     </span>
+                                   </button>
+                                   {item.isConfigConfirmed && <CheckCircle2 className="h-3.5 w-3.5 text-success" />}
+                                   {onDeleteStoryboardItem && (
+                                     <button
+                                         type="button"
+                                         onClick={(e) => { e.stopPropagation(); onDeleteStoryboardItem(item.id); }}
+                                         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-n100 opacity-0 transition-all hover:bg-r50 hover:text-danger group-hover:opacity-100"
+                                         title="删除此镜头"
+                                     >
+                                         <Trash2 className="h-3.5 w-3.5" />
+                                     </button>
+                                   )}
+                                 </div>
                                </div>
 
-                               <div className="w-12 h-10 bg-n30 rounded flex-shrink-0 overflow-hidden border border-n40 relative">
+                               <div className="mt-3 flex min-w-0 gap-3 pl-[34px] pr-1">
+                               <div className="relative h-10 w-12 flex-shrink-0 overflow-hidden rounded border border-n40 bg-n30">
                                    {thumb ? (
                                        <img 
                                            src={thumb} 
@@ -2644,65 +2708,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                    )}
                                </div>
                                <div className="flex-1 min-w-0">
-                                   <div className="flex justify-between items-center mb-0.5">
-                                       <span className={`text-[10px] font-bold ${isSelected ? 'text-primary' : 'text-n300'}`}>
-                                           镜头 {String(index + 1).padStart(2, '0')}
-                                       </span>
-                                       <div className="flex items-center gap-1">
-                                           {/* Model Indicator */}
-                                           <div 
-                                               className="relative group/model cursor-pointer"
-                                               onClick={(e) => {
-                                                   e.stopPropagation();
-                                                   const currentModel = shotModels[item.id] || globalModel;
-                                                   // 2026-05-21：循环顺序覆盖全部 8 个模型，确保 indicator 点击能切到天劫系列
-                                                   const models: GenerationModel[] = ['nanobanana', 'qwen', 'qwen_lora', 'kontext', 'qwenN', 'qwenN_lora', 'gpt_image_vip', 'gpt_image_official'];
-                                                   const currentIndex = models.indexOf(currentModel);
-                                                   const nextModel = models[(currentIndex + 1) % models.length];
-                                                   setShotModels(prev => ({ ...prev, [item.id]: nextModel }));
-                                               }}
-                                           >
-                                               <div className={`w-5 h-5 rounded flex items-center justify-center text-[7px] font-bold transition-all ${
-                                                   (shotModels[item.id] || globalModel) === 'nanobanana' 
-                                                       ? 'bg-yellow-500/20 text-yellow-400' 
-                                                       : (shotModels[item.id] || globalModel) === 'qwen'
-                                                       ? 'bg-blue-500/20 text-blue-400'
-                                                       : (shotModels[item.id] || globalModel) === 'qwen_lora'
-                                                       ? 'bg-green-500/20 text-green-400'
-                                                       : (shotModels[item.id] || globalModel) === 'qwenN'
-                                                       ? 'bg-red-500/20 text-red-400'
-                                                       : (shotModels[item.id] || globalModel) === 'gpt_image_vip'
-                                                       ? 'bg-fuchsia-500/20 text-fuchsia-300'
-                                                       : (shotModels[item.id] || globalModel) === 'gpt_image_official'
-                                                       ? 'bg-rose-500/20 text-rose-300'
-                                                       : 'bg-primary-light text-primary'
-                                               }`}>
-                                                   {(shotModels[item.id] || globalModel) === 'nanobanana' ? '化神' : 
-                                                    (shotModels[item.id] || globalModel) === 'qwen' ? '练气一阶' : 
-                                                    (shotModels[item.id] || globalModel) === 'qwen_lora' ? '筑基一阶' : 
-                                                    (shotModels[item.id] || globalModel) === 'qwenN' ? 'K神' : 
-                                                    (shotModels[item.id] || globalModel) === 'qwenN_lora' ? '筑基二阶' : 
-                                                    (shotModels[item.id] || globalModel) === 'kontext' ? '练气二阶' : 
-                                                    (shotModels[item.id] || globalModel) === 'gpt_image_vip' ? '天劫一' : 
-                                                    (shotModels[item.id] || globalModel) === 'gpt_image_official' ? '天劫二' : '未知'}
-                                               </div>
-                                               <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 hidden group-hover/model:block z-10 whitespace-nowrap bg-n0 border border-n40 rounded px-2 py-1 text-[8px] text-n700 shadow-lg">
-                                                   点击切换模型
-                                               </div>
-                                           </div>
-                                       {item.isConfigConfirmed && <CheckCircle2 className="w-3 h-3 text-success" />}
-                                       {onDeleteStoryboardItem && (
-                                           <button
-                                               onClick={(e) => { e.stopPropagation(); onDeleteStoryboardItem(item.id); }}
-                                               className="opacity-0 group-hover:opacity-100 text-n100 hover:text-danger transition-all p-0.5"
-                                               title="删除此镜头"
-                                           >
-                                               <Trash2 className="w-3 h-3" />
-                                           </button>
-                                       )}
-                                       </div>
-                                    </div>
-                                    <p className="text-[9px] text-n100 line-clamp-1">{item.scriptSegment}</p>
+                                    <p className="line-clamp-2 min-h-10 text-xs leading-5 text-n100">{item.scriptSegment || '暂无分镜内容'}</p>
                                     {isShotGenerating && (
                                       <div className="mt-1">
                                         <div className="flex items-center justify-between gap-1 text-[8px]">
@@ -2727,6 +2733,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                       </div>
                                     )}
                                 </div>
+                                </div>
                             </div>
                        );
                    })}
@@ -2734,7 +2741,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                    {hasStoryboard && storyboardTotalCount > visibleShotCount && (
                        <button
                            onClick={() => setVisibleShotCount(c => c + SHOT_PAGE_SIZE)}
-                           className="w-full py-2 my-1 text-xs font-medium text-primary bg-primary-light/50 hover:bg-primary-light rounded-lg border border-primary/20 transition-colors"
+                           className="mx-2 mt-2 w-[calc(100%_-_1rem)] rounded-md border border-primary/20 bg-primary-light/50 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary-light"
                        >
                            展开更多（还有 {storyboardTotalCount - visibleShotCount} 个镜头）
                        </button>
@@ -2742,7 +2749,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                    {hasStoryboard && visibleShotCount > SHOT_PAGE_SIZE && (
                        <button
                            onClick={() => setVisibleShotCount(SHOT_PAGE_SIZE)}
-                           className="w-full py-1.5 text-[11px] text-n300 hover:text-n800 hover:bg-n20 rounded-lg transition-colors"
+                           className="mx-2 mt-1 w-[calc(100%_-_1rem)] rounded-md py-1.5 text-[11px] text-n300 transition-colors hover:bg-n20 hover:text-n800"
                        >
                            收起（只看前 {SHOT_PAGE_SIZE} 个）
                        </button>
