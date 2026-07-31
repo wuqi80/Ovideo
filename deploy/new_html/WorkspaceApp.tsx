@@ -4435,6 +4435,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                       <div
                         style={{ flex: `${colWidths[1]} 0 0%` }}
                         className="relative h-full min-w-0 overflow-hidden rounded-md border border-n40 bg-n0 shadow-card"
+                        data-testid="quick-script-card-panel"
+                        data-panel="source"
                       >
                         <React.Suspense fallback={<LegacyColumnFallback label="source-script" />}>
                           <QuickScriptSourceColumn
@@ -4466,6 +4468,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                       <div
                         style={{ flex: `${colWidths[2]} 0 0%` }}
                         className="relative h-full min-w-0 overflow-hidden rounded-md border border-n40 bg-n0 shadow-card"
+                        data-testid="quick-script-card-panel"
+                        data-panel="version"
                       >
                         <React.Suspense fallback={<LegacyColumnFallback label="video-script" />}>
                           <QuickScriptVersionColumn
@@ -4497,6 +4501,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                       <div
                         style={{ flex: `${colWidths[3]} 0 0%` }}
                         className="relative h-full min-w-0 overflow-hidden rounded-md border border-n40 bg-n0 shadow-card"
+                        data-testid="quick-script-card-panel"
+                        data-panel="design"
                       >
                         <React.Suspense fallback={<LegacyColumnFallback label="storyboard" />}>
                           <StoryboardColumn

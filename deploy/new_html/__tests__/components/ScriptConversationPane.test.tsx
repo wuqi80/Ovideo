@@ -79,6 +79,8 @@ describe('ScriptConversationPane workflow', () => {
     expect(videoReversePage).toContain('await onCandidateCreated(scriptId)');
     expect(videoReversePage).toContain('createScriptVersion(episodeId, scriptId');
     expect(videoReversePage).toContain('buildVideoReverseStoryboardItems(selectedTask, segments)');
+    expect(videoReversePage).toContain("embedded ? 'gap-3 bg-n20 p-3' : ''");
+    expect(videoReversePage).toContain("embedded ? 'rounded-md border border-n40 bg-n0 shadow-card' : ''");
     expect(workflowLayout).not.toContain("path: 'video-reverse'");
     expect(app).toContain('<Navigate to="../script" replace />');
   });

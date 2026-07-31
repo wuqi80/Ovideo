@@ -137,4 +137,13 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('data-testid="quick-script-columns"');
     expect(source).toContain('className="flex h-full w-full min-w-[900px] max-w-none gap-2 overflow-hidden bg-n20 p-2"');
   });
+
+  it('presents the three quick work areas as separate cards on a quiet canvas', () => {
+    expect(source.match(/data-testid="quick-script-card-panel"/g)).toHaveLength(3);
+    expect(source).toContain('data-panel="source"');
+    expect(source).toContain('data-panel="version"');
+    expect(source).toContain('data-panel="design"');
+    expect(source).toContain('rounded-md border border-n40 bg-n0 shadow-card');
+    expect(source).toContain('cardMode');
+  });
 });

@@ -50,7 +50,6 @@ const baseProps = {
   onGenerateVideoScript: vi.fn().mockResolvedValue(true),
   onExtractStoryboardPrompts: vi.fn().mockResolvedValue(true),
   onRunThreeStage: vi.fn().mockResolvedValue(undefined),
-  onOpenVideoReverse: vi.fn(),
 };
 
 describe('QuickScriptSourceColumn', () => {
