@@ -4534,7 +4534,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   }
 
   return (
-    <div className={`layout-safe flex flex-col ${hideHeader ? 'h-full' : 'h-screen'} overflow-hidden bg-n20 text-n800 font-sans`}>
+    <div className={`layout-safe flex w-full min-w-0 flex-col ${hideHeader ? 'h-full flex-1' : 'h-screen'} overflow-hidden bg-n20 text-n800 font-sans`}>
       {!hideHeader && (
         <Header 
           visibleColumns={visibleColumns} 
@@ -4553,8 +4553,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         />
       )}
       
-      <main className={`workspace-main relative flex-1 overflow-hidden ${currentView === AppView.Admin ? 'flex' : 'flex'}`} ref={containerRef}>
-         <div className="workspace-view-frame flex h-full w-full overflow-hidden">
+      <main className={`workspace-main relative flex-1 min-w-0 overflow-hidden ${currentView === AppView.Admin ? 'flex' : 'flex'}`} ref={containerRef}>
+         <div className="workspace-view-frame flex h-full w-full min-w-0 flex-1 overflow-hidden">
          {renderAllViews()}
          </div>
       </main>

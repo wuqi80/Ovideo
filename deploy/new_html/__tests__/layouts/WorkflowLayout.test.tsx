@@ -86,4 +86,11 @@ describe('WorkflowLayout visual workspace shell', () => {
     expect(pageSource).toContain('workflow-stage-sidebar');
     expect(pageSource).toContain('workflow-stage-canvas');
   });
+
+  it('lets embedded script workspace fill the workflow canvas instead of shrinking to the file sidebar', () => {
+    expect(workspaceSource).toContain("layout-safe flex w-full min-w-0 flex-col");
+    expect(workspaceSource).toContain("hideHeader ? 'h-full flex-1' : 'h-screen'");
+    expect(workspaceSource).toContain('workspace-main relative flex-1 min-w-0 overflow-hidden');
+    expect(workspaceSource).toContain('workspace-view-frame flex h-full w-full min-w-0 flex-1 overflow-hidden');
+  });
 });

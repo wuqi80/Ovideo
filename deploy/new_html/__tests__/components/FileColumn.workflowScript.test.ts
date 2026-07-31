@@ -24,12 +24,14 @@ describe('FileColumn workflow script control', () => {
     expect(source).not.toContain('1. 文件列表');
   });
 
-  it('uses compact separated cards with a blue selected rail and tinted background', () => {
+  it('uses compact row items with a blue selected rail and tinted background', () => {
     expect(source).toContain('className="flex shrink-0 items-center justify-end gap-1"');
-    expect(source).toContain('className="flex flex-col gap-[6px] px-2 py-2"');
-    expect(source).toContain('rounded-md border border-l-[3px] border-n40');
+    expect(source).toContain('className="flex flex-col"');
+    expect(source).toContain('border-b border-l-[3px] border-n40 px-4 py-3');
     expect(source).toContain("'border-l-primary bg-primary-light'");
-    expect(source).toContain("'border-l-transparent bg-n0 hover:border-n100 hover:bg-n20'");
+    expect(source).toContain("'border-l-transparent bg-n0 hover:bg-n20'");
+    expect(source).not.toContain('className="flex flex-col gap-[6px] px-2 py-2"');
+    expect(source).not.toContain('rounded-md border border-l-[3px] border-n40');
     expect(source).not.toContain('rounded-lg border bg-n0 px-2.5 py-2');
     expect(source).not.toContain('flex-shrink-0 border-b border-n40 bg-n0');
     expect(source).not.toContain('border-t border-n40 px-4');
@@ -68,8 +70,8 @@ describe('FileColumn workflow script control', () => {
     expect(source).toContain('aria-label="关闭文件设置"');
   });
 
-  it('shows a larger two-line muted preview with horizontal breathing room', () => {
-    expect(source).toContain('className="mt-2 w-full min-w-0 select-none px-1"');
+  it('shows a two-line muted preview aligned under the title text', () => {
+    expect(source).toContain('className="mt-2 w-full min-w-0 select-none pl-[26px] pr-1"');
     expect(source).toContain('className="line-clamp-2 text-xs leading-[18px] text-n100"');
     expect(source).toContain('file.originalContent.slice(0, 100)');
   });

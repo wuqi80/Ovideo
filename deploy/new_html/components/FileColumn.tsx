@@ -270,7 +270,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-[6px] px-2 py-2">
+          <div className="flex flex-col">
             {files.map((file, index) => (
               <div
                 key={file.id}
@@ -322,10 +322,10 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   setDragOverIndex(null);
                 }}
                 onClick={() => onFileSelect(file.id)}
-                className={`group relative flex cursor-pointer flex-col gap-1.5 rounded-md border border-l-[3px] border-n40 px-3 py-3 transition-colors duration-150 ${
+                className={`group relative flex cursor-pointer flex-col border-b border-l-[3px] border-n40 px-4 py-3 transition-colors duration-150 ${
                   selectedFileId === file.id
                     ? 'border-l-primary bg-primary-light'
-                    : 'border-l-transparent bg-n0 hover:border-n100 hover:bg-n20'
+                    : 'border-l-transparent bg-n0 hover:bg-n20'
                 } ${draggedFileId === file.id ? 'bg-primary-light opacity-70' : ''} ${
                   dragOverIndex === index
                     ? 'border-l-primary bg-primary-light'
@@ -386,7 +386,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   </div>
                 </div>
 
-                <div data-testid="file-card-content" className="mt-2 w-full min-w-0 select-none px-1">
+                <div data-testid="file-card-content" className="mt-2 w-full min-w-0 select-none pl-[26px] pr-1">
                   <p className="line-clamp-2 text-xs leading-[18px] text-n100">
                     {file.originalContent.slice(0, 100).replace(/\n/g, ' ')}...
                   </p>
