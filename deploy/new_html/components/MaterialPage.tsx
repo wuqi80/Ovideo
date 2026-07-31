@@ -1,8 +1,8 @@
 
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { ProjectFile, StoryboardItem, MaterialLibrary, Material, FileVersion } from '../types';
-import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, ChevronDown, ChevronUp, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn, Layers, Box, ShieldCheck, Maximize, Scissors } from 'lucide-react';
+import { ProjectFile, StoryboardItem, MaterialLibrary, Material, FileVersion, AiModel } from '../types';
+import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, ChevronDown, ChevronUp, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn, Layers, Box, ShieldCheck, Maximize, Scissors, Loader, Wand2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
 import { adjustImageAngle } from '../services/comfyuiGenerationService';
@@ -20,8 +20,32 @@ import {
 import { recommendDoubaoImageSize } from '../utils/doubaoImageSize';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { deleteEntityFile, uploadEntityFile } from '../services/entityFileService';
+import { callAI } from '../services/aiService';
+import { crmMessage } from '../admin/crmUI';
+import { IMAGE_QUALITY_SUFFIX } from '../prompts/imagePrompts';
+import { useScriptModelOptions } from '../hooks/useScriptModelOptions';
+import {
+  formatScriptModelSelectLabel,
+  getScriptModelOption,
+} from '../services/scriptModelCatalogService';
+import { InlineCreditEstimate } from './InlineCreditEstimate';
+import {
+  DESIGN_IMAGE_BATCH_LIMIT,
+  DESIGN_IMAGE_MODEL_OPTIONS,
+  canUseDesignImageReferences,
+  findDesignImageModel,
+  maxDesignImageOutputCount,
+  normalizeDesignImageResolution,
+  type DesignImageEngine,
+  type DesignImageResolution,
+} from '../utils/designImageModels';
+import {
+  DESIGN_CREDIT_DEFAULTS,
+  DESIGN_CREDIT_FEATURES,
+  designImageCreditParams,
+} from '../utils/designCredits';
 
-type MaterialAIEngine = 'nanobanana' | 'doubao';
+type MaterialAIEngine = DesignImageEngine;
 type BindingAssetType = 'character' | 'scene' | 'prop';
 
 type MaterialAIGenerationPayload = {
@@ -69,6 +93,39 @@ type ProcessModalConfig = {
   selectedMaterialId: string;
   workflow: 'upscale_hd' | 'remove_watermark';
 };
+
+const MATERIAL_IMAGE_STYLE_PRESETS = [
+  { id: 'anime', label: '动画', suffix: IMAGE_QUALITY_SUFFIX.anime },
+  { id: 'realistic', label: '写实', suffix: IMAGE_QUALITY_SUFFIX.realistic },
+  { id: 'watercolor', label: '水彩', suffix: IMAGE_QUALITY_SUFFIX.watercolor },
+  { id: 'render3d', label: '3D渲染', suffix: IMAGE_QUALITY_SUFFIX.render3d },
+  { id: 'highQuality', label: '高质量', suffix: IMAGE_QUALITY_SUFFIX.highQuality },
+] as const;
+
+const materialAIPrefs = {
+  get(key: string, fallback: string) {
+    try { return localStorage.getItem(key) || fallback; } catch { return fallback; }
+  },
+  set(key: string, value: string) {
+    try { localStorage.setItem(key, value); } catch { /* ignore unavailable storage */ }
+  },
+};
+
+function materialPromptStorageKey(config: MaterialAIModalConfig): string {
+  return `material_ai_prompt:${config.type}:${config.tagName}`;
+}
+
+function buildMaterialRefinePrompt(
+  type: BindingAssetType,
+  name: string,
+  currentPrompt: string,
+): { system: string; user: string } {
+  const typeLabel = type === 'character' ? '角色' : type === 'scene' ? '场景' : '道具';
+  return {
+    system: `你是一位专业的${typeLabel}视觉设计师。请把用户提供的内容润色为适合 AI 绘画的中文提示词，补充外观、材质、色彩、构图、光影与氛围，保留原意，只输出提示词。`,
+    user: `${typeLabel}名称：${name}\n当前提示词：${currentPrompt}`,
+  };
+}
 
 type ThreeViewModalConfig = {
   tagName: string;
@@ -1857,34 +1914,113 @@ const MaterialAIModal: React.FC<{
     onClose: () => void;
     onSubmit: (payload: MaterialAIGenerationPayload) => void;
 }> = ({ config, onClose, onSubmit }) => {
-    const [engine, setEngine] = useState<MaterialAIEngine>('nanobanana');
-    const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash-image');  // ✅ 默认使用Gemini 2.5 Flash图像模型
-    const [prompt, setPrompt] = useState(config.defaultPrompt);
-    const [aspectRatio, setAspectRatio] = useState('1:1');
-    const [resolution, setResolution] = useState<'1K' | '2K' | '4K'>('1K');
+    const modelOptions = useScriptModelOptions();
+    const savedEngine = materialAIPrefs.get('design_ai_engine', 'nanobanana') as MaterialAIEngine;
+    const savedGeminiModel = materialAIPrefs.get('design_ai_gemini_model', 'gemini-2.5-flash-image');
+    const [engine, setEngine] = useState<MaterialAIEngine>(savedEngine);
+    const [geminiModel, setGeminiModel] = useState(savedGeminiModel);
+    const [prompt, setPrompt] = useState(() => (
+        materialAIPrefs.get(materialPromptStorageKey(config), config.defaultPrompt)
+    ));
+    const [aspectRatio, setAspectRatio] = useState(
+        materialAIPrefs.get('design_ai_aspect_ratio', '1:1'),
+    );
+    const [resolution, setResolution] = useState<DesignImageResolution>(() => (
+        normalizeDesignImageResolution(
+            findDesignImageModel(savedEngine, savedGeminiModel),
+            materialAIPrefs.get('design_ai_resolution', '1K'),
+        )
+    ));
     const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
     const [sequential, setSequential] = useState<'disabled' | 'auto'>('disabled');
     const [count, setCount] = useState(1);
+    const [activeStyle, setActiveStyle] = useState(
+        materialAIPrefs.get('design_ai_style', ''),
+    );
     const [standardTurnaround, setStandardTurnaround] = useState(
         supportsStandardTurnaround(config.type),
     );
+    const [isRefining, setIsRefining] = useState(false);
+    const [refineModel, setRefineModel] = useState(
+        materialAIPrefs.get('design_ai_refine_model', AiModel.DeepseekChat) as AiModel,
+    );
 
-    const maxRefs = engine === 'nanobanana' ? 6 : 10;
+    const generationModel = useMemo(
+        () => findDesignImageModel(engine, geminiModel),
+        [engine, geminiModel],
+    );
+    const refineModelOptions = useMemo(
+        () => [AiModel.DeepseekChat, AiModel.Gemini].map(model => getScriptModelOption(model, modelOptions)),
+        [modelOptions],
+    );
+    const maxRefs = generationModel.maxReferences;
+    const imageToImageEnabled = canUseDesignImageReferences(
+        generationModel,
+        sequential === 'auto',
+    );
+    const generatedImageCount = imageToImageEnabled ? count : 1;
+    const finalAspectRatio = standardTurnaroundAspectRatio(
+        config.type,
+        aspectRatio,
+        standardTurnaround,
+    );
+    const imageCreditParams = useMemo(() => designImageCreditParams({
+        imageCount: generatedImageCount,
+        model: generationModel.id,
+        resolution,
+        aspectRatio: finalAspectRatio,
+    }), [finalAspectRatio, generatedImageCount, generationModel.id, resolution]);
 
     useEffect(() => {
-        setPrompt(config.defaultPrompt);
+        setPrompt(materialAIPrefs.get(materialPromptStorageKey(config), config.defaultPrompt));
         setSelectedRefs(new Set());
+        setSequential('disabled');
+        setCount(1);
         setStandardTurnaround(supportsStandardTurnaround(config.type));
     }, [config]);
 
     useEffect(() => {
-        if (engine === 'nanobanana') {
+        setResolution(current => normalizeDesignImageResolution(generationModel, current));
+        if (!generationModel.supportsImageToImageBatch) {
             setSequential('disabled');
             setCount(1);
+            setSelectedRefs(new Set());
         }
-    }, [engine]);
+        setSelectedRefs(current => {
+            if (current.size <= generationModel.maxReferences) return current;
+            return new Set(Array.from(current).slice(0, generationModel.maxReferences));
+        });
+    }, [generationModel]);
+
+    useEffect(() => {
+        setCount(current => Math.min(current, maxDesignImageOutputCount(selectedRefs.size)));
+    }, [selectedRefs.size]);
+
+    const saveCurrentPreferences = () => {
+        materialAIPrefs.set('design_ai_engine', engine);
+        materialAIPrefs.set('design_ai_gemini_model', geminiModel);
+        materialAIPrefs.set('design_ai_style', activeStyle);
+        materialAIPrefs.set('design_ai_aspect_ratio', aspectRatio);
+        materialAIPrefs.set('design_ai_resolution', resolution);
+        materialAIPrefs.set('design_ai_refine_model', refineModel);
+        materialAIPrefs.set(materialPromptStorageKey(config), prompt.trim());
+    };
+
+    const handleClose = () => {
+        saveCurrentPreferences();
+        onClose();
+    };
+
+    const selectGenerationModel = (modelId: string) => {
+        const nextModel = DESIGN_IMAGE_MODEL_OPTIONS.find(option => option.id === modelId);
+        if (!nextModel) return;
+        setEngine(nextModel.engine);
+        setGeminiModel(nextModel.geminiModel);
+        setResolution(current => normalizeDesignImageResolution(nextModel, current));
+    };
 
     const toggleSelection = (id: string) => {
+        if (!imageToImageEnabled) return;
         setSelectedRefs(prev => {
             const next = new Set(prev);
             if (next.has(id)) {
@@ -1892,19 +2028,82 @@ const MaterialAIModal: React.FC<{
                 return next;
             }
             if (next.size >= maxRefs) {
-                alert(`参考图最多选择 ${maxRefs} 张`);
-                return next;
+                crmMessage.warning(`参考图最多选择 ${maxRefs} 张`);
+                return prev;
+            }
+            if (next.size + 1 + count > DESIGN_IMAGE_BATCH_LIMIT) {
+                crmMessage.warning(`参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张`);
+                return prev;
             }
             next.add(id);
             return next;
         });
     };
 
-    const handleSubmit = () => {
-        if (!prompt.trim()) {
-            alert('请输入提示词');
+    const toggleImageToImage = (enabled: boolean) => {
+        if (!generationModel.supportsImageToImageBatch) return;
+        setSequential(enabled ? 'auto' : 'disabled');
+        if (!enabled) {
+            setSelectedRefs(new Set());
+            setCount(1);
+        }
+    };
+
+    const updateGenerationCount = (rawValue: string) => {
+        const requested = Number(rawValue);
+        const nextCount = Number.isFinite(requested) ? Math.max(1, Math.floor(requested)) : 1;
+        const allowed = maxDesignImageOutputCount(selectedRefs.size);
+        if (nextCount > allowed) {
+            crmMessage.warning(`参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张，当前最多可生成 ${allowed} 张`);
+            setCount(allowed);
             return;
         }
+        setCount(nextCount);
+    };
+
+    const appendStyle = (styleId: string, suffix: string) => {
+        if (activeStyle === styleId) {
+            setPrompt(current => current.replace(suffix, '').trim());
+            setActiveStyle('');
+            return;
+        }
+        const previous = MATERIAL_IMAGE_STYLE_PRESETS.find(style => style.id === activeStyle);
+        setPrompt(current => `${previous ? current.replace(previous.suffix, '').trim() : current.trim()}${suffix}`);
+        setActiveStyle(styleId);
+    };
+
+    const handleRefine = async () => {
+        setIsRefining(true);
+        try {
+            const refinePrompt = buildMaterialRefinePrompt(config.type, config.tagName, prompt);
+            const result = await callAI(refineModel, refinePrompt);
+            if (typeof result === 'string' && result.trim()) {
+                setPrompt(result.trim());
+                materialAIPrefs.set(materialPromptStorageKey(config), result.trim());
+                materialAIPrefs.set('design_ai_refine_model', refineModel);
+            }
+        } catch (error) {
+            console.error('素材提示词 AI 润色失败:', error);
+            crmMessage.error('AI 润色失败，请重试');
+        } finally {
+            setIsRefining(false);
+        }
+    };
+
+    const handleSubmit = () => {
+        if (!prompt.trim()) {
+            crmMessage.error('请输入提示词');
+            return;
+        }
+        if (imageToImageEnabled && selectedRefs.size === 0) {
+            crmMessage.warning('启用图生图后，请至少选择 1 张参考图');
+            return;
+        }
+        if (selectedRefs.size + generatedImageCount > DESIGN_IMAGE_BATCH_LIMIT) {
+            crmMessage.warning(`参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张`);
+            return;
+        }
+        saveCurrentPreferences();
         const references = config.materials
             .filter(m => selectedRefs.has(m.id))
             .map(m => m.url);
@@ -1912,194 +2111,242 @@ const MaterialAIModal: React.FC<{
             tagName: config.tagName,
             engine,
             prompt: withStandardTurnaround(prompt, config.type, standardTurnaround),
-            references,
+            references: imageToImageEnabled ? references : [],
             geminiModel,
-            aspectRatio: standardTurnaroundAspectRatio(config.type, aspectRatio, standardTurnaround),
+            aspectRatio: finalAspectRatio,
             resolution,
-            sequential,
-            count
+            sequential: imageToImageEnabled ? 'auto' : 'disabled',
+            count: generatedImageCount,
         });
     };
 
     return (
-        <div className="fixed inset-0 bg-n900/50 backdrop-blur-sm flex items-center justify-center z-[120]" onClick={onClose}>
-            <div className="w-full max-w-4xl bg-n0 border border-n40 rounded-md shadow-bottom p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center overflow-hidden bg-n900/50 p-3 backdrop-blur-sm sm:p-4" onClick={handleClose}>
+            <div className="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-bottom sm:max-h-[calc(100vh-2rem)]" onClick={(e) => e.stopPropagation()}>
+                <div className="flex shrink-0 items-center justify-between px-6 pb-4 pt-6">
                     <div>
                         <h3 className="text-lg font-bold text-n800">AI 生成素材 - {config.tagName}</h3>
-                        <p className="text-xs text-n300 mt-1">选择模型与参考图，自定义提示词快速生成角色/场景/道具素材。</p>
+                        <p className="mt-1 text-xs text-n300">基于剧本内容智能生成，支持风格预设和参考图。提示词会自动保存。</p>
                     </div>
-                    <button onClick={onClose} className="text-n300 hover:text-n800">
+                    <button onClick={handleClose} className="text-n300 hover:text-n800">
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="col-span-1 space-y-3 border border-n40 rounded-md p-4">
-                        <span className="text-[11px] font-bold text-n100 uppercase">引擎选择</span>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => setEngine('nanobanana')}
-                                className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'nanobanana' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300 hover:text-n800 hover:border-n40'}`}
-                            >
-                                化神进阶
-                            </button>
-                            <button
-                                onClick={() => setEngine('doubao')}
-                                className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'doubao' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300 hover:text-n800 hover:border-n40'}`}
-                            >
-                                筑基境界
-                            </button>
+                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-5">
+                    <section>
+                        <div className="mb-2 flex items-center justify-between text-[11px] text-n100">
+                            <span className="font-bold uppercase">
+                                生成图 / 参考图 (最多 {maxRefs})
+                                {!imageToImageEnabled && <span className="ml-2 font-normal normal-case">启用图生图后可选择</span>}
+                            </span>
+                            <span className={selectedRefs.size > 0 ? 'font-semibold text-success' : ''}>{selectedRefs.size}/{maxRefs}</span>
                         </div>
-                        {engine === 'nanobanana' && (
-                            <div className="space-y-2">
-                                <span className="text-[11px] font-bold text-n100 uppercase">图像模型</span>
-                                <div className="flex flex-col gap-2">
-                                    {[
-                                        { id: 'gemini-2.5-flash-image', label: '化神1阶（快速）', desc: '快速生成，效率优先' },
-                                        { id: 'gemini-3-pro-image-preview', label: '化神2阶（高质量）', desc: '高质量生成，效果优先' }
-                                    ].map(model => (
-                                        <label key={model.id} className={`flex flex-col gap-1 text-xs p-2 rounded border cursor-pointer ${geminiModel === model.id ? 'bg-primary-light border-primary text-primary' : 'border-n40 text-n300 hover:border-n40'}`}>
-                                            <div className="flex items-center gap-2">
-                                            <input
-                                                type="radio"
-                                                name="geminiModel"
-                                                value={model.id}
-                                                checked={geminiModel === model.id}
-                                                onChange={() => setGeminiModel(model.id)}
+                        {config.materials.length === 0 ? (
+                            <div className="rounded-md border border-dashed border-n40 py-6 text-center text-xs text-n100">
+                                暂无素材，可先上传或生成后再选作参考。
+                            </div>
+                        ) : (
+                            <div className="grid max-h-44 grid-cols-4 gap-2 overflow-y-auto pr-1 sm:grid-cols-6 lg:grid-cols-8">
+                                {config.materials.map(material => {
+                                    const active = selectedRefs.has(material.id);
+                                    return (
+                                        <button
+                                            key={material.id}
+                                            type="button"
+                                            disabled={!imageToImageEnabled}
+                                            onClick={() => toggleSelection(material.id)}
+                                            title={!imageToImageEnabled ? '请先启用图生图' : (active ? '取消参考图' : '设为参考图')}
+                                            className={`relative aspect-square overflow-hidden rounded-lg border transition-colors ${
+                                                active
+                                                    ? 'border-success ring-2 ring-success/40'
+                                                    : imageToImageEnabled
+                                                        ? 'border-n40 hover:border-primary'
+                                                        : 'cursor-not-allowed border-n40 opacity-55'
+                                            }`}
+                                        >
+                                            <img
+                                                src={material.thumbnail || material.url}
+                                                alt={material.name || config.tagName}
+                                                loading="lazy"
+                                                className="h-full w-full object-cover"
                                             />
-                                                <span className="font-semibold">{model.label}</span>
-                                            </div>
-                                            {model.desc && (
-                                                <span className="text-[10px] text-n100 ml-5">{model.desc}</span>
+                                            {active && (
+                                                <span className="absolute inset-0 flex items-center justify-center bg-success/25">
+                                                    <Check className="h-5 w-5 text-white drop-shadow" />
+                                                </span>
                                             )}
-                                        </label>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </section>
+
+                    <section>
+                        <div className="mb-1.5 flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase text-n100">提示词</span>
+                            <div className="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={handleRefine}
+                                    disabled={isRefining}
+                                    className="flex h-8 items-center gap-1.5 rounded-l-md border border-primary bg-primary-light px-3 text-xs font-medium text-primary transition-all hover:bg-primary-light disabled:opacity-50"
+                                >
+                                    {isRefining ? <Loader size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                                    AI 润色
+                                </button>
+                                <label className="relative -ml-px">
+                                    <span className="sr-only">选择润色模型</span>
+                                    <select
+                                        value={refineModel}
+                                        onChange={event => setRefineModel(event.target.value as AiModel)}
+                                        className="h-8 min-w-[210px] appearance-none rounded-r-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
+                                    >
+                                        {refineModelOptions.map(option => (
+                                            <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
+                                </label>
+                            </div>
+                        </div>
+                        <textarea
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            rows={5}
+                            className="min-h-[132px] w-full resize-y rounded-md border border-n40 bg-n0 p-3 text-sm text-n800 focus:border-primary focus:outline-none"
+                            placeholder="描述你想要生成的内容..."
+                        />
+                    </section>
+
+                    <section className="border-y border-n40 py-3">
+                        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+                            <div className="min-w-0">
+                                <span className="mb-1.5 block text-[11px] font-bold uppercase text-n100">风格</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {MATERIAL_IMAGE_STYLE_PRESETS.map(style => (
+                                        <button
+                                            key={style.id}
+                                            type="button"
+                                            onClick={() => appendStyle(style.id, style.suffix)}
+                                            className={`h-8 rounded-md border px-3 text-xs transition-colors ${activeStyle === style.id ? 'border-primary bg-primary text-white' : 'border-n40 bg-n0 text-n300 hover:border-primary hover:text-n800'}`}
+                                        >
+                                            {style.label}
+                                        </button>
                                     ))}
                                 </div>
                             </div>
-                        )}
 
-                        <div className="space-y-2">
-                            <span className="text-[11px] font-bold text-n100 uppercase">输出规格</span>
-                            <div className="grid grid-cols-2 gap-2">
-                                {['1:1', '3:4', '4:3', '9:16', '16:9'].map(ratio => (
-                                    <button
-                                        key={ratio}
-                                        onClick={() => setAspectRatio(ratio)}
-                                        className={`py-1.5 rounded text-[11px] border ${aspectRatio === ratio ? 'bg-primary text-white font-semibold border-primary' : 'border-n40 text-n300 hover:text-n800 hover:border-n40'}`}
+                            <div className="flex flex-wrap items-end gap-2 xl:justify-end">
+                                <label className="relative min-w-[350px]">
+                                    <span className="mb-1.5 block text-[10px] font-medium text-n300">生成模型</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="inline-flex h-9 min-w-[76px] items-center justify-center whitespace-nowrap rounded-md border border-n40 bg-n20 px-2 text-[10px] font-medium text-n500">
+                                            {generationModel.usageLabel}
+                                        </span>
+                                        <span className="relative min-w-0 flex-1">
+                                            <select
+                                                value={generationModel.id}
+                                                onChange={event => selectGenerationModel(event.target.value)}
+                                                className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
+                                            >
+                                                {DESIGN_IMAGE_MODEL_OPTIONS.map(option => (
+                                                    <option key={option.id} value={option.id}>{option.label} · {option.runtime}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />
+                                        </span>
+                                    </div>
+                                </label>
+
+                                <label className="relative w-[100px]">
+                                    <span className="mb-1.5 block text-[10px] font-medium text-n300">比例</span>
+                                    <select
+                                        value={aspectRatio}
+                                        onChange={event => setAspectRatio(event.target.value)}
+                                        className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-7 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
                                     >
-                                        {ratio}
-                                    </button>
-                                ))}
+                                        {['1:1', '3:4', '4:3', '9:16', '16:9'].map(ratio => <option key={ratio} value={ratio}>{ratio}</option>)}
+                                    </select>
+                                    <ChevronDown className="pointer-events-none absolute bottom-2.5 right-2 h-4 w-4 text-n300" />
+                                </label>
+
+                                <label className="relative w-[90px]">
+                                    <span className="mb-1.5 block text-[10px] font-medium text-n300">尺寸</span>
+                                    <select
+                                        value={resolution}
+                                        onChange={event => setResolution(event.target.value as DesignImageResolution)}
+                                        className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-7 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
+                                    >
+                                        {generationModel.resolutions.map(size => <option key={size} value={size}>{size}</option>)}
+                                    </select>
+                                    <ChevronDown className="pointer-events-none absolute bottom-2.5 right-2 h-4 w-4 text-n300" />
+                                </label>
                             </div>
-                            <select
-                                value={resolution}
-                                onChange={(e) => setResolution(e.target.value as '1K' | '2K' | '4K')}
-                                className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                            >
-                                <option value="1K">1K 输出</option>
-                                <option value="2K">2K 输出</option>
-                                <option value="4K">4K 输出</option>
-                            </select>
                         </div>
 
-                        {supportsStandardTurnaround(config.type) && (
-                            <label className="flex items-center gap-2 text-xs text-n700">
-                                <input
-                                    type="checkbox"
-                                    checked={standardTurnaround}
-                                    onChange={(e) => setStandardTurnaround(e.target.checked)}
-                                    className="accent-indigo-500"
-                                />
-                                {standardTurnaroundLabel(config.type)}
-                            </label>
-                        )}
-
-                        {engine === 'doubao' && (
-                            <div className="space-y-2">
-                                <label className="flex items-center gap-2 text-xs text-n700">
-                                    <input
-                                        type="checkbox"
-                                        checked={sequential === 'auto'}
-                                        onChange={(e) => setSequential(e.target.checked ? 'auto' : 'disabled')}
-                                    />
-                                    生成关联组图
-                                </label>
-                                {sequential === 'auto' && (
-                                    <div className="flex items-center gap-2 text-xs text-n700">
-                                        <span>张数</span>
+                        <div className="mt-3 grid min-h-[44px] gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                            <div>
+                                {supportsStandardTurnaround(config.type) && (
+                                    <label className="inline-flex items-center gap-2 text-xs text-n700">
                                         <input
-                                            type="number"
-                                            min={1}
-                                            max={5}
-                                            value={count}
-                                            onChange={(e) => setCount(Math.min(5, Math.max(1, Number(e.target.value))))}
-                                            className="w-16 bg-n0 border border-n40 rounded px-2 py-1 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                            type="checkbox"
+                                            checked={standardTurnaround}
+                                            onChange={(e) => setStandardTurnaround(e.target.checked)}
+                                            className="accent-primary"
                                         />
-                                    </div>
+                                        {standardTurnaroundLabel(config.type)}
+                                    </label>
                                 )}
                             </div>
-                        )}
-                    </div>
 
-                    <div className="col-span-2 space-y-4">
-                        <div>
-                            <span className="text-[11px] font-bold text-n100 uppercase block mb-1">提示词</span>
-                            <textarea
-                                value={prompt}
-                                onChange={(e) => setPrompt(e.target.value)}
-                                rows={5}
-                                className="w-full bg-n0 border border-n40 rounded-md text-sm text-n800 p-3 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none"
-                                placeholder={selectedRefs.size > 0 ? "描述你想要的变化，例如：换一个姿势、改变背景、添加道具等。AI会参考你选择的图片风格。" : "描述你想要生成的内容"}
-                            />
-                            {selectedRefs.size > 0 && (
-                                <div className="mt-2 flex items-start gap-2 p-2 bg-primary-light border border-primary/30 rounded-lg">
-                                    <div className="text-primary mt-0.5">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                    </div>
-                                    <div className="flex-1 text-xs text-primary leading-relaxed">
-                                        <strong>💡 提示：</strong>你已选择 {selectedRefs.size} 张参考图，AI会严格遵循参考图的画风、构图和角色设计。建议在提示词中描述你想要的<strong>改变或变化</strong>，而不是重复描述参考图中已有的元素。
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div>
-                            <div className="flex items-center justify-between text-[11px] text-n100 mb-2">
-                                <span className="font-bold uppercase">参考图 (可多选，最多 {maxRefs} 张)</span>
-                                <span className={selectedRefs.size > 0 ? "text-success font-semibold" : ""}>{selectedRefs.size}/{maxRefs}</span>
+                            <div className="flex min-w-[390px] items-center justify-end gap-2">
+                                <label className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs ${
+                                    generationModel.supportsImageToImageBatch
+                                        ? 'border-n40 text-n700'
+                                        : 'cursor-not-allowed border-n40 bg-n20 text-n100'
+                                }`}>
+                                    <input
+                                        type="checkbox"
+                                        checked={imageToImageEnabled}
+                                        disabled={!generationModel.supportsImageToImageBatch}
+                                        onChange={event => toggleImageToImage(event.target.checked)}
+                                        className="accent-primary"
+                                    />
+                                    图生图
+                                </label>
+                                <label className={`inline-flex h-9 items-center gap-1 text-xs text-n700 ${imageToImageEnabled ? '' : 'invisible pointer-events-none'}`}>
+                                    <span>生成张数</span>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={maxDesignImageOutputCount(selectedRefs.size)}
+                                        value={count}
+                                        onChange={event => updateGenerationCount(event.target.value)}
+                                        className="h-9 w-16 rounded-md border border-n40 bg-n0 px-2 text-xs"
+                                    />
+                                </label>
+                                <span className="w-[116px] whitespace-nowrap text-[10px] text-n100">
+                                    {generationModel.supportsImageToImageBatch
+                                        ? '参考图 + 生成图 ≤ 15'
+                                        : '当前模型不支持图生图'}
+                                </span>
                             </div>
-                            {config.materials.length === 0 ? (
-                                <div className="border border-dashed border-n40 rounded-md text-center py-6 text-xs text-n100">
-                                    暂无素材，可先上传或生成后再选作参考。
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-4 gap-2 max-h-60 overflow-y-auto pr-1">
-                                    {config.materials.map(material => {
-                                        const active = selectedRefs.has(material.id);
-                                        return (
-                                            <button
-                                                key={material.id}
-                                                onClick={() => toggleSelection(material.id)}
-                                                className={`relative aspect-square rounded-lg overflow-hidden border ${active ? 'border-success ring-2 ring-success/40' : 'border-n40'}`}
-                                                type="button"
-                                            >
-                                                <img src={material.thumbnail || material.url} loading="lazy" className="w-full h-full object-cover" />
-                                                {active && <div className="absolute inset-0 bg-success/30"></div>}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            )}
                         </div>
-                    </div>
+                    </section>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
-                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
-                    <button onClick={handleSubmit} className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg shadow-indigo-900/30 hover:shadow-indigo-900/50">开始生成</button>
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-n40 bg-n0 px-6 py-4">
+                    <InlineCreditEstimate
+                        featureKey={DESIGN_CREDIT_FEATURES.imageGeneration}
+                        params={imageCreditParams}
+                        fallbackCost={generatedImageCount * DESIGN_CREDIT_DEFAULTS.imageGenerationPerImage}
+                    />
+                    <div className="flex items-center gap-3">
+                        <button onClick={handleClose} className="rounded-lg border border-n40 px-4 py-2 text-xs text-n700 hover:bg-n20">取消</button>
+                        <button onClick={handleSubmit} className="rounded-lg bg-primary px-5 py-2 text-xs font-bold text-white shadow-lg hover:bg-primary-hover">开始生成</button>
+                    </div>
                 </div>
             </div>
         </div>
