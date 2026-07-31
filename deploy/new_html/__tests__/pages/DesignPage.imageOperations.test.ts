@@ -65,4 +65,11 @@ describe('DesignPage image operation modals', () => {
     expect(source).toContain('[AiModel.DeepseekChat, AiModel.Gemini].map');
     expect(source).toContain('formatScriptModelSelectLabel(option)');
   });
+
+  it('uses public image model labels and billing tiers without exposing runtimes', () => {
+    expect(source).toContain('generationModel.hint');
+    expect(source).toContain('<option key={option.id} value={option.id}>{option.label}</option>');
+    expect(source).toContain('model: generationModel.billingModel');
+    expect(source).not.toContain('{option.label} · {option.runtime}');
+  });
 });

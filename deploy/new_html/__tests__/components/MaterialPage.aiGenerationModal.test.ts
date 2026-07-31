@@ -14,6 +14,9 @@ describe('MaterialPage AI generation modal', () => {
     expect(source).toContain("generationModel.resolutions.map");
     expect(source).toContain('图生图');
     expect(source).toContain('InlineCreditEstimate');
+    expect(source).toContain('generationModel.hint');
+    expect(source).toContain('<option key={option.id} value={option.id}>{option.label}</option>');
+    expect(source).not.toContain('{option.label} · {option.runtime}');
   });
 
   it('keeps the design modal sizing and removes the legacy engine sidebar', () => {
@@ -28,5 +31,9 @@ describe('MaterialPage AI generation modal', () => {
     expect(source).toContain("generateGeminiImageVariant({");
     expect(source).toContain("generateDoubaoImages({");
     expect(source).toContain("references: imageToImageEnabled ? references : []");
+    expect(source).toContain('assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration');
+    expect(source).toContain("taskId: newDesignCreditUsageId('material-image')");
+    expect(source).toContain('model: generationModel.billingModel');
+    expect(source).toContain("if (!results.length) throw new Error('未返回图片，本次不扣积分')");
   });
 });

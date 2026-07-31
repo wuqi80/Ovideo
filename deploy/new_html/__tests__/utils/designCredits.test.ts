@@ -15,7 +15,7 @@ describe('designCredits', () => {
       upscaleHd: 'design_upscale_hd',
     });
     expect(DESIGN_CREDIT_DEFAULTS).toEqual({
-      imageGenerationPerImage: 10,
+      imageGenerationPerImage: 40,
       angleAdjustment: 5,
       upscaleHd: 5,
     });

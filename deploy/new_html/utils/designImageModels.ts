@@ -4,7 +4,8 @@ export type DesignImageResolution = '1K' | '2K' | '4K';
 export interface DesignImageModelOption {
   id: string;
   label: string;
-  usageLabel: string;
+  hint: string;
+  billingModel: string;
   runtime: string;
   engine: DesignImageEngine;
   geminiModel: string;
@@ -18,8 +19,9 @@ export const DESIGN_IMAGE_BATCH_LIMIT = 15;
 export const DESIGN_IMAGE_MODEL_OPTIONS: readonly DesignImageModelOption[] = [
   {
     id: 'gemini-2.5-flash-image',
-    label: '化神1阶',
-    usageLabel: '快速生成',
+    label: '一阶 · 快速生图模型',
+    hint: '速度优先',
+    billingModel: 'image_tier_1',
     runtime: 'Gemini 2.5 Flash Image',
     engine: 'nanobanana',
     geminiModel: 'gemini-2.5-flash-image',
@@ -29,8 +31,9 @@ export const DESIGN_IMAGE_MODEL_OPTIONS: readonly DesignImageModelOption[] = [
   },
   {
     id: 'gemini-3-pro-image-preview',
-    label: '化神2阶',
-    usageLabel: '高质量生成',
+    label: '二阶 · 高质量生图模型',
+    hint: '质量优先',
+    billingModel: 'image_tier_2',
     runtime: 'Gemini 3 Pro Image',
     engine: 'nanobanana',
     geminiModel: 'gemini-3-pro-image-preview',
@@ -40,8 +43,9 @@ export const DESIGN_IMAGE_MODEL_OPTIONS: readonly DesignImageModelOption[] = [
   },
   {
     id: 'doubao-seedream-5-0-lite-260128',
-    label: '筑基',
-    usageLabel: '参考图生成',
+    label: '三阶 · 参考图生图模型',
+    hint: '参考优先',
+    billingModel: 'image_tier_3',
     runtime: 'Doubao-Seedream-5.0-lite',
     engine: 'doubao',
     geminiModel: 'gemini-2.5-flash-image',

@@ -43,7 +43,9 @@ import {
   DESIGN_CREDIT_DEFAULTS,
   DESIGN_CREDIT_FEATURES,
   designImageCreditParams,
+  newDesignCreditUsageId,
 } from '../utils/designCredits';
+import { assertEnoughCredits, consumeCredits } from '../services/creditService';
 
 type MaterialAIEngine = DesignImageEngine;
 type BindingAssetType = 'character' | 'scene' | 'prop';
@@ -222,6 +224,7 @@ function buildCameraPrompt(payload: CameraGenerationPayload, shot: StoryboardIte
 }
 
 interface MaterialPageProps {
+  projectId?: string | null;
   files: ProjectFile[];
   selectedFileId: string | null;
   materialLibrary: MaterialLibrary;
@@ -245,6 +248,7 @@ interface MaterialPageProps {
 }
 
 export const MaterialPage: React.FC<MaterialPageProps> = ({
+  projectId,
   files,
   selectedFileId,
   materialLibrary,
@@ -508,8 +512,27 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
 
   const handleMaterialAIGeneration = async (payload: MaterialAIGenerationPayload) => {
     if (!selectedShot) return;
+    const generationModel = findDesignImageModel(payload.engine, payload.geminiModel);
+    const requestedImageCount = payload.engine === 'doubao' && payload.sequential === 'auto'
+      ? Math.max(1, payload.count)
+      : 1;
+    const billingParams = designImageCreditParams({
+      imageCount: requestedImageCount,
+      model: generationModel.billingModel,
+      resolution: payload.resolution,
+      aspectRatio: payload.aspectRatio,
+    });
+    try {
+      await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, billingParams);
+    } catch (error: any) {
+      crmMessage.error(error?.message || '积分校验失败');
+      return;
+    }
+
     setAiModalConfig(null);
     setAIGeneratingTag(payload.tagName);
+    let generatedCount = 0;
+    let savedToLibrary = false;
     try {
         const references = await prepareReferenceData(payload.references);
         const targetAssetId = assetNameToId?.[payload.tagName];
@@ -532,6 +555,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         } else {
             results = await generateDoubaoImages({
                 prompt: payload.prompt,
+                model: generationModel.id,
                 references,
                 size: recommendDoubaoImageSize(payload.aspectRatio, payload.resolution),
                 sequential: payload.sequential,
@@ -540,7 +564,8 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             });
         }
 
-        if (!results.length) throw new Error('未返回图片');
+        if (!results.length) throw new Error('未返回图片，本次不扣积分');
+        generatedCount = results.length;
         
         const existing = materialLibrary[payload.tagName] || [];
         const newMaterials: Material[] = results.map((r, index) => ({
@@ -556,11 +581,38 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             ...materialLibrary,
             [payload.tagName]: [...existing, ...newMaterials]
         });
+        savedToLibrary = true;
 
         onBindMaterial(selectedShot.id, payload.tagName, newMaterials[0].id);
+        try {
+          const settlement = await consumeCredits({
+            featureKey: DESIGN_CREDIT_FEATURES.imageGeneration,
+            taskId: newDesignCreditUsageId('material-image'),
+            params: designImageCreditParams({
+              imageCount: generatedCount,
+              model: generationModel.billingModel,
+              resolution: payload.resolution,
+              aspectRatio: payload.aspectRatio,
+            }),
+            projectId,
+            metadata: {
+              episode_id: selectedFileId || null,
+              asset_id: targetAssetId || null,
+              tag_name: payload.tagName,
+              engine: payload.engine,
+              source: 'material_workspace',
+            },
+          });
+          crmMessage.success(`生成 ${generatedCount} 张图片，已扣除 ${settlement.charged_credits} 积分`);
+        } catch (error: any) {
+          console.error('Material AI credit settlement failed', error);
+          crmMessage.warning(`图片已生成，但积分结算失败：${error?.message || String(error)}`);
+        }
     } catch (error: any) {
         console.error('Material AI generation failed', error);
-        alert(error?.message || '生成失败，请稍后再试。');
+        crmMessage.error(savedToLibrary
+          ? `图片已保存，但后续处理失败：${error?.message || String(error)}`
+          : (error?.message || '生成失败，本次不扣积分。'));
     } finally {
         setAIGeneratingTag(null);
     }
@@ -1966,10 +2018,10 @@ const MaterialAIModal: React.FC<{
     );
     const imageCreditParams = useMemo(() => designImageCreditParams({
         imageCount: generatedImageCount,
-        model: generationModel.id,
+        model: generationModel.billingModel,
         resolution,
         aspectRatio: finalAspectRatio,
-    }), [finalAspectRatio, generatedImageCount, generationModel.id, resolution]);
+    }), [finalAspectRatio, generatedImageCount, generationModel.billingModel, resolution]);
 
     useEffect(() => {
         setPrompt(materialAIPrefs.get(materialPromptStorageKey(config), config.defaultPrompt));
@@ -2242,8 +2294,8 @@ const MaterialAIModal: React.FC<{
                                 <label className="relative min-w-[350px]">
                                     <span className="mb-1.5 block text-[10px] font-medium text-n300">生成模型</span>
                                     <div className="flex items-center gap-2">
-                                        <span className="inline-flex h-9 min-w-[76px] items-center justify-center whitespace-nowrap rounded-md border border-n40 bg-n20 px-2 text-[10px] font-medium text-n500">
-                                            {generationModel.usageLabel}
+                                        <span className="inline-flex h-9 min-w-[76px] items-center justify-center whitespace-nowrap px-1 text-[11px] font-medium text-n300">
+                                            {generationModel.hint}
                                         </span>
                                         <span className="relative min-w-0 flex-1">
                                             <select
@@ -2252,7 +2304,7 @@ const MaterialAIModal: React.FC<{
                                                 className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
                                             >
                                                 {DESIGN_IMAGE_MODEL_OPTIONS.map(option => (
-                                                    <option key={option.id} value={option.id}>{option.label} · {option.runtime}</option>
+                                                    <option key={option.id} value={option.id}>{option.label}</option>
                                                 ))}
                                             </select>
                                             <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />

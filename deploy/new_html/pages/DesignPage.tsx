@@ -550,7 +550,7 @@ export const DesignPage: React.FC = () => {
     const requestedImageCount = payload.engine === 'doubao' && payload.sequential === 'auto'
       ? Math.max(1, payload.count)
       : 1;
-    const model = payload.engine === 'nanobanana' ? payload.geminiModel : generationModel.id;
+    const model = generationModel.billingModel;
     const estimateParams = designImageCreditParams({
       imageCount: requestedImageCount,
       model,
@@ -740,7 +740,7 @@ export const DesignPage: React.FC = () => {
   }) => {
     const targets = designAssets.filter(a => config.assetIds.includes(a.assetId));
     const generationModel = findDesignImageModel(config.engine, config.geminiModel);
-    const model = generationModel.id;
+    const model = generationModel.billingModel;
     const estimateParams = designImageCreditParams({
       imageCount: targets.length,
       model,
@@ -1307,10 +1307,10 @@ const UnifiedAIModal: React.FC<{
   const finalAspectRatio = standardTurnaroundAspectRatio(asset.assetType, aspectRatio, standardTurnaround);
   const imageCreditParams = useMemo(() => designImageCreditParams({
     imageCount: generatedImageCount,
-    model: generationModel.id,
+    model: generationModel.billingModel,
     resolution,
     aspectRatio: finalAspectRatio,
-  }), [finalAspectRatio, generatedImageCount, generationModel.id, resolution]);
+  }), [finalAspectRatio, generatedImageCount, generationModel.billingModel, resolution]);
 
   useEffect(() => {
     setResolution(current => normalizeDesignImageResolution(generationModel, current));
@@ -1564,8 +1564,8 @@ const UnifiedAIModal: React.FC<{
                 <label className="relative min-w-[350px]">
                   <span className="mb-1.5 block text-[10px] font-medium text-n300">生成模型</span>
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex h-9 min-w-[76px] items-center justify-center whitespace-nowrap rounded-md border border-n40 bg-n20 px-2 text-[10px] font-medium text-n500">
-                      {generationModel.usageLabel}
+                    <span className="inline-flex h-9 min-w-[76px] items-center justify-center whitespace-nowrap px-1 text-[11px] font-medium text-n300">
+                      {generationModel.hint}
                     </span>
                     <span className="relative min-w-0 flex-1">
                       <select
@@ -1574,7 +1574,7 @@ const UnifiedAIModal: React.FC<{
                         className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
                       >
                         {DESIGN_IMAGE_MODEL_OPTIONS.map(option => (
-                          <option key={option.id} value={option.id}>{option.label} · {option.runtime}</option>
+                          <option key={option.id} value={option.id}>{option.label}</option>
                         ))}
                       </select>
                       <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />
@@ -1707,10 +1707,22 @@ const BatchGenerateModal: React.FC<{
   const propCount = assets.filter(a => a.assetType === 'prop' && checked.has(a.assetId)).length;
   const batchCreditParams = useMemo(() => designImageCreditParams({
     imageCount: checked.size,
-    model: batchGenerationModel.id,
+    model: batchGenerationModel.billingModel,
     resolution,
     aspectRatio,
-  }), [aspectRatio, batchGenerationModel.id, checked.size, resolution]);
+  }), [aspectRatio, batchGenerationModel.billingModel, checked.size, resolution]);
+
+  useEffect(() => {
+    setResolution(current => normalizeDesignImageResolution(batchGenerationModel, current));
+  }, [batchGenerationModel]);
+
+  const selectBatchGenerationModel = (modelId: string) => {
+    const nextModel = DESIGN_IMAGE_MODEL_OPTIONS.find(option => option.id === modelId);
+    if (!nextModel) return;
+    setEngine(nextModel.engine);
+    setGeminiModel(nextModel.geminiModel);
+    setResolution(current => normalizeDesignImageResolution(nextModel, current));
+  };
 
   const grouped = useMemo(() => {
     const g: Record<string, AssetItem[]> = { character: [], scene: [], prop: [] };
@@ -1760,22 +1772,25 @@ const BatchGenerateModal: React.FC<{
           </div>
           <div className="space-y-4 border border-n40 rounded-md p-4">
             <span className="text-[11px] font-bold text-n100 uppercase">统一配置</span>
-            <div className="flex gap-2">
-              <button onClick={() => setEngine('nanobanana')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'nanobanana' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300'}`}>化神进阶</button>
-              <button onClick={() => setEngine('doubao')} className={`flex-1 py-2 rounded-lg text-xs font-semibold border ${engine === 'doubao' ? 'bg-primary text-white border-primary' : 'border-n40 text-n300'}`}>筑基境界</button>
-            </div>
-            {engine === 'nanobanana' && (
-              <div className="flex gap-2">{[{ id: 'gemini-2.5-flash-image', label: '化神1阶' }, { id: 'gemini-3-pro-image-preview', label: '化神2阶' }].map(m => (
-                <button key={m.id} onClick={() => setGeminiModel(m.id)} className={`flex-1 py-1.5 rounded text-xs border ${geminiModel === m.id ? 'bg-primary-light border-primary text-primary' : 'border-n40 text-n300'}`}>{m.label}</button>
-              ))}</div>
-            )}
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] text-n100">生成模型</span>
+              <div className="flex items-center gap-2">
+                <span className="min-w-[64px] text-[11px] font-medium text-n300">{batchGenerationModel.hint}</span>
+                <span className="relative min-w-0 flex-1">
+                  <select value={batchGenerationModel.id} onChange={event => selectBatchGenerationModel(event.target.value)} className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary">
+                    {DESIGN_IMAGE_MODEL_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />
+                </span>
+              </div>
+            </label>
             <div>
               <span className="text-[11px] font-bold text-n100 uppercase block mb-1.5">风格</span>
               <div className="flex flex-wrap gap-1.5">{STYLE_PRESETS.map(s => (<button key={s.id} onClick={() => setStyle(style === s.id ? '' : s.id)} className={`text-[11px] px-2.5 py-1 rounded border ${style === s.id ? 'bg-primary text-white border-primary' : 'bg-n0 text-n300 border-n40 hover:text-n800'}`}>{s.label}</button>))}</div>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div><span className="text-[11px] text-n100 block mb-1">比例</span><select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-              <div><span className="text-[11px] text-n100 block mb-1">分辨率</span><select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option></select></div>
+              <div><span className="text-[11px] text-n100 block mb-1">分辨率</span><select value={resolution} onChange={e => setResolution(e.target.value as DesignImageResolution)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{batchGenerationModel.resolutions.map(size => <option key={size} value={size}>{size}</option>)}</select></div>
             </div>
             <div><span className="text-[11px] text-n100 block mb-1">AI 推断模型</span><select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{refineModelOptions.map(option => <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>)}</select></div>
             <label className="flex items-center gap-2 text-xs text-n700 p-3 bg-n30 rounded-lg border border-n40">

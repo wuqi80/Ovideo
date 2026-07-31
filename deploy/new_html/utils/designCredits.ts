@@ -5,7 +5,7 @@ export const DESIGN_CREDIT_FEATURES = {
 } as const;
 
 export const DESIGN_CREDIT_DEFAULTS = {
-  imageGenerationPerImage: 10,
+  imageGenerationPerImage: 40,
   angleAdjustment: 5,
   upscaleHd: 5,
 } as const;

@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from services import credit_service
+
 
 DEPLOY_DIR = Path(__file__).resolve().parents[1]
 
@@ -21,3 +23,46 @@ def test_design_credit_rules_cover_image_angle_and_upscale():
     assert "design_upscale_hd" in sql
     assert '"image_count"' in sql
     assert '"cost_per_unit":10' in sql
+
+
+def test_design_image_credit_tier_migration_mirror_and_manifest():
+    root = DEPLOY_DIR / "db_migration_design_image_credit_tiers.sql"
+    mirror = DEPLOY_DIR / "sql" / "db_migration_design_image_credit_tiers.sql"
+    manifest = (DEPLOY_DIR / "db_build" / "manifest.txt").read_text(encoding="utf-8")
+
+    assert root.read_bytes() == mirror.read_bytes()
+    assert "sql/db_migration_design_image_credit_tiers.sql" in manifest
+
+    sql = root.read_text(encoding="utf-8")
+    assert '"cost_per_unit":40' in sql
+    assert '"value":"image_tier_1","multiplier":1' in sql
+    assert '"value":"image_tier_2","multiplier":2.5' in sql
+    assert '"value":"image_tier_3","multiplier":1.5' in sql
+    assert "失败不扣积分" in sql
+
+
+def test_design_image_credit_tiers_cost_40_to_100_per_image():
+    rule = {
+        "feature_key": "design_image_generation",
+        "base_cost": 0,
+        "min_cost": 40,
+        "max_cost": 1500,
+        "factors": [
+            {"key": "image_count", "type": "linear_add", "cost_per_unit": 40},
+            {
+                "key": "model",
+                "type": "enum",
+                "rules": [
+                    {"value": "image_tier_1", "multiplier": 1},
+                    {"value": "image_tier_2", "multiplier": 2.5},
+                    {"value": "image_tier_3", "multiplier": 1.5},
+                ],
+                "default_multiplier": 1,
+            },
+        ],
+    }
+
+    assert credit_service.compute_cost(rule, {"image_count": 1, "model": "image_tier_1"}) == 40
+    assert credit_service.compute_cost(rule, {"image_count": 1, "model": "image_tier_2"}) == 100
+    assert credit_service.compute_cost(rule, {"image_count": 1, "model": "image_tier_3"}) == 60
+    assert credit_service.compute_cost(rule, {"image_count": 2, "model": "image_tier_1"}) == 80

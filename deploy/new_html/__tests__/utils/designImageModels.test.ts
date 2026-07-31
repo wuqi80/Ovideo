@@ -11,14 +11,19 @@ import {
 describe('design image model capabilities', () => {
   it('maps the three product levels to their runtime models', () => {
     expect(DESIGN_IMAGE_MODEL_OPTIONS.map(option => `${option.label} · ${option.runtime}`)).toEqual([
-      '化神1阶 · Gemini 2.5 Flash Image',
-      '化神2阶 · Gemini 3 Pro Image',
-      '筑基 · Doubao-Seedream-5.0-lite',
+      '一阶 · 快速生图模型 · Gemini 2.5 Flash Image',
+      '二阶 · 高质量生图模型 · Gemini 3 Pro Image',
+      '三阶 · 参考图生图模型 · Doubao-Seedream-5.0-lite',
     ]);
-    expect(DESIGN_IMAGE_MODEL_OPTIONS.map(option => option.usageLabel)).toEqual([
-      '快速生成',
-      '高质量生成',
-      '参考图生成',
+    expect(DESIGN_IMAGE_MODEL_OPTIONS.map(option => option.hint)).toEqual([
+      '速度优先',
+      '质量优先',
+      '参考优先',
+    ]);
+    expect(DESIGN_IMAGE_MODEL_OPTIONS.map(option => option.billingModel)).toEqual([
+      'image_tier_1',
+      'image_tier_2',
+      'image_tier_3',
     ]);
     expect(DESIGN_IMAGE_MODEL_OPTIONS[2].id).toBe('doubao-seedream-5-0-lite-260128');
   });

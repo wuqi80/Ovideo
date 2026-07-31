@@ -563,6 +563,7 @@ export const MaterialsPage: React.FC = () => {
   return (
     <>
       <MaterialPage
+        projectId={projectId}
         files={[pseudoFile]}
         selectedFileId={episodeId}
         materialLibrary={effectiveLibrary}
