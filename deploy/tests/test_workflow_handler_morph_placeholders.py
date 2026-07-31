@@ -103,6 +103,6 @@ def test_placeholder_node_template_is_not_executable(tmp_path):
             workflow_override=workflow,
         )
     except ValueError as exc:
-        assert "不是可执行的 ComfyUI 节点图" in str(exc)
+        assert "不是可执行的处理工作流" in str(exc)
     else:
         raise AssertionError("placeholder workflow should not be executable")

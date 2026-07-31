@@ -41,7 +41,7 @@
         <span class="dot dot-green dot-pulse"></span>
         <span id="sidebar-status-text">系统运行中</span>
       </div>
-      <div class="sidebar-version">v1.2.0 · Agent Pull</div>
+      <div class="sidebar-version">v1.2.0 · Cluster Pull</div>
     </div>
   </nav>
 
@@ -77,17 +77,17 @@
       <div class="page-header">
         <div>
           <h2>集群管理</h2>
-          <p>GPU Agent 注册与健康监控</p>
+          <p>处理集群节点注册与健康监控</p>
         </div>
         <button class="btn btn-primary" onclick="toggleRegisterPanel()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          注册 Agent
+          注册节点
         </button>
       </div>
       <div id="register-panel" class="register-panel hidden">
         <h3>生成注册 Token</h3>
         <div class="flex gap-2" style="margin-bottom:12px">
-          <input id="agent-name" type="text" class="input" placeholder="Agent 名称，如: AutoDL-A100-01" style="max-width:320px">
+          <input id="agent-name" type="text" class="input" placeholder="节点名称，如：处理节点01" style="max-width:320px">
           <button class="btn btn-success btn-sm" onclick="createAgent()">创建</button>
         </div>
         <div id="token-result" class="token-result hidden">
@@ -106,7 +106,7 @@
       <div class="page-header">
         <div>
           <h2>工作流管理</h2>
-          <p>ComfyUI 工作流模板与占位符配置</p>
+          <p>处理工作流模板与占位符配置</p>
         </div>
         <div class="flex gap-2">
           <button class="btn btn-success btn-sm" onclick="importAllWorkflows()">
@@ -194,7 +194,7 @@
             <button class="btn btn-ghost btn-xs" onclick="parseJsonNodes()">解析节点</button>
           </div>
         </div>
-        <textarea id="wf-json" class="json-editor" rows="14" placeholder="粘贴 ComfyUI 工作流 JSON ..."></textarea>
+        <textarea id="wf-json" class="json-editor" rows="14" placeholder="粘贴处理工作流 JSON ..."></textarea>
         <div id="json-status" style="font-size:11px;margin-top:6px"></div>
       </div>
       <div style="width:280px;padding:20px;overflow-y:auto">
@@ -270,7 +270,7 @@
         <label class="input-label">网络模式</label>
         <div class="flex gap-3" style="font-size:13px;margin-top:4px">
           <label class="flex items-center gap-2" style="cursor:pointer"><input type="radio" name="proxy-mode" value="direct" checked style="accent-color:var(--accent)"> 后端直连</label>
-          <label class="flex items-center gap-2" style="cursor:pointer"><input type="radio" name="proxy-mode" value="agent" style="accent-color:var(--accent)"> Agent 代理</label>
+          <label class="flex items-center gap-2" style="cursor:pointer"><input type="radio" name="proxy-mode" value="agent" style="accent-color:var(--accent)"> 节点代理</label>
           <label class="flex items-center gap-2" style="cursor:pointer"><input type="radio" name="proxy-mode" value="custom" style="accent-color:var(--accent)"> 自定义</label>
         </div>
       </div>

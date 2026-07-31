@@ -24,7 +24,7 @@ beforeEach(() => {
   localStorage.setItem('auth_token', 'test-token');
 });
 
-describe('GPU cluster routing', () => {
+describe('processing cluster routing', () => {
   it('uses GPU1 by default even when another node is also online', async () => {
     mockFetch.mockResolvedValueOnce(response({
       success: true,
@@ -37,7 +37,7 @@ describe('GPU cluster routing', () => {
     const routing = await resolveGpuTaskRouting();
 
     expect(routing.preferredAgentId).toBe('agent_gpu1');
-    expect(routing.node?.name).toBe('GPU1');
+    expect(routing.node?.name).toBe('处理节点1');
   });
 
   it('persists a manual GPU2 preference', async () => {

@@ -397,7 +397,7 @@ class WorkflowHandler:
         workflow = self.extract_executable_nodes(workflow, workflow_name)
         executable_nodes = list(workflow.values())
         if not executable_nodes:
-            raise ValueError(f"工作流模板 {workflow_name}.json 不是可执行的 ComfyUI 节点图，请在后台导入完整 workflow JSON")
+            raise ValueError(f"工作流模板 {workflow_name}.json 不是可执行的处理工作流，请在后台导入完整 workflow JSON")
         
         # 🔧 调试：打印接收到的 task_data 中的图片字段
         image_fields_in_data = {k: v for k, v in task_data.items() if 'image' in k.lower()}

@@ -95,7 +95,7 @@ def create_cluster_status_router(
 
     @router.get("/api/cluster/nodes")
     async def list_nodes(username: str = Depends(require_auth_dependency)):
-        """Return local cluster nodes plus online external GPU agents."""
+        """Return local cluster nodes plus online external processing nodes."""
         cluster_manager = get_cluster_manager()
         agent_nodes = await list_agent_nodes(include_offline=True)
         online_agent_nodes = [
@@ -104,9 +104,9 @@ def create_cluster_status_router(
         ]
         if cluster_manager is None:
             message = (
-                f"已检测到 {len(online_agent_nodes)} 个在线 GPU Agent，可由集群节点处理 ComfyUI 任务。"
+                f"已检测到 {len(online_agent_nodes)} 个在线处理节点，可由处理集群执行任务。"
                 if online_agent_nodes
-                else "Agent-Only 模式：当前没有在线 GPU Agent，ComfyUI 任务会等待 Agent 上线。"
+                else "当前没有在线处理节点，集群任务将等待节点上线。"
             )
             return {
                 "success": True,
@@ -173,7 +173,7 @@ def create_cluster_status_router(
         available_agents = sum(
             1 for node in agent_nodes if str(node.get("status") or "").lower() in available_agent_states
         )
-        gpu_agents = {
+        processing_nodes = {
             "status": (
                 "not_configured"
                 if not agent_nodes
@@ -194,7 +194,7 @@ def create_cluster_status_router(
                     and database["status"] == "healthy"
                     and queue_health["status"] not in {"unavailable", "inconsistent", "stalled"}
                     and providers["status"] not in {"unhealthy", "unavailable"}
-                    and gpu_agents["status"] != "unavailable"
+                    and processing_nodes["status"] != "unavailable"
                 )
                 else "degraded"
             ),
@@ -206,7 +206,7 @@ def create_cluster_status_router(
             "release": release,
             "providers": providers,
             "cluster": cluster_block,
-            "gpu_agents": gpu_agents,
+            "processing_nodes": processing_nodes,
             "workers": {
                 "total": total_workers,
                 "active": active_workers,

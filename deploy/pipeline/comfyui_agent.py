@@ -709,10 +709,10 @@ class ComfyUIAgent:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="ComfyUI GPU Agent")
+    parser = argparse.ArgumentParser(description="Processing Cluster Node")
     parser.add_argument("--server", required=True, help="Backend URL")
     parser.add_argument("--token", required=True, help="Agent registration token")
-    parser.add_argument("--ports", required=True, help="ComfyUI ports, comma-separated")
+    parser.add_argument("--ports", required=True, help="Processing service ports, comma-separated")
     args = parser.parse_args()
     ports = [int(p.strip()) for p in args.ports.split(",")]
     logger.info(f"Starting agent -> {args.server}")

@@ -27,6 +27,7 @@
 import * as videoTaskService from './videoTaskService';
 import { taskRegistry } from './taskRegistry';
 import type { SourcePage, TaskKind, GlobalTaskStatus } from '../types';
+import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 
 export type VideoPollStatus = 'queued' | 'running' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
@@ -91,7 +92,7 @@ function buildPollFn(uuid: string): () => Promise<void> {
                 cbs?.onComplete?.({ status });
             } else if (status.status === 'failed' || status.status === 'cancelled') {
                 stopAndClear(uuid);
-                const err = status.error || '任务失败';
+                const err = sanitizeProcessingTerminology(status.error || '任务失败');
                 try { taskRegistry.fail(entry.backendTaskId, err); } catch { /* noop */ }
                 cbs?.onFail?.(err);
             } else if (status.status === 'processing' || status.status === 'queued') {

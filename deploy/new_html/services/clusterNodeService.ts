@@ -1,5 +1,6 @@
 import { apiJson } from './httpClient';
 import { crmMessage } from '../admin/crmUI';
+import { formatProcessingNodeName, sanitizeProcessingTerminology } from '../utils/processingTerminology';
 
 export type ClusterNodeStatus = 'online' | 'busy' | 'healthy' | 'offline' | 'maintenance' | 'unavailable' | 'unknown';
 
@@ -57,13 +58,14 @@ function toNodeRows(nodes: unknown): Array<Record<string, any>> {
 export function normalizeClusterNode(row: Record<string, any>, index = 0): ClusterNodeOption {
   const id = String(row.id ?? row.node_id ?? row.agent_id ?? `node-${index + 1}`);
   const status = normalizeStatus(row.status ?? row.health ?? row.state);
-  const name = String(row.name ?? row.label ?? row.node_name ?? row.agent_id ?? id);
+  const rawName = row.display_name ?? row.name ?? row.label ?? row.node_name ?? row.agent_id ?? id;
+  const name = formatProcessingNodeName(rawName, index);
   return {
     id,
     nodeId: String(row.node_id ?? id),
     agentId: row.agent_id ? String(row.agent_id) : undefined,
     name,
-    routingName: row.routing_name ? String(row.routing_name) : undefined,
+    routingName: String(row.routing_name ?? row.name ?? row.node_name ?? '') || undefined,
     status,
     kind: row.kind ?? row.type,
     host: row.host ?? row.ip,
@@ -151,7 +153,7 @@ export async function fetchClusterNodes(): Promise<{ nodes: ClusterNodeOption[];
   const nodes = toNodeRows(data.nodes).map((row, index) => normalizeClusterNode(row, index));
   return {
     nodes,
-    message: data.message || '',
+    message: sanitizeProcessingTerminology(data.message || ''),
     agentOnlyMode: Boolean(data.agent_only_mode),
   };
 }
@@ -163,7 +165,7 @@ export async function resolveGpuTaskRouting(explicitNodeId?: string): Promise<Gp
   const node = selectGpuTaskNode(result.nodes, requested);
 
   if (!node) {
-    const message = 'GPU 集群当前没有可用节点，请检查节点状态后重试。';
+    const message = '处理集群当前没有可用节点，请检查节点状态后重试。';
     crmMessage.warning(message);
     throw new Error(message);
   }
@@ -173,13 +175,13 @@ export async function resolveGpuTaskRouting(explicitNodeId?: string): Promise<Gp
   }
 
   if (!requestedNode || !hasClusterNodeCapacity(requestedNode)) {
-    crmMessage.info(`GPU 节点「${requested}」当前不可用，任务已自动切换到「${node.name}」。`);
+    crmMessage.info(`处理节点「${formatProcessingNodeName(requested)}」当前不可用，任务已自动切换到「${node.name}」。`);
   }
 
   const active = node.tasks ?? (node.status === 'busy' ? 1 : 0);
   const capacity = node.maxConcurrent ?? 1;
   if (node.status === 'busy' || active >= capacity) {
-    crmMessage.info(`GPU 节点「${node.name}」正在处理任务，本次任务已进入服务端队列等待。`);
+    crmMessage.info(`处理节点「${node.name}」正在处理任务，本次任务已进入服务端队列等待。`);
   }
 
   return {

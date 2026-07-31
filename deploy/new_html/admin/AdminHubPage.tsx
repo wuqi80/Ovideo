@@ -173,7 +173,7 @@ export const AdminHubPage: React.FC = () => {
                         </div>
                         <div>
                             <div className="text-sm font-semibold text-n700">集群仪表盘 (Cluster Admin)</div>
-                            <div className="text-xs text-n100 mt-0.5">ComfyUI / AI API 控制台 · 已内嵌于「系统设置 › 生成集群」</div>
+                            <div className="text-xs text-n100 mt-0.5">处理集群 / AI API 控制台 · 已内嵌于「系统设置 › 生成集群」</div>
                         </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-n100 group-hover:text-n700 group-hover:translate-x-1 transition-all" />

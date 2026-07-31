@@ -44,6 +44,35 @@ class BackloggedTaskQueue(FakeTaskQueue):
         return 1
 
 
+async def test_cluster_nodes_use_public_processing_terminology(monkeypatch):
+    monkeypatch.setattr("routers.cluster_status.task_service.get_queue", lambda: FakeTaskQueue())
+    monkeypatch.setattr(
+        "routers.cluster_status.list_agent_nodes",
+        lambda include_offline=False: _async_value(
+            [{"agent_id": "agent_gpu1", "name": "处理节点1", "routing_name": "GPU1", "status": "online"}]
+        ),
+    )
+    app = FastAPI()
+    app.include_router(
+        create_cluster_status_router(
+            require_auth_dependency=lambda: "tester",
+            get_cluster_manager=lambda: None,
+            get_workers=lambda: [],
+            get_redis_client=lambda: FakeRedis(),
+            get_db_manager=lambda: FakeDatabase(),
+        )
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/cluster/nodes")
+
+    body = response.json()
+    assert body["nodes"][0]["name"] == "处理节点1"
+    assert "处理集群" in body["message"]
+    assert "GPU" not in body["message"]
+    assert "ComfyUI" not in body["message"]
+
+
 async def test_health_includes_database_migrations_and_release(monkeypatch):
     monkeypatch.setattr(
         "routers.cluster_status.read_release_metadata",
@@ -159,7 +188,7 @@ async def test_health_degrades_when_oldest_queued_task_is_stalled(monkeypatch):
     assert response.json()["queue"]["status"] == "stalled"
 
 
-async def test_health_degrades_when_configured_gpu_agents_are_offline(monkeypatch):
+async def test_health_degrades_when_configured_processing_nodes_are_offline(monkeypatch):
     monkeypatch.setattr(
         "routers.cluster_status.read_release_metadata",
         lambda: {"status": "available", "git_sha": "abc123"},
@@ -190,7 +219,7 @@ async def test_health_degrades_when_configured_gpu_agents_are_offline(monkeypatc
         response = await client.get("/health")
 
     assert response.json()["status"] == "degraded"
-    assert response.json()["gpu_agents"] == {
+    assert response.json()["processing_nodes"] == {
         "status": "unavailable",
         "configured": 1,
         "available": 0,

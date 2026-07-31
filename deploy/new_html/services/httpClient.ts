@@ -1,4 +1,5 @@
 import { pickTokenForCurrentRoute } from '../admin/adminAuth';
+import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 
 type HeaderMap = Record<string, string>;
 
@@ -55,6 +56,7 @@ export function handleUnauthorized(apiName: string = 'API', reason: 'response401
 }
 
 export async function handleResponse(response: Response, apiName: string = 'API'): Promise<any> {
+  const publicApiName = sanitizeProcessingTerminology(apiName);
   if (response.status === 401) {
     handleUnauthorized(apiName);
   }
@@ -62,11 +64,11 @@ export async function handleResponse(response: Response, apiName: string = 'API'
   const contentType = response.headers.get('content-type');
   if (!contentType || !contentType.includes('application/json')) {
     const text = await response.text();
-    console.error(`${apiName} 返回非JSON响应 (${response.status}):`, text.substring(0, 200));
+    console.error(`${publicApiName} 返回非JSON响应 (${response.status}):`, sanitizeProcessingTerminology(text.substring(0, 200)));
     if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
-      throw new Error(`${apiName} 返回了HTML页面而非JSON (${response.status})，可能是路由不存在或服务器错误`);
+      throw new Error(`${publicApiName} 返回了HTML页面而非JSON (${response.status})，可能是路由不存在或服务器错误`);
     }
-    throw new Error(`${apiName} 返回了非JSON响应: ${text.substring(0, 100)}`);
+    throw new Error(`${publicApiName} 返回了非JSON响应: ${sanitizeProcessingTerminology(text.substring(0, 100))}`);
   }
 
   let data: any;
@@ -74,8 +76,8 @@ export async function handleResponse(response: Response, apiName: string = 'API'
     data = await response.json();
   } catch (e) {
     const text = await response.text();
-    console.error(`${apiName} JSON解析失败:`, text.substring(0, 200));
-    throw new Error(`${apiName} 返回的数据无法解析为JSON`);
+    console.error(`${publicApiName} JSON解析失败:`, sanitizeProcessingTerminology(text.substring(0, 200)));
+    throw new Error(`${publicApiName} 返回的数据无法解析为JSON`);
   }
 
   if (!response.ok) {
@@ -85,16 +87,16 @@ export async function handleResponse(response: Response, apiName: string = 'API'
         detail.error ||
         detail.message ||
         JSON.stringify(detail);
-      console.error(`${apiName} 返回错误 (${response.status}):`, detail);
-      const err: any = new Error(`${apiName} 失败 (${response.status}): ${human}`);
+      console.error(`${publicApiName} 返回错误 (${response.status}):`, sanitizeProcessingTerminology(JSON.stringify(detail)));
+      const err: any = new Error(`${publicApiName} 失败 (${response.status}): ${sanitizeProcessingTerminology(human)}`);
       err.status = response.status;
       const { message: _detailMessage, ...rest } = detail as Record<string, any>;
       Object.assign(err, rest);
       throw err;
     }
     const text = typeof detail === 'string' ? detail : JSON.stringify(data);
-    console.error(`${apiName} 返回错误 (${response.status}):`, text);
-    const err: any = new Error(`${apiName} 失败 (${response.status}): ${text}`);
+    console.error(`${publicApiName} 返回错误 (${response.status}):`, sanitizeProcessingTerminology(text));
+    const err: any = new Error(`${publicApiName} 失败 (${response.status}): ${sanitizeProcessingTerminology(text)}`);
     err.status = response.status;
     throw err;
   }

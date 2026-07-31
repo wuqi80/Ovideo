@@ -6,6 +6,14 @@ const getStorageKey = (baseKey) => {
     return `${baseKey}-${username}`;
 };
 
+const publicProcessingError = (value) => String(value || '')
+    .replace(/ComfyUI\s*GPU\s*集群/gi, '处理集群')
+    .replace(/GPU\s*Agent/gi, '处理节点')
+    .replace(/ComfyUI\s*Agent/gi, '处理节点')
+    .replace(/ComfyUI/gi, '处理服务')
+    .replace(/GPU\s*节点/gi, '处理节点')
+    .replace(/GPU/gi, '处理集群');
+
 const Workspace = {
     // 状态变量
     viewMode: 'card',
@@ -1116,9 +1124,9 @@ const Workspace = {
             } else if (!img1.file && img1.comfyuiFilename) {
                 // 历史记录，已经上传过ComfyUI
                 imageFilename = img1.comfyuiFilename;
-                console.log('📜 使用历史ComfyUI文件名:', imageFilename);
+                console.log('📜 使用历史处理文件名:', imageFilename);
             } else if (img1.file) {
-                TaskManager.tasksStatus[uuid].message = '正在上传图片到ComfyUI...';
+                TaskManager.tasksStatus[uuid].message = '正在向处理节点上传图片...';
                 UI.refreshUI();
                 
                 // 上传到持久化存储和ComfyUI（指定video节点）
@@ -1134,14 +1142,14 @@ const Workspace = {
                 if (uploadResult.storage_url) {
                     img1.storageUrl = uploadResult.storage_url;
                     img1.url = `${API.baseURL}${uploadResult.storage_url}?token=${Auth.getToken()}`;
-                    console.log('✅ 图片已保存到持久化存储和ComfyUI video节点');
+                    console.log('✅ 图片已保存到持久化存储和处理节点');
                 }
             } else if (img1.url || img1.storageUrl) {
                 // 从URL重新下载并上传到ComfyUI（导入任务的情况）
                 TaskManager.tasksStatus[uuid].message = '正在准备图片...';
                 UI.refreshUI();
                 
-                console.log('🔄 从URL下载图片并上传到ComfyUI');
+                console.log('🔄 从URL下载图片并上传到处理节点');
                 console.log('  - img1.url:', img1.url);
                 console.log('  - img1.storageUrl:', img1.storageUrl);
                 
@@ -1190,7 +1198,7 @@ const Workspace = {
                     console.log('  → 创建File对象:', filename);
                     
                     // 上传到ComfyUI（video节点）
-                    TaskManager.tasksStatus[uuid].message = '正在上传图片到ComfyUI...';
+                    TaskManager.tasksStatus[uuid].message = '正在向处理节点上传图片...';
                     UI.refreshUI();
                     
                     const uploadResult = await API.uploadImageToComfyUI(file, 'video');
@@ -1261,9 +1269,9 @@ const Workspace = {
                 } else if (!img2.file && img2.comfyuiFilename) {
                     // 历史记录，已经上传过ComfyUI
                     imageFilenameEnd = img2.comfyuiFilename;
-                    console.log('📜 使用历史ComfyUI文件名2:', imageFilenameEnd);
+                    console.log('📜 使用历史处理文件名2:', imageFilenameEnd);
                 } else if (img2.file) {
-                    TaskManager.tasksStatus[uuid].message = '正在上传第二张图片到ComfyUI...';
+                    TaskManager.tasksStatus[uuid].message = '正在向处理节点上传第二张图片...';
                     UI.refreshUI();
                     
                     // 上传到持久化存储和ComfyUI（video节点）
@@ -1279,14 +1287,14 @@ const Workspace = {
                     if (uploadResult2.storage_url) {
                         img2.storageUrl = uploadResult2.storage_url;
                         img2.url = `${API.baseURL}${uploadResult2.storage_url}?token=${Auth.getToken()}`;
-                        console.log('✅ 第二张图片已保存到持久化存储和ComfyUI video节点');
+                        console.log('✅ 第二张图片已保存到持久化存储和处理节点');
                     }
                 } else if (img2.url || img2.storageUrl) {
                     // 从URL重新下载并上传到ComfyUI
                     TaskManager.tasksStatus[uuid].message = '正在准备第二张图片...';
                     UI.refreshUI();
                     
-                    console.log('🔄 从URL下载第二张图片并上传到ComfyUI');
+                    console.log('🔄 从URL下载第二张图片并上传到处理节点');
                     console.log('  - img2.url:', img2.url);
                     console.log('  - img2.storageUrl:', img2.storageUrl);
                     
@@ -1330,7 +1338,7 @@ const Workspace = {
                         console.log('  → 创建File对象:', filename);
                         
                         // 上传到ComfyUI（video节点）
-                        TaskManager.tasksStatus[uuid].message = '正在上传第二张图片到ComfyUI...';
+                        TaskManager.tasksStatus[uuid].message = '正在向处理节点上传第二张图片...';
                         UI.refreshUI();
                         
                         const uploadResult2 = await API.uploadImageToComfyUI(file, 'video');
@@ -1371,7 +1379,7 @@ const Workspace = {
             console.error('任务执行失败:', error);
             TaskManager.clearTimer(uuid);
             
-            const errorMsg = error.message || '未知错误';
+            const errorMsg = publicProcessingError(error.message || '未知错误');
             
             TaskManager.tasksStatus[uuid] = { 
                 ...TaskManager.tasksStatus[uuid], 
@@ -1384,7 +1392,7 @@ const Workspace = {
             
             // 🔧 使用弹窗显示详细错误信息（如果不是用户主动取消）
             if (!errorMsg.includes('取消')) {
-                alert(`❌ 任务执行失败\n\n错误详情：\n${errorMsg}\n\n可能的原因：\n- 图片上传失败\n- ComfyUI节点不可用\n- 网络连接问题\n- 文件格式或大小不符合要求`);
+                alert(`❌ 任务执行失败\n\n错误详情：\n${errorMsg}\n\n可能的原因：\n- 图片上传失败\n- 处理节点不可用\n- 网络连接问题\n- 文件格式或大小不符合要求`);
             }
             
             UI.showToast(`任务失败: ${errorMsg}`);
@@ -1470,11 +1478,11 @@ const Workspace = {
                 if (status.status === 'failed') {
                     stopSimulation();
                     TaskManager.clearTimer(uuid);
-                    const errorMsg = status.error || '生成失败（未知错误）';
+                    const errorMsg = publicProcessingError(status.error || '生成失败（未知错误）');
                     console.error('❌ 任务失败:', errorMsg);
                     
                     // 🔧 使用弹窗显示详细错误信息
-                    alert(`❌ 任务失败\n\n错误详情：\n${errorMsg}\n\n请检查：\n- ComfyUI节点是否在线\n- 图片文件大小是否超限\n- 网络连接是否正常`);
+                    alert(`❌ 任务失败\n\n错误详情：\n${errorMsg}\n\n请检查：\n- 处理节点是否在线\n- 图片文件大小是否超限\n- 网络连接是否正常`);
                     
                     throw new Error(errorMsg);
                 }
@@ -1651,7 +1659,7 @@ const Workspace = {
                     UI.refreshUI();
                     UI.showToast('任务不存在或已被清理');
                 } else {
-                    const errorMsg = error.message || '未知错误';
+                    const errorMsg = publicProcessingError(error.message || '未知错误');
                     
                     TaskManager.tasksStatus[uuid] = { 
                         ...TaskManager.tasksStatus[uuid], 
@@ -2791,10 +2799,10 @@ const Workspace = {
                     // ✅ 保存到localStorage
                     this.saveProcessingTasksToLocal();
                     
-                    const errorMsg = result.error || '未知错误';
+                    const errorMsg = publicProcessingError(result.error || '未知错误');
                     
                     // 🔧 使用弹窗显示详细错误信息
-                    alert(`❌ 视频放大失败\n\n错误详情：\n${errorMsg}\n\n请检查：\n- ComfyUI节点是否在线\n- 视频文件是否完整\n- 磁盘空间是否充足`);
+                    alert(`❌ 视频放大失败\n\n错误详情：\n${errorMsg}\n\n请检查：\n- 处理节点是否在线\n- 视频文件是否完整\n- 磁盘空间是否充足`);
                     
                     UI.refreshUI();
                     UI.showToast(`放大失败: ${errorMsg}`);
@@ -3121,7 +3129,7 @@ const Workspace = {
             } else if (result.filename) {
                 // 回退到ComfyUI代理URL
                 croppedVideoUrl = `${API.baseURL}/api/proxy/comfyui/view?filename=${result.filename}&subfolder=&type=output&token=${Auth.getToken()}`;
-                console.log('⚠️ 使用ComfyUI代理URL (fallback):', croppedVideoUrl);
+                console.log('⚠️ 使用处理节点代理URL (fallback):', croppedVideoUrl);
             } else {
                 throw new Error('服务器未返回有效的视频URL');
             }
@@ -3286,4 +3294,3 @@ window.clearAllTasks = () => Workspace.clearAllTasks(); // 清空所有任务
 document.addEventListener('DOMContentLoaded', () => {
     Workspace.init();
 });
-

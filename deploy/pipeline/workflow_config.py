@@ -820,7 +820,7 @@ WORKFLOW_CONFIGS = {
     'upscale_hd': WorkflowConfig(
         name='高清放大',
         file='upscale_hd.json',
-        description='使用ComfyUI放大图片到高清分辨率',
+        description='使用处理集群放大图片到高清分辨率',
         placeholders=['image', 'seed_0'],
         param_mapping={
             'image': 'image',
@@ -834,7 +834,7 @@ WORKFLOW_CONFIGS = {
     'remove_watermark': WorkflowConfig(
         name='图片去水印',
         file='remove_watermark.json',
-        description='使用ComfyUI移除图片水印',
+        description='使用处理集群移除图片水印',
         placeholders=['image', 'seed'],
         param_mapping={
             'image': 'image',
@@ -848,7 +848,7 @@ WORKFLOW_CONFIGS = {
     'three_view': WorkflowConfig(
         name='一键三视图',
         file=None,
-        description='使用ComfyUI生成物体的三视图',
+        description='使用处理集群生成物体的三视图',
         placeholders=['image', 'seed'],
         param_mapping={
             'image': 'image',

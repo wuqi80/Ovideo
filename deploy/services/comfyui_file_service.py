@@ -75,7 +75,7 @@ async def require_comfyui_file_access(
     if not record and hasattr(file_dao, "get_file_by_comfyui_filename"):
         record = await file_dao.get_file_by_comfyui_filename(filename)
     if not record or not record.get("file_id"):
-        raise ComfyUIFileAccessDenied("ComfyUI file not found or access denied")
+        raise ComfyUIFileAccessDenied("处理文件不存在或无权访问")
 
     try:
         await file_access_checker(
@@ -85,7 +85,7 @@ async def require_comfyui_file_access(
             file_dao=_ComfyUIFileAccessDAO(file_dao),
         )
     except EntityAccessDenied as exc:
-        raise ComfyUIFileAccessDenied("ComfyUI file not found or access denied") from exc
+        raise ComfyUIFileAccessDenied("处理文件不存在或无权访问") from exc
     return dict(record)
 
 
@@ -201,7 +201,7 @@ def fetch_comfyui_view_with_fallback(
 
     if not response.ok:
         logger.error("ComfyUI返回错误: %s - %s", response.status_code, response.text)
-        raise ComfyUIViewFetchFailed(f"无法获取文件: {response.text}", status_code=response.status_code)
+        raise ComfyUIViewFetchFailed("处理节点暂时无法读取文件", status_code=response.status_code)
     return response
 
 
@@ -454,7 +454,7 @@ def upload_audio_file_to_comfyui(
 
     if not response.ok:
         logger.error("[ComfyUploadAudio] 上传到 ComfyUI 失败: %s %s", response.status_code, response.text)
-        raise ComfyUIMediaUploadFailed(f"上传到 ComfyUI 失败: {response.status_code}", status_code=response.status_code)
+        raise ComfyUIMediaUploadFailed(f"上传到处理节点失败: {response.status_code}", status_code=response.status_code)
 
     comfyui_filename = _extract_uploaded_filename(response, unique_filename)
     logger.info(
@@ -517,7 +517,7 @@ async def upload_video_file_to_comfyui(
 
     if not response.ok:
         logger.error("[ComfyUploadVideo] 上传到 ComfyUI 失败: %s %s", response.status_code, response.text)
-        raise ComfyUIMediaUploadFailed(f"上传到 ComfyUI 失败: {response.status_code}", status_code=response.status_code)
+        raise ComfyUIMediaUploadFailed(f"上传到处理节点失败: {response.status_code}", status_code=response.status_code)
 
     comfyui_filename = _extract_uploaded_filename(response, unique_filename)
     logger.info("✅ ComfyUI 视频上传成功: comfyui_filename=%s, server=%s", comfyui_filename, target_server)
@@ -615,7 +615,7 @@ def resolve_reupload_video_source(
         logger.warning("从ComfyUI %s 目录下载失败: %s", try_type, response.status_code)
 
     raise ComfyUIVideoReuploadNotFound(
-        f"无法找到视频文件: {filename}。已尝试持久化存储和ComfyUI的 "
+        f"无法找到视频文件: {filename}。已尝试持久化存储和处理节点的 "
         f"{file_type}/temp/output/input 目录。该文件可能已被清理。请重新生成视频。"
     )
 

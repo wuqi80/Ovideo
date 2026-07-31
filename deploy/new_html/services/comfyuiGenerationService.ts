@@ -189,7 +189,7 @@ export const generateWithComfyUI = async (
             episode_id: entityOptions?.episodeId,
         }, '图像生成');
     } catch (error) {
-        console.error('ComfyUI Generation Error:', error);
+        console.error('处理任务生成失败:', error);
         throw error;
     }
 };
@@ -214,7 +214,7 @@ export const generateWithComfyUIWorkflow = async (
         const { uploadImageToComfyUI } = await import('./comfyuiBridgeService');
         const allImages = [mainImage, ...refImages].slice(0, 6);
 
-        console.log(`🔄 开始上传${allImages.length}张图片到ComfyUI...`);
+        console.log(`🔄 开始上传${allImages.length}张图片到处理服务...`);
 
         const filenames: string[] = [];
         for (let i = 0; i < allImages.length; i++) {
@@ -232,7 +232,7 @@ export const generateWithComfyUIWorkflow = async (
             throw new Error('所有图片上传失败，无法生成');
         }
 
-        console.log(`✅ 成功上传${filenames.length}/${allImages.length}张图片到ComfyUI:`, filenames);
+        console.log(`✅ 成功上传${filenames.length}/${allImages.length}张图片到处理服务:`, filenames);
 
         return await postGenerationTask('/api/generate/comfyui-workflow', {
             workflow_type: workflowType,

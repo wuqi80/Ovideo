@@ -21,7 +21,7 @@ beforeEach(() => {
 });
 
 describe('GpuNodeSelector', () => {
-  it('selects GPU1 by default and emits the real agent and node ids', async () => {
+  it('shows a neutral node name while emitting the real routing ids', async () => {
     mockFetch.mockResolvedValueOnce(response({
       success: true,
       nodes: [
@@ -34,22 +34,22 @@ describe('GpuNodeSelector', () => {
     render(<GpuNodeSelector onSelectionChange={onChange} />);
 
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'GPU1',
+      name: '处理节点1',
       preferredAgentId: 'agent_gpu1',
       preferredNodeId: 'node_gpu1',
       usable: true,
     })));
 
-    fireEvent.change(screen.getByLabelText('处理 GPU'), { target: { value: 'row_gpu2' } });
+    fireEvent.change(screen.getByLabelText('处理集群节点'), { target: { value: 'row_gpu2' } });
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
-      name: 'GPU2',
+      name: '处理节点2',
       preferredAgentId: 'agent_gpu2',
       preferredNodeId: 'node_gpu2',
     }));
     expect(localStorage.getItem('mecha:preferred-gpu-node-id')).toBe('agent_gpu2');
   });
 
-  it('marks an explicitly selected offline GPU as unavailable', async () => {
+  it('marks an explicitly selected offline processing node as unavailable', async () => {
     localStorage.setItem('mecha:preferred-gpu-node-id', 'GPU2');
     mockFetch.mockResolvedValueOnce(response({
       success: true,
@@ -63,9 +63,10 @@ describe('GpuNodeSelector', () => {
     render(<GpuNodeSelector onSelectionChange={onChange} />);
 
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'GPU2',
+      name: '处理节点2',
       usable: false,
     })));
-    expect(screen.getByText(/GPU2 当前不可用/)).toBeTruthy();
+    expect(screen.getByText(/处理节点2 当前不可用/)).toBeTruthy();
+    expect(screen.queryByText(/GPU|ComfyUI/i)).toBeNull();
   });
 });

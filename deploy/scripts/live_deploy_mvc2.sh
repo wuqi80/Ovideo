@@ -27,6 +27,8 @@ SMOKE_BASE_URL="${SMOKE_BASE_URL:-https://spti.ai}"
 GPU_AGENT_SOURCE_DIR="pipeline"
 GPU_AGENT_SOURCE_NAME="comfyui_agent.py"
 GPU_AGENT_REMOTE_REL="persistent_storage/tools/$GPU_AGENT_SOURCE_NAME"
+PROCESSING_AGENT_PUBLIC_NAME="processing_agent.py"
+PROCESSING_AGENT_REMOTE_REL="persistent_storage/tools/$PROCESSING_AGENT_PUBLIC_NAME"
 
 if [ ! -f "cluster_main.py" ] || [ ! -d "routers" ] || [ ! -d "schemas" ] || [ ! -d "services" ] || [ ! -d "utils" ] || [ ! -d "new_html" ]; then
   echo "ERROR: run this script from the deploy/ directory"
@@ -403,6 +405,8 @@ done
 mkdir -p "$STAGING_DIR/$(dirname "$GPU_AGENT_REMOTE_REL")"
 cp "$GPU_AGENT_SOURCE_DIR/$GPU_AGENT_SOURCE_NAME" \
   "$STAGING_DIR/$GPU_AGENT_REMOTE_REL"
+cp "$GPU_AGENT_SOURCE_DIR/$GPU_AGENT_SOURCE_NAME" \
+  "$STAGING_DIR/$PROCESSING_AGENT_REMOTE_REL"
 
 BACKEND_SOURCE_HASH=$(
   find "$STAGING_DIR" -type f -print0 \
@@ -453,8 +457,11 @@ if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   chmod 755 '$REMOTE_DIR'
   mkdir -p '$REMOTE_DIR/persistent_storage/tools'
   chown Administrator:Administrator \
-    '$REMOTE_DIR/persistent_storage/tools/comfyui_agent.py'
-  chmod 644 '$REMOTE_DIR/persistent_storage/tools/comfyui_agent.py'
+    '$REMOTE_DIR/persistent_storage/tools/comfyui_agent.py' \
+    '$REMOTE_DIR/persistent_storage/tools/processing_agent.py'
+  chmod 644 \
+    '$REMOTE_DIR/persistent_storage/tools/comfyui_agent.py' \
+    '$REMOTE_DIR/persistent_storage/tools/processing_agent.py'
 "; then
   rollback_remote
   echo "⚠️ 部署失败，已回滚: application root permissions failed"

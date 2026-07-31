@@ -82,7 +82,7 @@ def run():
     migrations = database.get("migrations") or {}
     queue = health.get("queue") or {}
     providers = health.get("providers") or {}
-    gpu_agents = health.get("gpu_agents") or {}
+    processing_nodes = health.get("processing_nodes") or {}
     health_ok = (
         st == 200
         and health.get("status") == "healthy"
@@ -97,7 +97,7 @@ def run():
             f"http={st} status={health.get('status')} redis={health.get('redis')} "
             f"database={database.get('status')} migrations={migrations.get('status')} "
             f"queue={queue.get('status')} providers={providers.get('status')} "
-            f"gpu_agents={gpu_agents.get('status')}"
+            f"processing_nodes={processing_nodes.get('status')}"
         ),
     )
 

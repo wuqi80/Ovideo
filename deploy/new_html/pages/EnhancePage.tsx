@@ -26,6 +26,7 @@ import {
   setPreferredGpuNodeId,
   type ClusterNodeOption,
 } from '../services/clusterNodeService';
+import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 
 interface MediaClip {
   id: string;
@@ -274,7 +275,7 @@ export const EnhancePage: React.FC = () => {
   const [audioUploading, setAudioUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [processProgress, setProcessProgress] = useState(0);
-  const [processStage, setProcessStage] = useState('GPU 处理中，可能需要数分钟');
+  const [processStage, setProcessStage] = useState('处理集群正在执行，可能需要数分钟');
   // All enhancement modes are dispatched through a selected GPU Agent.
   const [clusterNodes, setClusterNodes] = useState<ClusterNodeOption[]>([]);
   const [clusterNodesLoading, setClusterNodesLoading] = useState(false);
@@ -314,7 +315,7 @@ export const EnhancePage: React.FC = () => {
     } catch (error) {
       console.warn('[EnhancePage] cluster nodes unavailable:', error);
       setClusterNodes([]);
-      setClusterNodeMessage('GPU 集群节点状态获取失败，请刷新重试。');
+      setClusterNodeMessage('处理集群节点状态获取失败，请刷新重试。');
     } finally {
       setClusterNodesLoading(false);
     }
@@ -643,7 +644,7 @@ export const EnhancePage: React.FC = () => {
       attachVideoPollCallbacks(uuid, {
         onProgress: (progress, status) => {
           setProcessing(true);
-          setProcessStage(status === 'queued' ? '排队中' : 'GPU 处理中，可能需要数分钟');
+          setProcessStage(status === 'queued' ? '排队中' : '处理集群正在执行，可能需要数分钟');
           setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
         },
         onComplete: () => {
@@ -666,7 +667,7 @@ export const EnhancePage: React.FC = () => {
     // GPU enhancement actions require an online ComfyUI Agent.
     // 按钮已禁用，这里防止意外触发）。
     if (!selectedClusterNodeUsable) {
-      alert('该功能需要 GPU 集群节点（ComfyUI Agent）。当前没有可用节点，暂不可用。\n\n请在后台“集群节点监控”确认 Agent 在线，或使用不依赖 GPU 的功能。');
+      alert('该功能需要处理集群节点。当前没有可用节点，暂不可用。\n\n请在后台“集群节点监控”确认处理节点在线，或稍后重试。');
       return;
     }
     const targetClip = videoClips.find(c => c.id === selectedClipId) || videoUnderPlayhead || videoClips[0];
@@ -683,7 +684,7 @@ export const EnhancePage: React.FC = () => {
       }
       const referenceImage = targetClip.referenceImageUrl || targetClip.thumbnailUrl;
       if (!referenceImage) {
-        alert('当前视频片段缺少首帧图片，无法发起 GPU 对嘴任务。请先为对应分镜生成图片。');
+        alert('当前视频片段缺少首帧图片，无法发起对嘴任务。请先为对应分镜生成图片。');
         return;
       }
 
@@ -728,7 +729,7 @@ export const EnhancePage: React.FC = () => {
           callbacks: {
             onProgress: (progress, status) => {
               setProcessing(true);
-              setProcessStage(status === 'queued' ? '排队中' : 'GPU 处理中，可能需要数分钟');
+              setProcessStage(status === 'queued' ? '排队中' : '处理集群正在执行，可能需要数分钟');
               setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
             },
             onComplete: ({ status }) => {
@@ -788,7 +789,7 @@ export const EnhancePage: React.FC = () => {
           callbacks: {
             onProgress: (progress, status) => {
               setProcessing(true);
-              setProcessStage(status === 'queued' ? '排队中' : 'GPU 处理中，可能需要数分钟');
+              setProcessStage(status === 'queued' ? '排队中' : '处理集群正在执行，可能需要数分钟');
               setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
             },
             onComplete: ({ status }) => {
@@ -856,7 +857,7 @@ export const EnhancePage: React.FC = () => {
         callbacks: {
           onProgress: (progress, status) => {
             setProcessing(true);
-            setProcessStage(status === 'queued' ? '排队中' : 'GPU 处理中，可能需要数分钟');
+            setProcessStage(status === 'queued' ? '排队中' : '处理集群正在执行，可能需要数分钟');
             setProcessProgress(progress > 1 ? Math.floor(progress) : Math.floor(progress * 100));
           },
           onComplete: () => {
@@ -959,7 +960,7 @@ export const EnhancePage: React.FC = () => {
                 </button>
               )}
               {compose?.status === 'failed' && (
-                <span className="text-[10px] text-danger" title={compose.error || ''}>合成失败，点「合成成品」重试</span>
+                <span className="text-[10px] text-danger" title={sanitizeProcessingTerminology(compose.error || '')}>合成失败，点「合成成品」重试</span>
               )}
               <button
                 className="flex items-center gap-1 px-2.5 py-1 bg-primary hover:bg-primary-hover text-white text-xs rounded-lg transition-colors"
@@ -1024,7 +1025,7 @@ export const EnhancePage: React.FC = () => {
                       onClick={() => void loadClusterNodes()}
                       disabled={clusterNodesLoading || processing}
                       className="inline-flex items-center gap-1 text-[11px] text-primary disabled:opacity-50"
-                      title="刷新 GPU 节点状态"
+                      title="刷新处理节点状态"
                     >
                       <RefreshCw size={12} className={clusterNodesLoading ? 'animate-spin' : ''} />
                       刷新
@@ -1068,12 +1069,12 @@ export const EnhancePage: React.FC = () => {
                       <label
                         key={opt.kind}
                         className={`flex items-center justify-between p-3 bg-n0 rounded-lg border border-n40 transition-all ${gpuLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-primary'}`}
-                        title={gpuLocked ? '需 GPU 集群节点（ComfyUI Agent），当前无可用节点' : ''}
+                        title={gpuLocked ? '需要处理集群节点，当前无可用节点' : ''}
                       >
                         <div className="flex items-center gap-2.5">
                           <opt.Icon size={16} className="text-primary" />
                           <div>
-                            <div className="text-sm font-medium">{opt.label}{gpuLocked && <span className="ml-1 text-[10px] text-amber-600">需 GPU</span>}</div>
+                            <div className="text-sm font-medium">{opt.label}{gpuLocked && <span className="ml-1 text-[10px] text-amber-600">需要处理节点</span>}</div>
                             <div className="text-[11px] text-n100">{opt.desc}</div>
                           </div>
                         </div>
@@ -1164,8 +1165,8 @@ export const EnhancePage: React.FC = () => {
                     </button>
                     <p className="text-[11px] leading-4 text-n100">
                       {enhancementKind === 'dub'
-                        ? '选择现有音轨或上传录音，GPU 将生成带该配音且嘴型同步的新视频。'
-                        : '演员录音作为最终对白，提交后由 GPU 让当前镜头嘴型匹配该音频。'}
+                        ? '选择现有音轨或上传录音，处理集群将生成带该配音且嘴型同步的新视频。'
+                        : '演员录音作为最终对白，提交后由处理集群让当前镜头嘴型匹配该音频。'}
                     </p>
                   </div>
                 )}
@@ -1183,7 +1184,7 @@ export const EnhancePage: React.FC = () => {
                 </button>
                 {!selectedClusterNodeUsable && (
                   <div className="text-[11px] text-amber-600 text-center mt-1.5 leading-snug">
-                    「{ENHANCE_OPTIONS.find(o => o.kind === enhancementKind)?.label}」需 GPU 集群节点（ComfyUI Agent），
+                    「{ENHANCE_OPTIONS.find(o => o.kind === enhancementKind)?.label}」需要处理集群节点，
                     当前无可用节点，暂不可用。
                   </div>
                 )}

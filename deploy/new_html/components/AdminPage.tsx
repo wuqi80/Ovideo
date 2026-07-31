@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getUsers, getSystemStats, getGenerationLogs, updateUserPermissions, createUser, deleteUser } from '../services/adminCompatService';
 import { apiJson } from '../services/httpClient';
 import { AdminFeatureTabs } from './AdminFeatureTabs';
+import { formatProcessingNodeName, sanitizeProcessingTerminology } from '../utils/processingTerminology';
 
 interface AdminPageProps {
     // 2026-05-26：改为可选 — AdminPage 既可被 WorkspaceApp 内嵌（带文件/素材库降级数据），
@@ -72,7 +73,7 @@ const mapClusterNode = ([nodeId, nodeData]: [string, any]): ServerNode => {
     const gpuUsage = pickNumber(nodeData, ['gpu_usage', 'gpuUsage', 'gpu_load', 'gpuLoad']);
     return {
         id: String(nodeData?.id ?? nodeData?.node_id ?? nodeId),
-        name: String(nodeData?.name ?? nodeData?.id ?? nodeId),
+        name: formatProcessingNodeName(nodeData?.name ?? nodeData?.id ?? nodeId),
         status: normalizeClusterNodeStatus(nodeData?.status),
         ip: String(nodeData?.host ?? nodeData?.ip ?? nodeData?.url ?? '未上报'),
         storageUsed: storageUsed ?? 0,
@@ -366,7 +367,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 const nodesList = normalizeClusterNodeRows(data.nodes).map(mapClusterNode);
                 setNodes(nodesList);
                 setClusterNodeMessage(data.agent_only_mode
-                    ? (data.message || 'Agent-Only 模式：当前没有在线 GPU Agent 节点。')
+                    ? sanitizeProcessingTerminology(data.message || '当前没有在线处理节点。')
                     : (nodesList.length === 0 ? '当前没有已注册的集群节点。' : '')
                 );
                 console.log('✅ 加载了', nodesList.length, '个集群节点');
@@ -730,11 +731,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
         setConnectionStep('verifying');
 
         await new Promise(r => setTimeout(r, 1200));
-        setConnectionLogs(prev => [...prev, "> Checking GPU availability...", "> Found NVIDIA GPU", "> Installing Agent Service..."]);
+        setConnectionLogs(prev => [...prev, "> Checking processing node...", "> Processing node available", "> Installing node service..."]);
         setConnectionStep('installing');
 
         await new Promise(r => setTimeout(r, 1500));
-        setConnectionLogs(prev => [...prev, "> Agent started", "> Joining Cluster...", "> Node Registered Successfully."]);
+        setConnectionLogs(prev => [...prev, "> Node service started", "> Joining Cluster...", "> Node Registered Successfully."]);
         setConnectionStep('success');
 
         await new Promise(r => setTimeout(r, 800));
@@ -1487,7 +1488,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                               </h3>
                               <div className="flex items-center gap-2 text-xs text-n100 font-mono">
                                 <Network className="w-3 h-3" />
-                                {node.ip}
+                                {sanitizeProcessingTerminology(node.ip)}
                               </div>
                             </div>
                           </div>
@@ -1533,7 +1534,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                           <div>
                             <div className="flex justify-between text-xs mb-1">
                               <span className="text-n300 flex items-center gap-1">
-                                <Zap className="w-3 h-3" /> GPU Load
+                                <Zap className="w-3 h-3" /> 处理负载
                               </span>
                               <span className="text-n700 font-mono">
                                 {hasGpuMetric ? `${node.gpuUsage}%` : '未上报'}

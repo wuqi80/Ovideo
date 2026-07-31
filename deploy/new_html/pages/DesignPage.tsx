@@ -2046,7 +2046,7 @@ const CameraModal: React.FC<{
             <button
               onClick={() => { if (!cur || !gpuSelection?.usable) return; onSubmit({ imageUrl: cur.url, rotate, move, vertical, wideAngle, customPrompt: customPrompt.trim() || undefined, seed, gpu: gpuSelection }); }}
               disabled={!cur || !gpuSelection?.usable}
-              title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
+              title={!gpuSelection?.usable ? '请先选择一个可用处理节点' : undefined}
               className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >生成新角度</button>
           </div>
@@ -2096,7 +2096,7 @@ const ProcessModal: React.FC<{
             <button
               onClick={() => { if (!cur || !gpuSelection?.usable) return; onSubmit({ materialUrl: cur.url, gpu: gpuSelection }); }}
               disabled={!cur || !gpuSelection?.usable}
-              title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
+              title={!gpuSelection?.usable ? '请先选择一个可用处理节点' : undefined}
               className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${workflow === 'upscale_hd' ? 'bg-primary hover:bg-primary-hover' : 'bg-primary hover:bg-primary-hover'}`}
             >开始处理</button>
           </div>

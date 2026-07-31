@@ -15,14 +15,14 @@ function readSource(relativePath: string): string {
 }
 
 describe('angle adjustment modal responsive layout', () => {
-  it('keeps the generation-page GPU selector below the left preview', () => {
+  it('keeps the generation-page processing-node selector below the left preview', () => {
     const source = readSource('../../components/GenerationPage.tsx');
     const modal = componentSlice(source, 'const CameraAngleModal', 'const HumanMultiAngleModal');
 
     expect(modal).toContain('max-h-[calc(100vh-2rem)]');
-    expect(modal.indexOf('处理 GPU')).toBeGreaterThan(modal.indexOf('alt="预览"'));
-    expect(modal.indexOf('处理 GPU')).toBeLessThan(modal.indexOf('<div className="space-y-5">'));
-    expect(modal.indexOf('处理 GPU')).toBeLessThan(modal.lastIndexOf('生成新角度'));
+    expect(modal.indexOf('处理集群节点')).toBeGreaterThan(modal.indexOf('alt="预览"'));
+    expect(modal.indexOf('处理集群节点')).toBeLessThan(modal.indexOf('<div className="space-y-5">'));
+    expect(modal.indexOf('处理集群节点')).toBeLessThan(modal.lastIndexOf('生成新角度'));
   });
 
   it('keeps the design-page GPU selector with the left material preview', () => {

@@ -91,7 +91,7 @@ class ComfyUITaskQueue {
      */
     async enqueue<T>(
         taskFn: (frontendKey: string) => Promise<T>,
-        taskName: string = 'ComfyUI任务',
+        taskName: string = '处理任务',
         registryMeta?: ComfyQueueRegistryMeta,
     ): Promise<T> {
         const taskId = `comfyui_${++this.taskIdCounter}_${Date.now()}`;
@@ -126,11 +126,11 @@ class ComfyUITaskQueue {
                         fileRole: registryMeta.fileRole,
                     });
                 } catch (e) {
-                    console.warn('[ComfyUI队列] register 失败 (不影响任务):', e);
+                    console.warn('[处理队列] register 失败 (不影响任务):', e);
                 }
             }
 
-            console.log(`📋 [ComfyUI队列] 任务已加入: ${taskName} (ID: ${taskId})`);
+            console.log(`📋 [处理队列] 任务已加入: ${taskName} (ID: ${taskId})`);
             console.log(`   当前队列长度: ${this.queue.length}, 是否有任务执行中: ${this.isProcessing}`);
 
             this.emit({
@@ -185,13 +185,13 @@ class ComfyUITaskQueue {
         });
 
         const waitTime = Date.now() - task.addedAt;
-        console.log(`🚀 [ComfyUI队列] 开始执行: ${task.name} (等待了 ${Math.round(waitTime/1000)}秒, 并发: ${this.runningCount}/${this.maxConcurrent})`);
+        console.log(`🚀 [处理队列] 开始执行: ${task.name} (等待了 ${Math.round(waitTime/1000)}秒, 并发: ${this.runningCount}/${this.maxConcurrent})`);
 
         try {
             // 2026-05-20 (M6)：把 frontendKey 注入 taskFn —— 调用方可以传给 wait 函数让 register 复用同一条 task
             const result = await task.execute(task.id);
 
-            console.log(`✅ [ComfyUI队列] 任务完成: ${task.name}`);
+            console.log(`✅ [处理队列] 任务完成: ${task.name}`);
 
             // 2026-05-20 (M6)：兜底 complete —— 若 taskFn 内部 wait 函数已 complete 过则幂等更新；
             // 若 taskFn 仅做提交不等待（如 videoService 的 submitTaskQueued）则保留 running，
@@ -213,12 +213,12 @@ class ComfyUITaskQueue {
 
             task.resolve(result);
         } catch (error) {
-            console.error(`❌ [ComfyUI队列] 任务失败: ${task.name}`, error);
+            console.error(`❌ [处理队列] 任务失败: ${task.name}`, error);
 
             // 2026-05-20 (M6)：失败兜底 —— wait 函数已在 catch 里 fail 过，但若是 submit 阶段抛错（taskFn 内部）
             // 则未必走过 wait → 这里再 fail 一次（taskRegistry.fail 幂等，多次调用安全）。
             if (task.registryMeta) {
-                try { taskRegistry.fail(task.id, (error as any)?.message || 'ComfyUI 任务失败'); } catch { /* noop */ }
+                try { taskRegistry.fail(task.id, (error as any)?.message || '处理任务失败'); } catch { /* noop */ }
             }
 
             this.emit({
@@ -314,7 +314,7 @@ class ComfyUITaskQueue {
             task.reject(new Error('队列已清空'));
         });
         this.queue = [];
-        console.log(`🗑️ [ComfyUI队列] 已清空 ${count} 个等待中的任务`);
+        console.log(`🗑️ [处理队列] 已清空 ${count} 个等待中的任务`);
         return count;
     }
 }

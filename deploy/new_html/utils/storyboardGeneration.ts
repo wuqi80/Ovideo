@@ -146,7 +146,7 @@ export function applyStoryboardProviderProgress(
   state: StoryboardGenerationProgressState,
   rawProgress: number,
   now = Date.now(),
-  stage = 'GPU 正在生成',
+  stage = '处理集群正在生成',
 ): StoryboardGenerationProgressState {
   const normalized = Math.max(0, Math.min(1, rawProgress > 1 ? rawProgress / 100 : rawProgress));
   const elapsedSeconds = Math.max(0, (now - state.startedAt) / 1000);

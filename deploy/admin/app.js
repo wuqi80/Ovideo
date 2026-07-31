@@ -23,6 +23,16 @@ function escapeHtml(value) {
   }[ch]));
 }
 
+function publicProcessingNodeName(value) {
+  const raw = String(value || '').trim();
+  const numbered = raw.match(/^(?:gpu|agent[_\s-]*gpu|gpu[_\s-]*agent)[_\s-]*(\d+)$/i);
+  if (numbered) return `处理节点${numbered[1]}`;
+  return raw
+    .replace(/ComfyUI/gi, '处理服务')
+    .replace(/GPU\s*Agent/gi, '处理节点')
+    .replace(/GPU/gi, '处理节点');
+}
+
 function normalizeProviderId(provider) {
   return String(provider || '').trim().toLowerCase();
 }
@@ -434,7 +444,7 @@ async function fetchDashboard() {
 
     document.getElementById('dashboard-stats').innerHTML = `
       <div class="stat-card accent">
-        <div class="stat-label">在线 Agent</div>
+        <div class="stat-label">在线处理节点</div>
         <div class="stat-value">${d.agents_online}<span class="stat-sub">/ ${d.agents_total}</span></div>
       </div>
       <div class="stat-card success">
@@ -468,7 +478,7 @@ async function fetchDashboard() {
     document.getElementById('dashboard-tasks').innerHTML = `
       <table class="data-table">
         <thead><tr>
-          <th>任务 ID</th><th>类型</th><th>状态</th><th>Agent</th><th>时间</th>
+          <th>任务 ID</th><th>类型</th><th>状态</th><th>处理节点</th><th>时间</th>
         </tr></thead>
         <tbody>${tasks.map(t => `
           <tr>
@@ -496,14 +506,14 @@ function toggleRegisterPanel() {
 
 async function createAgent() {
   const name = document.getElementById('agent-name').value.trim();
-  if (!name) { showToast('请输入 Agent 名称', 'warn'); return; }
+  if (!name) { showToast('请输入节点名称', 'warn'); return; }
   const data = await apiCall('/api/admin/agents', { method: 'POST', body: JSON.stringify({ name }) });
   const token = data.token;
   document.getElementById('token-value').textContent = token;
   document.getElementById('token-command').textContent =
-    `curl -fsSL ${location.origin}/storage/tools/comfyui_agent.py -o comfyui_agent.py\npython comfyui_agent.py \\\n  --server ${location.origin} \\\n  --token ${token} \\\n  --ports 8188,8189`;
+    `curl -fsSL ${location.origin}/storage/tools/processing_agent.py -o processing_agent.py\npython processing_agent.py \\\n  --server ${location.origin} \\\n  --token ${token} \\\n  --ports 8188,8189`;
   document.getElementById('token-result').classList.remove('hidden');
-  showToast('Agent 创建成功', 'success');
+  showToast('处理节点创建成功', 'success');
   fetchAgents();
 }
 
@@ -519,13 +529,13 @@ async function fetchAgents() {
     document.getElementById('agent-list').innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">🖥️</div>
-        <p>暂无注册的 Agent</p>
+        <p>暂无注册的处理节点</p>
         <button class="btn btn-secondary btn-sm" onclick="toggleRegisterPanel()">生成注册 Token</button>
       </div>`;
     return;
   }
   document.getElementById('agent-list').innerHTML = agents.map(a => {
-    const displayName = a.display_name || a.name || a.agent_id;
+    const displayName = publicProcessingNodeName(a.display_name || a.name || a.agent_id);
     const encodedDisplayName = encodeURIComponent(displayName).replace(/'/g, '%27');
     const instances = (typeof a.comfyui_instances === 'string' ? JSON.parse(a.comfyui_instances) : a.comfyui_instances) || [];
     const stats = (typeof a.stats === 'string' ? JSON.parse(a.stats) : a.stats) || {};
@@ -555,7 +565,7 @@ async function fetchAgents() {
         <div class="agent-stats">
           <span>完成 <b style="color:var(--text-0)">${stats.tasks_completed || 0}</b></span>
           <span>失败 <b style="color:var(--text-0)">${stats.tasks_failed || 0}</b></span>
-          <span title="Agent 版本" style="font-family:var(--font-mono);font-size:11px;color:${agentVersion === 'legacy' ? 'var(--danger)' : 'var(--success)'}">v ${agentVersion}</span>
+          <span title="节点版本" style="font-family:var(--font-mono);font-size:11px;color:${agentVersion === 'legacy' ? 'var(--danger)' : 'var(--success)'}">v ${agentVersion}</span>
           ${a.last_heartbeat ? `<span style="font-family:var(--font-mono);font-size:11px">${new Date(a.last_heartbeat).toLocaleTimeString('zh-CN')}</span>` : ''}
         </div>
         <div class="agent-actions">
@@ -568,12 +578,12 @@ async function fetchAgents() {
           <div style="font-size:11px;color:var(--text-3);margin-bottom:4px">Token:</div>
           <code style="font-size:11px;color:var(--accent);word-break:break-all">${a.token}</code>
           <div style="font-size:11px;color:var(--text-3);margin-top:8px;margin-bottom:4px">启动命令:</div>
-          <pre style="font-size:11px;color:var(--text-1);white-space:pre-wrap;margin:0">curl -fsSL ${location.origin}/storage/tools/comfyui_agent.py -o comfyui_agent.py
-python comfyui_agent.py \\
+          <pre style="font-size:11px;color:var(--text-1);white-space:pre-wrap;margin:0">curl -fsSL ${location.origin}/storage/tools/processing_agent.py -o processing_agent.py
+python processing_agent.py \\
   --server ${location.origin} \\
   --token ${a.token} \\
   --ports 8188</pre>
-          <button class="btn btn-ghost btn-xs" style="margin-top:6px" onclick="navigator.clipboard.writeText('curl -fsSL ${location.origin}/storage/tools/comfyui_agent.py -o comfyui_agent.py\\npython comfyui_agent.py --server ${location.origin} --token ${a.token} --ports 8188');showToast('已复制','success')">复制命令</button>
+          <button class="btn btn-ghost btn-xs" style="margin-top:6px" onclick="navigator.clipboard.writeText('curl -fsSL ${location.origin}/storage/tools/processing_agent.py -o processing_agent.py\\npython processing_agent.py --server ${location.origin} --token ${a.token} --ports 8188');showToast('已复制','success')">复制命令</button>
         </div>
       </div>`;
   }).join('');
@@ -581,7 +591,7 @@ python comfyui_agent.py \\
 
 async function renameAgent(id, encodedCurrentName) {
   const currentName = decodeURIComponent(encodedCurrentName || '');
-  const requestedName = window.prompt('请输入新的 GPU 显示名称', currentName);
+  const requestedName = window.prompt('请输入新的处理节点显示名称', currentName);
   if (requestedName === null) return;
   const name = requestedName.trim();
   if (!name) {
@@ -593,7 +603,7 @@ async function renameAgent(id, encodedCurrentName) {
     method: 'PUT',
     body: JSON.stringify({ name }),
   });
-  showToast('GPU 名称已更新', 'success');
+  showToast('处理节点名称已更新', 'success');
   fetchAgents();
 }
 
@@ -603,9 +613,9 @@ async function toggleAgent(id) {
 }
 
 async function deleteAgent(id) {
-  if (!confirm('确定移除此 Agent？')) return;
+  if (!confirm('确定移除此处理节点？')) return;
   await apiCall(`/api/admin/agents/${id}`, { method: 'DELETE' });
-  showToast('Agent 已移除', 'success');
+  showToast('处理节点已移除', 'success');
   fetchAgents();
 }
 
@@ -785,7 +795,7 @@ function openWorkflowModal(template = null) {
   document.getElementById('json-status').textContent = '';
   if (isUploadImport) {
     document.getElementById('json-status').innerHTML =
-      '<span style="color:var(--text-2)">请选择完整、可执行的 ComfyUI 工作流 JSON；旧备份仅含占位内容，不会直接进入生产链路。</span>';
+      '<span style="color:var(--text-2)">请选择完整、可执行的处理工作流 JSON；旧备份仅含占位内容，不会直接进入生产链路。</span>';
   }
   if (template?.placeholders) {
     const ph = typeof template.placeholders === 'string' ? JSON.parse(template.placeholders) : template.placeholders;
@@ -1023,7 +1033,7 @@ function guessApiCategory(config) {
 
 function renderApiCard(c) {
   const hasKey = c.api_key_encrypted && c.api_key_encrypted !== '';
-  const proxyLabel = c.proxy_mode === 'direct' ? '直连' : c.proxy_mode === 'agent' ? 'Agent' : c.proxy_mode || 'direct';
+  const proxyLabel = c.proxy_mode === 'direct' ? '直连' : c.proxy_mode === 'agent' ? '节点代理' : c.proxy_mode || 'direct';
   const proxyBadge = c.proxy_mode === 'direct' ? 'badge-blue' : 'badge-purple';
   const provider = (c.provider || '').toLowerCase();
   const meta = getApiProviderMeta(provider);

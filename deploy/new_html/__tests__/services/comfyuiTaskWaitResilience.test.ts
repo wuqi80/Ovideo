@@ -56,14 +56,15 @@ describe('waitForComfyUITask 轮询韧性', () => {
 });
 
 describe('normalizeComfyUITaskError', () => {
-  it('hides local ComfyUI prompt URLs from user-facing errors', () => {
+  it('hides internal processing engine details from user-facing errors', () => {
     const message = normalizeComfyUITaskError(
       '400 Client Error: Bad Request for url: http://127.0.0.1:8188/prompt',
     );
 
-    expect(message).toContain('本地 ComfyUI');
+    expect(message).toContain('处理节点');
     expect(message).toContain('HTTP 400');
     expect(message).not.toContain('127.0.0.1:8188');
+    expect(message).not.toMatch(/GPU|ComfyUI/i);
   });
 
   it('uses task context for ComfyUI prompt validation errors', () => {
@@ -75,5 +76,6 @@ describe('normalizeComfyUITaskError', () => {
     expect(message).toContain('高清放大工作流');
     expect(message).toContain('SeedVR2');
     expect(message).not.toContain('角度调整工作流');
+    expect(message).not.toMatch(/GPU|ComfyUI/i);
   });
 });

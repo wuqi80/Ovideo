@@ -183,7 +183,7 @@ def _require_configured_comfyui_server(server: Optional[str]) -> str:
     configured = str(ComfyUIConfig.COMFYUI_BASE_URL).rstrip("/")
     requested = str(server or configured).rstrip("/")
     if requested != configured:
-        raise HTTPException(status_code=400, detail="Unregistered ComfyUI server")
+        raise HTTPException(status_code=400, detail="Unregistered processing node")
     return configured
 
 
@@ -230,7 +230,7 @@ class GenerateRequest(BaseModel):
     prompt: str = Field("", description="提示词")
     negative_prompt: str = Field("nsfw, bad quality, worst quality", description="负面提示词")
     # 改为使用已上传的文件名（通过 /api/comfyui/upload 上传后获得）
-    image_filename: Optional[str] = Field(None, description="已上传到 ComfyUI 的图片文件名")
+    image_filename: Optional[str] = Field(None, description="已上传到处理节点的图片文件名")
     image_filename_end: Optional[str] = Field(None, description="结束帧图片文件名（用于 morph）")
     seed: int = Field(-1, description="随机种子，-1 表示随机")
     steps: int = Field(20, description="生成步数")
@@ -239,7 +239,7 @@ class GenerateRequest(BaseModel):
     height: int = Field(1024, description="图片高度")
     batch_size: int = Field(1, description="批次大小")
     # ComfyUI 服务器地址（用于集群环境）
-    comfyui_server: Optional[str] = Field(None, description="指定的 ComfyUI 服务器地址")
+    comfyui_server: Optional[str] = Field(None, description="指定的处理节点地址")
     # 额外参数（用于替换工作流占位符）
     extra_params: Optional[Dict[str, Any]] = Field(None, description="额外参数")
 
@@ -651,7 +651,7 @@ async def process_generation_task(task_id: str, request: GenerateRequest):
         logger.info(f"提交到 ComfyUI 服务器: {target_server}")
         
         # 提交工作流
-        task_storage[task_id]['message'] = '正在提交到 ComfyUI...'
+        task_storage[task_id]['message'] = '正在提交到处理节点...'
         task_storage[task_id]['comfyui_server'] = target_server
         
         # 如果指定了服务器，临时修改 client 的 base_url
@@ -829,8 +829,7 @@ async def health_check():
         "status": "healthy",
         "service": SystemConfig.FRONTEND_CONFIG["title"],
         "version": SystemConfig.FRONTEND_CONFIG["version"],
-        "comfyui_status": comfyui_status,
-        "comfyui_url": ComfyUIConfig.COMFYUI_BASE_URL
+        "processing_status": comfyui_status,
     }
 
 @app.get("/api/config")
@@ -1049,7 +1048,7 @@ async def get_comfyui_images(
                 else:
                     raise HTTPException(
                         status_code=503,
-                        detail="无法连接到 ComfyUI 服务器"
+                        detail="无法连接到处理节点"
                     )
             except HTTPException:
                 raise
@@ -1102,7 +1101,7 @@ async def proxy_comfyui_view(
         if not response.ok:
             raise HTTPException(
                 status_code=response.status_code,
-                detail=f"从 ComfyUI 获取图片失败: {response.text}"
+                detail="从处理节点获取图片失败"
             )
         
         # 返回图片
@@ -1170,7 +1169,7 @@ async def comfyui_upload_proxy(
         if not response.ok:
             raise HTTPException(
                 status_code=response.status_code,
-                detail=f"ComfyUI 上传失败: {response.text}"
+                detail="处理节点上传失败"
             )
         
         result = response.json()
@@ -1190,7 +1189,7 @@ async def comfyui_upload_proxy(
         
     except requests.exceptions.RequestException as e:
         logger.error(f"ComfyUI 上传请求失败: {e}")
-        raise HTTPException(status_code=503, detail=f"无法连接到 ComfyUI 服务器: {str(e)}")
+        raise HTTPException(status_code=503, detail="无法连接到处理节点")
     
     except HTTPException:
         raise

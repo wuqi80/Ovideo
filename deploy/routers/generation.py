@@ -171,7 +171,7 @@ def create_generation_router(
 
             if request.engine == "comfyui":
                 if not request.ref_images:
-                    raise HTTPException(status_code=400, detail="ComfyUI引擎至少需要1张参考图")
+                    raise HTTPException(status_code=400, detail="当前处理模型至少需要1张参考图")
 
                 task_data = {
                     "image": request.ref_images[0],

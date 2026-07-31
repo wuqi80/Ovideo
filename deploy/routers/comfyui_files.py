@@ -57,7 +57,7 @@ def create_comfyui_files_router(
         requested = str(comfyui_server or "").rstrip("/")
         servers = registered_comfyui_servers()
         if requested not in servers:
-            raise HTTPException(status_code=400, detail="Unknown ComfyUI server")
+            raise HTTPException(status_code=400, detail="Unknown processing node")
         return requested, servers[requested]
 
     def select_video_comfyui_server(comfyui_server: Optional[str] = None) -> tuple[str, Optional[str]]:
@@ -156,7 +156,7 @@ def create_comfyui_files_router(
             raise HTTPException(status_code=e.status_code, detail=str(e))
         except ComfyUIFileRequestError as e:
             logger.error("代理ComfyUI文件失败: %s", e)
-            raise HTTPException(status_code=503, detail=f"无法连接到ComfyUI: {str(e)}")
+            raise HTTPException(status_code=503, detail="无法连接到处理节点，请稍后重试")
         except Exception as e:
             logger.error("代理ComfyUI文件失败: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
@@ -276,7 +276,7 @@ def create_comfyui_files_router(
             raise HTTPException(status_code=502, detail=str(e))
         except ComfyUIFileRequestError as e:
             logger.error("❌ ComfyUI 视频上传请求失败: %s", e)
-            raise HTTPException(status_code=503, detail=f"无法连接到 ComfyUI 服务器: {str(e)}")
+            raise HTTPException(status_code=503, detail="无法连接到处理节点，请稍后重试")
         except HTTPException:
             raise
         except Exception as e:
@@ -327,7 +327,7 @@ def create_comfyui_files_router(
             raise HTTPException(status_code=502, detail=str(e))
         except ComfyUIFileRequestError as e:
             logger.error("❌ ComfyUI 音频上传请求失败: %s", e)
-            raise HTTPException(status_code=503, detail=f"无法连接到 ComfyUI 服务器: {str(e)}")
+            raise HTTPException(status_code=503, detail="无法连接到处理节点，请稍后重试")
         except HTTPException:
             raise
         except Exception as e:

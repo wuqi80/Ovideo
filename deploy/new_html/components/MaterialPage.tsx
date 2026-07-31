@@ -2482,7 +2482,7 @@ const CameraModal: React.FC<{
 
     const handleSubmit = () => {
         if (!currentMaterial || !gpuSelection?.usable) {
-            alert(currentMaterial ? '请选择一个可用 GPU 节点' : '请选择一张素材图片');
+            alert(currentMaterial ? '请选择一个可用处理节点' : '请选择一张素材图片');
             return;
         }
         onSubmit({
@@ -2640,7 +2640,7 @@ const CameraModal: React.FC<{
                     <button
                         onClick={handleSubmit}
                         disabled={!currentMaterial || !gpuSelection?.usable}
-                        title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
+                        title={!gpuSelection?.usable ? '请先选择一个可用处理节点' : undefined}
                         className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg shadow-emerald-900/30 hover:shadow-emerald-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >生成新角度</button>
                 </div>
@@ -2665,7 +2665,7 @@ const ProcessModal: React.FC<{
 
     const handleSubmit = () => {
         if (!currentMaterial || !gpuSelection?.usable) {
-            alert(currentMaterial ? '请选择一个可用 GPU 节点' : '请选择一张素材图片');
+            alert(currentMaterial ? '请选择一个可用处理节点' : '请选择一张素材图片');
             return;
         }
         onSubmit(selectedMaterialId, gpuSelection);
@@ -2742,7 +2742,7 @@ const ProcessModal: React.FC<{
                     <button
                       onClick={handleSubmit}
                       disabled={!currentMaterial || !gpuSelection?.usable}
-                      title={!gpuSelection?.usable ? '请先选择一个可用 GPU 节点' : undefined}
+                      title={!gpuSelection?.usable ? '请先选择一个可用处理节点' : undefined}
                       className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
                         config.workflow === 'upscale_hd'
                             ? 'bg-b400 hover:bg-b500 shadow-blue-900/30 hover:shadow-blue-900/50'

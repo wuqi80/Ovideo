@@ -12,6 +12,7 @@ import { listMediaItems } from '../services/mediaLibraryService';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { getVideoTakes, startCompose, getComposeStatus, type VideoShot, type ComposeStatus } from '../services/videoWorkflowService';
 import { LazyVideo } from '../components/LazyVideo';
+import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 
 const isFinalFilm = (title: string | null | undefined) =>
   !!title && /成片|完整|全片|整片|final\s*cut|finalcut/i.test(title);
@@ -165,7 +166,7 @@ export const FinalProductPage: React.FC = () => {
           <span className="text-[11px] text-emerald-600 flex items-center gap-1"><Check size={12} /> 已生成</span>
         )}
         {compose?.status === 'failed' && (
-          <span className="text-[11px] text-danger" title={compose.error || ''}>合成失败</span>
+          <span className="text-[11px] text-danger" title={sanitizeProcessingTerminology(compose.error || '')}>合成失败</span>
         )}
       </header>
 

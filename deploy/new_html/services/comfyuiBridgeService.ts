@@ -42,7 +42,7 @@ async function downloadImageBlob(imageUrlOrDataUrl: string): Promise<Blob> {
   }
 
   if (imageUrlOrDataUrl.startsWith('blob:')) {
-    console.log(`[ComfyUI] Downloading blob image: ${imageUrlOrDataUrl}`);
+    console.log(`[ProcessingService] Downloading blob image: ${imageUrlOrDataUrl}`);
     return publicBlob(imageUrlOrDataUrl, { method: 'GET' }, 'downloadBlobImageForComfyUI');
   }
 
@@ -51,7 +51,7 @@ async function downloadImageBlob(imageUrlOrDataUrl: string): Promise<Blob> {
     ? normalizedUrl
     : `${window.location.origin}${normalizedUrl}`;
 
-  console.log(`[ComfyUI] Downloading image: ${imageUrlOrDataUrl} -> ${absolute}`);
+  console.log(`[ProcessingService] Downloading image: ${imageUrlOrDataUrl} -> ${absolute}`);
 
   if (isSameOriginUrl(normalizedUrl)) {
     return apiBlob(
@@ -71,7 +71,7 @@ export async function uploadImageToComfyUI(imageUrlOrDataUrl: string): Promise<{
   storage_url: string;
 }> {
   if (!imageUrlOrDataUrl || imageUrlOrDataUrl.trim() === '') {
-    throw new Error('Image URL is empty; cannot upload to ComfyUI.');
+    throw new Error('图片地址为空，无法提交到处理节点。');
   }
 
   if (!getAuthToken()) {

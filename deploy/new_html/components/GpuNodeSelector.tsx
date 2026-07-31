@@ -83,7 +83,7 @@ export const GpuNodeSelector: React.FC<GpuNodeSelectorProps> = ({
     } catch (error) {
       console.warn('[GpuNodeSelector] cluster nodes unavailable:', error);
       setNodes([]);
-      setMessage('GPU 集群节点状态获取失败，请刷新重试。');
+      setMessage('处理集群节点状态获取失败，请刷新重试。');
       selectNode(undefined);
     } finally {
       setLoading(false);
@@ -99,14 +99,14 @@ export const GpuNodeSelector: React.FC<GpuNodeSelectorProps> = ({
       <div className="flex items-center justify-between gap-3">
         <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-n700" htmlFor="gpu-node-selector">
           <Server size={13} />
-          处理 GPU
+          处理集群节点
         </label>
         <button
           type="button"
           onClick={() => void loadNodes()}
           disabled={disabled || loading}
           className="inline-flex items-center gap-1 text-[11px] text-primary hover:text-primary-hover disabled:opacity-50"
-          title="刷新 GPU 节点状态"
+          title="刷新处理节点状态"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
           刷新
@@ -114,7 +114,7 @@ export const GpuNodeSelector: React.FC<GpuNodeSelectorProps> = ({
       </div>
       <select
         id="gpu-node-selector"
-        aria-label="处理 GPU"
+        aria-label="处理集群节点"
         value={selectedId}
         onChange={event => {
           const node = nodes.find(item => item.id === event.target.value);
@@ -123,7 +123,7 @@ export const GpuNodeSelector: React.FC<GpuNodeSelectorProps> = ({
         disabled={disabled || loading || nodes.length === 0}
         className="w-full px-2.5 py-2 rounded bg-n0 border border-n40 text-xs text-n700 focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-n20 disabled:text-n100"
       >
-        {nodes.length === 0 && <option value="">暂无可选 GPU</option>}
+        {nodes.length === 0 && <option value="">暂无可用处理节点</option>}
         {nodes.map(node => (
           <option key={node.id} value={node.id}>
             {node.name} · {node.status}
@@ -134,7 +134,7 @@ export const GpuNodeSelector: React.FC<GpuNodeSelectorProps> = ({
       <p className={`text-[10px] leading-4 ${selectedUsable ? 'text-g400' : 'text-amber-600'}`}>
         {selectedNode
           ? (selectedUsable ? `${selectedNode.name} 可用；繁忙时任务自动排队。` : `${selectedNode.name} 当前不可用。`)
-          : (loading ? '正在读取 GPU 节点...' : '当前没有可用 GPU 节点。')}
+          : (loading ? '正在读取处理节点...' : '当前没有可用处理节点。')}
         {message ? ` ${message}` : ''}
       </p>
     </div>

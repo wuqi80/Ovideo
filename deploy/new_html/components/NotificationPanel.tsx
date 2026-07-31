@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useTaskManager } from '../contexts/TaskContext';
 import type { RegisteredTask, SourcePage, TaskKind } from '../types';
+import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 
 // ===== 状态色板（窄域、克制） =====
 const STATUS_THEME = {
@@ -56,8 +57,8 @@ const KIND_LABEL: Record<string, string> = {
     wan2: 'Wan2', 'wan2-fast': 'Wan2 Fast',
     kling: '合体 · Kling', vidu: '大乘 · Vidu', happyhorse: '炼虚 · HappyHorse',
     sora2: 'Sora2', veo: 'Veo',
-    'video-i2v': '图生视频', 'video-comfy': 'ComfyUI 视频',
-    'comfyui-image': 'ComfyUI 图', 'gemini-image': 'Gemini 图', 'doubao-image': '豆包图',
+    'video-i2v': '图生视频', 'video-comfy': '集群视频',
+    'comfyui-image': '集群图片', 'gemini-image': 'Gemini 图', 'doubao-image': '豆包图',
     nanobanana: 'Nanobanana', 'qwen-image': 'Qwen 图', 'qwen-lora': 'Qwen LoRA', kontext: 'Kontext',
     matting: '抠图', 'angle-adjust': '角度调整',
     'human-multi-angle': '多角度', 'around-angle': '环绕镜头',
@@ -411,9 +412,9 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onNavigate, onRemove, removeL
                 {/* Title row */}
                 <div className="flex items-center gap-1.5">
                     <KindIcon size={11} className="text-n300 shrink-0" />
-                    <span className="text-sm font-medium text-n800 truncate">{task.title}</span>
+                    <span className="text-sm font-medium text-n800 truncate">{sanitizeProcessingTerminology(task.title)}</span>
                     <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] tabular-nums ${theme.bg} ${theme.text} ${theme.border} border`}>
-                        {kindLabel}
+                        {sanitizeProcessingTerminology(kindLabel)}
                     </span>
                 </div>
 
@@ -421,7 +422,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onNavigate, onRemove, removeL
                 <div className="mt-1 flex items-center gap-2">
                     <span className={`text-xs ${theme.text}`}>{statusText}</span>
                     {task.error && (
-                        <span className="text-xs text-danger truncate">· {task.error}</span>
+                        <span className="text-xs text-danger truncate">· {sanitizeProcessingTerminology(task.error)}</span>
                     )}
                 </div>
 

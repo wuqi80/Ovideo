@@ -13,6 +13,7 @@ import {
   Upload, RefreshCw, X, RotateCcw, Coins, Film, FilePlus2,
   Copy, Check, ChevronRight, Loader2, AlertTriangle,
 } from 'lucide-react';
+import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 import {
   estimateVideoReverse,
   createVideoReverseTask,
@@ -449,7 +450,7 @@ const TaskDetail: React.FC<{
           )}
           {task.error_message && (
             <div className="mt-2 p-2 text-xs text-danger bg-r50 border border-r75 rounded">
-              {task.error_message}
+              {sanitizeProcessingTerminology(task.error_message)}
             </div>
           )}
           <div className="mt-3 flex items-center gap-2">

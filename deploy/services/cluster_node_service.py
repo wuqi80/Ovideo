@@ -3,9 +3,19 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
+
+
+def _public_node_name(value: Any) -> str:
+    raw = str(value or "").strip()
+    match = re.fullmatch(r"(?:gpu|agent[_\s-]*gpu|gpu[_\s-]*agent)[_\s-]*(\d+)", raw, re.IGNORECASE)
+    if match:
+        return f"处理节点{match.group(1)}"
+    public_name = re.sub(r"comfyui", "处理服务", raw, flags=re.IGNORECASE)
+    return re.sub(r"gpu", "处理节点", public_name, flags=re.IGNORECASE) or "处理节点"
 
 
 def _jsonish(value: Any, fallback: Any) -> Any:
@@ -35,7 +45,7 @@ def _agent_node(row: Dict[str, Any]) -> Dict[str, Any]:
         or system_info.get("host")
         or system_info.get("ip")
         or first_instance.get("host")
-        or "GPU Agent"
+        or "处理节点"
     )
     port = first_instance.get("port")
     status = str(row.get("status") or "offline").lower()
@@ -61,7 +71,7 @@ def _agent_node(row: Dict[str, Any]) -> Dict[str, Any]:
         "id": agent_id,
         "node_id": agent_id,
         "agent_id": agent_id,
-        "name": row.get("display_name") or row.get("name") or agent_id,
+        "name": _public_node_name(row.get("display_name") or row.get("name") or agent_id),
         "routing_name": row.get("name") or agent_id,
         "status": status,
         "kind": "agent",

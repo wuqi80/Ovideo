@@ -91,7 +91,8 @@ async def test_list_agent_nodes_can_include_offline(monkeypatch):
 
     nodes = await cluster_node_service.list_agent_nodes(include_offline=True)
 
-    assert [node["name"] for node in nodes] == ["GPU1", "GPU2"]
+    assert [node["name"] for node in nodes] == ["处理节点1", "处理节点2"]
+    assert [node["routing_name"] for node in nodes] == ["GPU1", "GPU2"]
     assert nodes[0]["status"] == "offline"
     assert nodes[1]["status"] == "busy"
     assert nodes[1]["tasks"] == 1

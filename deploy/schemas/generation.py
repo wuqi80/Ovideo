@@ -35,8 +35,8 @@ class GenerateRequest(BaseModel):
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
     project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
-    preferred_agent_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的 GPU Agent")
-    preferred_node_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的集群节点")
+    preferred_agent_id: Optional[str] = Field(None, description="指定执行任务的处理节点")
+    preferred_node_id: Optional[str] = Field(None, description="指定执行任务的集群节点")
     # Seedance 2.0 (飞升/渡劫) 专用字段
     sub_model: Optional[str] = Field(None, description="Seedance 子型号: standard|fast")
     model_scope: Optional[str] = Field(None, description="model usage scope: workflow|studio")
@@ -202,34 +202,34 @@ class ImageGenerationRequest(BaseModel):
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
     project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
-    preferred_agent_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的 GPU Agent")
-    preferred_node_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的集群节点")
+    preferred_agent_id: Optional[str] = Field(None, description="指定执行任务的处理节点")
+    preferred_node_id: Optional[str] = Field(None, description="指定执行任务的集群节点")
 
 
 class ComfyUIWorkflowRequest(BaseModel):
     workflow_type: str = Field(..., description="工作流类型: qwen/qwen_lora/kontext")
     prompt: str = Field(..., description="正面提示词")
     negative_prompt: str = Field(default="bad quality, worst quality", description="负面提示词")
-    image_filenames: List[str] = Field(..., description="ComfyUI中的图片文件名列表（1-6张）")
+    image_filenames: List[str] = Field(..., description="处理节点中的图片文件名列表（1-6张）")
     seed: int = Field(default=-1, description="随机种子")
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
     project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
-    preferred_agent_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的 GPU Agent")
-    preferred_node_id: Optional[str] = Field(None, description="指定处理该 ComfyUI 任务的集群节点")
+    preferred_agent_id: Optional[str] = Field(None, description="指定执行任务的处理节点")
+    preferred_node_id: Optional[str] = Field(None, description="指定执行任务的集群节点")
     output_width: Optional[int] = Field(None, ge=64, le=8192, description="目标图像宽度")
     output_height: Optional[int] = Field(None, ge=64, le=8192, description="目标图像高度")
 
 
 class ComfyUIRoutedRequest(BaseModel):
-    preferred_agent_id: Optional[str] = Field(None, description="Preferred GPU Agent")
+    preferred_agent_id: Optional[str] = Field(None, description="Preferred processing node")
     preferred_node_id: Optional[str] = Field(None, description="Preferred cluster node")
 
 
 class AngleAdjustRequest(ComfyUIRoutedRequest):
-    image_filename: str = Field(..., description="ComfyUI中的图片文件名")
+    image_filename: str = Field(..., description="处理节点中的图片文件名")
     prompt: str = Field(..., description="角度调整提示词")
     seed: int = Field(default=-1, description="随机种子")
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
@@ -242,7 +242,7 @@ class AngleAdjustRequest(ComfyUIRoutedRequest):
 
 
 class HumanMultiAngleRequest(ComfyUIRoutedRequest):
-    image_filename: str = Field(..., description="ComfyUI中的图片文件名")
+    image_filename: str = Field(..., description="处理节点中的图片文件名")
     seed: int = Field(default=-1, description="随机种子")
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
@@ -252,7 +252,7 @@ class HumanMultiAngleRequest(ComfyUIRoutedRequest):
 
 
 class AroundAngleRequest(ComfyUIRoutedRequest):
-    image_filename: str = Field(..., description="ComfyUI中的图片文件名")
+    image_filename: str = Field(..., description="处理节点中的图片文件名")
     prompt: str = Field(..., description="角度描述提示词，如：front view, eye-level shot, medium shot")
     seed: int = Field(default=-1, description="随机种子")
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
@@ -263,7 +263,7 @@ class AroundAngleRequest(ComfyUIRoutedRequest):
 
 
 class MattingRequest(ComfyUIRoutedRequest):
-    image_filename: str = Field(..., description="ComfyUI中的图片文件名")
+    image_filename: str = Field(..., description="处理节点中的图片文件名")
     matting_type: str = Field(..., description="抠图类型: subject(主体脱离)/split(主体背景分离)")
     seed: int = Field(default=-1, description="随机种子")
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
@@ -333,7 +333,7 @@ class MultiGridStoryboardRequest(ComfyUIRoutedRequest):
 
 
 class MaterialProcessRequest(ComfyUIRoutedRequest):
-    image_filename: str = Field(..., description="ComfyUI中的图片文件名")
+    image_filename: str = Field(..., description="处理节点中的图片文件名")
     workflow_type: str = Field(..., description="工作流类型: upscale_hd/remove_watermark/three_view")
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")

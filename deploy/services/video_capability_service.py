@@ -102,7 +102,7 @@ def build_video_model_manifest(
             },
             {
                 "key": "COMFYUI",
-                "label": "GPU 集群",
+                "label": "处理集群",
                 "provider": "comfyui",
                 "model_name": None,
                 "task_types": ["workflow"],

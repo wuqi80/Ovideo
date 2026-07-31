@@ -6,9 +6,9 @@ import {
   normalizeMiniMaxVideoParams,
 } from '../../services/videoModelService';
 
-describe('GPU runtime model label', () => {
-  it('shows the actual node-specific engines behind the stable Wan2 operation ID', () => {
-    expect(getModelDisplayName('Wan2')).toBe('GPU视频（GPU1·LTX / GPU2·Wan）');
+describe('processing cluster model label', () => {
+  it('uses neutral processing-node names behind the stable Wan2 operation ID', () => {
+    expect(getModelDisplayName('Wan2')).toBe('集群视频（处理节点1·LTX / 处理节点2·Wan）');
   });
 });
 

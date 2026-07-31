@@ -37,6 +37,7 @@ import {
   setPreferredGpuNodeId,
   type ClusterNodeOption,
 } from '../services/clusterNodeService';
+import { formatProcessingNodeName } from '../utils/processingTerminology';
 import { fitAngleOutputDimensions } from '../utils/angleOutputSize';
 import {
   buildIdentityAnchoredPrompt,
@@ -553,7 +554,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     } catch (error) {
       console.warn('[GenerationPage] cluster nodes unavailable:', error);
       setClusterNodes([]);
-      setClusterNodeMessage('GPU 集群节点状态暂时不可用，请刷新后重试。');
+      setClusterNodeMessage('处理集群节点状态暂时不可用，请刷新后重试。');
     } finally {
       setClusterNodesLoading(false);
     }
@@ -1360,7 +1361,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       const modelToUse = model || (useCurrentState ? globalModel : (shotModels[shot.id] || globalModel));
       beginShotProgress(shot.id, modelToUse);
       if (COMFYUI_MODELS.has(modelToUse) && submittedReferences.length === 0) {
-          throw new Error('练气/筑基等本地 GPU 模型需要一张参考图；请添加参考图，或先选择当前分镜已有的生成结果。');
+          throw new Error('当前生成模型需要一张参考图；请添加参考图，或先选择当前分镜已有的生成结果。');
       }
 
       const basePrompt = (useCurrentState ? prompt : shot.imagePrompt) || shot.scriptSegment || '';
@@ -1455,7 +1456,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   };
               }).filter(image => image.url);
           } else {
-              updateShotProgressStage(shot.id, '等待 GPU 接收任务', 8);
+              updateShotProgressStage(shot.id, '等待处理节点接收任务', 8);
               let workflowType: 'qwen' | 'qwen_lora' | 'kontext' | 'qwenN' | 'qwenN_lora';
               if (modelToUse === 'qwen') workflowType = 'qwen';
               else if (modelToUse === 'qwen_lora') workflowType = 'qwen_lora';
@@ -1477,7 +1478,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   taskId => {
                       currentTaskId = taskId;
                       saveRunningTask({ taskId, shotId: shot.id, fileId: selectedFileId || '', model: modelToUse, startedAt: Date.now() });
-                      updateShotProgressStage(shot.id, 'GPU 已接收任务，正在生成', 10);
+                      updateShotProgressStage(shot.id, '处理节点已接收任务，正在生成', 10);
                   },
                   {
                       entityType: 'storyboard_item', entityId: shot.id, fileRole: 'generated_image', episodeId,
@@ -2118,7 +2119,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
             console.log('✅ 直接拼合完成');
         } else if (fusionType === 'fusion') {
             // 图像融合模式 - 使用合成图调用ComfyUI
-            console.log('🔄 开始图像融合（传送合成图到ComfyUI）');
+            console.log('🔄 开始图像融合（提交到处理节点）');
             
             if (!params.compositeImage) {
                 throw new Error('合成图片缺失');
@@ -2887,15 +2888,15 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             <div className="flex items-start justify-between gap-2">
                                 <span>
                                     {usableClusterNodes.length > 0
-                                        ? <>此档走 <b>ComfyUI GPU 集群</b>。默认 GPU1，可手动切换任意在线节点；选择会保留。</>
-                                        : <>此档走 <b>ComfyUI GPU 集群</b>。当前未检测到在线节点，请先启动对应 Agent。</>}
+                                        ? <>此档使用 <b>处理集群</b>。默认使用处理节点1，可手动切换任意在线节点；选择会保留。</>
+                                        : <>此档使用 <b>处理集群</b>。当前未检测到在线处理节点，请稍后重试或联系管理员。</>}
                                 </span>
                                 <button
                                     type="button"
                                     onClick={loadClusterNodeOptions}
                                     disabled={clusterNodesLoading}
                                     className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-current/20 bg-n0/70 hover:bg-n0 disabled:opacity-60"
-                                    title="刷新 GPU 集群节点"
+                                    title="刷新处理集群节点"
                                 >
                                     <RefreshCw className={`w-3 h-3 ${clusterNodesLoading ? 'animate-spin' : ''}`} />
                                     刷新
@@ -2913,7 +2914,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                     className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-primary focus:outline-none disabled:bg-n20 disabled:text-n100"
                                 >
                                     {clusterNodes.length === 0 && (
-                                        <option value={DEFAULT_GPU_NODE_NAME}>{DEFAULT_GPU_NODE_NAME} · offline</option>
+                                        <option value={DEFAULT_GPU_NODE_NAME}>{formatProcessingNodeName(DEFAULT_GPU_NODE_NAME)} · offline</option>
                                     )}
                                     {clusterNodes.map((node) => (
                                         <option key={node.id} value={clusterNodePreferenceId(node)}>
@@ -3413,7 +3414,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             onClick={handleGenerateCurrent}
                             disabled={isCurrentShotGenerating || !prompt}
                             className="px-8 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg font-bold text-sm shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
-                            title={COMFYUI_MODELS.has(globalModel) && references.length === 0 && currentGeneratedImages.length === 0 ? '本地 GPU 模型需要参考图' : ''}
+                            title={COMFYUI_MODELS.has(globalModel) && references.length === 0 && currentGeneratedImages.length === 0 ? '当前模型需要参考图' : ''}
                         >
                             <Sparkles className={`w-4 h-4 ${isCurrentShotGenerating ? 'animate-spin' : ''}`} />
                             {isCurrentShotGenerating
@@ -3939,7 +3940,7 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
                         </div>
                         <div className="rounded-md border border-n40 bg-n20 p-3">
                             <div className="mb-2 flex items-center justify-between">
-                                <span className="text-xs font-semibold text-n700">处理 GPU</span>
+                                <span className="text-xs font-semibold text-n700">处理集群节点</span>
                                 <button
                                     type="button"
                                     onClick={onRefreshClusterNodes}
@@ -3957,7 +3958,7 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
                                 className="h-9 w-full rounded border border-n40 bg-n0 px-2 text-xs text-n700 outline-none focus:border-primary disabled:bg-n20 disabled:text-n100"
                             >
                                 {clusterNodes.length === 0 && (
-                                    <option value={DEFAULT_GPU_NODE_NAME}>{DEFAULT_GPU_NODE_NAME} · offline</option>
+                                    <option value={DEFAULT_GPU_NODE_NAME}>{formatProcessingNodeName(DEFAULT_GPU_NODE_NAME)} · offline</option>
                                 )}
                                 {clusterNodes.map((node) => (
                                     <option key={node.id} value={clusterNodePreferenceId(node)} disabled={!isClusterNodeUsable(node)}>
@@ -3967,7 +3968,7 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
                                 ))}
                             </select>
                             <p className="mt-1.5 text-[10px] leading-4 text-n300">
-                                输出保持原图比例。所选节点不可用时优先由 GPU1 接管，再由其他在线低负载节点处理。
+                                输出保持原图比例。所选节点不可用时优先由处理节点1接管，再由其他在线低负载节点处理。
                                 {clusterNodeMessage ? ` ${clusterNodeMessage}` : ''}
                             </p>
                         </div>

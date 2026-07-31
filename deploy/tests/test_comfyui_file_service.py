@@ -130,7 +130,7 @@ def test_fetch_comfyui_view_with_fallback_raises_with_status():
         )
 
     assert exc.value.status_code == 404
-    assert "无法获取文件: not found" in str(exc.value)
+    assert "处理节点暂时无法读取文件" in str(exc.value)
 
 
 class _ProjectDAO:
@@ -614,7 +614,7 @@ def test_upload_audio_file_to_comfyui_raises_on_rejected_upload(tmp_path):
         )
 
     assert exc.value.status_code == 502
-    assert "上传到 ComfyUI 失败: 502" in str(exc.value)
+    assert "上传到处理节点失败: 502" in str(exc.value)
 
 
 @pytest.mark.asyncio
@@ -692,5 +692,5 @@ async def test_upload_video_file_to_comfyui_raises_on_rejected_upload(tmp_path):
         )
 
     assert exc.value.status_code == 502
-    assert "上传到 ComfyUI 失败: 502" in str(exc.value)
+    assert "上传到处理节点失败: 502" in str(exc.value)
     assert _FileDAO.created == []

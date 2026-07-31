@@ -12,6 +12,7 @@ import type { GlobalTask, RegisteredTask, SourcePage, TaskKind, TaskNotification
 import { taskRegistry, type RegisterInput } from '../services/taskRegistry';
 import type { ServerNotificationRow } from '../services/notificationMapping';
 import { getStoredUserId } from '../services/accountStorage';
+import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 
 interface TaskContextValue {
   activeTasks: GlobalTask[];
@@ -228,7 +229,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (t.status === 'completed') {
               taskRegistry.complete(t.id);
             } else if (t.status === 'failed') {
-              taskRegistry.fail(t.id, t.error || `${t.displayName || '任务'}执行失败`);
+              taskRegistry.fail(t.id, sanitizeProcessingTerminology(t.error || `${t.displayName || '任务'}执行失败`));
             } else if (t.status === 'cancelled') {
               taskRegistry.cancel(t.id);
             }

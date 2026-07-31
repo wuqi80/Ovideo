@@ -70,7 +70,7 @@ const API = {
     
     // 🆕 上传图片到ComfyUI（用于Wan2等ComfyUI工作流）
     async uploadImageToComfyUI(file, nodeType = 'video') {
-        console.log(`📤 开始上传图片到ComfyUI (节点类型: ${nodeType}):`, file.name);
+        console.log(`📤 开始上传图片到处理节点 (节点类型: ${nodeType}):`, file.name);
         const token = Auth.getToken();
         if (!token) {
             throw new Error('请先登录');
@@ -89,11 +89,11 @@ const API = {
         
         if (!response.ok) {
             const error = await response.json().catch(() => ({ detail: '上传失败' }));
-            throw new Error(error.detail || '上传到ComfyUI失败');
+            throw new Error(error.detail || '上传到处理节点失败');
         }
         
         const result = await response.json();
-        console.log('✅ 图片上传到ComfyUI成功:', result.filename, `(节点: ${result.node_id || 'default'})`);
+        console.log('✅ 图片上传到处理节点成功:', result.filename, `(节点: ${result.node_id || 'default'})`);
         
         return result;  // 返回: { filename (ComfyUI文件名), storage_url, node_id, ... }
     },

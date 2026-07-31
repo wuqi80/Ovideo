@@ -14,6 +14,8 @@ def test_live_deploy_publishes_gpu_agent_for_self_update():
     assert 'GPU_AGENT_REMOTE_REL="persistent_storage/tools/$GPU_AGENT_SOURCE_NAME"' in script
     assert 'cp "$GPU_AGENT_SOURCE_DIR/$GPU_AGENT_SOURCE_NAME"' in script
     assert '"$STAGING_DIR/$GPU_AGENT_REMOTE_REL"' in script
+    assert 'PROCESSING_AGENT_PUBLIC_NAME="processing_agent.py"' in script
+    assert '"$STAGING_DIR/$PROCESSING_AGENT_REMOTE_REL"' in script
 
 
 def test_gpu_agent_version_keeps_control_capability_marker():

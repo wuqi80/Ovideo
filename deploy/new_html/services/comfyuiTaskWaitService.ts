@@ -3,6 +3,7 @@ import { getComfyUIQueueStatus } from './comfyuiTaskQueue';
 import type { ComfyQueueRegistryMeta } from './comfyuiTaskQueue';
 import { apiJson } from './httpClient';
 import { taskRegistry } from './taskRegistry';
+import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 
 // 轮询任务状态时，允许的最大连续瞬时错误次数。2 秒一次轮询，5 次约等于容忍 10 秒的网络抖动，
 // 超过才判定生成失败，避免单次网关抖动误杀仍在后端运行的生成任务。
@@ -30,10 +31,11 @@ export interface GeneratedImageResult {
 type ErrorNormalizeContext = Pick<ComfyUITaskRegistryMeta, 'kind' | 'title'>;
 
 function sanitizeComfyUIErrorDetail(message: string): string {
-    return message
-        .replace(/https?:\/\/127\.0\.0\.1:8188\/prompt/gi, '本地 ComfyUI /prompt')
+    const normalized = message
+        .replace(/https?:\/\/127\.0\.0\.1:8188\/prompt/gi, '处理服务请求')
         .replace(/\s+/g, ' ')
         .trim();
+    return sanitizeProcessingTerminology(normalized);
 }
 
 function workflowLabelFromContext(message: string, context?: ErrorNormalizeContext): string {
@@ -87,27 +89,27 @@ export function normalizeComfyUITaskError(error: unknown, context?: ErrorNormali
     const message = raw.trim();
 
     if (!message) {
-        return 'ComfyUI 任务失败。请检查所选 GPU 集群节点 / Agent 日志。';
+        return '处理任务失败。请检查所选处理节点状态后重试。';
     }
 
     if (/400\s+Client Error|Bad Request/i.test(message) && /127\.0\.0\.1:8188\/prompt|\/prompt/i.test(message)) {
         const label = workflowLabelFromContext(message, context);
         const detail = sanitizeComfyUIErrorDetail(message);
-        return `GPU 集群节点的 ComfyUI 拒绝了${label}工作流（HTTP 400）。请检查该节点是否安装工作流所需节点和模型，然后重试。详情：${detail}`;
+        return `处理节点拒绝了${label}工作流（HTTP 400）。请确认该处理节点已启用所需能力，然后重试。详情：${detail}`;
     }
 
     if (/ComfyUI\s+\/prompt\s+failed:\s*HTTP\s+400/i.test(message)) {
         const label = workflowLabelFromContext(message, context);
         const detail = sanitizeComfyUIErrorDetail(message);
-        return `GPU 集群节点的 ComfyUI 拒绝了${label}工作流（HTTP 400）。请检查该节点是否安装工作流所需节点和模型，然后重试。详情：${detail}`;
+        return `处理节点拒绝了${label}工作流（HTTP 400）。请确认该处理节点已启用所需能力，然后重试。详情：${detail}`;
     }
 
     if (/Task timed out/i.test(message)) {
-        return 'ComfyUI 等待超时。GPU 首次加载模型可能较慢，请检查 GPU 集群节点 / Agent 和 ComfyUI 队列后再重试。';
+        return '处理任务等待超时。首次加载资源可能较慢，请检查处理节点和任务队列后再重试。';
     }
 
     if (/Auto-cleanup:\s*stale task exceeded timeout/i.test(message)) {
-        return '任务长时间未被 GPU 集群节点接走，已被系统自动清理。请确认目标 Agent 在线后再重试。';
+        return '任务长时间未被处理节点接收，已被系统自动清理。请确认目标处理节点在线后再重试。';
     }
 
     return sanitizeComfyUIErrorDetail(message);
@@ -127,11 +129,11 @@ export const checkComfyUITaskStatus = async (taskId: string): Promise<{
         const data = await apiJson<any>(
             `/api/task/${taskId}`,
             { method: 'GET' },
-            'Query ComfyUI task status',
+            'Query processing task status',
             { authErrorMessage: 'Not logged in' }
         );
         if (data.status === 'completed') {
-            console.log(`ComfyUI task ${taskId} completed:`, JSON.stringify(data.result, null, 2));
+            console.log(`Processing task ${taskId} completed:`, JSON.stringify(data.result, null, 2));
         }
         return {
             status: data.status,
@@ -301,14 +303,14 @@ export const waitForComfyUITaskAllImages = async (
 
                 if (status.status === 'completed') {
                     const images = status.result?.images || [];
-                    console.log(`ComfyUI returned ${images.length} images:`, images);
+                    console.log(`Processing service returned ${images.length} images:`, images);
                     const results: GeneratedImageResult[] = images
                         .filter((img: any) => img.url)
                         .map((img: any) => ({
                             url: img.url,
                             fileId: img.file_id || null,
                         }));
-                    console.log(`Extracted ${results.length} ComfyUI image results:`, results);
+                    console.log(`Extracted ${results.length} processing image results:`, results);
 
                     if (results.length === 0) {
                         failTask(registryKey, hasRegistryMeta, 'No generated result found');

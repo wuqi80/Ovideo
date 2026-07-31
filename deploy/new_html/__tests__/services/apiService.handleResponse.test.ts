@@ -36,6 +36,19 @@ describe('handleResponse — 504 detail dict 平铺到 Error', () => {
     await expect(handleResponse(res, 'X')).rejects.toThrow(/something broke/);
   });
 
+  it('统一隐藏后端错误中的内部处理技术名称', async () => {
+    const res = makeRes(503, { detail: 'ComfyUI GPU Agent 当前离线' });
+    const assertion = expect(handleResponse(res, 'ComfyUI upload')).rejects.toThrow();
+
+    await assertion;
+    try {
+      await handleResponse(makeRes(503, { detail: 'ComfyUI GPU Agent 当前离线' }), 'ComfyUI upload');
+    } catch (error) {
+      expect((error as Error).message).toContain('处理节点');
+      expect((error as Error).message).not.toMatch(/GPU|ComfyUI/i);
+    }
+  });
+
   it('200 OK 正常解析 JSON', async () => {
     const res = makeRes(200, { success: true, task_id: 'abc' });
     const data = await handleResponse(res, 'X');
