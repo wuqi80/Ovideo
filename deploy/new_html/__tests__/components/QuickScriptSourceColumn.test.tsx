@@ -59,7 +59,7 @@ describe('QuickScriptSourceColumn', () => {
 
     expect(screen.getByTestId('quick-three-stage-panel')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '按三步生成' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '视频反推' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '视频反推' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '拆分剧本' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成视频脚本' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '生成镜头设计' })).toBeInTheDocument();
@@ -115,23 +115,24 @@ describe('QuickScriptSourceColumn', () => {
     expect(screen.getByText('· 成功后扣除')).toBeInTheDocument();
   });
 
-  it('opens video reverse in quick mode before source text exists', () => {
-    const onOpenVideoReverse = vi.fn();
+  it('shows the actual total credit cost after generation has completed', () => {
+    render(<QuickScriptSourceColumn {...baseProps} actualCreditCost={5} />);
+
+    expect(screen.getByText('本次合计消耗：5')).toBeInTheDocument();
+    expect(screen.getByText('积分')).toBeInTheDocument();
+    expect(screen.queryByText('· 成功后扣除')).not.toBeInTheDocument();
+  });
+
+  it('keeps quick generation disabled before source text exists', () => {
     render(
       <QuickScriptSourceColumn
         {...baseProps}
         selectedFile={{ ...file, originalContent: '' } as ProjectFile}
-        onOpenVideoReverse={onOpenVideoReverse}
       />,
     );
 
-    const reverseButton = screen.getByRole('button', { name: '视频反推' });
-    expect(reverseButton).not.toBeDisabled();
     expect(screen.getByRole('button', { name: '按三步生成' })).toBeDisabled();
-
-    fireEvent.click(reverseButton);
-
-    expect(onOpenVideoReverse).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: '视频反推' })).not.toBeInTheDocument();
   });
 
   it('runs each available master stage independently and shows its progress', async () => {

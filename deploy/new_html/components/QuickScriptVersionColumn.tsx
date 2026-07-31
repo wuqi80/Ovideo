@@ -128,10 +128,10 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
 
   return (
     <section
-      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-r border-n40 bg-n0"
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-n0"
       data-testid="quick-script-version-column"
     >
-      <header className="flex h-[52px] flex-shrink-0 items-center gap-2 border-b border-n40 px-4">
+      <header className="flex h-14 flex-shrink-0 items-center gap-2 border-b border-n40/70 px-4">
         <FileText className="h-4 w-4 flex-shrink-0 text-primary" />
         <h2 className="whitespace-nowrap text-sm font-semibold text-n700">3. 分镜脚本</h2>
         {version && availableVersions.length > 1 && onSelectVersion ? (
@@ -164,7 +164,7 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
         </span>
       </header>
 
-      <div className="flex h-[52px] flex-shrink-0 items-center gap-1.5 border-b border-n40 px-3">
+      <div className="mx-3 mb-2 mt-3 flex min-h-[48px] flex-shrink-0 items-center gap-1.5 rounded-md bg-n20/70 px-2.5 py-2">
         {version ? (
           <>
             <button
@@ -234,7 +234,7 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
       </div>
 
       {(saveError || error) && (
-        <div className="flex flex-shrink-0 items-start gap-2 border-b border-danger/30 bg-r50 px-3 py-2 text-[11px] leading-5 text-danger">
+        <div className="mx-3 mb-2 flex flex-shrink-0 items-start gap-2 rounded-md border border-danger/30 bg-r50 px-3 py-2 text-[11px] leading-5 text-danger">
           <span className="min-w-0 flex-1">{saveError || error}</span>
           <button
             type="button"
@@ -250,7 +250,7 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-hidden bg-n20">
+      <div className="mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-md border border-n40 bg-n20">
         {isEditing && version ? (
           <textarea
             autoFocus
@@ -266,6 +266,7 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
             highlightedItemIds={highlightedScriptItemIds}
             onSelectItemIds={handleSelectScriptItems}
             showHeader={false}
+            cardMode
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-n100">

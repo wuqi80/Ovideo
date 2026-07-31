@@ -43,6 +43,7 @@ interface StoryboardColumnProps {
   onInsertShot: (position: number, shotData: Omit<StoryboardItem, 'id'>) => Promise<void>;
   onInsertShotWithAI: (position: number, originalText: string) => Promise<void>;
   onClose?: () => void;
+  cardMode?: boolean;
   // 🔧 已移除 userRequirements - 新流程中镜头详情由规则自动解析生成
 }
 
@@ -80,6 +81,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
   onInsertShot,
   onInsertShotWithAI,
   onClose,
+  cardMode = false,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -373,8 +375,8 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
   const isStoryboardPromptRunning = storyboardPromptStage?.status === 'running';
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-n0">
-       <div className="h-[52px] px-4 border-b border-n40 bg-n0 flex-shrink-0 flex items-center justify-between">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-n0" data-card-mode={cardMode || undefined}>
+       <div className={`flex h-14 flex-shrink-0 items-center justify-between bg-n0 px-4 ${cardMode ? 'border-b border-n40/70' : 'border-b border-n40'}`}>
             <h2 className="text-sm font-semibold text-n700 flex items-center gap-2">
                 镜头设计
             </h2>
@@ -382,7 +384,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                  {/* 🔧 分镜详情由解析器自动填入，无需单独按钮 */}
 
                  {/* Version Controls - Always visible if file selected */}
-                 <div className="flex items-center gap-2 border-r border-n40 pr-2 mr-1">
+                 <div className={`mr-1 flex items-center gap-2 pr-2 ${cardMode ? '' : 'border-r border-n40'}`}>
                      <button
                          onClick={handleSaveClick}
                          disabled={!selectedFile}
@@ -406,7 +408,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                  </div>
 
                  {/* Undo/Redo */}
-                 <div className="flex items-center gap-1 border-r border-n40 pr-2">
+                 <div className={`flex items-center gap-1 pr-2 ${cardMode ? '' : 'border-r border-n40'}`}>
                      <button onClick={onUndo} disabled={!canUndo} className="p-1.5 text-n100 hover:text-n800 disabled:opacity-30 rounded hover:bg-n20">
                          <Undo2 className="w-4 h-4" />
                      </button>
@@ -419,12 +421,12 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                     <>
                     <button
                         onClick={onExport}
-                        disabled={isExporting || !isWorkflowScript}
-                        title={isWorkflowScript ? '将本集采用剧本导出到后续流程' : '请先在文件列表中将当前剧本设为后续采用'}
-                        className={`flex items-center gap-1 text-[10px] text-white px-3 py-1.5 rounded shadow-sm transition-colors font-semibold ${isExporting || !isWorkflowScript ? 'bg-n100 cursor-not-allowed' : 'bg-primary hover:bg-primary-hover'}`}
+                        disabled={isExporting}
+                        title={isWorkflowScript ? '将本集采用剧本导出到后续流程' : '导出时会自动设为本集主剧本'}
+                        className={`flex items-center gap-1 text-[10px] text-white px-3 py-1.5 rounded shadow-sm transition-colors font-semibold ${isExporting ? 'bg-n100 cursor-not-allowed' : 'bg-primary hover:bg-primary-hover'}`}
                     >
-                        {isExporting ? '导出中...' : isWorkflowScript ? '全部导出' : '设为采用后导出'}
-                        {!isExporting && isWorkflowScript && <ArrowRight className="w-3 h-3" />}
+                        {isExporting ? '导出中...' : '全部导出'}
+                        {!isExporting && <ArrowRight className="w-3 h-3" />}
                       </button>
                     </>
                 )}
@@ -443,13 +445,13 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
       </div>
       
       {/* Toolbar - 固定高度52px，与其他栏目对齐 */}
-      <div className="h-[52px] px-3 border-b border-n40 bg-n0 flex items-center">
+      <div className={`flex h-[52px] items-center bg-n0 px-3 ${cardMode ? '' : 'border-b border-n40'}`}>
         {selectedFile?.storyboard ? (
           <div className="w-full flex items-center gap-2 px-3 py-2 bg-primary-light border border-primary rounded-lg text-xs text-primary">
             <Film className="w-4 h-4" />
             <span>共 {segmentGroups.length} 个分段 · {selectedFile.storyboard.items.filter(i => !i.isPlaceholder).length} 个镜头</span>
             {Number.isFinite(generationCreditCost) && Number(generationCreditCost) > 0 && (
-              <span className="ml-auto inline-flex items-center gap-1 rounded border border-warning/30 bg-y50 px-2 py-1 text-[10px] font-medium text-warning" title="最近一次镜头详情生成实际扣除积分">
+              <span className="ml-auto inline-flex items-center gap-1 rounded border border-warning/30 bg-y50 px-2 py-1 text-[10px] font-medium text-warning" title="当前版本剧本生成与镜头设计生成合计扣除积分">
                 <Coins className="h-3.5 w-3.5" /> 本次消耗 {generationCreditCost} 积分
               </span>
             )}
@@ -635,7 +637,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
         /* 有分镜数据 - 显示卡片列表（生成中也显示） */
         <div
           ref={scrollContainerRef}
-          className="custom-scrollbar relative min-h-0 flex-1 space-y-4 overflow-y-auto bg-n20 p-4"
+          className={`custom-scrollbar relative min-h-0 flex-1 overflow-y-auto bg-n20 ${cardMode ? 'space-y-3 p-3' : 'space-y-4 p-4'}`}
           data-testid="storyboard-design-scroll-container"
         >
 

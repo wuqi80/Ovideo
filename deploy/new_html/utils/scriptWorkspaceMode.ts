@@ -1,4 +1,4 @@
-export type ScriptWorkspaceMode = 'writing' | 'quick';
+export type ScriptWorkspaceMode = 'writing' | 'quick' | 'reverse';
 
 export const DEFAULT_SCRIPT_WORKSPACE_MODE: ScriptWorkspaceMode = 'writing';
 export const SCRIPT_WORKSPACE_MODE_STORAGE_PREFIX = 'mecha:script-workspace-mode:v1';
@@ -15,7 +15,7 @@ export function readScriptWorkspaceMode(
   username?: string | null,
 ): ScriptWorkspaceMode {
   const value = storage.getItem(getScriptWorkspaceModeStorageKey(username));
-  return value === 'quick' || value === 'writing'
+  return value === 'quick' || value === 'writing' || value === 'reverse'
     ? value
     : DEFAULT_SCRIPT_WORKSPACE_MODE;
 }

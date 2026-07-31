@@ -13,6 +13,7 @@ interface StoryboardScriptColumnProps {
   highlightedItemIds: Set<string>;
   onSelectItemIds: (selectedIds: Set<string>) => void;
   showHeader?: boolean;
+  cardMode?: boolean;
 }
 
 const getScriptBlock = (item: StoryboardItem): string => (
@@ -32,6 +33,7 @@ export const StoryboardScriptColumn: React.FC<StoryboardScriptColumnProps> = ({
   highlightedItemIds,
   onSelectItemIds,
   showHeader = true,
+  cardMode = false,
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
@@ -66,7 +68,7 @@ export const StoryboardScriptColumn: React.FC<StoryboardScriptColumnProps> = ({
 
   return (
     <section
-      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-r border-n40 bg-n20"
+      className={`flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-n20 ${cardMode ? '' : 'border-r border-n40'}`}
       data-testid="storyboard-script-column"
       aria-label="当前镜头设计对应的分镜脚本"
     >
@@ -92,7 +94,7 @@ export const StoryboardScriptColumn: React.FC<StoryboardScriptColumnProps> = ({
 
       <div
         ref={scrollContainerRef}
-        className="custom-scrollbar relative min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
+        className={`custom-scrollbar relative min-h-0 flex-1 space-y-3 overflow-y-auto ${cardMode ? 'p-3' : 'p-4'}`}
         data-testid="storyboard-script-scroll-container"
       >
         {items.length > 0 ? segmentGroups.map(group => {

@@ -210,6 +210,41 @@ async function validateOrReplanVideoScript(
   return content;
 }
 
+function buildVideoScriptSegmentsFromGroups(
+  originalContent: string,
+  orderedSegments: ScriptSegment[],
+  content: string,
+): ScriptSegment[] {
+  const groups = parseVideoScriptGroups(content);
+  if (groups.length === 0) return [];
+
+  const shouldPreserveSourceSegments = groups.length === orderedSegments.length
+    && !isBriefCreativeSeed(originalContent, orderedSegments);
+
+  return groups.map((group, index) => {
+    const existing = shouldPreserveSourceSegments ? orderedSegments[index] : undefined;
+    const durationSec = group.blocks.reduce((total, block) => {
+      const duration = normalizePositiveIntegerSeconds(block.durationSec);
+      return total + (duration || 0);
+    }, 0);
+    const groupContent = [`分段${group.groupNo}`, group.rawGroup].filter(Boolean).join('\n').trim();
+    const sourceText = existing?.sourceText
+      || group.blocks.map(block => block.rawBlock).filter(Boolean).join('\n\n')
+      || groupContent;
+
+    return {
+      ...(existing || {}),
+      id: existing?.id || `seg_local_video_${Date.now().toString(36)}_${group.groupNo}_${index}`,
+      order: index,
+      sourceText,
+      estimatedDurationSec: durationSec > 0 ? durationSec : (existing?.estimatedDurationSec ?? null),
+      videoScript: groupContent,
+      status: 'done' as const,
+      errorMessage: '',
+    };
+  });
+}
+
 async function splitWithValidation(
   model: AiModel,
   originalContent: string,
@@ -322,17 +357,12 @@ export async function generateVideoScriptForSegments(
   const groups = parseVideoScriptGroups(content);
   options.onProgress?.({
     stage: 'videoScript',
-    completed: orderedSegments.length,
-    total: orderedSegments.length,
+    completed: groups.length || orderedSegments.length,
+    total: groups.length || orderedSegments.length,
     content,
   });
-  const completedSegments = orderedSegments.map((segment, index) => ({
-    ...segment,
-    videoScript: outputs[index] || '',
-    status: 'done' as const,
-    errorMessage: '',
-  }));
   if (groups.length === 0) throw new Error('视频脚本生成未返回可解析的分段/分镜，请手动调整后重试');
+  const completedSegments = buildVideoScriptSegmentsFromGroups(originalContent, orderedSegments, content);
   return { segments: completedSegments, content, inputTexts, outputTexts };
 }
 

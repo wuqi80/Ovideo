@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BookOpen, ChevronDown, Coins, Film, LoaderCircle, Wand2, X } from 'lucide-react';
+import { BookOpen, ChevronDown, Coins, LoaderCircle, Wand2, X } from 'lucide-react';
 import type { AiModel, ProjectFile, ScriptStoryboardVersion } from '../types';
 import {
   formatScriptModelSelectLabel,
@@ -29,7 +29,7 @@ interface QuickScriptSourceColumnProps {
   onGenerateVideoScript: (fileId: string) => Promise<boolean | ScriptStoryboardVersion | void>;
   onExtractStoryboardPrompts: (fileId: string) => Promise<boolean | void>;
   onRunThreeStage: (fileId: string) => Promise<void>;
-  onOpenVideoReverse?: () => void;
+  actualCreditCost?: number;
 }
 
 export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = ({
@@ -46,7 +46,7 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
   onGenerateVideoScript,
   onExtractStoryboardPrompts,
   onRunThreeStage,
-  onOpenVideoReverse,
+  actualCreditCost = 0,
 }) => {
   const [requestError, setRequestError] = useState('');
   const [estimatedCreditCost, setEstimatedCreditCost] = useState<number | null>(null);
@@ -78,6 +78,7 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
   const isBusy = isLoading || isSending || isStageRunning;
   const selectedModelOption = getScriptModelOption(aiModel, modelOptions);
   const selectedModelHint = selectedModelOption.hint.trim();
+  const completedActualCreditCost = Number.isFinite(actualCreditCost) && actualCreditCost > 0 ? actualCreditCost : 0;
   const creditEstimateParams = useMemo(() => {
     if (!selectedFile?.originalContent?.trim()) return null;
     const sourceText = selectedFile.originalContent;
@@ -165,10 +166,10 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
 
   return (
     <section
-      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-r border-n40 bg-n0"
+      className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-n0"
       data-testid="quick-script-source-column"
     >
-      <header className="flex h-[52px] flex-shrink-0 items-center gap-2 border-b border-n40 px-4">
+      <header className="flex h-14 flex-shrink-0 items-center gap-2 border-b border-n40/70 px-4">
         <BookOpen className="h-4 w-4 flex-shrink-0 text-primary" />
         <h2 className="whitespace-nowrap text-sm font-semibold text-n700">2. 文字脚本</h2>
         <div className="ml-auto flex min-w-0 items-center gap-2">
@@ -199,7 +200,7 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
         </div>
       </header>
 
-      <div className="relative min-h-0 flex-1 bg-n20">
+      <div className="relative mx-3 mb-3 min-h-0 flex-1 overflow-hidden rounded-md border border-n40 bg-n0">
         {selectedFile ? (
           <textarea
             key={selectedFile.id}
@@ -208,7 +209,7 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
             onChange={event => onUpdateSource(selectedFile.id, event.target.value)}
             placeholder="在此输入文字剧本…"
             aria-label="文字剧本"
-            className="h-full w-full resize-none bg-transparent p-5 font-serif text-sm leading-7 text-n700 outline-none custom-scrollbar focus:bg-n0 read-only:cursor-default"
+            className="h-full w-full resize-none bg-n0 p-5 font-serif text-sm leading-7 text-n700 outline-none custom-scrollbar focus:ring-1 focus:ring-inset focus:ring-primary/20 read-only:cursor-default"
             spellCheck={false}
           />
         ) : (
@@ -220,7 +221,7 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
       </div>
 
       {selectedFile && (
-        <div className="flex-shrink-0 border-t border-n40 bg-n0 p-3" data-testid="quick-three-stage-panel">
+        <div className="mx-3 mb-3 flex-shrink-0 rounded-md border border-n40 bg-n20/60 p-3" data-testid="quick-three-stage-panel">
           {visibleError && (
             <div className="mb-2 flex items-start gap-2 rounded border border-danger/30 bg-r50 px-2.5 py-2 text-[11px] leading-5 text-danger">
               <span className="min-w-0 flex-1">{visibleError}</span>
@@ -238,19 +239,8 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
               </button>
             </div>
           )}
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2.5 flex items-center justify-between">
             <span className="text-xs font-semibold text-n700">三步生成</span>
-            {onOpenVideoReverse && (
-              <button
-                type="button"
-                onClick={onOpenVideoReverse}
-                disabled={isBusy}
-                className="ml-auto mr-2 inline-flex h-8 items-center gap-1.5 rounded border border-primary/30 bg-primary-light px-3 text-xs font-semibold text-primary hover:border-primary hover:bg-n0 disabled:cursor-not-allowed disabled:border-n40 disabled:bg-n20 disabled:text-n100"
-              >
-                <Film className="h-3.5 w-3.5" />
-                视频反推
-              </button>
-            )}
             <button
               type="button"
               onClick={() => void runAction(onRunThreeStage, '按三步生成失败，请稍后重试')}
@@ -286,29 +276,37 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
           ] as const).map(row => {
             const stage = stages?.[row.key];
             return (
-              <div key={row.key} className="flex min-w-0 items-center gap-2 border-t border-n40 py-1.5">
-                <button
-                  type="button"
-                  onClick={() => void runAction(row.action, `${row.label}失败，请稍后重试`)}
-                  disabled={row.disabled || isBusy}
-                  className="h-7 flex-shrink-0 rounded border border-n40 bg-n0 px-2 text-[11px] font-medium text-n700 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:border-n40 disabled:text-n100"
-                >
-                  {row.label}
-                </button>
-                <span className="min-w-0 flex-1 truncate text-[10px] text-n300">{row.metric}</span>
-                <span className={`inline-flex flex-shrink-0 items-center gap-1 text-[10px] ${statusClass(stage)}`}>
-                  {stage?.status === 'running' && <LoaderCircle className="h-3 w-3 animate-spin" />}
-                  {statusText(stage)}
-                </span>
+              <div key={row.key} className="mb-1.5 rounded border border-n40 bg-n0 px-2.5 py-2 last:mb-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void runAction(row.action, `${row.label}失败，请稍后重试`)}
+                    disabled={row.disabled || isBusy}
+                    className="min-w-0 flex-1 truncate text-left text-[11px] font-semibold text-n700 hover:text-primary disabled:cursor-not-allowed disabled:text-n100"
+                  >
+                    {row.label}
+                  </button>
+                  <span className={`inline-flex flex-shrink-0 items-center gap-1 text-[10px] ${statusClass(stage)}`}>
+                    {stage?.status === 'running' && <LoaderCircle className="h-3 w-3 animate-spin" />}
+                    {statusText(stage)}
+                  </span>
+                </div>
+                <span className="mt-1 block truncate text-[10px] text-n300">{row.metric}</span>
               </div>
             );
           })}
-          <div className="mt-2 flex items-center gap-1.5 border-t border-n40 pt-2 text-[10px] font-medium text-warning">
+          <div className="mt-2.5 flex items-center gap-1.5 px-0.5 text-[10px] font-medium text-warning">
             <Coins className="h-3.5 w-3.5 flex-shrink-0" />
-            <span title="按当前输入、所选模型和预计镜头规模估算，实际以成功生成后的用量为准">
-              预计消耗积分：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
+            <span title={completedActualCreditCost > 0 ? '当前版本剧本生成与镜头设计生成合计扣除积分' : '按当前输入、所选模型和预计镜头规模估算，实际以成功生成后的用量为准'}>
+              {completedActualCreditCost > 0
+                ? `本次合计消耗：${completedActualCreditCost}`
+                : `预计消耗积分：${isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}`}
             </span>
-            <span className="text-n100">· 成功后扣除</span>
+            {completedActualCreditCost > 0 ? (
+              <span className="text-n100">积分</span>
+            ) : (
+              <span className="text-n100">· 成功后扣除</span>
+            )}
           </div>
         </div>
       )}

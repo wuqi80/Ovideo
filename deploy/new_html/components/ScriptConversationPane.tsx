@@ -24,7 +24,6 @@ import {
   Send,
   Upload,
   User,
-  Wand2,
   X,
 } from 'lucide-react';
 import {
@@ -72,7 +71,6 @@ interface ScriptConversationPaneProps {
   onEditVersion: (version: ScriptStoryboardVersion, content: string) => Promise<void>;
   onExportVersion: (version: ScriptStoryboardVersion) => void;
   onOpenStoryboard: () => void;
-  onOpenVideoReverse?: () => void;
   storyboardItemCount: number;
   workspaceMode?: ScriptWorkspaceMode;
   onWorkspaceModeChange?: (mode: ScriptWorkspaceMode) => void;
@@ -194,7 +192,6 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   onEditVersion,
   onExportVersion,
   onOpenStoryboard,
-  onOpenVideoReverse,
   storyboardItemCount,
   workspaceMode,
   onWorkspaceModeChange,
@@ -751,7 +748,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             <LoaderCircle className="h-4 w-4 animate-spin text-primary" /> 正在加载对话
           </div>
         ) : (conversation?.messages || []).length > 0 ? (
-          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 py-4 lg:grid-cols-[156px_minmax(0,1fr)_172px] xl:grid-cols-[172px_minmax(0,1fr)_196px]">
+          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 py-4 lg:grid-cols-[172px_minmax(0,1fr)_172px] xl:grid-cols-[196px_minmax(0,1fr)_196px]">
             <aside className="hidden min-w-0 lg:block" data-testid="conversation-turn-rail">
               <div className="sticky top-4 border-r border-n40 pr-3">
                 <div className="mb-2 flex h-7 min-w-0 items-center gap-1">
@@ -857,7 +854,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
           className="pointer-events-none absolute inset-x-0 z-40"
           style={{ bottom: composerHeight + 28 }}
         >
-          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 lg:grid-cols-[124px_minmax(0,1fr)_172px] xl:grid-cols-[140px_minmax(0,1fr)_196px]">
+          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 lg:grid-cols-[172px_minmax(0,1fr)_172px] xl:grid-cols-[196px_minmax(0,1fr)_196px]">
             <div className="flex min-w-0 justify-center lg:col-start-2">
               <button
                 type="button"
@@ -876,7 +873,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
 
       <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30" data-testid="floating-conversation-composer">
         <div
-          className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 lg:grid-cols-[124px_minmax(0,1fr)_172px] xl:grid-cols-[140px_minmax(0,1fr)_196px]"
+          className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 lg:grid-cols-[172px_minmax(0,1fr)_172px] xl:grid-cols-[196px_minmax(0,1fr)_196px]"
           data-testid="conversation-composer-grid"
         >
           <div className="min-w-0 lg:col-start-2">
@@ -958,19 +955,6 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             >
               <Upload className="h-4 w-4" />
             </button>
-            {onOpenVideoReverse && (
-              <button
-                type="button"
-                onClick={onOpenVideoReverse}
-                disabled={!selectedFile || isSending}
-                title="视频反推：上传视频并生成候选剧本"
-                aria-label="打开视频反推"
-                className="inline-flex h-8 items-center gap-1.5 rounded px-2 text-xs text-n300 hover:bg-n20 hover:text-primary disabled:cursor-not-allowed disabled:text-n100"
-              >
-                <Wand2 className="h-4 w-4" />
-                视频反推
-              </button>
-            )}
             <span
               className="inline-flex flex-shrink-0 items-center gap-1 text-xs font-medium text-warning"
               title="根据当前输入、历史上下文、预计输出和所选模型动态计算"

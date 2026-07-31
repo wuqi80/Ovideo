@@ -30,9 +30,11 @@ describe('script workspace mode preference', () => {
 
     writeScriptWorkspaceMode(storage, 'Alice', 'quick');
     writeScriptWorkspaceMode(storage, 'Bob', 'writing');
+    writeScriptWorkspaceMode(storage, 'Carol', 'reverse');
 
     expect(readScriptWorkspaceMode(storage, 'alice')).toBe('quick');
     expect(readScriptWorkspaceMode(storage, 'bob')).toBe('writing');
+    expect(readScriptWorkspaceMode(storage, 'carol')).toBe('reverse');
     expect(getScriptWorkspaceModeStorageKey('Alice')).not.toBe(
       getScriptWorkspaceModeStorageKey('Bob'),
     );

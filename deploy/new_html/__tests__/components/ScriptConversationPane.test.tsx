@@ -68,12 +68,13 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('composerFileInputRef.current?.click()');
   });
 
-  it('integrates video reverse as a script composer tool and refreshes the imported candidate', () => {
-    expect(source).toContain('aria-label="打开视频反推"');
-    expect(source).toContain('视频反推：上传视频并生成候选剧本');
-    expect(workspace).toContain('data-testid="video-reverse-tool-dialog"');
-    expect(workspace).toContain('onOpenVideoReverse={() => setVideoReverseOpen(true)}');
+  it('integrates video reverse as an independent script workspace mode and refreshes the imported candidate', () => {
+    expect(source).not.toContain('aria-label="打开视频反推"');
+    expect(workspace).toContain("scriptWorkspaceMode === 'reverse'");
+    expect(workspace).toContain('data-testid="video-reverse-workspace"');
+    expect(workspace).toContain('上传视频并生成可导入的候选剧本');
     expect(workspace).toContain('await loadEpisodeData(scriptId)');
+    expect(workspace).toContain("handleScriptWorkspaceModeChange('writing')");
     expect(videoReversePage).toContain('onCandidateCreated?: (scriptId: string) => Promise<void> | void');
     expect(videoReversePage).toContain('await onCandidateCreated(scriptId)');
     expect(videoReversePage).toContain('createScriptVersion(episodeId, scriptId');
@@ -180,8 +181,8 @@ describe('ScriptConversationPane workflow', () => {
 
   it('aligns the floating composer with the center conversation column', () => {
     expect(source).toContain('data-testid="conversation-composer-grid"');
-    expect(source).toContain('lg:grid-cols-[124px_minmax(0,1fr)_172px]');
-    expect(source).toContain('xl:grid-cols-[140px_minmax(0,1fr)_196px]');
+    expect(source).toContain('lg:grid-cols-[172px_minmax(0,1fr)_172px]');
+    expect(source).toContain('xl:grid-cols-[196px_minmax(0,1fr)_196px]');
     expect(source).toContain('min-w-0 lg:col-start-2');
     expect(source).toContain('pointer-events-auto relative flex w-full flex-col');
     expect(source).not.toContain('w-[calc(100%-24px)] max-w-6xl');

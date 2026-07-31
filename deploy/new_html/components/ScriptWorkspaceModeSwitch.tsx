@@ -1,5 +1,4 @@
 import React from 'react';
-import { LayoutGrid, MessagesSquare } from 'lucide-react';
 import type { ScriptWorkspaceMode } from '../utils/scriptWorkspaceMode';
 
 interface ScriptWorkspaceModeSwitchProps {
@@ -11,19 +10,21 @@ const OPTIONS: Array<{
   value: ScriptWorkspaceMode;
   label: string;
   title: string;
-  icon: React.ComponentType<{ className?: string }>;
 }> = [
   {
     value: 'quick',
     label: '快速版',
     title: '快速版：使用四列工作区查看同一份剧本和镜头数据',
-    icon: LayoutGrid,
   },
   {
     value: 'writing',
     label: '写作版',
     title: '写作版：通过对话持续生成和修改分镜脚本',
-    icon: MessagesSquare,
+  },
+  {
+    value: 'reverse',
+    label: '视频反推',
+    title: '视频反推：上传视频并生成可导入的候选剧本',
   },
 ];
 
@@ -32,13 +33,12 @@ export const ScriptWorkspaceModeSwitch: React.FC<ScriptWorkspaceModeSwitchProps>
   onChange,
 }) => (
   <div
-    className="inline-flex h-8 flex-shrink-0 items-center rounded border border-n40 bg-n20 p-0.5"
+    className="inline-flex h-9 flex-shrink-0 items-center rounded-full border border-n40 bg-n30 p-1"
     role="radiogroup"
     aria-label="分集剧本工作模式"
     data-testid="script-workspace-mode-switch"
   >
     {OPTIONS.map(option => {
-      const Icon = option.icon;
       const active = mode === option.value;
       return (
         <button
@@ -48,13 +48,12 @@ export const ScriptWorkspaceModeSwitch: React.FC<ScriptWorkspaceModeSwitchProps>
           aria-checked={active}
           title={option.title}
           onClick={() => onChange(option.value)}
-          className={`inline-flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium transition-colors ${
+          className={`inline-flex h-7 min-w-[68px] items-center justify-center rounded-full px-3 text-xs font-medium transition-all ${
             active
               ? 'bg-n0 text-primary shadow-sm'
-              : 'text-n300 hover:bg-n0/70 hover:text-n700'
+              : 'text-n400 hover:bg-n0/65 hover:text-n800'
           }`}
         >
-          <Icon className="h-3.5 w-3.5" />
           {option.label}
         </button>
       );

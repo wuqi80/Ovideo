@@ -19,11 +19,13 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain("(file.storyboard?.items || []).filter(item => !item.isPlaceholder)");
   });
 
-  it('exports only the adopted workflow script without replacing persisted storyboards', () => {
-    expect(source).toContain('filesRef.current.find(file => file.id === activeScriptId)');
-    expect(source).toContain('if (selectedFileId !== activeScriptId)');
+  it('exports the current script by adopting it first without replacing persisted storyboards', () => {
+    expect(source).toContain('const exportFileId = selectedFileId || activeScriptId');
+    expect(source).toContain('filesRef.current.find(file => file.id === exportFileId)');
+    expect(source).toContain('await activateWorkflowScript(exportFileId)');
     expect(source).toContain('preserve_existing_storyboards: true');
     expect(source).toContain('storyboard_items: []');
+    expect(source).not.toContain('当前浏览的不是本集后续采用剧本，请先在文件列表中设为后续采用。');
   });
 
   it('downloads a complete JSON workspace backup from the file column', () => {
@@ -41,9 +43,13 @@ describe('WorkspaceApp script workflow persistence', () => {
 
   it('appends persistent storyboard snapshots after generation and manual saves', () => {
     expect(source).toContain('const persistStoryboardSnapshot = useCallback');
+    expect(source).toContain('waitForRemote?: boolean');
+    expect(source).toContain('if (options.waitForRemote === false)');
+    expect(source).toContain('void persistRemoteSnapshot().catch');
     expect(source).toContain('{ [STORYBOARD_SNAPSHOTS_METADATA_KEY]: snapshots }');
     expect(source).toContain("source: 'auto'");
     expect(source).toContain("source: 'manual'");
+    expect(source).toContain('waitForRemote: false');
     expect(source).toContain('collectConversationStoryboardSnapshots(mergedConversation)');
     expect(source).toContain('handleConversationGenerateDesign(version, { autoSnapshot: false })');
   });
@@ -59,8 +65,8 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('onGenerateVideoScript={handleGenerateVideoScript}');
     expect(source).toContain('onExtractStoryboardPrompts={handleExtractStoryboardPrompts}');
     expect(source).toContain('onRunThreeStage={handleRunThreeStagePipeline}');
-    expect(source).toContain('const videoReverseToolDialog = videoReverseOpen ?');
-    expect(source).toContain('onOpenVideoReverse={() => setVideoReverseOpen(true)}');
+    expect(source).toContain("scriptWorkspaceMode === 'reverse'");
+    expect(source).toContain('data-testid="video-reverse-workspace"');
     expect(source).toContain('onEditVersion={handleConversationEditVersion}');
     expect(source).toContain('handleConversationGenerateDesign(version, { openDrawer: false })');
     expect(source).toContain('version={quickPipelineVersion}');
@@ -129,6 +135,6 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('data-testid="quick-script-canvas"');
     expect(source).toContain("style={{ width: 0, flex: '1 1 0%' }}");
     expect(source).toContain('data-testid="quick-script-columns"');
-    expect(source).toContain('className="flex h-full w-full min-w-[900px] max-w-none overflow-hidden"');
+    expect(source).toContain('className="flex h-full w-full min-w-[900px] max-w-none gap-2 overflow-hidden bg-n20 p-2"');
   });
 });

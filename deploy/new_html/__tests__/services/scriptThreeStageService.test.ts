@@ -65,7 +65,7 @@ describe('three-stage script pipeline prefers usable output over blocking valida
     expect(() => assertValidVideoScript('只有普通文字，没有分段和分镜')).toThrow('第二步未解析出有效分段和分镜');
   });
 
-  it('turns a short creative idea into one local seed segment instead of calling the split model', async () => {
+  it('uses one local seed call for a short idea but returns the generated groups as formal segments', async () => {
     aiMocks.aiGenerateVideoScriptFromSegment.mockResolvedValue([
       '分段1',
       '分镜1-1',
@@ -103,12 +103,16 @@ describe('three-stage script pipeline prefers usable output over blocking valida
       undefined,
       expect.objectContaining({ suppressNotification: true }),
     );
-    expect(result.segments).toHaveLength(1);
+    expect(result.segments).toHaveLength(2);
+    expect(result.segments.map(segment => segment.estimatedDurationSec)).toEqual([8, 7]);
+    expect(result.segments[0].videoScript).toContain('分段1');
+    expect(result.segments[1].videoScript).toContain('分段2');
     expect(parseVideoScriptGroups(result.content)).toHaveLength(2);
     expect(result.content).toContain('天兵在南天门前列阵');
     expect(progress).toEqual(expect.arrayContaining([
       { stage: 'split', completed: 1, total: 1 },
       { stage: 'videoScript', completed: 1, total: 1 },
+      { stage: 'videoScript', completed: 2, total: 2 },
     ]));
   });
 

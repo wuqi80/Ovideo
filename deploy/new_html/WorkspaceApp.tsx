@@ -111,6 +111,16 @@ function buildScriptSegmentPayload(segments: ScriptSegment[]) {
     error_message: s.errorMessage || '',
   }));
 }
+
+function numericCreditCost(value: unknown): number {
+  const cost = Number(value || 0);
+  return Number.isFinite(cost) && cost > 0 ? cost : 0;
+}
+
+function getStoryboardVersionTotalCreditCost(version?: ScriptStoryboardVersion): number {
+  const metadata = version?.metadata || {};
+  return numericCreditCost(metadata.creditCost) + numericCreditCost(metadata.storyboardDesignCreditCost);
+}
 const LegacyHistoryPage = React.lazy(() => import('./components/HistoryPage').then(m => ({ default: m.HistoryPage })));
 
 function buildBoundAssetTags(item: Partial<StoryboardItem>): string[] {
@@ -586,7 +596,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const [conversationSendingId, setConversationSendingId] = useState<string | null>(null);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [storyboardDrawerOpen, setStoryboardDrawerOpen] = useState(false);
-  const [videoReverseOpen, setVideoReverseOpen] = useState(false);
   const loadedConversationKeysRef = useRef<Set<string>>(new Set());
   const conversationRequestsRef = useRef<Map<string, Promise<ScriptConversation>>>(new Map());
   const appliedConversationModelRef = useRef<string>('');
@@ -597,7 +606,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const handleScriptWorkspaceModeChange = useCallback((mode: ScriptWorkspaceMode) => {
     writeScriptWorkspaceMode(localStorage, scriptWorkspaceUsername, mode);
     setScriptWorkspaceMode(mode);
-    if (mode === 'quick') setStoryboardDrawerOpen(false);
+    if (mode !== 'writing') setStoryboardDrawerOpen(false);
   }, [scriptWorkspaceUsername]);
 
   const selectedFile = files.find(f => f.id === selectedFileId);
@@ -609,6 +618,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const selectedConversationVersion = selectedConversation?.versions.find(
     version => version.id === selectedConversation.currentVersionId,
   ) || selectedConversation?.versions[selectedConversation.versions.length - 1];
+  const selectedConversationVersionCreditCost = getStoryboardVersionTotalCreditCost(selectedConversationVersion);
   const fallbackQuickVersion = selectedFile?.scriptContent ? buildLocalScriptConversation(selectedFile).versions[0] : undefined;
   const quickAvailableVersions = selectedConversation?.versions?.length
     ? selectedConversation.versions
@@ -1292,6 +1302,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       name?: string;
       source: 'auto' | 'manual';
       version?: ScriptStoryboardVersion;
+      waitForRemote?: boolean;
     },
   ): Promise<FileVersion> => {
     const file = filesRef.current.find(item => item.id === fileId);
@@ -1312,7 +1323,18 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       scriptVersionId: targetVersion?.id,
     });
 
-    if (targetVersion && !targetVersion.id.startsWith('legacy_') && !fileId.startsWith('local_')) {
+    setFiles(prev => {
+      const next = prev.map(item => (
+        item.id === fileId
+          ? { ...item, versions: mergeStoryboardSnapshots(item.versions || [], [snapshot]) }
+          : item
+      ));
+      filesRef.current = next;
+      return next;
+    });
+
+    const persistRemoteSnapshot = async () => {
+      if (!targetVersion || targetVersion.id.startsWith('legacy_') || fileId.startsWith('local_')) return;
       const snapshots = mergeStoryboardSnapshots(
         getVersionStoryboardSnapshots(targetVersion),
         [snapshot],
@@ -1332,17 +1354,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           )),
         },
       }) : prev);
+    };
+
+    if (options.waitForRemote === false) {
+      void persistRemoteSnapshot().catch(error => {
+        console.warn('后台同步镜头设计存档失败:', error);
+      });
+      return snapshot;
     }
 
-    setFiles(prev => {
-      const next = prev.map(item => (
-        item.id === fileId
-          ? { ...item, versions: mergeStoryboardSnapshots(item.versions || [], [snapshot]) }
-          : item
-      ));
-      filesRef.current = next;
-      return next;
-    });
+    await persistRemoteSnapshot();
     return snapshot;
   }, [propEpisodeId, scriptConversations]);
 
@@ -1350,6 +1371,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     await persistStoryboardSnapshot(id, {
       name: customName,
       source: 'manual',
+      waitForRemote: false,
     });
   }, [persistStoryboardSnapshot]);
 
@@ -2181,6 +2203,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         source: 'auto',
         version: selectedVersion,
         name: `自动存档 · 分镜脚本 V${selectedVersion.versionNo} · ${new Date().toLocaleString('zh-CN')}`,
+        waitForRemote: false,
       });
 
       const billingParams = {
@@ -2986,11 +3009,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         const projIdx = pathSegments.indexOf('projects');
         const pid = projIdx >= 0 ? pathSegments[projIdx + 1] : '';
         const eid = pathSegments[epIdx + 1];
-        const workflowFile = filesRef.current.find(file => file.id === activeScriptId);
+        const exportFileId = selectedFileId || activeScriptId;
+        const workflowFile = filesRef.current.find(file => file.id === exportFileId);
         if (pid && eid && workflowFile) {
-          if (selectedFileId !== activeScriptId) {
-            alert('当前浏览的不是本集后续采用剧本，请先在文件列表中设为后续采用。');
+          const exportableItems = (workflowFile.storyboard?.items || []).filter(item => !item.isPlaceholder);
+          if (exportableItems.length === 0) {
+            alert('当前没有可导出的镜头设计，请先生成镜头设计。');
             return;
+          }
+          if (exportFileId && exportFileId !== activeScriptId) {
+            await activateWorkflowScript(exportFileId);
           }
           await saveEpisodeToBackend();
           const charSet = new Set<string>(workflowFile.extractedCharacters || []);
@@ -3659,6 +3687,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           name: sourceVersion
             ? `自动存档 · 分镜脚本 V${sourceVersion.versionNo} · ${new Date().toLocaleString('zh-CN')}`
             : `自动存档 · 快速版镜头设计 · ${new Date().toLocaleString('zh-CN')}`,
+          waitForRemote: false,
         });
       } catch (snapshotError) {
         console.error('自动保存镜头设计失败:', snapshotError);
@@ -3882,6 +3911,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           source: 'auto',
           version: snapshotVersion,
           name: `自动存档 · 镜头详情 · ${new Date().toLocaleString('zh-CN')}`,
+          waitForRemote: false,
         });
       } catch (error) {
         console.error('自动保存镜头详情失败:', error);
@@ -4168,24 +4198,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   }, []);
 
   const isFullView = visibleColumns.every(v => v);
-  const videoReverseToolDialog = videoReverseOpen ? (
-    <div className="absolute inset-0 z-[90] bg-n900/45 p-3 sm:p-5" data-testid="video-reverse-tool-dialog">
-      <div className="h-full w-full overflow-hidden rounded-md border border-n40 bg-n0 shadow-bottom">
-        <React.Suspense fallback={<LegacyViewFallback label="video-reverse" />}>
-          <VideoReversePage
-            embedded
-            onClose={() => setVideoReverseOpen(false)}
-            onCandidateCreated={async (scriptId) => {
-              setVideoReverseOpen(false);
-              loadedConversationKeysRef.current.delete(`${propEpisodeId}:${scriptId}`);
-              await loadEpisodeData(scriptId);
-            }}
-          />
-        </React.Suspense>
-      </div>
-    </div>
-  ) : null;
-
   const renderAllViews = () => {
       const adminUsername = localStorage.getItem('username') || '';
       const isAdmin = adminUsername === 'admin' || adminUsername === 'lllsdhr';
@@ -4194,7 +4206,67 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           {/* Editor - 懒挂载 + display 切换，永不卸载 */}
           {mountedViews.has(AppView.Editor) && (
             <div style={{ display: currentView === AppView.Editor ? 'contents' : 'none' }}>
-              {scriptWorkspaceMode === 'writing' ? (
+              {scriptWorkspaceMode === 'reverse' ? (
+                <div
+                  className="workflow-stage-layout relative flex h-full min-h-0 w-full min-w-0 overflow-hidden"
+                  data-testid="video-reverse-workspace"
+                >
+                  <div className="workflow-stage-sidebar relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40">
+                    <React.Suspense fallback={<LegacyColumnFallback label="files" />}>
+                      <FileColumn
+                        files={files}
+                        selectedFileId={selectedFileId}
+                        activeFileId={activeScriptId || null}
+                        checkedFileIds={checkedFileIds}
+                        onFileSelect={handleFileSelect}
+                        onActivateFile={activateWorkflowScript}
+                        onFileCheck={handleFileCheck}
+                        onCheckAll={handleCheckAll}
+                        onFileUpload={handleFileUpload}
+                        onCreateBlankFile={handleCreateBlankFile}
+                        onRenameFile={handleRenameFile}
+                        onDeleteFile={handleDeleteFile}
+                        onDownloadFile={handleDownloadFile}
+                        onMoveFile={handleMoveFile}
+                        onSaveVersion={handleSaveVersion}
+                        onRestoreVersion={handleRestoreVersion}
+                        isExpanded={false}
+                        onToggleExpand={() => {}}
+                        onReorderFiles={handleReorderFiles}
+                        onExportProject={handleExportProject}
+                      />
+                    </React.Suspense>
+                  </div>
+
+                  <div className="workflow-stage-canvas flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-n20">
+                    <header className="workflow-stage-toolbar flex h-12 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
+                      <FileText className="h-4 w-4 flex-shrink-0 text-primary" />
+                      <div className="truncate text-sm font-semibold text-n800">
+                        {selectedFile?.name || '请选择剧本任务'}
+                      </div>
+                      <ScriptWorkspaceModeSwitch
+                        mode={scriptWorkspaceMode}
+                        onChange={handleScriptWorkspaceModeChange}
+                      />
+                      <span className="ml-auto text-[10px] text-n200">上传视频并生成可导入的候选剧本</span>
+                    </header>
+                    <div className="min-h-0 flex-1 bg-n20 p-3">
+                      <div className="h-full overflow-hidden rounded-md border border-n40 bg-n0 shadow-card">
+                        <React.Suspense fallback={<LegacyViewFallback label="video-reverse" />}>
+                          <VideoReversePage
+                            embedded
+                            onCandidateCreated={async (scriptId) => {
+                              loadedConversationKeysRef.current.delete(`${propEpisodeId}:${scriptId}`);
+                              await loadEpisodeData(scriptId);
+                              handleScriptWorkspaceModeChange('writing');
+                            }}
+                          />
+                        </React.Suspense>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : scriptWorkspaceMode === 'writing' ? (
                 <>
                 <div className="workflow-stage-sidebar relative h-full w-[280px] flex-shrink-0 overflow-hidden border-r border-n40">
                     <React.Suspense fallback={<LegacyColumnFallback label="files" />}>
@@ -4241,7 +4313,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         onEditVersion={handleConversationEditVersion}
                         onExportVersion={handleConversationExportVersion}
                         onOpenStoryboard={handleOpenStoryboardDrawer}
-                        onOpenVideoReverse={() => setVideoReverseOpen(true)}
                         storyboardItemCount={Math.max(
                           selectedStoryboardItemCount,
                           selectedFileId ? (storyboardTotalsByFileId[selectedFileId] ?? 0) : 0,
@@ -4295,14 +4366,13 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         onDeleteVersion={(versionId) => selectedFileId && handleDeleteVersion(selectedFileId, versionId)}
                         scriptVersions={selectedConversation?.versions || []}
                         currentScriptVersionId={selectedConversation?.currentVersionId}
-                        generationCreditCost={Number(selectedConversationVersion?.metadata?.storyboardDesignCreditCost || 0)}
+                        generationCreditCost={selectedConversationVersionCreditCost}
                         onRestoreScriptVersion={(version) => handleConversationGenerateDesign(version, { autoSnapshot: false })}
                       />
                       </React.Suspense>
                     </div>
                     </aside>
 
-                    {videoReverseToolDialog}
                 </div>
                 </>
               ) : (
@@ -4358,13 +4428,13 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
 
                     <div className="min-h-0 w-full min-w-0 max-w-none flex-1 overflow-x-auto overflow-y-hidden">
                       <div
-                        className="flex h-full w-full min-w-[900px] max-w-none overflow-hidden"
+                        className="flex h-full w-full min-w-[900px] max-w-none gap-2 overflow-hidden bg-n20 p-2"
                         data-testid="quick-script-columns"
                       >
 
                       <div
                         style={{ flex: `${colWidths[1]} 0 0%` }}
-                        className="relative h-full min-w-0 overflow-hidden"
+                        className="relative h-full min-w-0 overflow-hidden rounded-md border border-n40 bg-n0 shadow-card"
                       >
                         <React.Suspense fallback={<LegacyColumnFallback label="source-script" />}>
                           <QuickScriptSourceColumn
@@ -4378,24 +4448,24 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                             onChangeModel={setAiModel}
                             onUpdateSource={handleUpdateContent}
                             onSplitScript={handleSplitScript}
-                            onGenerateVideoScript={handleGenerateVideoScript}
-                            onExtractStoryboardPrompts={handleExtractStoryboardPrompts}
-                            onRunThreeStage={handleRunThreeStagePipeline}
-                            onOpenVideoReverse={() => setVideoReverseOpen(true)}
-                          />
+                             onGenerateVideoScript={handleGenerateVideoScript}
+                             onExtractStoryboardPrompts={handleExtractStoryboardPrompts}
+                             onRunThreeStage={handleRunThreeStagePipeline}
+                             actualCreditCost={selectedConversationVersionCreditCost}
+                           />
                         </React.Suspense>
                       </div>
 
                       {isFullView && (
                         <div
                           onMouseDown={() => startResizing(1)}
-                          className="z-20 w-1 flex-shrink-0 cursor-col-resize bg-n40 transition-colors hover:bg-primary"
+                          className="z-20 -mx-1 w-2 flex-shrink-0 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-primary/20"
                         />
                       )}
 
                       <div
                         style={{ flex: `${colWidths[2]} 0 0%` }}
-                        className="relative h-full min-w-0 overflow-hidden"
+                        className="relative h-full min-w-0 overflow-hidden rounded-md border border-n40 bg-n0 shadow-card"
                       >
                         <React.Suspense fallback={<LegacyColumnFallback label="video-script" />}>
                           <QuickScriptVersionColumn
@@ -4420,13 +4490,13 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                       {isFullView && (
                         <div
                           onMouseDown={() => startResizing(2)}
-                          className="z-20 w-1 flex-shrink-0 cursor-col-resize bg-n40 transition-colors hover:bg-primary"
+                          className="z-20 -mx-1 w-2 flex-shrink-0 cursor-col-resize rounded-full bg-transparent transition-colors hover:bg-primary/20"
                         />
                       )}
 
                       <div
                         style={{ flex: `${colWidths[3]} 0 0%` }}
-                        className="relative h-full min-w-0 overflow-hidden"
+                        className="relative h-full min-w-0 overflow-hidden rounded-md border border-n40 bg-n0 shadow-card"
                       >
                         <React.Suspense fallback={<LegacyColumnFallback label="storyboard" />}>
                           <StoryboardColumn
@@ -4458,7 +4528,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                             onDeleteVersion={(versionId) => selectedFileId && handleDeleteVersion(selectedFileId, versionId)}
                             scriptVersions={selectedConversation?.versions || []}
                             currentScriptVersionId={selectedConversation?.currentVersionId}
-                            generationCreditCost={Number(selectedConversationVersion?.metadata?.storyboardDesignCreditCost || 0)}
+                            generationCreditCost={selectedConversationVersionCreditCost}
+                            cardMode
                             onRestoreScriptVersion={(version) => handleConversationGenerateDesign(
                               version,
                               { autoSnapshot: false, openDrawer: false },
@@ -4469,7 +4540,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     </div>
                   </div>
                   </div>
-                  {videoReverseToolDialog}
                 </div>
               )}
             </div>

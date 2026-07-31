@@ -258,8 +258,8 @@ export const VideoReversePage: React.FC<VideoReversePageProps> = ({
   };
 
   return (
-    <div className={`layout-safe flex flex-col bg-n0 text-n800 ${embedded ? 'h-full' : 'h-screen'}`}>
-      <div className="responsive-toolbar flex items-center gap-3 px-4 py-3 border-b border-n40 bg-n0">
+    <div className={`layout-safe flex flex-col text-n800 ${embedded ? 'h-full bg-n20' : 'h-screen bg-n0'}`}>
+      <div className="responsive-toolbar flex items-center gap-3 border-b border-n40 bg-n0 px-4 py-3">
         {!embedded && (
           <button onClick={() => navigate(`/projects/${projectId}/episodes`)} className="text-sm text-n300 hover:text-n800">
             ← 返回项目
@@ -310,18 +310,20 @@ export const VideoReversePage: React.FC<VideoReversePageProps> = ({
         </div>
       )}
 
-      <div className="responsive-split flex flex-1 overflow-hidden">
+      <div className={`responsive-split flex min-h-0 flex-1 overflow-hidden ${embedded ? 'gap-3 bg-n20 p-3' : ''}`}>
         {/* 左侧：历史任务 */}
-        <aside className="responsive-pane w-72 border-r border-n40 bg-n0 overflow-auto">
-          <div className="px-3 py-2 text-xs text-n100 border-b border-n40">
+        <aside className={`responsive-pane w-72 overflow-auto bg-n0 ${embedded ? 'rounded-md border border-n40 p-2 shadow-card' : 'border-r border-n40'}`}>
+          <div className={`px-3 py-2 text-xs font-medium text-n300 ${embedded ? '' : 'border-b border-n40'}`}>
             历史任务 {tasks.length}
           </div>
           {tasks.map(t => (
             <button
               key={t.reverse_task_id}
               onClick={() => setSelectedTaskId(t.reverse_task_id)}
-              className={`w-full flex items-start gap-2 px-3 py-2 text-left border-b border-n40 ${
-                selectedTaskId === t.reverse_task_id ? 'bg-n30' : 'hover:bg-n20'
+              className={`mb-1.5 flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left last:mb-0 ${
+                selectedTaskId === t.reverse_task_id
+                  ? 'border-primary/30 bg-primary-light'
+                  : 'border-n40 bg-n0 hover:border-n100 hover:bg-n20'
               }`}
             >
               <div className={`w-2 h-2 rounded-full mt-1.5 ${STATUS_LABEL[t.status]?.color || 'bg-n50'}`} />
@@ -349,7 +351,7 @@ export const VideoReversePage: React.FC<VideoReversePageProps> = ({
         </aside>
 
         {/* 主区：详情 */}
-        <main className="responsive-pane flex-1 overflow-auto">
+        <main className={`responsive-pane min-w-0 flex-1 overflow-auto ${embedded ? 'rounded-md border border-n40 bg-n0 shadow-card' : ''}`}>
           {!selectedTask ? (
             <div className="text-center text-sm text-n100 py-24">
               选择一个任务以查看详情
