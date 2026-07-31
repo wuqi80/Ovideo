@@ -1063,8 +1063,8 @@ export const App = () => {
                         <div className="relative z-10 flex items-center gap-4 px-4 pb-2">
                             <img
                               src={isDarkCanvas
-                                ? '/static/branding/spti-ai-logo-dark.png'
-                                : '/static/branding/spti-ai-logo-light.png'}
+                                ? '/static/branding/spti-ai-logo-dark.png?v=20260731-white-panel-v1'
+                                : '/static/branding/spti-ai-logo-light.png?v=20260731-white-panel-v1'}
                               alt="SPTI.AI"
                               className="h-20 w-auto max-w-[68vw] object-contain drop-shadow-sm md:h-28"
                               draggable={false}

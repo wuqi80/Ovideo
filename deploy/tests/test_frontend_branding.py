@@ -49,7 +49,7 @@ def test_spti_ai_favicon_files_have_valid_signatures():
     assert (DEPLOY_DIR / "static/apple-touch-icon.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_spti_brand_favicons_and_mark_stay_clean_without_white_outline():
+def test_spti_brand_favicons_and_mark_use_a_white_panel_inside_the_blue_frame():
     login_html = (DEPLOY_DIR / "login.html").read_text(encoding="utf-8")
 
     assert "/static/branding/spti-ai-logo-dark.png" in login_html
@@ -70,7 +70,17 @@ def test_spti_brand_favicons_and_mark_stay_clean_without_white_outline():
         )
 
         assert visible_pixels > 0
-        assert white_pixels / visible_pixels < 0.02
+        assert 0.25 < white_pixels / visible_pixels < 0.75
+
+    mark = Image.open(DEPLOY_DIR / "static/branding/spti-ai-mark.png").convert("RGBA")
+    panel_red, panel_green, panel_blue, panel_alpha = mark.getpixel((80, 80))
+    frame_red, frame_green, frame_blue, frame_alpha = mark.getpixel((184, 40))
+
+    assert panel_alpha > 240
+    assert panel_red > 245 and panel_green > 245 and panel_blue > 245
+    assert frame_alpha > 240
+    assert frame_red < 40 and frame_green > 80 and frame_blue > 220
+    assert mark.getpixel((0, 0))[3] == 0
 
 
 def test_spti_final_logo_masters_are_backed_up_and_theme_ready():

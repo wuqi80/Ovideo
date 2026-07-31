@@ -12,12 +12,12 @@ interface BrandLogoProps {
 
 const BRAND_ASSETS: Record<BrandLogoTone, Record<BrandLogoVariant, string>> = {
   light: {
-    lockup: '/static/branding/spti-ai-logo-light.png',
-    mark: '/static/branding/spti-ai-mark.png',
+    lockup: '/static/branding/spti-ai-logo-light.png?v=20260731-white-panel-v1',
+    mark: '/static/branding/spti-ai-mark.png?v=20260731-white-panel-v1',
   },
   dark: {
-    lockup: '/static/branding/spti-ai-logo-dark.png',
-    mark: '/static/branding/spti-ai-mark.png',
+    lockup: '/static/branding/spti-ai-logo-dark.png?v=20260731-white-panel-v1',
+    mark: '/static/branding/spti-ai-mark.png?v=20260731-white-panel-v1',
   },
 };
 
