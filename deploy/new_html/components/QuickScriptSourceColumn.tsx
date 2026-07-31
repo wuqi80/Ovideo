@@ -9,6 +9,12 @@ import {
 } from '../services/scriptModelCatalogService';
 import { estimateCredits, estimateTextTokens } from '../services/creditService';
 
+const BRIEF_SOURCE_MAX_CHARACTERS = 80;
+
+function countContentCharacters(value: string): number {
+  return value.replace(/\s+/g, '').length;
+}
+
 interface QuickScriptSourceColumnProps {
   selectedFile: ProjectFile | undefined;
   aiModel: AiModel;
@@ -77,14 +83,16 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
     const sourceText = selectedFile.originalContent;
     const sourceTokens = estimateTextTokens(sourceText);
     const segmentTexts = selectedFile.scriptSegments?.map(segment => segment.sourceText).join('\n') || '';
+    const isBriefSource = countContentCharacters(sourceText) <= BRIEF_SOURCE_MAX_CHARACTERS;
     const currentVideoScript = selectedFile.scriptContent || selectedFile.scriptSegments
       ?.map(segment => segment.videoScript || '')
       .filter(Boolean)
       .join('\n\n')
       || '';
+    const storedSegmentCount = selectedFile.scriptSegments?.length || 0;
     const segmentCountEstimate = Math.max(
       1,
-      selectedFile.scriptSegments?.length || Math.ceil(sourceTokens / 120),
+      isBriefSource ? 1 : storedSegmentCount || Math.ceil(sourceTokens / 120),
     );
     const sourceShotCountEstimate = Math.max(
       1,

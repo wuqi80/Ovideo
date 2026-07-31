@@ -3419,7 +3419,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     const segs = file.scriptSegments || [];
     if (segs.length === 0) { alert('请先拆分剧本'); return false; }
 
-    const ordered = [...segs].sort((a, b) => a.order - b.order);
+    const pipelineService = await loadScriptThreeStageService();
+    const ordered = pipelineService.prepareVideoScriptSegments(file.originalContent, segs);
     const modelInfo = getScriptModelInfo(aiModel, scriptModelOptions);
     const requestId = `quick_video_script_${uuidv4()}`;
     const forecastInputText = [
@@ -3442,9 +3443,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       return false;
     }
 
-    setStage(file.id, 'videoScript', { status: 'running', total: segs.length, completed: 0, errorMessage: '' });
+    setStage(file.id, 'videoScript', { status: 'running', total: ordered.length, completed: 0, errorMessage: '' });
     try {
-      const pipelineService = await loadScriptThreeStageService();
       const result = await pipelineService.generateVideoScriptForSegments(
         aiModel,
         file.originalContent,

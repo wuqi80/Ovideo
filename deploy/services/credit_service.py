@@ -147,6 +147,25 @@ def compute_cost(rule: Dict[str, Any], params: Dict[str, Any]) -> int:
         cost = min_c
     if max_c is not None and cost > int(max_c):
         cost = int(max_c)
+    text_generation_caps = {
+        'script_model_call': {
+            'script_tier_1': 3,
+            'script_tier_2': 5,
+            'script_tier_3': 8,
+            'script_tier_4': 10,
+        },
+        'storyboard_design_generation': {
+            'script_tier_1': 2,
+            'script_tier_2': 5,
+            'script_tier_3': 8,
+            'script_tier_4': 10,
+        },
+    }
+    feature_key = str(rule.get('feature_key') or '')
+    if feature_key in text_generation_caps:
+        cap = text_generation_caps[feature_key].get(str((params or {}).get('model') or ''))
+        if cap is not None and cost > cap:
+            cost = cap
     return cost
 
 

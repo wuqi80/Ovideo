@@ -93,7 +93,7 @@ describe('QuickScriptSourceColumn', () => {
 
   it('shows quick pipeline failures inline instead of requiring a browser alert', async () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-    const onRunThreeStage = vi.fn().mockRejectedValue(new Error('剧本拆分未完成，系统已自动重新规划，请稍后再试'));
+    const onRunThreeStage = vi.fn().mockRejectedValue(new Error('视频脚本生成未返回可解析的分段/分镜，请手动调整后重试'));
     render(
       <QuickScriptSourceColumn
         {...baseProps}
@@ -103,7 +103,7 @@ describe('QuickScriptSourceColumn', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '按三步生成' }));
 
-    expect(await screen.findByText('剧本拆分未完成，系统已自动重新规划，请稍后再试')).toBeInTheDocument();
+    expect(await screen.findByText('视频脚本生成未返回可解析的分段/分镜，请手动调整后重试')).toBeInTheDocument();
     expect(alertSpy).not.toHaveBeenCalled();
     alertSpy.mockRestore();
   });
