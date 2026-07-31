@@ -4,7 +4,7 @@ import {
     GripVertical, CheckSquare, Square, Clock, Film, AlertCircle,
     Image as ImageIcon, ChevronDown, Download, Maximize, Mic, Scissors,
     LayoutGrid, List, X, Loader2, Check, Music, Eye, Volume2, Plus,
-    History, ArrowRight, Maximize2, Database, ImageOff, RotateCw, Settings,
+    History, ArrowRight, Database, ImageOff, RotateCw, Settings,
     Combine, Split, SkipBack, SkipForward
 } from 'lucide-react';
 import {
@@ -58,25 +58,31 @@ import type { VideoVoiceReference } from '../types';
 import {
     getCardHeightClass,
     getPreviewImageHeightClass,
-    getResultVisualHeightClass,
     isSeedanceModel,
     CARD_MEDIA_HEIGHT_CLASS,
     CARD_BODY_SCROLL_CLASS,
-    SIMPLE_PROMPT_TEXTAREA_CLASS,
     PLACEHOLDER_PROMPT_TEXTAREA_CLASS,
     RESULT_PROMPT_READONLY_CLASS,
+    getVideoResultPlaceholderCount,
 } from '../utils/videoCardLayout';
 import {
     DurationFieldForGroup,
     AudioBadgesRow,
 } from './video/VideoCard';
 import { MiniMaxVideoPanel } from './video/MiniMaxVideoPanel';
+import { CapabilityVideoPanel } from './video/CapabilityVideoPanel';
 import { MediaBadges } from './video/MediaBadges';
 // 2026-05-24 — DashScope 共享 API：合体(Kling) / 大乘(Vidu) / 炼虚(HappyHorse)
 // Task 3 cleanup：`makeDefaultDashScopeParams` 单一可信源在 videoModelService.ts，
 // 不再从 DashScopeCards.tsx 间接导入（旧 legacy 工厂已删除）。
 // DashScopeVideoCard 不再直接 import — 走 DashScopeCardWithCandidates 包装器以注入 mention candidates。
-import { createVideoSegment, fetchSeedanceOmni, updateVideoSegment } from '../services/videoWorkflowService';
+import {
+    createVideoSegment,
+    fetchVideoCapabilities,
+    getVideoCapability,
+    updateVideoSegment,
+    type VideoCapabilityManifest,
+} from '../services/videoWorkflowService';
 import { getVideoSegments } from '../services/episodeDataService';
 import { buildVideoTaskImport } from '../utils/videoTaskImport';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
@@ -281,11 +287,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         defaultValue: 'card',
     });
     const [isLoading, setIsLoading] = useState(true);
-    const [seedanceOmniEnabled, setSeedanceOmniEnabled] = useState(false);
+    const [videoCapabilities, setVideoCapabilities] = useState<VideoCapabilityManifest | null>(null);
+    const seedanceOmniEnabled = videoCapabilities?.seedance_omni ?? false;
     useEffect(() => {
         let cancelled = false;
-        void fetchSeedanceOmni().then((enabled) => {
-            if (!cancelled) setSeedanceOmniEnabled(enabled);
+        void fetchVideoCapabilities().then((manifest) => {
+            if (!cancelled) setVideoCapabilities(manifest);
         });
         return () => { cancelled = true; };
     }, []);
@@ -2089,6 +2096,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const minimaxParams = group.model === 'MINI'
                 ? normalizeMiniMaxVideoParams(group.minimaxParams)
                 : undefined;
+            const capabilityParams = group.videoParams || {};
+            const capabilityDuration = Number(capabilityParams.duration);
+            const capabilitySeed = Number(capabilityParams.seed);
             
             console.log('📤 提交任务:', { filename1, filename2, prompt: prompt.substring(0, 50), model: group.model });
             
@@ -2100,7 +2110,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 group.model,
                 undefined,
                 undefined,
-                group.shotType || 'multi',
+                (capabilityParams.shot_type as ShotType | undefined) || group.shotType || 'multi',
                 {
                     entity_type: 'video_segment',
                     entity_id: entityId,
@@ -2108,7 +2118,18 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     episode_id: episodeId,
                 },
                 {
-                    duration: minimaxParams?.duration ?? group.duration,
+                    duration: minimaxParams?.duration
+                        ?? (Number.isFinite(capabilityDuration) ? capabilityDuration : group.duration),
+                    resolution: typeof capabilityParams.resolution === 'string'
+                        ? capabilityParams.resolution
+                        : undefined,
+                    seed: Number.isFinite(capabilitySeed) ? capabilitySeed : undefined,
+                    negative_prompt: typeof capabilityParams.negative_prompt === 'string'
+                        ? capabilityParams.negative_prompt
+                        : undefined,
+                    shot_type: typeof capabilityParams.shot_type === 'string'
+                        ? capabilityParams.shot_type as ShotType
+                        : undefined,
                     minimax_model: minimaxParams?.model,
                     minimax_resolution: minimaxParams?.resolution,
                     minimax_prompt_optimizer: minimaxParams?.promptOptimizer,
@@ -3318,19 +3339,6 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             </span>
                         )}
                         
-                        {/* 大能模型的镜头类型 */}
-                        {group.model === '大能' && (
-                            <select
-                                value={group.shotType || 'multi'}
-                                onChange={(e) => setTaskGroups(prev => prev.map(g => 
-                                    g.uuid === group.uuid ? { ...g, shotType: e.target.value as ShotType } : g
-                                ))}
-                                className="bg-y50 border border-warning/50 text-[10px] text-warning rounded px-1 py-0.5 focus:outline-none focus:border-warning cursor-pointer hover:bg-y75"
-                            >
-                                <option value="multi">智能多镜头</option>
-                                <option value="single">单镜头</option>
-                            </select>
-                        )}
                     </div>
                     
                     <div className="flex items-center gap-2">
@@ -3503,11 +3511,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             onPromptChange={(next) => updatePrompt(group.ids[0], next)}
                         />
                     ) : (
-                        <textarea
-                            value={imagePrompts[group.ids[0]] || ''}
-                            onChange={(e) => updatePrompt(group.ids[0], e.target.value)}
-                            placeholder={isPair ? '描述变化过程...' : '描述动作内容...'}
-                            className={SIMPLE_PROMPT_TEXTAREA_CLASS}
+                        <CapabilityVideoPanel
+                            capability={getVideoCapability(videoCapabilities, group.model)}
+                            value={group.videoParams}
+                            prompt={imagePrompts[group.ids[0]] || ''}
+                            onChange={(next) => patchTaskGroup(group.uuid, {
+                                videoParams: next,
+                                ...(group.model === '大能' && typeof next.shot_type === 'string'
+                                    ? { shotType: next.shot_type as ShotType }
+                                    : {}),
+                            })}
+                            onPromptChange={(next) => updatePrompt(group.ids[0], next)}
                         />
                     )}
                 </div>
@@ -3574,7 +3588,6 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const isPlaceholderCard = !!img1?.isPlaceholder;
         const cardHeight = getCardHeightClass(group.model, isPlaceholderCard);
         const seedanceCard = isSeedanceModel(group.model);
-        const resultVisualHeight = getResultVisualHeightClass(group.model);
         const activeVideoVoiceReference = getVideoVoiceReferenceForGroup(group);
         
         const renderStatusBadge = () => {
@@ -3643,20 +3656,29 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     </button>
                 );
             };
+            const renderEmptyResultSlots = (count: number) => Array.from({ length: count }, (_, slotIndex) => (
+                <div
+                    key={`empty-result-${slotIndex}`}
+                    data-testid="video-result-placeholder"
+                    className="h-full min-h-[72px] rounded border border-dashed border-n40 bg-n20/60 flex items-center justify-center text-n100"
+                >
+                    <Film className="h-4 w-4 opacity-40" />
+                </div>
+            ));
             
             // videos 是独立持久化的历史结果；最新一次重试失败不能隐藏或灰化旧视频。
             if (hasStoredVideoResult(status)) {
                 // 多视频网格显示（超过1个视频或运行中）
-                if (videoCount > 1 || (videoCount === 1 && isRunning)) {
+                if (videoCount >= 1) {
                     return (
-                        <div className="w-full">
-                            <div className="grid grid-cols-3 gap-2 max-h-[140px] overflow-y-auto shrink-0">
+                        <div className={`w-full ${CARD_MEDIA_HEIGHT_CLASS}`} data-testid="video-result-grid">
+                            <div className="grid h-full grid-cols-4 gap-2 overflow-y-auto">
                                 {videos.map((videoUrl, idx) => {
                                     const active = isBeautifyVideo(videoUrl);
                                     return (
                                         <div
                                             key={idx}
-                                            className={`relative bg-n800 rounded border group/video overflow-hidden aspect-video ${
+                                            className={`relative h-full min-h-[72px] bg-n800 rounded border group/video overflow-hidden ${
                                                 active ? 'border-success ring-2 ring-success/40' : 'border-n40'
                                             }`}
                                         >
@@ -3691,7 +3713,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 })}
                                 {/* 运行中时显示loading网格 */}
                                 {isRunning && (
-                                    <div className="bg-gradient-to-br from-n30 to-n20 rounded border border-n40 flex flex-col items-center justify-center">
+                                    <div className="h-full min-h-[72px] bg-gradient-to-br from-n30 to-n20 rounded border border-n40 flex flex-col items-center justify-center">
                                         <div className="relative w-8 h-8 mb-2">
                                             <div className="absolute inset-0 border-2 border-t-indigo-500 border-r-indigo-500 border-b-transparent border-l-transparent rounded-full animate-spin" />
                                         </div>
@@ -3699,73 +3721,33 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                         <div className="text-n100 text-[9px]">{status.progress || 0}%</div>
                                     </div>
                                 )}
-                                {/* 显示剩余空位 */}
-                                {!isRunning && videoCount < 12 && (
-                                    <div className="bg-n20 rounded border border-dashed border-n40 flex items-center justify-center text-n100 text-xs">
-                                        +
-                                    </div>
-                                )}
+                                {renderEmptyResultSlots(getVideoResultPlaceholderCount(videoCount, isRunning))}
                             </div>
                         </div>
                     );
                 }
-                
-                // 单视频显示（仅在不运行时）- 根据任务类型调整高度
-                const videoHeight = resultVisualHeight;
-                const active = isBeautifyVideo(videos[0]);
-                return (
-                    <div 
-                        className={`relative w-full bg-n800 rounded-lg overflow-hidden border ${videoHeight} group/video ${
-                            active ? 'border-success ring-2 ring-success/40' : 'border-n40'
-                        }`}
-                    >
-                        <LazyVideo
-                            src={videos[0]}
-                            preload="none"
-                            className="w-full h-full object-contain cursor-pointer"
-                            onClick={() => { setLightboxUrl(videos[0]); setLightboxType('video'); }}
-                        />
-                        {status.videoGenerateTimes && status.videoGenerateTimes[0] && (
-                            <span className="absolute top-2 right-2 bg-success/80 text-white text-[10px] px-2 py-0.5 rounded-full font-bold z-10 backdrop-blur-sm">
-                                {status.videoGenerateTimes[0]}s
-                            </span>
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center bg-n900/50 opacity-0 group-hover/video:opacity-100 transition-opacity pointer-events-none">
-                            <Maximize2 className="w-5 h-5 text-white" />
-                        </div>
-                        {renderBeautifyButton(videos[0], 0)}
-                    </div>
-                );
             }
             
             // 运行中状态（没有旧视频）- 根据任务类型调整高度
             if (status.state === 'running' || status.state === 'processing') {
-                const loadingHeight = resultVisualHeight;
                 return (
-                    <div className={`w-full ${loadingHeight} rounded border border-n40 flex flex-col items-center justify-center bg-gradient-to-br from-n30 to-n20`}>
-                        <div className="relative w-12 h-12 mb-2">
-                            <div className="absolute inset-0 border-2 border-t-indigo-500 border-r-indigo-500 border-b-transparent border-l-transparent rounded-full animate-spin" />
+                    <div className={`grid w-full grid-cols-4 gap-2 ${CARD_MEDIA_HEIGHT_CLASS}`} data-testid="video-result-grid">
+                        <div className="h-full rounded border border-n40 flex flex-col items-center justify-center bg-gradient-to-br from-n30 to-n20">
+                            <div className="relative w-8 h-8 mb-1">
+                                <div className="absolute inset-0 border-2 border-t-indigo-500 border-r-indigo-500 border-b-transparent border-l-transparent rounded-full animate-spin" />
+                            </div>
+                            <div className="text-primary text-[10px] font-medium">生成中...</div>
+                            <div className="text-n300 text-[9px]">{status.progress || 0}%</div>
                         </div>
-                        <div className="text-primary text-sm font-medium">生成中...</div>
-                        <div className="text-n300 text-xs">{status.progress || 0}%</div>
+                        {renderEmptyResultSlots(3)}
                     </div>
                 );
             }
             
             // 空闲状态显示原图（灰度）— 与左图预览同高 h-28
-            const idleImg = uploadedImages.find(i => i.id === group.ids[0]);
-            const idleHeight = resultVisualHeight;
-            if (isPlaceholderCard || !idleImg?.url) {
-                return (
-                    <div className={`w-full ${idleHeight} bg-n30 rounded border border-dashed border-n40 overflow-hidden flex flex-col items-center justify-center text-n100`}>
-                        <ImageIcon size={18} />
-                        <div className="text-[9px] mt-1">等待上传</div>
-                    </div>
-                );
-            }
             return (
-                <div className={`w-full ${idleHeight} bg-n800 rounded border border-n40 overflow-hidden opacity-60 grayscale`}>
-                    <img src={idleImg.url} loading="lazy" decoding="async" className="w-full h-full object-contain" alt="" />
+                <div className={`grid w-full grid-cols-4 gap-2 ${CARD_MEDIA_HEIGHT_CLASS}`} data-testid="video-result-grid">
+                    {renderEmptyResultSlots(4)}
                 </div>
             );
         };

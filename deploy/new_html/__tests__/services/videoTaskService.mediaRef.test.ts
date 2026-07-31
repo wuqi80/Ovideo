@@ -98,4 +98,23 @@ describe('ComfyUI video duration contract', () => {
             duration: 5,
         });
     });
+
+    it('forwards only the capability-backed workflow parameters', () => {
+        expect(buildComfyUIVideoTaskPayload(
+            'i2v',
+            'first.png',
+            null,
+            'slow camera push',
+            '一阶',
+            {
+                duration: 10,
+                seed: 42,
+                negative_prompt: 'blur, flicker',
+            },
+        )).toMatchObject({
+            duration: 10,
+            seed: 42,
+            negative_prompt: 'blur, flicker',
+        });
+    });
 });

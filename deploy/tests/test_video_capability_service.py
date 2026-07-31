@@ -26,6 +26,12 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
     ]
     gpu = next(model for model in result["models"] if model["key"] == "COMFYUI")
     assert gpu["available"] is True
+    cluster_model = next(model for model in result["models"] if model["key"] == "一阶")
+    assert cluster_model["available"] is True
+    assert cluster_model["parameter_rules"]["duration"]["options"] == [5, 10, 15]
+    wan26 = next(model for model in result["models"] if model["key"] == "大能")
+    assert wan26["parameter_rules"]["resolution"] == ["720P", "1080P"]
+    assert wan26["parameter_rules"]["shot_type"] == ["multi", "single"]
 
 
 async def test_video_capabilities_degrade_safely(monkeypatch):

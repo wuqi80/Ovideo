@@ -21,6 +21,10 @@ export { cancelTask, deleteTask } from './taskControlService';
 
 export interface VideoGenerationOptions {
     duration?: number;
+    resolution?: string;
+    seed?: number;
+    negative_prompt?: string;
+    shot_type?: ShotType;
     minimax_model?: string;
     minimax_resolution?: '768P' | '1080P';
     minimax_prompt_optimizer?: boolean;
@@ -38,10 +42,10 @@ export function buildComfyUIVideoTaskPayload(
         task_type: taskType,
         image_path: imageFilename,
         prompt,
-        negative_prompt: 'nsfw, bad quality, worst quality',
+        negative_prompt: generationOptions?.negative_prompt || 'nsfw, bad quality, worst quality',
         model,
         duration: generationOptions?.duration ?? 5,
-        seed: -1,
+        seed: generationOptions?.seed ?? -1,
         priority: 2,
     };
     if (imageFilenameEnd) {
@@ -184,10 +188,10 @@ export async function submitTask(
             task_type: 'wan26_i2v',
             image_path: imageFilename,
             prompt: prompt,
-            resolution: '1080P',
-            duration: 5,
-            shot_type: shotType,
-            seed: -1,
+            resolution: generationOptions?.resolution || '1080P',
+            duration: generationOptions?.duration ?? 5,
+            shot_type: generationOptions?.shot_type || shotType,
+            seed: generationOptions?.seed ?? -1,
             priority: 2
         };
     } else if (model === 'Kling') {

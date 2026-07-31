@@ -34,6 +34,8 @@ export interface TaskGroup {
   duration?: number;
   durationUserOverride?: boolean;
   minimaxParams?: MiniMaxVideoParams;
+  /** Parameters declared by /api/video/capabilities for the selected model. */
+  videoParams?: Record<string, string | number | boolean>;
   mergedFrom?: MergedCardSnapshot[];
 }
 

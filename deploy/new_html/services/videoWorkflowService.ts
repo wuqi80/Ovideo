@@ -11,9 +11,38 @@ export interface VideoModelCapability {
   supports_original_audio?: boolean;
   supports_cancel?: boolean;
   requires_gpu_node?: boolean;
+  requires_processing_node?: boolean;
   available?: boolean;
   query_mode: 'async' | 'queue' | string;
   parameter_rules: Record<string, unknown>;
+}
+
+export interface VideoCapabilityNumberRule {
+  type?: 'integer' | 'number' | string;
+  default?: number;
+  minimum?: number;
+  maximum?: number;
+  options?: number[];
+}
+
+export interface VideoCapabilityStringRule {
+  type?: 'string' | string;
+  default?: string;
+}
+
+export type VideoCapabilityParameterRule =
+  | string[]
+  | number[]
+  | VideoCapabilityNumberRule
+  | VideoCapabilityStringRule
+  | { type?: 'boolean' | string; default?: boolean }
+  | string;
+
+export function getVideoCapability(
+  manifest: VideoCapabilityManifest | null | undefined,
+  modelKey: string,
+): VideoModelCapability | undefined {
+  return manifest?.models.find(model => model.key === modelKey);
 }
 
 export interface VideoCapabilityManifest {

@@ -55,6 +55,48 @@ def _seedance_manifest(model_name: str, *, key: str, label: str, omni: bool) -> 
     }
 
 
+def _workflow_video_manifest(key: str, label: str, *, available: bool) -> Dict[str, Any]:
+    """Describe the parameters that the processing-cluster workflow really accepts."""
+    return {
+        "key": key,
+        "label": label,
+        "provider": "processing_cluster",
+        "model_name": None,
+        "task_types": ["i2v", "first_last_frame"],
+        "media_inputs": ["first_frame", "last_frame"],
+        "supports_original_audio": False,
+        "supports_cancel": True,
+        "requires_processing_node": True,
+        "available": available,
+        "query_mode": "queue",
+        "parameter_rules": {
+            "duration": {"type": "integer", "default": 5, "options": [5, 10, 15]},
+            "seed": {"type": "integer", "default": -1, "minimum": -1},
+            "negative_prompt": {
+                "type": "string",
+                "default": "nsfw, bad quality, worst quality",
+            },
+            "normalization_policy": "workflow_defined",
+        },
+    }
+
+
+def _fixed_api_video_manifest(key: str, label: str, provider: str) -> Dict[str, Any]:
+    """Describe API video models whose remaining parameters are provider-managed."""
+    return {
+        "key": key,
+        "label": label,
+        "provider": provider,
+        "model_name": None,
+        "task_types": ["i2v", "first_last_frame"],
+        "media_inputs": ["first_frame", "last_frame"],
+        "supports_original_audio": False,
+        "supports_cancel": False,
+        "query_mode": "async",
+        "parameter_rules": {"normalization_policy": "provider_default"},
+    }
+
+
 def build_video_model_manifest(
     *,
     standard_seedance_model: str,
@@ -65,9 +107,42 @@ def build_video_model_manifest(
 ) -> Dict[str, Any]:
     """Build the versioned, secret-free capability contract consumed by the UI."""
     return {
-        "manifest_version": "2026-07-18.1",
+        "manifest_version": "2026-08-01.1",
         "model_scope": model_scope,
         "models": [
+            *[
+                _workflow_video_manifest(key, label, available=comfyui_available)
+                for key, label in (
+                    ("Wan2", "处理集群视频"),
+                    ("一阶", "一阶"),
+                    ("二阶", "二阶"),
+                    ("三阶", "三阶"),
+                    ("四阶", "四阶"),
+                    ("五阶", "五阶"),
+                    ("六阶", "六阶"),
+                    ("七阶", "七阶"),
+                )
+            ],
+            _fixed_api_video_manifest("Veo", "筑基", "veo"),
+            _fixed_api_video_manifest("Sora2", "化神", "sora2"),
+            {
+                "key": "大能",
+                "label": "大能",
+                "provider": "dashscope",
+                "model_name": "wan2.6-i2v",
+                "task_types": ["i2v"],
+                "media_inputs": ["first_frame"],
+                "supports_original_audio": False,
+                "supports_cancel": False,
+                "query_mode": "async",
+                "parameter_rules": {
+                    "resolution": ["720P", "1080P"],
+                    "duration": {"type": "integer", "default": 5, "options": [5, 10, 15]},
+                    "shot_type": ["multi", "single"],
+                    "seed": {"type": "integer", "default": -1, "minimum": -1},
+                    "normalization_policy": "reject_or_explain",
+                },
+            },
             _seedance_manifest(
                 standard_seedance_model,
                 key="Seedance2",
@@ -98,6 +173,60 @@ def build_video_model_manifest(
                         {"duration": 10, "resolution": ["768P"]},
                     ],
                     "normalization_policy": "reject",
+                },
+            },
+            {
+                "key": "Kling",
+                "label": "合体",
+                "provider": "dashscope",
+                "model_name": None,
+                "task_types": ["t2v", "i2v", "first_last_frame", "multi_reference"],
+                "media_inputs": ["first_frame", "last_frame", "reference_image"],
+                "supports_original_audio": True,
+                "supports_cancel": False,
+                "query_mode": "async",
+                "parameter_rules": {
+                    "mode": ["std", "pro"],
+                    "duration": {"type": "integer", "minimum": 1, "maximum": 15, "default": 5},
+                    "aspect_ratio": ["16:9", "9:16", "1:1"],
+                    "audio": {"type": "boolean", "default": False},
+                    "watermark": {"type": "boolean", "default": False},
+                    "normalization_policy": "reject_or_explain",
+                },
+            },
+            {
+                "key": "Vidu",
+                "label": "大乘",
+                "provider": "dashscope",
+                "model_name": None,
+                "task_types": ["i2v", "first_last_frame", "multi_reference"],
+                "media_inputs": ["first_frame", "last_frame", "reference_image"],
+                "supports_original_audio": True,
+                "supports_cancel": False,
+                "query_mode": "async",
+                "parameter_rules": {
+                    "resolution": ["540P", "720P", "1080P"],
+                    "duration": {"type": "integer", "minimum": 1, "maximum": 16, "default": 5},
+                    "watermark": {"type": "boolean", "default": False},
+                    "normalization_policy": "reject_or_explain",
+                },
+            },
+            {
+                "key": "HappyHorse",
+                "label": "炼虚",
+                "provider": "dashscope",
+                "model_name": None,
+                "task_types": ["multi_reference"],
+                "media_inputs": ["reference_image"],
+                "supports_original_audio": False,
+                "supports_cancel": False,
+                "query_mode": "async",
+                "parameter_rules": {
+                    "resolution": ["720P", "1080P"],
+                    "ratio": ["16:9", "9:16", "3:4", "4:3", "4:5", "5:4", "1:1", "9:21", "21:9"],
+                    "duration": {"type": "integer", "minimum": 1, "maximum": 15, "default": 5},
+                    "watermark": {"type": "boolean", "default": True},
+                    "normalization_policy": "reject_or_explain",
                 },
             },
             {

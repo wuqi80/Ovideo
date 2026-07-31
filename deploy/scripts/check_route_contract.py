@@ -5925,7 +5925,7 @@ def check_frontend_video_preload_contract(root: Path) -> int:
     high_density_expectations = [
         (
             root / "new_html" / "components" / "VideoPage.tsx",
-            3,
+            2,
             "Video workflow result lists should keep LazyVideo preload='none'",
         ),
         (
@@ -5955,6 +5955,12 @@ def check_frontend_video_preload_contract(root: Path) -> int:
         checks += 1
         if count < minimum:
             violations.append(f"{label}: expected at least {minimum}, found {count} in {path.relative_to(root)}")
+
+    video_page = (root / "new_html" / "components" / "VideoPage.tsx").read_text(encoding="utf-8")
+    for snippet in ('data-testid="video-result-grid"', 'grid-cols-4', 'preload="none"'):
+        checks += 1
+        if snippet not in video_page:
+            violations.append(f"Video workflow stable four-slot result layout missing: {snippet}")
 
     if violations:
         fail("Frontend video preload contract failed:\n" + "\n".join(violations))
