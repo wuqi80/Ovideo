@@ -91,6 +91,23 @@ describe('QuickScriptSourceColumn', () => {
     await waitFor(() => expect(onRunThreeStage).toHaveBeenCalledWith('script-1'));
   });
 
+  it('shows quick pipeline failures inline instead of requiring a browser alert', async () => {
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    const onRunThreeStage = vi.fn().mockRejectedValue(new Error('剧本拆分未完成，系统已自动重新规划，请稍后再试'));
+    render(
+      <QuickScriptSourceColumn
+        {...baseProps}
+        onRunThreeStage={onRunThreeStage}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '按三步生成' }));
+
+    expect(await screen.findByText('剧本拆分未完成，系统已自动重新规划，请稍后再试')).toBeInTheDocument();
+    expect(alertSpy).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
   it('shows the estimated credit cost in the quick three-stage panel', () => {
     render(<QuickScriptSourceColumn {...baseProps} />);
 

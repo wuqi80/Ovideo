@@ -160,12 +160,16 @@ function serializeSplitSegments(segments: ScriptSegment[]): string {
   ].join('\n')).join('\n---\n');
 }
 
-function assertValidSplitSegments(segments: ScriptSegment[]): void {
+function assertValidSplitSegments(
+  segments: ScriptSegment[],
+  options: { enforceDurationDensity?: boolean } = {},
+): void {
   if (segments.length === 0) failSplitScriptValidation('第一步未解析出有效剧本分段');
   const durations = segments.map(segment => segment.estimatedDurationSec);
   if (durations.some(duration => duration === null || duration < 4 || duration > 15)) {
     failSplitScriptValidation('第一步分段时长必须全部为4-15秒的正整数');
   }
+  if (!options.enforceDurationDensity) return;
   const numericDurations = durations as number[];
   const denseSegmentRatio = numericDurations.filter(duration => duration >= 14).length / numericDurations.length;
   const averageDuration = numericDurations.reduce((total, duration) => total + duration, 0) / numericDurations.length;
@@ -176,7 +180,7 @@ function assertValidSplitSegments(segments: ScriptSegment[]): void {
 
 export function assertValidVideoScript(
   content: string,
-  enforceDurationDensity = true,
+  enforceDurationDensity = false,
   enforcePromptLength = true,
 ): void {
   const groups = parseVideoScriptGroups(content);

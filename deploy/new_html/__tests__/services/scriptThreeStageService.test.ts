@@ -196,6 +196,34 @@ describe('three-stage video script contract', () => {
     ]));
   });
 
+  it('does not block a short creative seed just because generated segments are below density targets', async () => {
+    aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
+      { id: 's1', order: 0, sourceText: '孙悟空冲向南天门。', estimatedDurationSec: 8, status: 'done' },
+      { id: 's2', order: 1, sourceText: '天兵列阵拦截。', estimatedDurationSec: 8, status: 'done' },
+      { id: 's3', order: 2, sourceText: '金箍棒横扫云海。', estimatedDurationSec: 8, status: 'done' },
+      { id: 's4', order: 3, sourceText: '凌霄殿光影震荡。', estimatedDurationSec: 8, status: 'done' },
+    ]);
+    aiMocks.aiGenerateVideoScriptFromSegment.mockImplementation(async (_model, segment) => [
+      '分段1',
+      '镜头1-1',
+      `时长（秒）：${segment.estimatedDurationSec}`,
+      `画面描述：${segment.sourceText}`,
+      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+    ].join('\n'));
+
+    const result = await generateEpisodeVideoScript(
+      AiModel.DeepseekChat,
+      '孙悟空大闹天宫（仿照黑悟空的游戏剧情）',
+    );
+
+    expect(aiMocks.aiReplanInvalidScriptSegments).not.toHaveBeenCalled();
+    expect(aiMocks.aiReplanInvalidVideoScript).not.toHaveBeenCalled();
+    expect(result.segments).toHaveLength(4);
+    expect(result.content).toContain('分段4');
+    expect(result.content).toContain('镜头4-1');
+  });
+
 
   it('normalizes an under-duration brief split instead of blocking the full three-stage run', async () => {
     aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([

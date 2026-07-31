@@ -3408,8 +3408,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       return true;
     } catch (e) {
       setStage(file.id, 'split', { status: 'error', errorMessage: (e as Error).message });
-      alert(`拆分剧本失败: ${(e as Error).message}`);
-      return false;
+      throw e;
     }
   }, [selectedFileId, aiModel, propEpisodeId, setStage, urlProjectId]);
 
@@ -3563,8 +3562,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       await batchSaveScriptSegments(propEpisodeId, file.id, buildScriptSegmentPayload(updated)).catch(() => {});
       return selectedVersion;
     } catch (e) {
-      setStage(file.id, 'videoScript', { status: 'error', errorMessage: summarizePipelineError(e) });
-      return false;
+      const errorSummary = summarizePipelineError(e);
+      setStage(file.id, 'videoScript', { status: 'error', errorMessage: errorSummary });
+      throw new Error(errorSummary);
     }
   }, [
     aiModel,
@@ -3713,7 +3713,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       const errorSummary = summarizePipelineError(shotErr);
       setStage(file.id, 'storyboardPrompt', { status: 'error', errorMessage: errorSummary });
       setConversationError(`生成镜头设计失败：${errorSummary}`);
-      return false;
+      throw new Error(errorSummary);
     }
   }, [
     aiModel,
