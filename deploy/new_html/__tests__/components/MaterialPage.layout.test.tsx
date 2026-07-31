@@ -24,6 +24,15 @@ describe('MaterialPage workspace layout', () => {
     expect(source).toContain("event.key === 'Enter' || event.key === ' '");
   });
 
+  it('matches the script file rail with a compact title row and blue active edge', () => {
+    expect(source).toContain('data-testid="material-shot-list-title-row"');
+    expect(source).toContain('({storyboardItems.length})');
+    expect(source).toContain('data-testid="material-shot-card"');
+    expect(source).toContain('border-b border-l-[3px]');
+    expect(source).toContain("? 'border-l-primary bg-primary-light'");
+    expect(source).toContain('line-clamp-2 min-h-10');
+  });
+
   it('shows up to three cards per row inside every material category on desktop', () => {
     expect(source).toContain('data-testid="material-category-grid"');
     expect(source).toContain('data-testid="material-character-cards"');

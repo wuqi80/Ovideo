@@ -939,12 +939,16 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         style={{ width: sidebarWidth }}
         className="workflow-stage-sidebar responsive-pane flex-shrink-0 border-r border-n40 bg-n0 flex flex-col relative"
       >
-        <div className="workflow-stage-toolbar h-[52px] px-4 border-b border-n40 bg-n0 flex items-center justify-between flex-shrink-0">
-          <h2 className="text-sm font-bold text-n700 uppercase tracking-wider flex items-center gap-2">
-              <LayoutDashboard className="w-4 h-4 text-primary" />
-              分镜列表
-          </h2>
-          <div className="flex items-center gap-2">
+        <div className="flex-shrink-0 bg-n0 px-3 pb-2 pt-3">
+          <div
+            data-testid="material-shot-list-title-row"
+            className="flex h-9 min-w-0 items-center gap-2"
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <h2 className="whitespace-nowrap text-sm font-semibold text-n800">分镜列表</h2>
+              <span className="whitespace-nowrap font-mono text-xs text-n100">({storyboardItems.length})</span>
+            </div>
+            <div className="flex shrink-0 items-center justify-end gap-1">
             {/* 🆕 追加其他文件分镜按钮 */}
             {onAppendStoryboard && files.filter(f => f.id !== selectedFileId && f.storyboard?.items?.length).length > 0 && (
               <button
@@ -952,7 +956,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                   setSelectedAppendFileIds(new Set());
                   setShowAppendModal(true);
                 }}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-primary hover:bg-primary-hover text-white rounded transition-colors"
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-primary bg-primary px-2 text-[10px] font-medium text-white transition-colors hover:bg-primary-hover"
                 title="追加其他文件的分镜"
               >
                 <Plus className="w-3 h-3" />
@@ -967,17 +971,20 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                     onRemoveAppendedStoryboard();
                   }
                 }}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium bg-danger hover:bg-danger text-white rounded transition-colors"
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-danger bg-n0 px-2 text-[10px] font-medium text-danger transition-colors hover:bg-r50"
                 title="移除所有追加的镜头"
               >
                 <Trash2 className="w-3 h-3" />
                 清除追加
               </button>
             )}
-            <span className="text-xs text-n100 truncate max-w-[100px]">{selectedFile?.name || '未命名'}</span>
+              <span className="max-w-[88px] truncate text-xs text-n100" title={selectedFile?.name || '未命名'}>
+                {selectedFile?.name || '未命名'}
+              </span>
+            </div>
           </div>
         </div>
-        <div className="workflow-stage-scroll flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
+        <div className="workflow-stage-scroll flex-1 overflow-y-auto custom-scrollbar pb-2">
           {/* 🆕 显示追加来源文件列表 */}
           {(() => {
             const appendedSources = new Map<string, string>();
@@ -988,7 +995,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             });
             if (appendedSources.size > 0) {
               return (
-                <div className="mb-2 p-2 bg-y50 border border-y75 rounded-lg">
+                <div className="mx-2 mb-2 rounded-md border border-y75 bg-y50 p-2">
                   <div className="text-[10px] text-warning font-bold mb-1.5">📎 已追加的文件镜头：</div>
                   <div className="flex flex-wrap gap-1">
                     {Array.from(appendedSources.entries()).map(([fileId, fileName]) => (
@@ -1039,42 +1046,45 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                     setSelectedShotId(item.id);
                   }
                 }}
-                className={`p-3 rounded-lg cursor-pointer border transition-all relative ${
+                data-testid="material-shot-card"
+                className={`group relative flex min-h-[112px] cursor-pointer flex-col justify-center border-b border-l-[3px] border-n40 px-4 py-4 transition-colors duration-150 ${
                   isSelected
-                    ? 'bg-primary-light border-primary ring-1 ring-primary/50'
+                    ? 'border-l-primary bg-primary-light'
                     : isAppended
-                      ? 'bg-y50 border-y75 hover:border-warning hover:bg-y75'  // 追加镜头
-                      : 'bg-n0 border-n40 hover:border-n40 hover:bg-n20'
+                      ? 'border-l-warning bg-y50 hover:bg-y75'  // 追加镜头
+                      : 'border-l-transparent bg-n0 hover:bg-n20'
                 }`}
               >
-                <div className="flex items-center justify-between mb-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs font-bold ${isSelected ? 'text-primary' : isAppended ? 'text-warning' : 'text-n300'}`}>
+                <div className="flex min-h-7 w-full min-w-0 items-center gap-1.5">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className={`min-w-[52px] font-mono text-[10px] font-bold ${isSelected ? 'text-primary' : isAppended ? 'text-warning' : 'text-n100'}`}>
                       镜头 {String((displayIndex >= 0 ? displayIndex : index) + 1).padStart(2, '0')}
                     </span>
                     {/* 🆕 追加来源标记 */}
                     {isAppended && (
-                      <span className="text-[8px] px-1.5 py-0.5 bg-amber-600/30 border border-amber-500/30 text-warning rounded" title={`来自: ${item.sourceFileName}`}>
+                      <span className="max-w-[92px] truncate rounded border border-y75 bg-y50 px-1.5 py-0.5 text-[9px] text-warning" title={`来自: ${item.sourceFileName}`}>
                         📎 {item.sourceFileName}
                       </span>
                     )}
                   </div>
                   {hasTags && (
                     isBound ? (
-                        <div className="flex items-center gap-1 text-[9px] text-success bg-g50 px-1.5 py-0.5 rounded-full border border-g75">
+                        <div className="flex shrink-0 items-center gap-1 rounded bg-g50 px-1.5 py-0.5 text-[9px] text-success">
                             <Check className="w-2.5 h-2.5" />
                             已完成
                         </div>
                     ) : (
-                        <div className="flex items-center gap-1 text-[9px] text-warning bg-y50 px-1.5 py-0.5 rounded-full border border-y75">
+                        <div className="flex shrink-0 items-center gap-1 rounded bg-y50 px-1.5 py-0.5 text-[9px] text-warning">
                             <AlertCircle className="w-2.5 h-2.5" />
                             待绑定
                         </div>
                     )
                   )}
                 </div>
-                <p className="text-[10px] text-n300 line-clamp-2 leading-relaxed opacity-80 mb-2">"{item.scriptSegment}"</p>
-                <div className="flex gap-1 overflow-hidden flex-wrap">
+                <p className="mt-3 line-clamp-2 min-h-10 select-none pl-[60px] pr-1 text-xs leading-5 text-n100">
+                  {item.scriptSegment || '暂无分镜内容'}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1 overflow-hidden pl-[60px] pr-1">
                    {(item.characters || []).map(c => (
                      <span key={c} className={`text-[8px] px-1.5 py-0.5 rounded border transition-colors ${item.materialSelections?.[c] ? 'bg-primary-light border-primary/30 text-primary' : 'bg-n30 border-n40 text-n100'}`}>
                          {c}
@@ -1098,7 +1108,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             <button
               type="button"
               onClick={() => setVisibleShotCount(count => Math.min(count + MATERIAL_SHOT_PAGE_SIZE, storyboardItems.length))}
-              className="w-full px-3 py-2 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/15 border border-primary/20 rounded-lg transition-colors"
+              className="mx-2 mt-2 w-[calc(100%_-_1rem)] rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/15"
             >
               加载更多镜头（{Math.min(visibleShotCount, storyboardItems.length)} / {storyboardItems.length}）
             </button>
