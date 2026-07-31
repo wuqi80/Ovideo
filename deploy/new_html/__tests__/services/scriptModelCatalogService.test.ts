@@ -99,7 +99,7 @@ describe('scriptModelCatalogService', () => {
     expect(formatScriptModelDisplay(getScriptModelOption(AiModel.MinimaxM3, options)))
       .toBe('一阶 · 连续写作模型');
     expect(formatScriptModelSelectLabel(getScriptModelOption(AiModel.MinimaxM3, options)))
-      .toBe('适合持续 · 一阶 · 连续写作模型');
+      .toBe('一阶 · 连续写作模型');
     expect(getScriptModelBillingKey(getScriptModelOption(AiModel.Gemini, options)))
       .toBe('script_tier_4');
     expect(resolveScriptAiModel('MiniMax-M3', options)).toBe(AiModel.MinimaxM3);

@@ -198,8 +198,7 @@ export function formatScriptModelDisplay(option: ScriptModelOption): string {
 }
 
 export function formatScriptModelSelectLabel(option: ScriptModelOption): string {
-  const display = formatScriptModelDisplay(option);
-  return option.hint ? `${option.hint} · ${display}` : display;
+  return formatScriptModelDisplay(option);
 }
 
 export function getScriptModelBillingKey(option: ScriptModelOption): string {

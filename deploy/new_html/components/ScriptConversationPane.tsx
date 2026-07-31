@@ -226,6 +226,8 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   const keepLatestVisibleOnResizeRef = useRef(true);
   const initializedScriptRef = useRef<string | null>(null);
   composerHeightRef.current = composerHeight;
+  const selectedModelOption = getScriptModelOption(aiModel, modelOptions);
+  const selectedModelHint = selectedModelOption.hint.trim();
 
   const versionByMessageId = useMemo(() => new Map(
     (conversation?.versions || [])
@@ -976,20 +978,30 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               <Coins className="h-3.5 w-3.5" />
               预计消耗积分：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
             </span>
-            <label className="relative ml-auto min-w-0">
-              <span className="sr-only">选择剧本模型</span>
-              <select
-                value={aiModel}
-                onChange={event => onChangeModel(event.target.value as AiModel)}
-                disabled={isSending}
-                className="h-8 max-w-[230px] appearance-none border-0 bg-transparent pl-2 pr-7 text-xs text-n700 outline-none hover:text-primary focus:text-primary disabled:opacity-50"
-              >
-                {modelOptions.map(option => (
-                  <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
-            </label>
+            <div className="ml-auto flex min-w-0 items-center gap-2">
+              {selectedModelHint && (
+                <span
+                  className="flex-shrink-0 whitespace-nowrap text-[11px] font-medium text-n300"
+                  data-testid="script-model-hint"
+                >
+                  {selectedModelHint}
+                </span>
+              )}
+              <label className="relative min-w-0">
+                <span className="sr-only">选择剧本模型</span>
+                <select
+                  value={aiModel}
+                  onChange={event => onChangeModel(event.target.value as AiModel)}
+                  disabled={isSending}
+                  className="h-8 max-w-[190px] appearance-none border-0 bg-transparent pl-2 pr-7 text-xs text-n700 outline-none hover:text-primary focus:text-primary disabled:opacity-50"
+                >
+                  {modelOptions.map(option => (
+                    <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
+              </label>
+            </div>
             <button
               type="button"
               onClick={() => void submit()}
@@ -1061,20 +1073,27 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               <Coins className="h-3.5 w-3.5" />
               预计消耗积分：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
             </span>
-            <label className="relative ml-auto min-w-0">
-              <span className="sr-only">选择剧本模型</span>
-              <select
-                value={aiModel}
-                onChange={event => onChangeModel(event.target.value as AiModel)}
-                disabled={isSending}
-                className="h-9 max-w-[260px] appearance-none rounded border border-n40 bg-n0 pl-3 pr-8 text-sm text-n700 outline-none hover:border-primary focus:border-primary disabled:opacity-50"
-              >
-                {modelOptions.map(option => (
-                  <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />
-            </label>
+            <div className="ml-auto flex min-w-0 items-center gap-2">
+              {selectedModelHint && (
+                <span className="flex-shrink-0 whitespace-nowrap text-xs font-medium text-n300">
+                  {selectedModelHint}
+                </span>
+              )}
+              <label className="relative min-w-0">
+                <span className="sr-only">选择剧本模型</span>
+                <select
+                  value={aiModel}
+                  onChange={event => onChangeModel(event.target.value as AiModel)}
+                  disabled={isSending}
+                  className="h-9 max-w-[220px] appearance-none rounded border border-n40 bg-n0 pl-3 pr-8 text-sm text-n700 outline-none hover:border-primary focus:border-primary disabled:opacity-50"
+                >
+                  {modelOptions.map(option => (
+                    <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />
+              </label>
+            </div>
             <button
               type="button"
               onClick={() => setIsComposerFullscreen(false)}

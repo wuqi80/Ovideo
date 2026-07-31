@@ -21,7 +21,9 @@ describe('ScriptConversationPane workflow', () => {
   it('keeps the single model selector beside the send action', () => {
     expect(source).not.toContain('完整上下文');
     expect(source).not.toContain('{modelOption.runtime}');
-    expect(source).toContain('className="relative ml-auto min-w-0"');
+    expect(source).toContain('className="ml-auto flex min-w-0 items-center gap-2"');
+    expect(source).toContain('data-testid="script-model-hint"');
+    expect(source).toContain('className="relative min-w-0"');
     expect(source).toContain('aria-label="发送"');
   });
 

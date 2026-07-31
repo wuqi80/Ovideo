@@ -3,6 +3,7 @@ import { BookOpen, ChevronDown, Film, LoaderCircle, Wand2, X } from 'lucide-reac
 import type { AiModel, ProjectFile, ScriptStoryboardVersion } from '../types';
 import {
   formatScriptModelSelectLabel,
+  getScriptModelOption,
   type ScriptModelOption,
 } from '../services/scriptModelCatalogService';
 
@@ -65,6 +66,8 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
   const promptCount = selectedFile?.storyboard?.items?.filter(item => item.imagePrompt).length || 0;
   const isStageRunning = Object.values(stages || {}).some(stage => stage?.status === 'running');
   const isBusy = isLoading || isSending || isStageRunning;
+  const selectedModelOption = getScriptModelOption(aiModel, modelOptions);
+  const selectedModelHint = selectedModelOption.hint.trim();
 
   const statusText = (stage: NonNullable<ProjectFile['generationStages']>[keyof NonNullable<ProjectFile['generationStages']>]) => {
     if (stage?.status === 'running') return `进行中 ${stage.completed ?? 0}/${stage.total ?? '?'}`;
@@ -88,22 +91,32 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
       <header className="flex h-[52px] flex-shrink-0 items-center gap-2 border-b border-n40 px-4">
         <BookOpen className="h-4 w-4 flex-shrink-0 text-primary" />
         <h2 className="whitespace-nowrap text-sm font-semibold text-n700">2. 文字脚本</h2>
-        <label className="relative ml-auto min-w-0">
-          <span className="sr-only">选择剧本模型</span>
-          <select
-            value={aiModel}
-            onChange={event => onChangeModel(event.target.value as AiModel)}
-            disabled={isSending}
-            className="h-8 max-w-[210px] appearance-none rounded border border-n40 bg-n0 pl-2 pr-7 text-[11px] text-n700 outline-none hover:border-primary focus:border-primary disabled:opacity-50"
-          >
-            {modelOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {formatScriptModelSelectLabel(option)}
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
-        </label>
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          {selectedModelHint && (
+            <span
+              className="flex-shrink-0 whitespace-nowrap text-[11px] font-medium text-n300"
+              data-testid="quick-script-model-hint"
+            >
+              {selectedModelHint}
+            </span>
+          )}
+          <label className="relative min-w-0">
+            <span className="sr-only">选择剧本模型</span>
+            <select
+              value={aiModel}
+              onChange={event => onChangeModel(event.target.value as AiModel)}
+              disabled={isSending}
+              className="h-8 max-w-[180px] appearance-none rounded border border-n40 bg-n0 pl-2 pr-7 text-[11px] text-n700 outline-none hover:border-primary focus:border-primary disabled:opacity-50"
+            >
+              {modelOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {formatScriptModelSelectLabel(option)}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
+          </label>
+        </div>
       </header>
 
       <div className="relative min-h-0 flex-1 bg-n20">

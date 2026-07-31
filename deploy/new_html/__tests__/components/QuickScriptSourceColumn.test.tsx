@@ -54,11 +54,13 @@ describe('QuickScriptSourceColumn', () => {
     expect(screen.queryByRole('button', { name: '生成新版' })).not.toBeInTheDocument();
   });
 
-  it('shows public model hints before the configured display name', () => {
+  it('shows public model hints outside the dropdown', () => {
     render(<QuickScriptSourceColumn {...baseProps} />);
 
+    expect(screen.getByTestId('quick-script-model-hint')).toHaveTextContent('速度优先');
     const modelSelect = screen.getByLabelText('选择剧本模型');
-    expect(modelSelect).toHaveTextContent('速度优先 · 二阶 · 快速写作模型');
+    expect(modelSelect).toHaveTextContent('二阶 · 快速写作模型');
+    expect(modelSelect).not.toHaveTextContent('速度优先');
     expect(modelSelect).not.toHaveTextContent('deepseek');
   });
 
