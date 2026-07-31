@@ -28,6 +28,33 @@ def test_compute_cost_combines_token_shot_and_model_factors():
     ) == 15
 
 
+def test_compute_cost_applies_public_script_model_tiers():
+    rule = {
+        "base_cost": 1,
+        "min_cost": 1,
+        "max_cost": 1000,
+        "factors": [
+            {"key": "input_tokens", "type": "per_unit_add", "unit_size": 1000, "cost_per_unit": 1},
+            {"key": "output_tokens", "type": "per_unit_add", "unit_size": 1000, "cost_per_unit": 2},
+            {
+                "key": "model",
+                "type": "enum",
+                "rules": [
+                    {"value": "script_tier_1", "multiplier": 1},
+                    {"value": "script_tier_2", "multiplier": 2},
+                    {"value": "script_tier_3", "multiplier": 3},
+                    {"value": "script_tier_4", "multiplier": 4},
+                ],
+                "default_multiplier": 1,
+            },
+        ],
+    }
+
+    params = {"input_tokens": 1001, "output_tokens": 1001}
+    assert credit_service.compute_cost(rule, {**params, "model": "script_tier_1"}) == 7
+    assert credit_service.compute_cost(rule, {**params, "model": "script_tier_4"}) == 28
+
+
 @pytest.mark.asyncio
 async def test_consume_usage_reuses_existing_consumption(monkeypatch):
     async def existing(*_args, **_kwargs):

@@ -6,7 +6,7 @@ from services import text_model_catalog_service
 
 
 @pytest.mark.asyncio
-async def test_catalog_keeps_stable_operations_and_reports_effective_runtime_models(monkeypatch):
+async def test_catalog_returns_public_model_tiers_without_runtime_metadata(monkeypatch):
     async def fake_resolve_ai_proxy_provider(provider, model=None, usage_scope="workflow"):
         assert provider == "gemini-text"
         assert model is None
@@ -16,53 +16,42 @@ async def test_catalog_keeps_stable_operations_and_reports_effective_runtime_mod
             {"active": True},
         )
 
-    def fake_resolve_provider(provider, operation, usage_scope="workflow"):
-        assert usage_scope == "studio"
-        if provider == "minimax":
-            assert operation == "minimax-m3"
-            return SimpleNamespace(provider="minimax", model_name="MiniMax-M3-plan")
-        assert provider == "deepseek"
-        return SimpleNamespace(
-            provider="deepseek",
-            model_name={
-                "deepseek-reasoner": "deepseek-v4-pro-custom",
-                "deepseek-chat": "deepseek-v4-flash-custom",
-            }[operation],
-        )
-
     monkeypatch.setattr(
         text_model_catalog_service,
         "resolve_ai_proxy_provider",
         fake_resolve_ai_proxy_provider,
-    )
-    monkeypatch.setattr(
-        text_model_catalog_service,
-        "resolve_provider",
-        fake_resolve_provider,
     )
 
     models = await text_model_catalog_service.build_text_model_catalog("studio")
 
     assert [item["value"] for item in models] == [
         "minimax-m3",
-        "gemini",
+        "deepseek-chat",
         "deepseek",
-        "deepseek-chat",
+        "gemini",
     ]
-    assert [item["operation"] for item in models] == [
-        "minimax-m3",
-        "gemini-text",
-        "deepseek-reasoner",
-        "deepseek-chat",
+    assert [item["label"] for item in models] == [
+        "一阶 · 连续写作模型",
+        "二阶 · 快速写作模型",
+        "三阶 · 推理写作模型",
+        "四阶 · 全能写作模型",
     ]
-    assert [item["runtime_model_name"] for item in models] == [
-        "MiniMax-M3-plan",
-        "fallback-v4",
-        "deepseek-v4-pro-custom",
-        "deepseek-v4-flash-custom",
+    assert [item["hint"] for item in models] == [
+        "适合持续",
+        "速度优先",
+        "推理优先",
+        "综合全能",
     ]
-    assert models[0]["provider"] == "minimax"
-    assert models[1]["provider"] == "deepseek"
-    assert models[1]["failover_active"] is True
+    assert [item["billing_model"] for item in models] == [
+        "script_tier_1",
+        "script_tier_2",
+        "script_tier_3",
+        "script_tier_4",
+    ]
+    assert models[3]["failover_active"] is True
     assert {item["model_scope"] for item in models} == {"studio"}
+    assert all("provider" not in item for item in models)
+    assert all("requested_provider" not in item for item in models)
+    assert all("runtime_model_name" not in item for item in models)
+    assert all("operation" not in item for item in models)
     assert all("api_key" not in item and "endpoint" not in item for item in models)

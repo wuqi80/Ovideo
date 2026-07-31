@@ -72,27 +72,27 @@ export const ViewerColumn: React.FC<ViewerColumnProps> = ({
                   className={`px-2 py-1 text-[10px] font-semibold rounded-l transition-all ${
                       aiModel === AiModel.Gemini ? 'bg-primary text-white' : 'text-n300 hover:text-n800'
                   }`}
-                  title="GI化神 (Gemini)"
+                  title="四阶 · 全能写作模型"
                 >
-                  GI化神
+                  四阶
                 </button>
                 <button
                   onClick={() => onChangeModel(AiModel.Deepseek)}
                   className={`px-2 py-1 text-[10px] font-semibold transition-all border-l border-n40 ${
                       aiModel === AiModel.Deepseek ? 'bg-primary text-white' : 'text-n300 hover:text-n800'
                   }`}
-                  title="DK筑基 (deepseek-v4-pro)"
+                  title="三阶 · 推理写作模型"
                 >
-                  DK筑基
+                  三阶
                 </button>
                 <button
                   onClick={() => onChangeModel(AiModel.DeepseekChat)}
                   className={`px-2 py-1 text-[10px] font-semibold rounded-r transition-all border-l border-n40 ${
                       aiModel === AiModel.DeepseekChat ? 'bg-yellow-600 text-white' : 'text-n300 hover:text-n800'
                   }`}
-                  title="DK金丹 (deepseek-v4-flash)"
+                  title="二阶 · 快速写作模型"
                 >
-                  DK金丹
+                  二阶
                 </button>
               </div>
             </div>

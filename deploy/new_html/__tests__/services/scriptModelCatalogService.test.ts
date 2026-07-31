@@ -11,6 +11,9 @@ import {
   DEFAULT_SCRIPT_MODEL_OPTIONS,
   fetchScriptModelOptions,
   formatScriptModelDisplay,
+  formatScriptModelHistoryLabel,
+  formatScriptModelSelectLabel,
+  getScriptModelBillingKey,
   getScriptModelOption,
   normalizeScriptModelOptions,
   resolveScriptAiModel,
@@ -21,44 +24,36 @@ describe('scriptModelCatalogService', () => {
     vi.clearAllMocks();
   });
 
-  it('uses backend runtime models without changing stable frontend values or operations', async () => {
+  it('uses public frontend labels without requiring backend runtime metadata', async () => {
     vi.mocked(apiJson).mockResolvedValue({
       success: true,
       models: [
         {
           value: 'minimax-m3',
-          label: '练气',
-          operation: 'minimax-m3',
-          requested_provider: 'minimax',
-          provider: 'minimax',
-          runtime_model_name: 'MiniMax-M3',
+          label: '一阶 · 连续写作模型',
+          hint: '适合持续',
+          billing_model: 'script_tier_1',
           failover_active: false,
         },
         {
           value: 'deepseek-chat',
-          label: '金丹',
-          operation: 'deepseek-chat',
-          requested_provider: 'deepseek',
-          provider: 'deepseek',
-          runtime_model_name: 'deepseek-v4-flash-admin',
+          label: '二阶 · 快速写作模型',
+          hint: '速度优先',
+          billing_model: 'script_tier_2',
           failover_active: false,
         },
         {
           value: 'deepseek',
-          label: '筑基',
-          operation: 'deepseek-reasoner',
-          requested_provider: 'deepseek',
-          provider: 'deepseek',
-          runtime_model_name: 'deepseek-v4-pro-admin',
+          label: '三阶 · 推理写作模型',
+          hint: '推理优先',
+          billing_model: 'script_tier_3',
           failover_active: false,
         },
         {
           value: 'gemini',
-          label: '化神',
-          operation: 'gemini-text',
-          requested_provider: 'gemini-text',
-          provider: 'deepseek',
-          runtime_model_name: 'deepseek-v4-pro-fallback',
+          label: '四阶 · 全能写作模型',
+          hint: '综合全能',
+          billing_model: 'script_tier_4',
           failover_active: true,
         },
       ],
@@ -68,32 +63,46 @@ describe('scriptModelCatalogService', () => {
 
     expect(options.map(option => option.value)).toEqual([
       AiModel.MinimaxM3,
-      AiModel.Gemini,
-      AiModel.Deepseek,
       AiModel.DeepseekChat,
+      AiModel.Deepseek,
+      AiModel.Gemini,
     ]);
     expect(getScriptModelOption(AiModel.DeepseekChat, options)).toMatchObject({
+      label: '二阶 · 快速写作模型',
+      hint: '速度优先',
       operation: 'deepseek-chat',
-      runtime: 'deepseek-v4-flash-admin',
+      runtime: 'deepseek-v4-flash',
+      billingModel: 'script_tier_2',
     });
     expect(getScriptModelOption(AiModel.Deepseek, options)).toMatchObject({
+      label: '三阶 · 推理写作模型',
+      hint: '推理优先',
       operation: 'deepseek-reasoner',
-      runtime: 'deepseek-v4-pro-admin',
+      runtime: 'deepseek-v4-pro',
+      billingModel: 'script_tier_3',
     });
     expect(getScriptModelOption(AiModel.Gemini, options)).toMatchObject({
-      provider: 'deepseek',
-      runtime: 'deepseek-v4-pro-fallback',
+      label: '四阶 · 全能写作模型',
+      hint: '综合全能',
+      provider: 'gemini-text',
+      runtime: 'gemini-2.5-flash',
+      billingModel: 'script_tier_4',
       failoverActive: true,
     });
     expect(getScriptModelOption(AiModel.MinimaxM3, options)).toMatchObject({
+      label: '一阶 · 连续写作模型',
+      hint: '适合持续',
       operation: 'minimax-m3',
       runtime: 'MiniMax-M3',
+      billingModel: 'script_tier_1',
     });
     expect(formatScriptModelDisplay(getScriptModelOption(AiModel.MinimaxM3, options)))
-      .toBe('练气·Minimax M3');
+      .toBe('一阶 · 连续写作模型');
+    expect(formatScriptModelSelectLabel(getScriptModelOption(AiModel.MinimaxM3, options)))
+      .toBe('适合持续 · 一阶 · 连续写作模型');
+    expect(getScriptModelBillingKey(getScriptModelOption(AiModel.Gemini, options)))
+      .toBe('script_tier_4');
     expect(resolveScriptAiModel('MiniMax-M3', options)).toBe(AiModel.MinimaxM3);
-    expect(resolveScriptAiModel('deepseek-v4-pro-admin', options)).toBe(AiModel.Deepseek);
-    expect(resolveScriptAiModel('deepseek-v4-flash-admin', options)).toBe(AiModel.DeepseekChat);
   });
 
   it('falls back per option when the response is incomplete', () => {
@@ -112,9 +121,14 @@ describe('scriptModelCatalogService', () => {
   it('restores legacy aliases and new V4 runtime names to the correct selector', () => {
     expect(resolveScriptAiModel('minimax-m3')).toBe(AiModel.MinimaxM3);
     expect(resolveScriptAiModel('MiniMax-M3')).toBe(AiModel.MinimaxM3);
+    expect(resolveScriptAiModel('一阶 · 连续写作模型')).toBe(AiModel.MinimaxM3);
+    expect(resolveScriptAiModel('script_tier_2')).toBe(AiModel.DeepseekChat);
     expect(resolveScriptAiModel('deepseek-reasoner')).toBe(AiModel.Deepseek);
     expect(resolveScriptAiModel('deepseek-v4-pro')).toBe(AiModel.Deepseek);
     expect(resolveScriptAiModel('deepseek-chat')).toBe(AiModel.DeepseekChat);
     expect(resolveScriptAiModel('deepseek-v4-flash')).toBe(AiModel.DeepseekChat);
+    expect(formatScriptModelHistoryLabel('deepseek-v4-flash', 'DK金丹')).toBe('二阶 · 快速写作模型');
+    expect(formatScriptModelHistoryLabel('legacy', '历史版本')).toBe('历史版本');
+    expect(formatScriptModelHistoryLabel('experimental-runtime', 'GPT 高阶')).toBe('写作模型');
   });
 });

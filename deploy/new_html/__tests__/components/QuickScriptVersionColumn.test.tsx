@@ -68,7 +68,8 @@ describe('QuickScriptVersionColumn', () => {
       />,
     );
 
-    expect(screen.getByText('deepseek-v4-flash')).toBeInTheDocument();
+    expect(screen.getByText('二阶 · 快速写作模型')).toBeInTheDocument();
+    expect(screen.queryByText('deepseek-v4-flash')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /分镜1-1/ })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '生成镜头设计' }));

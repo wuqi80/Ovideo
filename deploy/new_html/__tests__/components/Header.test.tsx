@@ -37,34 +37,37 @@ describe('Header model display and credit balance', () => {
     (getCreditBalance as any).mockResolvedValue({ available_credits: 1280 });
   });
 
-  it('shows business name with the actual runtime model name', () => {
+  it('shows public script model names without leaking runtime model names', () => {
     render(<Header {...baseProps} aiModel={AiModel.Gemini} />);
-    expect(screen.getByText('化神 · gemini-2.5-flash')).toBeTruthy();
+    expect(screen.getByText('四阶 · 全能写作模型')).toBeTruthy();
 
     render(<Header {...baseProps} aiModel={AiModel.DeepseekChat} />);
-    expect(screen.getByText('金丹 · deepseek-v4-flash')).toBeTruthy();
+    expect(screen.getByText('二阶 · 快速写作模型')).toBeTruthy();
 
     render(<Header {...baseProps} aiModel={AiModel.Deepseek} />);
-    expect(screen.getByText('筑基 · deepseek-v4-pro')).toBeTruthy();
+    expect(screen.getByText('三阶 · 推理写作模型')).toBeTruthy();
   });
 
-  it('uses backend-resolved model metadata when supplied', () => {
+  it('keeps public labels even when backend-resolved runtime metadata is supplied', () => {
     render(
       <Header
         {...baseProps}
         aiModel={AiModel.DeepseekChat}
         modelOptions={[{
           value: AiModel.DeepseekChat,
-          label: '金丹',
+          label: '二阶 · 快速写作模型',
+          hint: '速度优先',
           operation: 'deepseek-chat',
           requestedProvider: 'deepseek',
           provider: 'deepseek',
           runtime: 'deepseek-v4-flash-admin',
+          billingModel: 'script_tier_2',
           failoverActive: false,
         }]}
       />,
     );
-    expect(screen.getByText('金丹 · deepseek-v4-flash-admin')).toBeTruthy();
+    expect(screen.getByText('二阶 · 快速写作模型')).toBeTruthy();
+    expect(screen.queryByText(/deepseek-v4-flash-admin/)).toBeNull();
   });
 
   it('loads and renders the available credit balance', async () => {

@@ -25,6 +25,8 @@ import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getS
 import { getAuthToken } from './services/httpClient';
 import { useScriptModelOptions } from './hooks/useScriptModelOptions';
 import {
+  formatScriptModelDisplay,
+  getScriptModelBillingKey,
   getScriptModelOption,
   type ScriptModelOption,
 } from './services/scriptModelCatalogService';
@@ -402,9 +404,10 @@ function exportStoryboardVersionCsv(file: ProjectFile, version: ScriptStoryboard
 function getScriptModelInfo(model: AiModel, options: readonly ScriptModelOption[]) {
   const option = getScriptModelOption(model, options);
   return {
-    alias: option.label,
-    provider: option.provider,
+    alias: formatScriptModelDisplay(option),
+    provider: 'script-writing',
     runtime: option.runtime,
+    billingModel: getScriptModelBillingKey(option),
   };
 }
 
@@ -1799,7 +1802,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       const creditQuote = await assertEnoughCredits('script_model_call', {
         input_tokens: estimateTextTokens(billingInput),
         output_tokens: forecastOutputTokens,
-        model: modelInfo.runtime,
+        model: modelInfo.billingModel,
       });
       estimatedCreditCost = Number(creditQuote.estimated_cost || 0);
       const userMessage = await createScriptMessage(propEpisodeId, fileId, {
@@ -1808,7 +1811,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         status: 'completed',
         modelAlias: modelInfo.alias,
         provider: modelInfo.provider,
-        modelName: modelInfo.runtime,
+        modelName: modelInfo.billingModel,
         requestId: `${requestId}_user`,
       });
       setScriptConversations(prev => ({
@@ -1830,7 +1833,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         status: 'streaming',
         modelAlias: modelInfo.alias,
         provider: modelInfo.provider,
-        modelName: modelInfo.runtime,
+        modelName: modelInfo.billingModel,
         replyToMessageId: userMessage.id,
         requestId: `${requestId}_assistant`,
         metadata: {
@@ -1897,7 +1900,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       const billingParams = {
         input_tokens: estimateTextTokens(pipelineInputTexts.join('\n')),
         output_tokens: estimateTextTokens(pipelineOutputTexts.join('\n') || finalContent),
-        model: modelInfo.runtime,
+        model: modelInfo.billingModel,
       };
       const credit = await consumeCredits({
         featureKey: 'script_model_call',
@@ -1939,7 +1942,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         status: 'ready',
         modelAlias: modelInfo.alias,
         provider: modelInfo.provider,
-        modelName: modelInfo.runtime,
+        modelName: modelInfo.billingModel,
         metadata: versionMetadata,
         setCurrent: true,
       });
@@ -1960,7 +1963,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           [fileId]: {
             ...current,
             currentVersionId: version.id,
-            defaultModel: modelInfo.runtime,
+            defaultModel: modelInfo.billingModel,
             messages: current.messages.map(message => message.id === assistantMessage.id ? completedMessage : message),
             versions: [...current.versions.filter(item => item.id !== version.id), version],
           },
@@ -2126,7 +2129,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         shot_count: sourceItems.length,
         input_tokens: estimateTextTokens(selectedVersion.content),
         output_tokens: Math.max(500, sourceItems.length * 500),
-        model: modelInfo.runtime,
+        model: modelInfo.billingModel,
       });
 
       const pipelineService = await loadScriptThreeStageService();
@@ -2184,7 +2187,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         shot_count: persistedItems.length,
         input_tokens: estimateTextTokens(designResult.inputTexts.join('\n')),
         output_tokens: estimateTextTokens(designResult.outputTexts.join('\n')),
-        model: modelInfo.runtime,
+        model: modelInfo.billingModel,
       };
       const credit = await consumeCredits({
         featureKey: 'storyboard_design_generation',
@@ -3461,7 +3464,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         status: 'completed',
         modelAlias: modelInfo.alias,
         provider: modelInfo.provider,
-        modelName: modelInfo.runtime,
+        modelName: modelInfo.billingModel,
         requestId,
         metadata,
       });
@@ -3473,7 +3476,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         status: 'ready',
         modelAlias: modelInfo.alias,
         provider: modelInfo.provider,
-        modelName: modelInfo.runtime,
+        modelName: modelInfo.billingModel,
         metadata,
         setCurrent: false,
       });
@@ -3506,7 +3509,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           [file.id]: {
             ...current,
             currentVersionId: selectedVersion.id,
-            defaultModel: modelInfo.runtime,
+            defaultModel: modelInfo.billingModel,
             messages: [...current.messages.filter(item => item.id !== message.id), message],
             versions: [...current.versions.filter(item => item.id !== selectedVersion.id), selectedVersion],
           },
@@ -3558,7 +3561,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         shot_count: sourceShotCount,
         input_tokens: estimateTextTokens(videoScript),
         output_tokens: Math.max(500, sourceShotCount * 500),
-        model: modelInfo.runtime,
+        model: modelInfo.billingModel,
       });
     } catch (error) {
       alert(error instanceof Error ? error.message : '积分校验失败');
@@ -3624,7 +3627,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         shot_count: persistedItems.length,
         input_tokens: estimateTextTokens(designResult.inputTexts.join('\n')),
         output_tokens: estimateTextTokens(designResult.outputTexts.join('\n')),
-        model: modelInfo.runtime,
+        model: modelInfo.billingModel,
       };
       const credit = await consumeCredits({
         featureKey: 'storyboard_design_generation',
@@ -3724,7 +3727,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         shot_count: file.storyboard.items.length,
         input_tokens: forecastInputTokens,
         output_tokens: Math.max(500, file.storyboard.items.length * 500),
-        model: modelInfo.runtime,
+        model: modelInfo.billingModel,
       });
     } catch (error) {
       alert(error instanceof Error ? error.message : '积分校验失败');
@@ -3795,7 +3798,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         shot_count: billingSuccessfulShots,
         input_tokens: billingInputTokens,
         output_tokens: billingOutputTokens,
-        model: modelInfo.runtime,
+        model: modelInfo.billingModel,
       };
       const credit = await consumeCredits({
         featureKey: 'storyboard_design_generation',

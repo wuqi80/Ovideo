@@ -45,6 +45,10 @@ import { parseVideoScriptGroups } from '../utils/scriptPipelineParsers';
 import { SegmentPromptCards } from './SegmentPromptCards';
 import {
   DEFAULT_SCRIPT_MODEL_OPTIONS,
+  formatScriptModelHistoryLabel,
+  formatScriptModelSelectLabel,
+  getScriptModelBillingKey,
+  getScriptModelOption,
   type ScriptModelOption,
 } from '../services/scriptModelCatalogService';
 import type { ScriptWorkspaceMode } from '../utils/scriptWorkspaceMode';
@@ -283,7 +287,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       1000,
       estimateTextTokens(currentVersion?.content || selectedFile.scriptContent || draft) * (isFirstTurn ? 3 : 1),
     );
-    const model = modelOptions.find(option => option.value === aiModel)?.runtime || String(aiModel);
+    const model = getScriptModelBillingKey(getScriptModelOption(aiModel, modelOptions));
     return {
       input_tokens: estimateTextTokens(billingInput),
       output_tokens: forecastOutputTokens,
@@ -515,6 +519,9 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     const failureMessage = String(message.metadata?.error || '生成未完成，请重新发送');
     const creditCharged = message.metadata?.creditCharged === true;
     const versionSegmentCount = version ? buildStoryboardSegmentGroups(version.storyboardItems || []).length : 0;
+    const messageModelLabel = isAssistant
+      ? formatScriptModelHistoryLabel(message.modelName, message.modelAlias, modelOptions)
+      : '';
     const messageControls = messageScrollControls[message.id] || {
       canJumpTop: false,
       canJumpBottom: false,
@@ -539,9 +546,9 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               <span className="text-xs font-semibold text-n800">
                 {isAssistant ? '分镜脚本' : message.id === firstUserMessageId ? '输入文字剧本' : '修改要求'}
               </span>
-              {isAssistant && message.modelAlias && (
+              {isAssistant && messageModelLabel && (
                 <span className="rounded border border-n40 bg-n20 px-1.5 py-0.5 text-[10px] text-n300">
-                  {message.modelAlias}{message.modelName ? ` · ${message.modelName}` : ''}
+                  {messageModelLabel}
                 </span>
               )}
               {version && (
@@ -978,7 +985,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 className="h-8 max-w-[230px] appearance-none border-0 bg-transparent pl-2 pr-7 text-xs text-n700 outline-none hover:text-primary focus:text-primary disabled:opacity-50"
               >
                 {modelOptions.map(option => (
-                  <option key={option.value} value={option.value}>{option.label} · {option.runtime}</option>
+                  <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
                 ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
@@ -1063,7 +1070,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 className="h-9 max-w-[260px] appearance-none rounded border border-n40 bg-n0 pl-3 pr-8 text-sm text-n700 outline-none hover:border-primary focus:border-primary disabled:opacity-50"
               >
                 {modelOptions.map(option => (
-                  <option key={option.value} value={option.value}>{option.label} · {option.runtime}</option>
+                  <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
                 ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />

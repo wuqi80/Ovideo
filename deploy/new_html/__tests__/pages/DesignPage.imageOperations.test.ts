@@ -60,9 +60,9 @@ describe('DesignPage image operation modals', () => {
     expect(source).toContain("sequential: imageToImageEnabled ? 'auto' : 'disabled'");
   });
 
-  it('defaults refinement to Jindan and lists it before Huashen', () => {
+  it('defaults refinement to the fast tier and lists it before the all-round tier', () => {
     expect(source).toContain("LS.get('design_ai_refine_model', AiModel.DeepseekChat)");
     expect(source).toContain('[AiModel.DeepseekChat, AiModel.Gemini].map');
-    expect(source).toContain('formatScriptModelDisplay(option)');
+    expect(source).toContain('formatScriptModelSelectLabel(option)');
   });
 });

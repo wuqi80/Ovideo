@@ -47,6 +47,7 @@ sql/db_migration_user_profile.sql           # ALTER users; self-service profile 
 # ---- 4. 用户维度业务表 ----
 sql/db_migration_credits.sql                # REF users
 sql/db_migration_script_credit_rules.sql    # INSERT script/storyboard usage rules
+sql/db_migration_script_model_tier_credit_rules.sql # UPDATE script/storyboard model tier multipliers
 sql/db_migration_design_credit_rules.sql    # INSERT design image/angle/upscale usage rules
 sql/db_migration_credit_onboarding.sql      # REF users, credit_accounts, credit_transactions
 sql/db_migration_notifications.sql          # REF users

@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { BookOpen, ChevronDown, Film, LoaderCircle, Wand2, X } from 'lucide-react';
 import type { AiModel, ProjectFile, ScriptStoryboardVersion } from '../types';
-import type { ScriptModelOption } from '../services/scriptModelCatalogService';
+import {
+  formatScriptModelSelectLabel,
+  type ScriptModelOption,
+} from '../services/scriptModelCatalogService';
 
 interface QuickScriptSourceColumnProps {
   selectedFile: ProjectFile | undefined;
@@ -95,7 +98,7 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
           >
             {modelOptions.map(option => (
               <option key={option.value} value={option.value}>
-                {option.label} · {option.runtime}
+                {formatScriptModelSelectLabel(option)}
               </option>
             ))}
           </select>

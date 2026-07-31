@@ -28,7 +28,7 @@ import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { useScriptModelOptions } from '../hooks/useScriptModelOptions';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
 import {
-  formatScriptModelDisplay,
+  formatScriptModelSelectLabel,
   getScriptModelOption,
   type ScriptModelOption,
 } from '../services/scriptModelCatalogService';
@@ -1525,7 +1525,7 @@ const UnifiedAIModal: React.FC<{
                     className="h-8 min-w-[210px] appearance-none rounded-r-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
                   >
                     {refineModelOptions.map(option => (
-                      <option key={option.value} value={option.value}>{formatScriptModelDisplay(option)}</option>
+                      <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
                     ))}
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
@@ -1777,7 +1777,7 @@ const BatchGenerateModal: React.FC<{
               <div><span className="text-[11px] text-n100 block mb-1">比例</span><select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => <option key={r} value={r}>{r}</option>)}</select></div>
               <div><span className="text-[11px] text-n100 block mb-1">分辨率</span><select value={resolution} onChange={e => setResolution(e.target.value as any)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5"><option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option></select></div>
             </div>
-            <div><span className="text-[11px] text-n100 block mb-1">AI 推断模型</span><select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{refineModelOptions.map(option => <option key={option.value} value={option.value}>{formatScriptModelDisplay(option)}</option>)}</select></div>
+            <div><span className="text-[11px] text-n100 block mb-1">AI 推断模型</span><select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{refineModelOptions.map(option => <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>)}</select></div>
             <label className="flex items-center gap-2 text-xs text-n700 p-3 bg-n30 rounded-lg border border-n40">
               <input type="checkbox" checked={threeView} onChange={e => setThreeView(e.target.checked)} className="accent-indigo-500" />
               人物/道具默认生成白底四视图

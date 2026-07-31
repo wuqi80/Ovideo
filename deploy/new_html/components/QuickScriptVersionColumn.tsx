@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, Edit2, FileText, LoaderCircle, Save, Sparkles, X } from 'lucide-react';
 import type { ProjectFile, ScriptStoryboardVersion, StoryboardItem } from '../types';
 import { StoryboardScriptColumn } from './StoryboardScriptColumn';
+import { formatScriptModelHistoryLabel } from '../services/scriptModelCatalogService';
 
 interface QuickScriptVersionColumnProps {
   selectedFile: ProjectFile | undefined;
@@ -63,6 +64,7 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
   }, [version, versions]);
 
   const scriptItems = version?.storyboardItems || [];
+  const versionModelLabel = formatScriptModelHistoryLabel(version?.modelName, version?.modelAlias);
   const normalizedText = (value?: string | null) => String(value || '').replace(/\s+/g, '').trim();
   const getSourceKey = (item: StoryboardItem): string => (
     String(item.sourceVideoShotNo || item.shotNumber || '').trim()
@@ -148,9 +150,9 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
         )}
         <span
           className="ml-auto max-w-[150px] truncate text-[10px] text-n200"
-          title={version?.modelName || version?.modelAlias || ''}
+          title={versionModelLabel}
         >
-          {version?.modelName || version?.modelAlias || ''}
+          {versionModelLabel}
         </span>
       </header>
 
