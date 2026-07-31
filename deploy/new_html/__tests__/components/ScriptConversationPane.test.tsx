@@ -85,6 +85,15 @@ describe('ScriptConversationPane workflow', () => {
     expect(app).toContain('<Navigate to="../script" replace />');
   });
 
+  it('centers the quick writing and video reverse mode switch in each script toolbar', () => {
+    expect(source).toContain('data-testid="script-workspace-mode-switch-anchor"');
+    expect(source).toContain('absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2');
+    expect(source).toContain('relative flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4');
+    expect(workspace.match(/data-testid="script-workspace-mode-switch-anchor"/g)).toHaveLength(2);
+    expect(workspace).toContain('workflow-stage-toolbar relative flex h-12');
+    expect(workspace).toContain('workflow-stage-toolbar relative flex h-11');
+  });
+
   it('keeps immutable reply actions together', () => {
     expect(source).toContain('生成镜头设计');
     expect(source).toContain('编辑分镜脚本');

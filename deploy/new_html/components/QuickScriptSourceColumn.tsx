@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BookOpen, ChevronDown, Coins, LoaderCircle, Wand2, X } from 'lucide-react';
-import type { AiModel, ProjectFile, ScriptStoryboardVersion } from '../types';
+import type { AiModel, ProjectFile, ScriptGenerationStageState, ScriptStoryboardVersion } from '../types';
 import {
   formatScriptModelSelectLabel,
   getScriptModelBillingKey,
@@ -10,6 +10,7 @@ import {
 import { estimateCredits, estimateTextTokens } from '../services/creditService';
 
 const BRIEF_SOURCE_MAX_CHARACTERS = 80;
+type QuickStageKey = keyof NonNullable<ProjectFile['generationStages']>;
 
 function countContentCharacters(value: string): number {
   return value.replace(/\s+/g, '').length;
@@ -73,8 +74,36 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
   const stages = selectedFile?.generationStages;
   const segmentCount = selectedFile?.scriptSegments?.length || 0;
   const generatedSegmentCount = selectedFile?.scriptSegments?.filter(segment => segment.videoScript).length || 0;
-  const promptCount = selectedFile?.storyboard?.items?.filter(item => item.imagePrompt).length || 0;
-  const isStageRunning = Object.values(stages || {}).some(stage => stage?.status === 'running');
+  const storyboardDesignCount = selectedFile?.storyboard?.items
+    ?.filter(item => !item.isPlaceholder && (item.imagePrompt || item.videoPrompt || item.scriptSegment || item.originalText))
+    .length || 0;
+  const hasCompletedOutputForStage = (key: QuickStageKey, stage?: ScriptGenerationStageState) => {
+    const targetTotal = typeof stage?.total === 'number' && stage.total > 0 ? stage.total : 0;
+    if (key === 'split') return segmentCount > 0 && (!targetTotal || segmentCount >= targetTotal);
+    if (key === 'videoScript') return segmentCount > 0 && generatedSegmentCount >= (targetTotal || segmentCount);
+    return storyboardDesignCount > 0 && (!targetTotal || storyboardDesignCount >= targetTotal);
+  };
+  const getCompletedTotalForStage = (key: QuickStageKey) => {
+    if (key === 'split') return segmentCount;
+    if (key === 'videoScript') return generatedSegmentCount;
+    return storyboardDesignCount;
+  };
+  const getDisplayStage = (key: QuickStageKey): ScriptGenerationStageState | undefined => {
+    const stage = stages?.[key];
+    if (stage?.status === 'running' && !hasCompletedOutputForStage(key, stage)) return stage;
+    if (hasCompletedOutputForStage(key, stage)) {
+      const completedTotal = getCompletedTotalForStage(key);
+      return {
+        ...stage,
+        status: 'done',
+        total: completedTotal,
+        completed: completedTotal,
+      };
+    }
+    return stage;
+  };
+  const isStageRunning = (Object.entries(stages || {}) as Array<[QuickStageKey, ScriptGenerationStageState]>)
+    .some(([key, stage]) => stage?.status === 'running' && !hasCompletedOutputForStage(key, stage));
   const isBusy = isLoading || isSending || isStageRunning;
   const selectedModelOption = getScriptModelOption(aiModel, modelOptions);
   const selectedModelHint = selectedModelOption.hint.trim();
@@ -150,14 +179,14 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
     };
   }, [creditEstimateParams, isBusy]);
 
-  const statusText = (stage: NonNullable<ProjectFile['generationStages']>[keyof NonNullable<ProjectFile['generationStages']>]) => {
+  const statusText = (stage?: ScriptGenerationStageState) => {
     if (stage?.status === 'running') return `进行中 ${stage.completed ?? 0}/${stage.total ?? '?'}`;
     if (stage?.status === 'done') return '完成';
     if (stage?.status === 'error') return '失败，可重试';
     return '未开始';
   };
 
-  const statusClass = (stage: NonNullable<ProjectFile['generationStages']>[keyof NonNullable<ProjectFile['generationStages']>]) => {
+  const statusClass = (stage?: ScriptGenerationStageState) => {
     if (stage?.status === 'done') return 'text-success';
     if (stage?.status === 'error') return 'text-danger';
     if (stage?.status === 'running') return 'text-warning';
@@ -269,12 +298,12 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
             {
               key: 'storyboardPrompt',
               label: '生成镜头设计',
-              metric: `镜头设计：${promptCount}`,
+              metric: `镜头设计：${storyboardDesignCount}`,
               action: onExtractStoryboardPrompts,
               disabled: generatedSegmentCount === 0,
             },
           ] as const).map(row => {
-            const stage = stages?.[row.key];
+            const stage = getDisplayStage(row.key);
             return (
               <div key={row.key} className="mb-1.5 rounded border border-n40 bg-n0 px-2.5 py-2 last:mb-0">
                 <div className="flex min-w-0 items-center gap-2">

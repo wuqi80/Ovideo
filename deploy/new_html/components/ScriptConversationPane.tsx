@@ -711,14 +711,19 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
 
   return (
     <section className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-n20" data-testid="script-conversation-pane">
-      <header className="flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
-        <FileText className="h-4 w-4 text-primary" />
-        <div className="truncate text-sm font-semibold text-n800">{selectedFile?.name || '请选择剧本任务'}</div>
+      <header className="relative flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
+        <FileText className="h-4 w-4 flex-shrink-0 text-primary" />
+        <div className="max-w-[32%] truncate text-sm font-semibold text-n800">{selectedFile?.name || '请选择剧本任务'}</div>
         {workspaceMode && onWorkspaceModeChange && (
-          <ScriptWorkspaceModeSwitch
-            mode={workspaceMode}
-            onChange={onWorkspaceModeChange}
-          />
+          <div
+            className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+            data-testid="script-workspace-mode-switch-anchor"
+          >
+            <ScriptWorkspaceModeSwitch
+              mode={workspaceMode}
+              onChange={onWorkspaceModeChange}
+            />
+          </div>
         )}
         {isLoading && conversation && (
           <span className="ml-auto inline-flex flex-shrink-0 items-center gap-1 text-[10px] text-n300" title="正在后台同步最新对话">

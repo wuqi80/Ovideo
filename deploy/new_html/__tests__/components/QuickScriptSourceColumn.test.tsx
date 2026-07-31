@@ -122,6 +122,69 @@ describe('QuickScriptSourceColumn', () => {
     expect(screen.queryByText('· 成功后扣除')).not.toBeInTheDocument();
   });
 
+  it('marks quick stages complete from persisted outputs when stage metadata is stale', () => {
+    const completedFile = {
+      ...file,
+      scriptSegments: [
+        {
+          id: 'segment-1',
+          order: 0,
+          sourceText: '第一段',
+          estimatedDurationSec: 12,
+          videoScript: '分镜1-1',
+          status: 'done',
+        },
+        {
+          id: 'segment-2',
+          order: 1,
+          sourceText: '第二段',
+          estimatedDurationSec: 10,
+          videoScript: '分镜2-1',
+          status: 'done',
+        },
+      ],
+      storyboard: {
+        items: [
+          {
+            id: 'shot-1',
+            shotNumber: '1-1',
+            originalText: '第一段',
+            scriptSegment: '第一段',
+            imagePrompt: '画面一',
+            videoPrompt: '镜头一',
+            dialogue: '',
+            characters: [],
+            scene: '',
+            timestamp: Date.now(),
+          },
+          {
+            id: 'shot-2',
+            shotNumber: '1-2',
+            originalText: '第二段',
+            scriptSegment: '第二段',
+            imagePrompt: '画面二',
+            videoPrompt: '镜头二',
+            dialogue: '',
+            characters: [],
+            scene: '',
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      generationStages: {
+        split: { status: 'idle', total: 0, completed: 0 },
+        videoScript: { status: 'idle', total: 0, completed: 0 },
+        storyboardPrompt: { status: 'idle', total: 0, completed: 0 },
+      },
+    } as ProjectFile;
+
+    render(<QuickScriptSourceColumn {...baseProps} selectedFile={completedFile} />);
+
+    expect(screen.getAllByText('完成')).toHaveLength(3);
+    expect(screen.queryByText('未开始')).not.toBeInTheDocument();
+    expect(screen.getByText('镜头设计：2')).toBeInTheDocument();
+  });
+
   it('keeps quick generation disabled before source text exists', () => {
     render(
       <QuickScriptSourceColumn

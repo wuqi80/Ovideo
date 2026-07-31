@@ -4239,15 +4239,20 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                   </div>
 
                   <div className="workflow-stage-canvas flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-n20">
-                    <header className="workflow-stage-toolbar flex h-12 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
+                    <header className="workflow-stage-toolbar relative flex h-12 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
                       <FileText className="h-4 w-4 flex-shrink-0 text-primary" />
-                      <div className="truncate text-sm font-semibold text-n800">
+                      <div className="max-w-[32%] truncate text-sm font-semibold text-n800">
                         {selectedFile?.name || '请选择剧本任务'}
                       </div>
-                      <ScriptWorkspaceModeSwitch
-                        mode={scriptWorkspaceMode}
-                        onChange={handleScriptWorkspaceModeChange}
-                      />
+                      <div
+                        className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+                        data-testid="script-workspace-mode-switch-anchor"
+                      >
+                        <ScriptWorkspaceModeSwitch
+                          mode={scriptWorkspaceMode}
+                          onChange={handleScriptWorkspaceModeChange}
+                        />
+                      </div>
                       <span className="ml-auto text-[10px] text-n200">上传视频并生成可导入的候选剧本</span>
                     </header>
                     <div className="min-h-0 flex-1 bg-n20 p-3">
@@ -4412,15 +4417,20 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     data-testid="quick-script-canvas"
                     style={{ width: 0, flex: '1 1 0%' }}
                   >
-                    <header className="workflow-stage-toolbar flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
+                    <header className="workflow-stage-toolbar relative flex h-11 flex-shrink-0 items-center gap-3 border-b border-n40 bg-n0 px-4">
                       <FileText className="h-4 w-4 flex-shrink-0 text-primary" />
-                      <div className="truncate text-sm font-semibold text-n800">
+                      <div className="max-w-[32%] truncate text-sm font-semibold text-n800">
                         {selectedFile?.name || '请选择剧本任务'}
                       </div>
-                      <ScriptWorkspaceModeSwitch
-                        mode={scriptWorkspaceMode}
-                        onChange={handleScriptWorkspaceModeChange}
-                      />
+                      <div
+                        className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+                        data-testid="script-workspace-mode-switch-anchor"
+                      >
+                        <ScriptWorkspaceModeSwitch
+                          mode={scriptWorkspaceMode}
+                          onChange={handleScriptWorkspaceModeChange}
+                        />
+                      </div>
                       <span className="ml-auto text-[10px] text-n200">
                         四列使用同一生成、版本、积分与镜头数据
                       </span>
