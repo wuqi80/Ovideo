@@ -322,7 +322,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   setDragOverIndex(null);
                 }}
                 onClick={() => onFileSelect(file.id)}
-                className={`group relative flex cursor-pointer flex-col border-b border-l-[3px] border-n40 px-4 py-3 transition-colors duration-150 ${
+                className={`group relative flex min-h-[112px] cursor-pointer flex-col justify-center border-b border-l-[3px] border-n40 px-4 py-4 transition-colors duration-150 ${
                   selectedFileId === file.id
                     ? 'border-l-primary bg-primary-light'
                     : 'border-l-transparent bg-n0 hover:bg-n20'
@@ -386,8 +386,8 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   </div>
                 </div>
 
-                <div data-testid="file-card-content" className="mt-2 w-full min-w-0 select-none pl-[26px] pr-1">
-                  <p className="line-clamp-2 text-xs leading-[18px] text-n100">
+                <div data-testid="file-card-content" className="mt-3 w-full min-w-0 select-none pl-[26px] pr-1">
+                  <p className="line-clamp-2 text-xs leading-5 text-n100">
                     {file.originalContent.slice(0, 100).replace(/\n/g, ' ')}...
                   </p>
                 </div>

@@ -27,7 +27,7 @@ describe('FileColumn workflow script control', () => {
   it('uses compact row items with a blue selected rail and tinted background', () => {
     expect(source).toContain('className="flex shrink-0 items-center justify-end gap-1"');
     expect(source).toContain('className="flex flex-col"');
-    expect(source).toContain('border-b border-l-[3px] border-n40 px-4 py-3');
+    expect(source).toContain('min-h-[112px] cursor-pointer flex-col justify-center border-b border-l-[3px] border-n40 px-4 py-4');
     expect(source).toContain("'border-l-primary bg-primary-light'");
     expect(source).toContain("'border-l-transparent bg-n0 hover:bg-n20'");
     expect(source).not.toContain('className="flex flex-col gap-[6px] px-2 py-2"');
@@ -71,8 +71,8 @@ describe('FileColumn workflow script control', () => {
   });
 
   it('shows a two-line muted preview aligned under the title text', () => {
-    expect(source).toContain('className="mt-2 w-full min-w-0 select-none pl-[26px] pr-1"');
-    expect(source).toContain('className="line-clamp-2 text-xs leading-[18px] text-n100"');
+    expect(source).toContain('className="mt-3 w-full min-w-0 select-none pl-[26px] pr-1"');
+    expect(source).toContain('className="line-clamp-2 text-xs leading-5 text-n100"');
     expect(source).toContain('file.originalContent.slice(0, 100)');
   });
 
