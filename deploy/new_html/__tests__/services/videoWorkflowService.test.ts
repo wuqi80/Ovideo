@@ -127,6 +127,28 @@ describe('video workflow service', () => {
     expect(mockFetch.mock.calls[1][0]).toBe('/api/video/capabilities?scope=studio');
   });
 
+  it('can force-refresh cached video capabilities', async () => {
+    const { fetchVideoCapabilities } = await loadService();
+    mockFetch
+      .mockResolvedValueOnce(mockJsonResponse({
+        seedance_omni: false,
+        comfyui_available: false,
+        manifest_version: 'old',
+        models: [],
+      }))
+      .mockResolvedValueOnce(mockJsonResponse({
+        seedance_omni: true,
+        comfyui_available: true,
+        manifest_version: 'new',
+        models: [],
+      }));
+
+    await expect(fetchVideoCapabilities()).resolves.toMatchObject({ manifest_version: 'old' });
+    await expect(fetchVideoCapabilities('workflow', { force: true })).resolves.toMatchObject({ manifest_version: 'new' });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('loads video takes for the final compose picker', async () => {
     const { getVideoTakes } = await loadService();
     mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, shots: [] }));

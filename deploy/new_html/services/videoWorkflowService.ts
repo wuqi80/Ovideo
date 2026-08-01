@@ -6,6 +6,7 @@ export interface VideoModelCapability {
   provider: string;
   model_name?: string | null;
   model_options?: string[];
+  available?: boolean;
   task_types: string[];
   media_inputs: string[];
   supports_original_audio?: boolean;
@@ -70,13 +71,18 @@ function normalizeCapabilityScope(scope?: string): string {
   return value || 'workflow';
 }
 
-export function fetchVideoCapabilities(scope: string = 'workflow'): Promise<VideoCapabilityManifest> {
+export function fetchVideoCapabilities(
+  scope: string = 'workflow',
+  options: { force?: boolean } = {},
+): Promise<VideoCapabilityManifest> {
   const cacheKey = normalizeCapabilityScope(scope);
-  if (cacheKey === 'workflow' && videoCapabilitiesCache) return Promise.resolve(videoCapabilitiesCache);
+  if (!options.force && cacheKey === 'workflow' && videoCapabilitiesCache) return Promise.resolve(videoCapabilitiesCache);
   const scopedCache = scopedVideoCapabilitiesCache.get(cacheKey);
-  if (scopedCache) return Promise.resolve(scopedCache);
+  if (!options.force && scopedCache) return Promise.resolve(scopedCache);
 
-  let promise = cacheKey === 'workflow' ? videoCapabilitiesPromise : scopedVideoCapabilitiesPromise.get(cacheKey);
+  let promise = options.force
+    ? null
+    : (cacheKey === 'workflow' ? videoCapabilitiesPromise : scopedVideoCapabilitiesPromise.get(cacheKey));
   if (!promise) {
     const query = cacheKey === 'workflow' ? '' : `?scope=${encodeURIComponent(cacheKey)}`;
     promise = apiJson<VideoCapabilityManifest>(

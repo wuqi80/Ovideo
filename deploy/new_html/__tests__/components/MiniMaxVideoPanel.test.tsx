@@ -10,22 +10,27 @@ const defaultValue = {
 };
 
 describe('MiniMaxVideoPanel', () => {
-    it('exposes Standard and Fast model choices', () => {
+    it('exposes backend runtime model choices', () => {
         const onChange = vi.fn();
         render(
             <MiniMaxVideoPanel
                 value={defaultValue}
                 prompt="move gently"
+                modelOptions={[
+                    { value: 'MiniMax-Hailuo-2.3-Preview' },
+                    { value: 'MiniMax-Hailuo-2.3-Fast' },
+                ]}
                 onChange={onChange}
                 onPromptChange={vi.fn()}
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'Fast' }));
+        fireEvent.click(screen.getByRole('button', { name: 'MiniMax-Hailuo-2.3-Fast' }));
 
         expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
             model: 'MiniMax-Hailuo-2.3-Fast',
         }));
+        expect(screen.getByRole('button', { name: 'MiniMax-Hailuo-2.3-Preview' })).toBeInTheDocument();
     });
 
     it('disables 10 seconds while 1080P is selected instead of silently changing the resolution', () => {

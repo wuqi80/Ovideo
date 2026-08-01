@@ -10,10 +10,13 @@ import {
 import {
     ALL_MODELS,
     SELECTABLE_MODELS,
-    getModelDisplayName,
+    buildVideoModelOptions,
+    formatVideoModelOptionLabel,
+    getVideoModelRuntimeNames,
     isDashScopeVideoModel,
     makeDefaultDashScopeParams,
     normalizeMiniMaxVideoParams,
+    withCurrentVideoModelOption,
     type DashScopeVideoModel,
     type DashScopeVideoParams,
     type MiniMaxVideoParams,
@@ -291,11 +294,51 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const seedanceOmniEnabled = videoCapabilities?.seedance_omni ?? false;
     useEffect(() => {
         let cancelled = false;
-        void fetchVideoCapabilities().then((manifest) => {
-            if (!cancelled) setVideoCapabilities(manifest);
-        });
-        return () => { cancelled = true; };
+        const refresh = () => {
+            void fetchVideoCapabilities('workflow', { force: true }).then((manifest) => {
+                if (!cancelled) setVideoCapabilities(manifest);
+            });
+        };
+        refresh();
+        window.addEventListener('focus', refresh);
+        return () => {
+            cancelled = true;
+            window.removeEventListener('focus', refresh);
+        };
     }, []);
+    const videoCapabilityModels = videoCapabilities?.models ?? null;
+    const selectableVideoModelOptions = useMemo(
+        () => buildVideoModelOptions(videoCapabilityModels, SELECTABLE_MODELS),
+        [videoCapabilityModels],
+    );
+    const allVideoModelOptions = useMemo(
+        () => buildVideoModelOptions(videoCapabilityModels, ALL_MODELS),
+        [videoCapabilityModels],
+    );
+    const videoCapabilityReady = Boolean(
+        videoCapabilities
+        && videoCapabilities.manifest_version !== 'unavailable'
+        && (videoCapabilities.models?.length || 0) > 0,
+    );
+    const availableVideoModelSet = useMemo(
+        () => new Set(allVideoModelOptions.map(option => option.value)),
+        [allVideoModelOptions],
+    );
+    const getModelSelectOptions = useCallback(
+        (currentModel: VideoModel, options = selectableVideoModelOptions) => (
+            withCurrentVideoModelOption(options, currentModel, videoCapabilityModels)
+        ),
+        [selectableVideoModelOptions, videoCapabilityModels],
+    );
+    const isVideoModelAvailable = useCallback((model: VideoModel): boolean => (
+        !videoCapabilityReady || availableVideoModelSet.has(model)
+    ), [availableVideoModelSet, videoCapabilityReady]);
+    const miniMaxCapability = getVideoCapability(videoCapabilities, 'MINI');
+    const miniMaxModelOptions = useMemo(() => (
+        getVideoModelRuntimeNames(miniMaxCapability)
+            .map(model => ({ value: model, label: model }))
+    ), [miniMaxCapability]);
+    const defaultMiniMaxVideoModel = miniMaxModelOptions[0]?.value;
     const [globalModel, setGlobalModel] = usePersistedPageState<VideoModel>({
         page: 'VideoPage:globalModel',
         episodeId: sessionScope ?? null,
@@ -305,6 +348,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         version: 2,
         defaultValue: 'HappyHorse',
     });
+    useEffect(() => {
+        if (!videoCapabilityReady || selectableVideoModelOptions.length === 0) return;
+        if (selectableVideoModelOptions.some(option => option.value === globalModel)) return;
+        setGlobalModel(selectableVideoModelOptions[0].value);
+    }, [globalModel, selectableVideoModelOptions, setGlobalModel, videoCapabilityReady]);
     
     // 拖拽状态
     const [dragSrcIndex, setDragSrcIndex] = useState<number | null>(null);
@@ -1420,10 +1468,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     }, []);
     
     const updateTaskModel = useCallback((uuid: string, model: VideoModel) => {
+        if (!isVideoModelAvailable(model)) {
+            showToast('后台未启用或未配置该视频模型，请先在后台完成配置');
+            return;
+        }
         setTaskGroups(prev => prev.map(g => {
             if (g.uuid !== uuid) return g;
             return model === 'MINI'
-                ? { ...g, model, minimaxParams: normalizeMiniMaxVideoParams(g.minimaxParams) }
+                ? { ...g, model, minimaxParams: normalizeMiniMaxVideoParams(g.minimaxParams, defaultMiniMaxVideoModel) }
                 : { ...g, model };
         }));
         if (model === 'Seedance2' || model === 'Seedance2Fast') {
@@ -1441,7 +1493,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 };
             });
         }
-    }, []);
+    }, [defaultMiniMaxVideoModel, isVideoModelAvailable, showToast]);
     
     const linkGroups = useCallback((index: number) => {
         if (!canCreateFirstLastPair(taskGroups, index)) {
@@ -1905,6 +1957,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const runTask = useCallback(async (uuid: string): Promise<string | null> => {
         const group = taskGroups.find(g => g.uuid === uuid);
         if (!group) return null;
+        if (!isVideoModelAvailable(group.model)) {
+            showToast('后台未启用或未配置该视频模型，请先在后台完成配置');
+            return null;
+        }
 
         // 提交前先拿到真实 segment_id（取或建），供下方各分支作为 entity_id 写回 video_segments。
         const segmentId = await ensureVideoSegmentId(group);
@@ -2094,7 +2150,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             
             const prompt = imagePrompts[group.ids[0]] || '';
             const minimaxParams = group.model === 'MINI'
-                ? normalizeMiniMaxVideoParams(group.minimaxParams)
+                ? normalizeMiniMaxVideoParams(group.minimaxParams, defaultMiniMaxVideoModel)
                 : undefined;
             const capabilityParams = group.videoParams || {};
             const capabilityDuration = Number(capabilityParams.duration);
@@ -2150,7 +2206,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             }));
             return null;
         }
-    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId, prepareSeedanceParamsForCapability, getCharacterNameForGroup, getVideoVoiceReferenceForGroup, seedanceOmniEnabled]);
+    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId, prepareSeedanceParamsForCapability, getCharacterNameForGroup, getVideoVoiceReferenceForGroup, seedanceOmniEnabled, isVideoModelAvailable, defaultMiniMaxVideoModel]);
 
     const waitForBatchVideoTask = useCallback((uuid: string): Promise<VideoBatchWaitResult> => {
         const existing = batchWaitersRef.current[uuid];
@@ -2859,8 +2915,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     }`}>
                         {isPair ? 'Morph' : 'I2V'}
                     </span>
-                    <span className="text-[10px] text-n100 text-center truncate">
-                        {getModelDisplayName(group.model)}
+                    <span
+                        className="text-[10px] text-n100 text-center truncate"
+                        title={formatVideoModelOptionLabel(group.model, getVideoCapability(videoCapabilities, group.model))}
+                    >
+                        {formatVideoModelOptionLabel(group.model, getVideoCapability(videoCapabilities, group.model))}
                     </span>
                 </div>
                 
@@ -2899,12 +2958,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             )
                             : null;
                         const running = status.state === 'running' || status.state === 'processing';
+                        const unavailable = !isVideoModelAvailable(group.model);
                         return (
                             <button
                                 onClick={() => runTask(group.uuid)}
-                                disabled={running || !!seedanceBlock}
+                                disabled={running || !!seedanceBlock || unavailable}
                                 className="p-1.5 bg-n0 hover:bg-primary-hover text-n700 hover:text-white rounded transition-colors disabled:opacity-50"
-                                title={seedanceBlock || (status.state === 'done' ? '重做' : '生成')}
+                                title={unavailable ? '后台未启用或未配置该视频模型' : (seedanceBlock || (status.state === 'done' ? '重做' : '生成'))}
                             >
                                 {status.state === 'done' ? <RefreshCw className="w-3 h-3" /> : <Play className="w-3 h-3" />}
                             </button>
@@ -3104,11 +3164,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         onChange={(e) => updateTaskModel(group.uuid, e.target.value as VideoModel)}
                         className="bg-n20 border border-n40 text-[10px] text-n800 rounded px-1 py-0.5 focus:outline-none focus:border-primary cursor-pointer"
                     >
-                        {(SELECTABLE_MODELS.includes(group.model)
-                            ? SELECTABLE_MODELS
-                            : [group.model, ...SELECTABLE_MODELS]
-                        ).map(m => (
-                            <option key={m} value={m}>{getModelDisplayName(m)}</option>
+                        {getModelSelectOptions(group.model, selectableVideoModelOptions).map(option => (
+                            <option key={option.value} value={option.value} disabled={!option.available}>
+                                {option.label}
+                            </option>
                         ))}
                     </select>
                 </div>
@@ -3149,8 +3208,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     ) : group.model === 'MINI' ? (
                         <MiniMaxVideoPanel
                             compact
-                            value={normalizeMiniMaxVideoParams(group.minimaxParams)}
+                            value={normalizeMiniMaxVideoParams(group.minimaxParams, defaultMiniMaxVideoModel)}
                             prompt={promptText}
+                            modelOptions={miniMaxModelOptions}
                             onChange={(next: MiniMaxVideoParams) => patchTaskGroup(group.uuid, { minimaxParams: next })}
                             onPromptChange={(next) => updatePrompt(group.ids[0], next)}
                         />
@@ -3326,8 +3386,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             onChange={(e) => updateTaskModel(group.uuid, e.target.value as VideoModel)}
                             className="bg-n20 border border-n40 text-[10px] text-n800 rounded px-1 py-0.5 focus:outline-none focus:border-primary cursor-pointer hover:bg-n0"
                         >
-                            {ALL_MODELS.map(m => (
-                                <option key={m} value={m}>{getModelDisplayName(m)}</option>
+                            {getModelSelectOptions(group.model, allVideoModelOptions).map(option => (
+                                <option key={option.value} value={option.value} disabled={!option.available}>
+                                    {option.label}
+                                </option>
                             ))}
                         </select>
                         {activeVideoVoiceReference && (
@@ -3505,8 +3567,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         </React.Suspense>
                     ) : group.model === 'MINI' ? (
                         <MiniMaxVideoPanel
-                            value={normalizeMiniMaxVideoParams(group.minimaxParams)}
+                            value={normalizeMiniMaxVideoParams(group.minimaxParams, defaultMiniMaxVideoModel)}
                             prompt={imagePrompts[group.ids[0]] || ''}
+                            modelOptions={miniMaxModelOptions}
                             onChange={(next: MiniMaxVideoParams) => patchTaskGroup(group.uuid, { minimaxParams: next })}
                             onPromptChange={(next) => updatePrompt(group.ids[0], next)}
                         />
@@ -3773,8 +3836,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <span className="text-xs font-bold text-n700">
                             #{index + 1} {isPair ? 'Morph' : 'I2V'}
                         </span>
-                        <span className="text-[10px] px-1 rounded border border-n40 text-n300">
-                            {getModelDisplayName(group.model)}
+                        <span
+                            className="text-[10px] px-1 rounded border border-n40 text-n300 truncate max-w-[180px]"
+                            title={formatVideoModelOptionLabel(group.model, getVideoCapability(videoCapabilities, group.model))}
+                        >
+                            {formatVideoModelOptionLabel(group.model, getVideoCapability(videoCapabilities, group.model))}
                         </span>
                         {renderStatusBadge()}
                         {activeVideoVoiceReference && (
@@ -3791,8 +3857,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     <div className="flex items-center gap-1.5">
                         <button
                             onClick={() => runTask(group.uuid)}
-                            disabled={status.state === 'running' || status.state === 'processing'}
+                            disabled={status.state === 'running' || status.state === 'processing' || !isVideoModelAvailable(group.model)}
                             className="flex items-center gap-1 px-2 py-1 bg-n0 hover:bg-primary-hover text-n700 hover:text-white text-[10px] rounded transition-colors disabled:opacity-50"
+                            title={!isVideoModelAvailable(group.model) ? '后台未启用或未配置该视频模型' : undefined}
                         >
                             {status.state === 'done' ? <RefreshCw className="w-3 h-3" /> : <Play className="w-3 h-3" />}
                             {status.state === 'done' ? '重做' : '生成'}

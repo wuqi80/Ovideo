@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildVideoModelOptions,
   getModelDisplayName,
   getMiniMaxVideoParamsError,
   inferSeedanceTaskType,
   normalizeMiniMaxVideoParams,
+  withCurrentVideoModelOption,
 } from '../../services/videoModelService';
 
 describe('processing cluster model label', () => {
@@ -51,6 +53,17 @@ describe('normalizeMiniMaxVideoParams', () => {
     });
   });
 
+  it('preserves backend-provided runtime model names', () => {
+    expect(normalizeMiniMaxVideoParams(undefined, 'MiniMax-Hailuo-2.3-Preview')).toMatchObject({
+      model: 'MiniMax-Hailuo-2.3-Preview',
+    });
+    expect(normalizeMiniMaxVideoParams({
+      model: 'MiniMax-Hailuo-2.3-Custom',
+    })).toMatchObject({
+      model: 'MiniMax-Hailuo-2.3-Custom',
+    });
+  });
+
   it('preserves an invalid saved combination so the UI can explain it instead of silently changing it', () => {
     const params = normalizeMiniMaxVideoParams({ duration: 10, resolution: '1080P' });
     expect(params).toMatchObject({
@@ -58,5 +71,65 @@ describe('normalizeMiniMaxVideoParams', () => {
       resolution: '1080P',
     });
     expect(getMiniMaxVideoParamsError(params)).toContain('1080P 仅支持 6 秒');
+  });
+});
+
+describe('buildVideoModelOptions', () => {
+  it('filters unavailable capability models and shows runtime model names', () => {
+    const options = buildVideoModelOptions([
+      {
+        key: 'HappyHorse',
+        label: '炼虚',
+        provider: 'dashscope',
+        model_name: 'happyhorse-1.0-r2v',
+        available: true,
+      },
+      {
+        key: 'MINI',
+        label: '金丹',
+        provider: 'minimax',
+        model_options: ['MiniMax-Hailuo-2.3', 'MiniMax-Hailuo-2.3-Fast'],
+        available: true,
+      },
+      {
+        key: 'Seedance2',
+        label: '飞升',
+        provider: 'seedance',
+        model_name: 'doubao-seedance-2-0-260128',
+        available: false,
+      },
+    ]);
+
+    expect(options.map(option => option.value)).toEqual(['HappyHorse', 'MINI']);
+    expect(options[0].label).toContain('happyhorse-1.0-r2v');
+    expect(options[1].label).toContain('MiniMax-Hailuo-2.3');
+  });
+
+  it('keeps the current legacy model visible as unavailable', () => {
+    const options = buildVideoModelOptions([
+      {
+        key: 'HappyHorse',
+        label: '炼虚',
+        provider: 'dashscope',
+        model_name: 'happyhorse-1.0-r2v',
+        available: true,
+      },
+    ]);
+
+    const withCurrent = withCurrentVideoModelOption(options, 'Seedance2', [
+      {
+        key: 'Seedance2',
+        label: '飞升',
+        provider: 'seedance',
+        model_name: 'doubao-seedance-2-0-260128',
+        available: false,
+      },
+    ]);
+
+    expect(withCurrent[0]).toMatchObject({
+      value: 'Seedance2',
+      available: false,
+    });
+    expect(withCurrent[0].label).toContain('当前不可用');
   });
 });

@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from services import video_capability_service
 
 
@@ -10,6 +12,14 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
         "resolve_seedance_model_name",
         lambda sub_model, usage_scope="workflow": "doubao-seedance-2-0-260128",
     )
+    monkeypatch.setattr(
+        video_capability_service,
+        "resolve_provider",
+        lambda provider, model_name=None, usage_scope="workflow": SimpleNamespace(
+            has_key=True,
+            model_name=model_name or f"{provider}-runtime-model",
+        ),
+    )
     monkeypatch.setattr(video_capability_service, "list_agent_nodes", fake_list_agent_nodes)
 
     result = await video_capability_service.get_video_capabilities("studio")
@@ -19,6 +29,8 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
     assert result["manifest_version"]
     assert result["model_scope"] == "studio"
     minimax = next(model for model in result["models"] if model["key"] == "MINI")
+    assert minimax["available"] is True
+    assert minimax["model_name"] == "minimax-runtime-model"
     assert minimax["parameter_rules"]["normalization_policy"] == "reject"
     assert minimax["parameter_rules"]["valid_combinations"] == [
         {"duration": 6, "resolution": ["768P", "1080P"]},
@@ -30,6 +42,7 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
     assert cluster_model["available"] is True
     assert cluster_model["parameter_rules"]["duration"]["options"] == [5, 10, 15]
     wan26 = next(model for model in result["models"] if model["key"] == "大能")
+    assert wan26["available"] is True
     assert wan26["parameter_rules"]["resolution"] == ["720P", "1080P"]
     assert wan26["parameter_rules"]["shot_type"] == ["multi", "single"]
 
@@ -43,6 +56,14 @@ async def test_video_capabilities_degrade_safely(monkeypatch):
 
     monkeypatch.setattr(video_capability_service, "resolve_seedance_model_name", broken_seedance_model)
     monkeypatch.setattr(video_capability_service, "list_agent_nodes", broken_list_agent_nodes)
+    monkeypatch.setattr(
+        video_capability_service,
+        "resolve_provider",
+        lambda provider, model_name=None, usage_scope="workflow": SimpleNamespace(
+            has_key=False,
+            model_name=model_name or "",
+        ),
+    )
 
     result = await video_capability_service.get_video_capabilities()
 
@@ -50,6 +71,11 @@ async def test_video_capabilities_degrade_safely(monkeypatch):
     assert result["comfyui_available"] is False
     assert result["manifest_version"]
     seedance = next(model for model in result["models"] if model["key"] == "Seedance2")
+    minimax = next(model for model in result["models"] if model["key"] == "MINI")
+    happyhorse = next(model for model in result["models"] if model["key"] == "HappyHorse")
+    assert seedance["available"] is False
+    assert minimax["available"] is False
+    assert happyhorse["available"] is False
     assert "reference_audio" not in seedance["media_inputs"]
 
 

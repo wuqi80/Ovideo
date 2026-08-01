@@ -8,7 +8,7 @@ export type VideoModel =
   | 'Seedance2' | 'Seedance2Fast'
   | 'Kling' | 'Vidu' | 'HappyHorse';
 
-export type MiniMaxVideoModelName = 'MiniMax-Hailuo-2.3' | 'MiniMax-Hailuo-2.3-Fast';
+export type MiniMaxVideoModelName = string;
 export type MiniMaxVideoDuration = 6 | 10;
 export type MiniMaxVideoResolution = '768P' | '1080P';
 
@@ -28,10 +28,10 @@ export const DEFAULT_MINIMAX_VIDEO_PARAMS: MiniMaxVideoParams = {
 
 export function normalizeMiniMaxVideoParams(
   params?: Partial<MiniMaxVideoParams> | null,
+  defaultModel: MiniMaxVideoModelName = DEFAULT_MINIMAX_VIDEO_PARAMS.model,
 ): MiniMaxVideoParams {
-  const model = params?.model === 'MiniMax-Hailuo-2.3-Fast'
-    ? params.model
-    : DEFAULT_MINIMAX_VIDEO_PARAMS.model;
+  const model = String(params?.model || defaultModel || DEFAULT_MINIMAX_VIDEO_PARAMS.model).trim()
+    || DEFAULT_MINIMAX_VIDEO_PARAMS.model;
   const resolution: MiniMaxVideoResolution = params?.resolution === '1080P' ? '1080P' : '768P';
   const requestedDuration: MiniMaxVideoDuration = Number(params?.duration) === 10 ? 10 : 6;
 
@@ -316,3 +316,112 @@ export const ALL_MODELS: VideoModel[] = [
 export const SELECTABLE_MODELS: VideoModel[] = [
   'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance2', 'Seedance2Fast', 'MINI',
 ];
+
+const ALL_MODEL_VALUES = new Set<string>(ALL_MODELS);
+
+export interface VideoCapabilityModelLike {
+  key?: string;
+  label?: string;
+  provider?: string;
+  model_name?: string | null;
+  model_options?: string[];
+  available?: boolean;
+}
+
+export interface VideoModelOption {
+  value: VideoModel;
+  label: string;
+  baseLabel: string;
+  runtimeLabel: string;
+  available: boolean;
+  provider?: string;
+  capability?: VideoCapabilityModelLike;
+}
+
+export function isVideoModelKey(value: string): value is VideoModel {
+  return ALL_MODEL_VALUES.has(value);
+}
+
+function uniqueNonEmpty(values: Iterable<unknown>): string[] {
+  const out: string[] = [];
+  for (const item of values) {
+    const value = String(item || '').trim();
+    if (value && !out.includes(value)) out.push(value);
+  }
+  return out;
+}
+
+export function getVideoModelRuntimeNames(capability?: VideoCapabilityModelLike | null): string[] {
+  if (!capability) return [];
+  return uniqueNonEmpty([
+    ...(Array.isArray(capability.model_options) ? capability.model_options : []),
+    capability.model_name,
+  ]);
+}
+
+export function formatVideoModelRuntimeLabel(capability?: VideoCapabilityModelLike | null): string {
+  const names = getVideoModelRuntimeNames(capability);
+  if (names.length <= 2) return names.join(' / ');
+  return `${names[0]} / ${names[1]} / +${names.length - 2}`;
+}
+
+export function formatVideoModelOptionLabel(
+  model: VideoModel,
+  capability?: VideoCapabilityModelLike | null,
+): string {
+  const base = getModelDisplayName(model);
+  const runtimeLabel = formatVideoModelRuntimeLabel(capability);
+  return runtimeLabel ? `${base} · ${runtimeLabel}` : base;
+}
+
+export function buildVideoModelOptions(
+  capabilities: readonly VideoCapabilityModelLike[] | null | undefined,
+  fallbackModels: readonly VideoModel[] = SELECTABLE_MODELS,
+): VideoModelOption[] {
+  const hasManifest = Array.isArray(capabilities) && capabilities.length > 0;
+  const capabilityByKey = new Map<string, VideoCapabilityModelLike>();
+  if (hasManifest) {
+    for (const capability of capabilities || []) {
+      const key = String(capability.key || '').trim();
+      if (isVideoModelKey(key)) capabilityByKey.set(key, capability);
+    }
+  }
+
+  return fallbackModels.flatMap((model) => {
+    const capability = capabilityByKey.get(model);
+    if (hasManifest && (!capability || capability.available === false)) return [];
+    const runtimeLabel = formatVideoModelRuntimeLabel(capability);
+    return [{
+      value: model,
+      label: formatVideoModelOptionLabel(model, capability),
+      baseLabel: getModelDisplayName(model),
+      runtimeLabel,
+      available: capability?.available !== false,
+      provider: capability?.provider,
+      capability,
+    }];
+  });
+}
+
+export function withCurrentVideoModelOption(
+  options: readonly VideoModelOption[],
+  currentModel: VideoModel,
+  capabilities: readonly VideoCapabilityModelLike[] | null | undefined,
+): VideoModelOption[] {
+  if (options.some(option => option.value === currentModel)) return [...options];
+  const capability = Array.isArray(capabilities)
+    ? capabilities.find(item => item.key === currentModel)
+    : undefined;
+  return [
+    {
+      value: currentModel,
+      label: `${formatVideoModelOptionLabel(currentModel, capability)}（当前不可用）`,
+      baseLabel: getModelDisplayName(currentModel),
+      runtimeLabel: formatVideoModelRuntimeLabel(capability),
+      available: false,
+      provider: capability?.provider,
+      capability,
+    },
+    ...options,
+  ];
+}

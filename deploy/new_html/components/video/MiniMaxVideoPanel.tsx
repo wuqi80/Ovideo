@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+    DEFAULT_MINIMAX_VIDEO_PARAMS,
     getMiniMaxVideoParamsError,
     normalizeMiniMaxVideoParams,
     type MiniMaxVideoDuration,
@@ -13,22 +14,50 @@ interface MiniMaxVideoPanelProps {
     prompt: string;
     onChange: (next: MiniMaxVideoParams) => void;
     onPromptChange: (next: string) => void;
+    modelOptions?: Array<{ value: MiniMaxVideoModelName; label?: string }>;
     compact?: boolean;
 }
 
 const MODEL_OPTIONS: Array<{ value: MiniMaxVideoModelName; label: string }> = [
-    { value: 'MiniMax-Hailuo-2.3', label: '标准' },
-    { value: 'MiniMax-Hailuo-2.3-Fast', label: 'Fast' },
+    { value: 'MiniMax-Hailuo-2.3', label: 'MiniMax-Hailuo-2.3' },
+    { value: 'MiniMax-Hailuo-2.3-Fast', label: 'MiniMax-Hailuo-2.3-Fast' },
 ];
+
+function normalizeModelOptions(
+    options: Array<{ value: MiniMaxVideoModelName; label?: string }> | undefined,
+    currentModel: MiniMaxVideoModelName,
+): Array<{ value: MiniMaxVideoModelName; label: string }> {
+    const seen = new Set<string>();
+    const rows = (options && options.length ? options : MODEL_OPTIONS)
+        .map(option => ({
+            value: String(option.value || '').trim(),
+            label: String(option.label || option.value || '').trim(),
+        }))
+        .filter(option => {
+            if (!option.value || seen.has(option.value)) return false;
+            seen.add(option.value);
+            return true;
+        });
+    if (currentModel && !rows.some(option => option.value === currentModel)) {
+        rows.unshift({ value: currentModel, label: currentModel });
+    }
+    return rows.length ? rows : MODEL_OPTIONS;
+}
 
 export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
     value,
     prompt,
     onChange,
     onPromptChange,
+    modelOptions,
     compact = false,
 }) => {
-    const params = normalizeMiniMaxVideoParams(value);
+    const defaultModel = modelOptions?.[0]?.value || DEFAULT_MINIMAX_VIDEO_PARAMS.model;
+    const params = normalizeMiniMaxVideoParams(value, defaultModel);
+    const panelModelOptions = React.useMemo(
+        () => normalizeModelOptions(modelOptions, params.model),
+        [modelOptions, params.model],
+    );
     const validationError = getMiniMaxVideoParamsError(params);
 
     const setDuration = (duration: MiniMaxVideoDuration) => {
@@ -51,7 +80,7 @@ export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
                     className="w-24 shrink-0 rounded border border-n40 bg-n20 px-1.5 py-1 text-[10px] text-n700 focus:border-primary focus:outline-none"
                     aria-label="MiniMax 模型"
                 >
-                    {MODEL_OPTIONS.map(option => (
+                    {panelModelOptions.map(option => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                 </select>
@@ -98,7 +127,7 @@ export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
                 <div className="min-w-0">
                     <div className="mb-1 text-[10px] font-medium text-n300">模型</div>
                     <div className="grid h-8 grid-cols-2 overflow-hidden rounded border border-n40">
-                        {MODEL_OPTIONS.map(option => (
+                        {panelModelOptions.map(option => (
                             <button
                                 key={option.value}
                                 type="button"
