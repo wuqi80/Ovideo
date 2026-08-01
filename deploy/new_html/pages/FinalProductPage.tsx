@@ -109,9 +109,8 @@ export const FinalProductPage: React.FC = () => {
   }, [episodeId]);
 
   const finals = videos.filter(v => isFinalFilm(v.title));
-  const others = videos.filter(v => !isFinalFilm(v.title));
   const featured = finals[0] || null;
-  const rest = finals.slice(1).concat(others);
+  const additionalFinals = finals.slice(1);
 
   return (
     <div className="layout-safe workflow-stage-canvas workflow-stage-scroll p-6">
@@ -176,7 +175,7 @@ export const FinalProductPage: React.FC = () => {
         </div>
       ) : err ? (
         <div className="flex items-center gap-2 text-danger"><AlertCircle className="w-4 h-4" />{err}</div>
-      ) : !videos.length ? (
+      ) : !finals.length ? (
         <div className="bg-n0 border border-n40 rounded-md p-10 text-center text-n100">
           <Film className="w-10 h-10 mx-auto mb-3 opacity-40" />
           还没有成品视频 —— 在「视频 / 美化」阶段合成整片后，会自动出现在这里。
@@ -184,7 +183,7 @@ export const FinalProductPage: React.FC = () => {
       ) : (
         <div className="space-y-6 max-w-6xl min-w-0">
           {/* 主成片 */}
-          {featured ? (
+          {featured && (
             <div className="bg-n0 border border-n40 rounded-md shadow-card overflow-hidden">
               <div className="responsive-toolbar flex items-center justify-between px-4 py-3 border-b border-n40">
                 <div className="flex items-center gap-2 min-w-0">
@@ -205,18 +204,14 @@ export const FinalProductPage: React.FC = () => {
                 className="mx-auto max-w-full max-h-[70vh] bg-black block"
               />
             </div>
-          ) : (
-            <div className="bg-y50 border border-y200 rounded-md p-4 text-sm text-y400">
-              暂无「完整成片」（标题含“成片/完整/全片”）。下面是{assetScopeMode === 'episode' ? '本集' : '本项目'}的视频片段——在「视频/美化」合成整片后会自动归到这里置顶。
-            </div>
           )}
 
-          {/* 其它片段 / 全部视频 */}
-          {rest.length > 0 && (
+          {/* 其它完整成片 */}
+          {additionalFinals.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-n300 mb-2">{featured ? '其它视频片段' : '全部视频'}（{rest.length}）</div>
+              <div className="text-xs font-semibold text-n300 mb-2">其它完整成片（{additionalFinals.length}）</div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {rest.map(v => (
+                {additionalFinals.map(v => (
                   <div key={v.library_item_id} className="bg-n0 border border-n40 rounded-md overflow-hidden shadow-card">
                     <LazyVideo
                       src={v.file_url}

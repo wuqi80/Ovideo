@@ -1,0 +1,18 @@
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const source = readFileSync(resolve(__dirname, '../../pages/FinalProductPage.tsx'), 'utf-8')
+  .replace(/\r\n/g, '\n');
+
+describe('FinalProductPage', () => {
+  it('renders only final composed films and keeps generated segments out of the gallery', () => {
+    expect(source).toContain('const finals = videos.filter(v => isFinalFilm(v.title));');
+    expect(source).toContain('const additionalFinals = finals.slice(1);');
+    expect(source).toContain(') : !finals.length ? (');
+    expect(source).toContain('{additionalFinals.map(v => (');
+    expect(source).not.toContain('const others = videos.filter');
+    expect(source).not.toContain('concat(others)');
+    expect(source).not.toContain('{rest.map(v => (');
+  });
+});
