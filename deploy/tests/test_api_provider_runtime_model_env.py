@@ -249,13 +249,16 @@ def test_seedance_sub_models_resolve_scoped_runtime_model_env(monkeypatch):
     assert env_key
     standard_env = get_seedance_sub_model_env_key("standard")
     standard_studio_env = get_scoped_model_env_key(standard_env, "studio")
+    mini_env = get_seedance_sub_model_env_key("mini")
 
     monkeypatch.setenv(env_key, "seedance-key")
     monkeypatch.setenv(standard_env, "doubao-seedance-2-0-260128")
     monkeypatch.setenv(standard_studio_env, "doubao-seedance-2-0-studio")
+    monkeypatch.setenv(mini_env, "doubao-seedance-2-0-mini-260615")
 
     assert resolve_seedance_model_name("standard") == "doubao-seedance-2-0-260128"
     assert resolve_seedance_model_name("standard", usage_scope="studio") == "doubao-seedance-2-0-studio"
+    assert resolve_seedance_model_name("mini") == "doubao-seedance-2-0-mini-260615"
 
 
 class _ImageResponse:
@@ -1133,6 +1136,32 @@ def test_seedance_video_uses_fast_sub_model_runtime_env(monkeypatch):
     assert calls[0]["json"]["model"] == "seedance-fast-runtime-model"
 
 
+def test_seedance_video_uses_mini_sub_model_runtime_env(monkeypatch):
+    env_key = get_provider_env_key("seedance")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    mini_env = get_seedance_sub_model_env_key("mini")
+    calls = []
+
+    monkeypatch.setenv(env_key, "test-seedance-key")
+    monkeypatch.setenv(endpoint_env, "https://seedance-runtime.example.test/tasks")
+    monkeypatch.setenv(mini_env, "seedance-mini-runtime-model")
+
+    def fake_request(method, url, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
+        return _SeedanceTaskResponse()
+
+    monkeypatch.setattr(video_base.requests, "request", fake_request)
+
+    client = seedance_video.SeedanceClient()
+    task_id = client.create_video_task("mini", [{"type": "text", "text": "move gently"}])
+
+    assert task_id == "seedance-task-1"
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["url"] == "https://seedance-runtime.example.test/tasks"
+    assert calls[0]["json"]["model"] == "seedance-mini-runtime-model"
+
+
 def test_seedance_video_uses_callable_default_when_runtime_model_missing(monkeypatch):
     env_key = get_provider_env_key("seedance")
     assert env_key
@@ -1145,6 +1174,7 @@ def test_seedance_video_uses_callable_default_when_runtime_model_missing(monkeyp
     monkeypatch.delenv(model_env, raising=False)
     monkeypatch.delenv(get_seedance_sub_model_env_key("standard"), raising=False)
     monkeypatch.delenv(get_seedance_sub_model_env_key("fast"), raising=False)
+    monkeypatch.delenv(get_seedance_sub_model_env_key("mini"), raising=False)
 
     def fake_request(method, url, **kwargs):
         calls.append({"method": method, "url": url, **kwargs})

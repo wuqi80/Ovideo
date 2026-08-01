@@ -5,7 +5,7 @@ const COMFYUI_MODELS: string[] = ['Wan2', '一阶', '二阶', '三阶', '四阶'
 export type VideoModel =
   | 'Wan2' | '一阶' | '二阶' | '三阶' | '四阶' | '五阶' | '六阶' | '七阶'
   | 'Veo' | 'Sora2' | 'MINI' | '大能'
-  | 'Seedance2' | 'Seedance2Fast'
+  | 'Seedance15' | 'Seedance2' | 'Seedance2Fast' | 'Seedance2Mini'
   | 'Kling' | 'Vidu' | 'HappyHorse';
 
 export type MiniMaxVideoModelName = string;
@@ -73,7 +73,7 @@ export interface SeedanceMediaInput {
 }
 
 export interface SeedanceParams {
-  sub_model: 'standard' | 'fast';
+  sub_model: 'standard' | 'fast' | 'mini';
   model_scope?: string;
   prompt: string;
   media_inputs: SeedanceMediaInput[];
@@ -84,6 +84,21 @@ export interface SeedanceParams {
   watermark?: boolean;
   generate_audio?: boolean;
   camera_fixed?: boolean;
+}
+
+export type SeedanceVideoModel = 'Seedance15' | 'Seedance2' | 'Seedance2Fast' | 'Seedance2Mini';
+
+export function isSeedanceVideoModel(model: VideoModel): model is SeedanceVideoModel {
+  return model === 'Seedance15'
+    || model === 'Seedance2'
+    || model === 'Seedance2Fast'
+    || model === 'Seedance2Mini';
+}
+
+export function seedanceSubModelForVideoModel(model: SeedanceVideoModel | VideoModel): SeedanceParams['sub_model'] {
+  if (model === 'Seedance2Fast') return 'fast';
+  if (model === 'Seedance2Mini') return 'mini';
+  return 'standard';
 }
 
 export function inferSeedanceTaskType(media: SeedanceMediaInput[], hasDraftId?: boolean): string {
@@ -297,8 +312,10 @@ export function getModelDisplayName(model: VideoModel): string {
     MINI: '金丹',
     Sora2: '化神',
     '大能': '大能',
+    Seedance15: 'Seedance 1.5',
     Seedance2: '飞升',
     Seedance2Fast: '渡劫',
+    Seedance2Mini: '元婴',
     Kling: '合体',
     Vidu: '大乘',
     HappyHorse: '炼虚',
@@ -309,12 +326,12 @@ export function getModelDisplayName(model: VideoModel): string {
 export const ALL_MODELS: VideoModel[] = [
   'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶',
   'Veo', 'Sora2', 'MINI', '大能',
-  'Seedance2', 'Seedance2Fast',
+  'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
   'Kling', 'Vidu', 'HappyHorse',
 ];
 
 export const SELECTABLE_MODELS: VideoModel[] = [
-  'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance2', 'Seedance2Fast', 'MINI',
+  'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini', 'MINI',
 ];
 
 const ALL_MODEL_VALUES = new Set<string>(ALL_MODELS);

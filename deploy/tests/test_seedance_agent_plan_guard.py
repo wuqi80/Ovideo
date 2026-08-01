@@ -25,6 +25,7 @@ class _PayAsYouGoResolvedConfig(_ResolvedConfig):
     [
         ("standard", "doubao-seedance-2-0-260128"),
         ("fast", "doubao-seedance-2-0-fast-260128"),
+        ("mini", "doubao-seedance-2-0-mini-260615"),
     ],
 )
 def test_seedance_agent_plan_uses_supported_15_model(monkeypatch, sub_model, resolved_model):
@@ -285,6 +286,7 @@ def test_seedance_agent_plan_t2v_keeps_duration(monkeypatch):
     [
         ("standard", "doubao-seedance-2-0-260128"),
         ("fast", "doubao-seedance-2-0-fast-260128"),
+        ("mini", "doubao-seedance-2-0-mini-260615"),
     ],
 )
 def test_seedance_payg_falls_back_to_15_for_model_availability_errors(

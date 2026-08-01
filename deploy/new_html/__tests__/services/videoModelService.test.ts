@@ -4,7 +4,9 @@ import {
   getModelDisplayName,
   getMiniMaxVideoParamsError,
   inferSeedanceTaskType,
+  isSeedanceVideoModel,
   normalizeMiniMaxVideoParams,
+  seedanceSubModelForVideoModel,
   withCurrentVideoModelOption,
 } from '../../services/videoModelService';
 
@@ -74,6 +76,17 @@ describe('normalizeMiniMaxVideoParams', () => {
   });
 });
 
+describe('Seedance model mapping', () => {
+  it('maps frontend model IDs to backend sub_model operations', () => {
+    expect(isSeedanceVideoModel('Seedance15')).toBe(true);
+    expect(isSeedanceVideoModel('Seedance2Mini')).toBe(true);
+    expect(seedanceSubModelForVideoModel('Seedance15')).toBe('standard');
+    expect(seedanceSubModelForVideoModel('Seedance2')).toBe('standard');
+    expect(seedanceSubModelForVideoModel('Seedance2Fast')).toBe('fast');
+    expect(seedanceSubModelForVideoModel('Seedance2Mini')).toBe('mini');
+  });
+});
+
 describe('buildVideoModelOptions', () => {
   it('filters unavailable capability models and shows runtime model names', () => {
     const options = buildVideoModelOptions([
@@ -98,11 +111,34 @@ describe('buildVideoModelOptions', () => {
         model_name: 'doubao-seedance-2-0-260128',
         available: false,
       },
+      {
+        key: 'Seedance2Mini',
+        label: '元婴',
+        provider: 'seedance',
+        model_name: 'doubao-seedance-2-0-mini-260615',
+        available: true,
+      },
     ]);
 
-    expect(options.map(option => option.value)).toEqual(['HappyHorse', 'MINI']);
+    expect(options.map(option => option.value)).toEqual(['HappyHorse', 'Seedance2Mini', 'MINI']);
     expect(options[0].label).toContain('happyhorse-1.0-r2v');
-    expect(options[1].label).toContain('MiniMax-Hailuo-2.3');
+    expect(options[1].label).toContain('doubao-seedance-2-0-mini-260615');
+    expect(options[2].label).toContain('MiniMax-Hailuo-2.3');
+  });
+
+  it('uses backend Plan-mode manifest to expose only Seedance 1.5', () => {
+    const options = buildVideoModelOptions([
+      {
+        key: 'Seedance15',
+        label: 'Seedance 1.5',
+        provider: 'seedance',
+        model_name: 'doubao-seedance-1.5-pro',
+        available: true,
+      },
+    ]);
+
+    expect(options.map(option => option.value)).toEqual(['Seedance15']);
+    expect(options[0].label).toContain('doubao-seedance-1.5-pro');
   });
 
   it('keeps the current legacy model visible as unavailable', () => {

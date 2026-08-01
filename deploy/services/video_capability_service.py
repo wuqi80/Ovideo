@@ -9,9 +9,11 @@ from services.api_provider_registry import (
     MINIMAX_DEFAULT_VIDEO_MODEL,
     MINIMAX_FAST_VIDEO_MODEL,
     MODEL_USAGE_SCOPE_WORKFLOW,
+    SEEDANCE_AGENT_PLAN_MODEL_MAP,
     SORA2_DEFAULT_VIDEO_MODEL,
     VEO_DEFAULT_VIDEO_MODEL,
     normalize_model_usage_scope,
+    seedance_access_mode as resolve_seedance_access_mode,
 )
 from services.api_provider_runtime import (
     resolve_dashscope_model_name,
@@ -77,7 +79,15 @@ def _resolve_dashscope_model_options(
     return out
 
 
-def _seedance_manifest(model_name: str, *, key: str, label: str, omni: bool, available: bool) -> Dict[str, Any]:
+def _seedance_manifest(
+    model_name: str,
+    *,
+    key: str,
+    label: str,
+    omni: bool,
+    available: bool,
+    resolutions: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     media_inputs = ["text", "first_frame", "last_frame"]
     task_types = ["t2v", "i2v", "first_last_frame"]
     if omni:
@@ -96,7 +106,7 @@ def _seedance_manifest(model_name: str, *, key: str, label: str, omni: bool, ava
         "supports_cancel": False,
         "query_mode": "async",
         "parameter_rules": {
-            "resolution": ["480p", "720p", "1080p"],
+            "resolution": resolutions or ["480p", "720p", "1080p"],
             "ratio": ["adaptive", "16:9", "4:3", "1:1", "3:4", "9:16", "21:9"],
             "duration": {"type": "integer", "minimum": 2, "maximum": max_duration},
             "normalization_policy": "reject_or_explain",
@@ -158,8 +168,10 @@ def build_video_model_manifest(
     *,
     standard_seedance_model: str,
     fast_seedance_model: str,
+    mini_seedance_model: str,
     seedance_omni: bool,
     comfyui_available: bool,
+    seedance_billing_mode: str = "standard",
     model_scope: str = MODEL_USAGE_SCOPE_WORKFLOW,
     api_availability: Optional[Dict[str, bool]] = None,
     runtime_model_names: Optional[Dict[str, Any]] = None,
@@ -192,8 +204,44 @@ def build_video_model_manifest(
                 out.append(value)
         return out
 
+    if seedance_billing_mode == "agent_plan":
+        seedance_models = [
+            _seedance_manifest(
+                standard_seedance_model or SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"],
+                key="Seedance15",
+                label="Seedance 1.5",
+                omni=False,
+                available=is_available("Seedance15"),
+            )
+        ]
+    else:
+        seedance_models = [
+            _seedance_manifest(
+                standard_seedance_model,
+                key="Seedance2",
+                label="飞升",
+                omni=seedance_omni,
+                available=is_available("Seedance2"),
+            ),
+            _seedance_manifest(
+                fast_seedance_model,
+                key="Seedance2Fast",
+                label="渡劫",
+                omni=seedance_omni,
+                available=is_available("Seedance2Fast"),
+            ),
+            _seedance_manifest(
+                mini_seedance_model,
+                key="Seedance2Mini",
+                label="元婴",
+                omni=seedance_omni,
+                available=is_available("Seedance2Mini"),
+                resolutions=["480p", "720p"],
+            ),
+        ]
+
     return {
-        "manifest_version": "2026-08-01.2",
+        "manifest_version": "2026-08-01.3",
         "model_scope": model_scope,
         "models": [
             *[
@@ -242,20 +290,7 @@ def build_video_model_manifest(
                     "normalization_policy": "reject_or_explain",
                 },
             },
-            _seedance_manifest(
-                standard_seedance_model,
-                key="Seedance2",
-                label="飞升",
-                omni=seedance_omni,
-                available=is_available("Seedance2"),
-            ),
-            _seedance_manifest(
-                fast_seedance_model,
-                key="Seedance2Fast",
-                label="渡劫",
-                omni=seedance_omni,
-                available=is_available("Seedance2Fast"),
-            ),
+            *seedance_models,
             {
                 "key": "MINI",
                 "label": "金丹",
@@ -366,17 +401,34 @@ async def get_video_capabilities(
     try:
         standard_seedance_model = resolve_seedance_model_name("standard", usage_scope=model_scope)
         fast_seedance_model = resolve_seedance_model_name("fast", usage_scope=model_scope)
+        mini_seedance_model = resolve_seedance_model_name("mini", usage_scope=model_scope)
     except Exception as exc:
         logger.debug("video capability Seedance model probe failed: %s", exc)
         standard_seedance_model = ""
         fast_seedance_model = ""
+        mini_seedance_model = ""
 
-    seedance_omni = _is_seedance_omni_model(standard_seedance_model)
     comfyui_available = await _has_online_comfyui_agent()
-    seedance_key_available, _seedance_provider_model = _provider_runtime_state(
-        "seedance",
-        standard_seedance_model or None,
-        usage_scope=model_scope,
+    seedance_billing_mode = "standard"
+    try:
+        seedance_provider_config = resolve_provider(
+            "seedance",
+            standard_seedance_model or None,
+            usage_scope=model_scope,
+        )
+        seedance_key_available = bool(seedance_provider_config.has_key)
+        seedance_billing_mode = resolve_seedance_access_mode(seedance_provider_config.endpoint)
+    except Exception as exc:
+        logger.debug(
+            "video capability Seedance provider probe failed: model=%s error=%s",
+            standard_seedance_model,
+            exc,
+        )
+        seedance_key_available = False
+
+    seedance_omni = (
+        seedance_billing_mode != "agent_plan"
+        and _is_seedance_omni_model(standard_seedance_model)
     )
     minimax_available, minimax_model = _provider_runtime_state(
         "minimax",
@@ -423,7 +475,9 @@ async def get_video_capabilities(
         **build_video_model_manifest(
             standard_seedance_model=standard_seedance_model,
             fast_seedance_model=fast_seedance_model,
+            mini_seedance_model=mini_seedance_model,
             seedance_omni=seedance_omni,
+            seedance_billing_mode=seedance_billing_mode,
             comfyui_available=comfyui_available,
             model_scope=model_scope,
             api_availability={
@@ -432,6 +486,8 @@ async def get_video_capabilities(
                 "大能": dashscope_available,
                 "Seedance2": seedance_key_available and bool(standard_seedance_model),
                 "Seedance2Fast": seedance_key_available and bool(fast_seedance_model),
+                "Seedance2Mini": seedance_key_available and bool(mini_seedance_model),
+                "Seedance15": seedance_key_available and bool(standard_seedance_model),
                 "MINI": minimax_available,
                 "Kling": dashscope_available,
                 "Vidu": dashscope_available,

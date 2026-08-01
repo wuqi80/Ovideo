@@ -14,8 +14,10 @@ import {
     formatVideoModelOptionLabel,
     getVideoModelRuntimeNames,
     isDashScopeVideoModel,
+    isSeedanceVideoModel,
     makeDefaultDashScopeParams,
     normalizeMiniMaxVideoParams,
+    seedanceSubModelForVideoModel,
     withCurrentVideoModelOption,
     type DashScopeVideoModel,
     type DashScopeVideoParams,
@@ -61,7 +63,6 @@ import type { VideoVoiceReference } from '../types';
 import {
     getCardHeightClass,
     getPreviewImageHeightClass,
-    isSeedanceModel,
     CARD_MEDIA_HEIGHT_CLASS,
     CARD_BODY_SCROLL_CLASS,
     PLACEHOLDER_PROMPT_TEXTAREA_CLASS,
@@ -528,7 +529,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (existing && group) return applyPreferredReferenceAudio(group, syncSeedanceDuration(group, existing));
         if (existing) return existing;
 
-        // Issue 5a: when a card is freshly switched to Seedance2/Fast, auto-pull the
+        // Issue 5a: when a card is freshly switched to Seedance, auto-pull the
         // storyboard image linked to this group as a reference_image so the prompt
         // editor's @-popover can resolve "current_card" candidates and the panel
         // doesn't show 0/9 while the card visually has an image.
@@ -568,7 +569,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         }
 
         const nextParams: SeedanceParams = {
-            sub_model: model === 'Seedance2Fast' ? 'fast' : 'standard',
+            sub_model: seedanceSubModelForVideoModel(model),
             prompt: imagePrompts[itemId || ''] || '',
             media_inputs: seedMedia,
             resolution: '720p',
@@ -1478,8 +1479,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 ? { ...g, model, minimaxParams: normalizeMiniMaxVideoParams(g.minimaxParams, defaultMiniMaxVideoModel) }
                 : { ...g, model };
         }));
-        if (model === 'Seedance2' || model === 'Seedance2Fast') {
-            const subModel: SeedanceParams['sub_model'] = model === 'Seedance2Fast' ? 'fast' : 'standard';
+        if (isSeedanceVideoModel(model)) {
+            const subModel: SeedanceParams['sub_model'] = seedanceSubModelForVideoModel(model);
             setSeedanceParamsByUuid(prev => {
                 const current = prev[uuid];
                 if (!current || current.sub_model === subModel) return prev;
@@ -1488,7 +1489,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     [uuid]: {
                         ...current,
                         sub_model: subModel,
-                        resolution: subModel === 'fast' && current.resolution === '1080p' ? '720p' : current.resolution,
+                        resolution: (subModel === 'fast' || subModel === 'mini') && current.resolution === '1080p' ? '720p' : current.resolution,
                     },
                 };
             });
@@ -1555,7 +1556,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 与 linkGroups（拼首尾帧）不同：这里是把两卡的提示词追加合并、媒体素材拼接（保留各自 role），
     // 结果写回上卡 uuid 的 params map；记录 mergedFrom 快照供 splitMergedCard 原位还原。
     const isSeedanceModel = useCallback(
-        (m: VideoModel) => m === 'Seedance2' || m === 'Seedance2Fast',
+        (m: VideoModel) => isSeedanceVideoModel(m),
         [],
     );
     const isMergeableModel = useCallback(
@@ -1966,9 +1967,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const segmentId = await ensureVideoSegmentId(group);
         const entityId = segmentId || uuid;  // 拿不到 episodeId 时回退 uuid（至少不报错）
 
-        // ==================== Seedance 2.0 早期分支 ====================
-        // 飞升/渡劫 走多模态面板（params.media_inputs），完全跳过 prepareImage / submitTaskQueued
-        if (group.model === 'Seedance2' || group.model === 'Seedance2Fast') {
+        // ==================== Seedance 早期分支 ====================
+        // Seedance 走多模态面板（params.media_inputs），完全跳过 prepareImage / submitTaskQueued
+        if (isSeedanceModel(group.model)) {
             const rawParams = getSeedanceParams(group.uuid, group.model);
             const capabilityParams = prepareSeedanceParamsForCapability(rawParams);
             // 2026-07-11：Seedance 1.5-pro（Agent Plan 强制覆盖）仅支持单图/首尾帧。
@@ -2206,7 +2207,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             }));
             return null;
         }
-    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId, prepareSeedanceParamsForCapability, getCharacterNameForGroup, getVideoVoiceReferenceForGroup, seedanceOmniEnabled, isVideoModelAvailable, defaultMiniMaxVideoModel]);
+    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId, prepareSeedanceParamsForCapability, getCharacterNameForGroup, getVideoVoiceReferenceForGroup, seedanceOmniEnabled, isVideoModelAvailable, defaultMiniMaxVideoModel, isSeedanceModel]);
 
     const waitForBatchVideoTask = useCallback((uuid: string): Promise<VideoBatchWaitResult> => {
         const existing = batchWaitersRef.current[uuid];
@@ -2376,6 +2377,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             title: titleText,
             kind: groupRef?.model === 'Seedance2' ? 'seedance'
                 : groupRef?.model === 'Seedance2Fast' ? 'seedance-fast'
+                : groupRef?.model === 'Seedance2Mini' ? 'seedance-mini'
+                : groupRef?.model === 'Seedance15' ? 'seedance-1.5'
                 : groupRef?.model === 'Wan2' ? 'wan2'
                 : groupRef?.model === 'Kling' ? 'kling'
                 : groupRef?.model === 'Vidu' ? 'vidu'
@@ -3174,7 +3177,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 
                 {/* 提示词 + (Seedance only) 媒体徽章 + 详情按钮 */}
                 <div className="flex-1 min-w-0 flex items-center gap-2">
-                    {(group.model === 'Seedance2' || group.model === 'Seedance2Fast') ? (
+                    {isSeedanceModel(group.model) ? (
                         <ListSeedanceRow
                             group={group}
                             params={getSeedanceParams(group.uuid, group.model)}
@@ -3505,7 +3508,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 {(() => {
                     const itemId = img1.storyboardItemId;
                     const m = itemId ? storyboardMetaByItemId[itemId] : undefined;
-                    const showDuration = group.model === 'Seedance2' || group.model === 'Seedance2Fast';
+                    const showDuration = isSeedanceModel(group.model);
                     if (!m && !showDuration) return null;
                     return (
                         <div className="flex items-center justify-between gap-2 shrink-0 mb-1">
@@ -3531,7 +3534,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             placeholder="先上传图片，再描述此分镜内容..."
                             className={PLACEHOLDER_PROMPT_TEXTAREA_CLASS}
                         />
-                    ) : (group.model === 'Seedance2' || group.model === 'Seedance2Fast') ? (
+                    ) : isSeedanceModel(group.model) ? (
                         <React.Suspense fallback={<VideoProviderPanelFallback label="加载 Seedance 面板..." />}>
                             <SeedancePanelWithCandidates
                                 value={getSeedanceParams(group.uuid, group.model)}
@@ -4871,7 +4874,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             {/* Issue 7: list-view ⚙ Seedance detail modal */}
             {seedanceDetailUuid && (() => {
                 const g = taskGroups.find(x => x.uuid === seedanceDetailUuid);
-                if (!g || (g.model !== 'Seedance2' && g.model !== 'Seedance2Fast')) return null;
+                if (!g || !isSeedanceModel(g.model)) return null;
                 const params = getSeedanceParams(g.uuid, g.model);
                 return (
                     <SeedanceDetailModalWithCandidates

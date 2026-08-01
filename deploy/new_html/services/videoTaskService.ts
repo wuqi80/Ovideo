@@ -5,8 +5,10 @@ import {
     inferDashScopeTaskType,
     inferSeedanceTaskType,
     isComfyUIModel,
+    isSeedanceVideoModel,
     normalizeMiniMaxVideoParams,
     normalizeSeedanceMediaForSubmission,
+    seedanceSubModelForVideoModel,
     type DashScopeVideoParams,
     type SeedanceMediaInput,
     type SeedanceParams,
@@ -145,9 +147,9 @@ export async function submitTask(
         if (imageFilenameEnd) {
             requestData.image_path_end = imageFilenameEnd;
         }
-    } else if (model === 'Seedance2' || model === 'Seedance2Fast') {
-        // Seedance 2.0 (飞升/渡劫) — 兼容 i2v/morph 入口；多模态完整路径用 submitSeedanceTask
-        const subModel = model === 'Seedance2' ? 'standard' : 'fast';
+    } else if (isSeedanceVideoModel(model)) {
+        // Seedance 系列 — 兼容 i2v/morph 入口；多模态完整路径用 submitSeedanceTask
+        const subModel = seedanceSubModelForVideoModel(model);
         const media: SeedanceMediaInput[] = [];
         if (imageFilename) {
             const url = imageFilename.startsWith('http') ? imageFilename : `/uploads/${imageFilename}`;
@@ -640,7 +642,7 @@ export async function submitVoiceTaskQueued(
     }, '视频配音');
 }
 
-// ==================== Seedance 2.0 (飞升/渡劫) 多模态任务 ====================
+// ==================== Seedance 多模态任务 ====================
 
 /**
  * 提交 Seedance 2.0 多模态任务（VideoPage 多模态面板专用）。
@@ -662,8 +664,8 @@ export async function submitSeedanceTask(
     draftTaskId?: string,
     agentPlanCompat: boolean = true,
 ): Promise<{ task_id: string }> {
-    // fast 子型号不支持 1080p：前端兜底降级，配合后端二次校验
-    const resolution = (params.sub_model === 'fast' && params.resolution === '1080p')
+    // fast / mini 子型号不使用 1080p：前端兜底降级，配合后端二次校验
+    const resolution = ((params.sub_model === 'fast' || params.sub_model === 'mini') && params.resolution === '1080p')
         ? '720p'
         : params.resolution;
 

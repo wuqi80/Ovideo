@@ -4983,7 +4983,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_model_service, "export function getModelDisplayName("),
         (video_model_service, "export const ALL_MODELS: VideoModel[]"),
         (video_model_service, "export const SELECTABLE_MODELS: VideoModel[]"),
-        (video_model_service, "'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance2', 'Seedance2Fast', 'MINI'"),
+        (video_model_service, "'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini', 'MINI'"),
         (video_task_types, "export interface UploadedImage"),
         (video_task_types, "export interface TaskGroup"),
         (video_task_types, "export interface TaskStatus"),

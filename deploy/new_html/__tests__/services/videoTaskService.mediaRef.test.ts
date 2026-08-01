@@ -68,6 +68,28 @@ describe('Seedance model scope submission', () => {
         expect(JSON.parse(String(options?.body || '{}')).model_scope).toBe('studio');
         fetchSpy.mockRestore();
     });
+
+    it('passes Seedance Mini sub_model and downgrades 1080p to 720p', async () => {
+        localStorage.setItem('auth_token', 'test-token');
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(
+            JSON.stringify({ task_id: 'task_seedance_mini' }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+        ));
+
+        await submitSeedanceTask({
+            sub_model: 'mini',
+            prompt: 'make a low cost shot',
+            media_inputs: [],
+            resolution: '1080p',
+        });
+
+        const [, options] = fetchSpy.mock.calls[0];
+        expect(JSON.parse(String(options?.body || '{}'))).toMatchObject({
+            sub_model: 'mini',
+            resolution: '720p',
+        });
+        fetchSpy.mockRestore();
+    });
 });
 
 describe('ComfyUI video duration contract', () => {

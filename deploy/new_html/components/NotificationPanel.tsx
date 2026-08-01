@@ -31,7 +31,7 @@ const STATUS_THEME = {
 
 // ===== Kind → 图标 =====
 const KIND_ICON: Record<string, React.FC<{ size?: number; className?: string }>> = {
-    seedance: Video, 'seedance-fast': Video,
+    seedance: Video, 'seedance-fast': Video, 'seedance-mini': Video, 'seedance-1.5': Video,
     wan2: Video, 'wan2-fast': Video, kling: Video, vidu: Video, happyhorse: Video, sora2: Video, veo: Video,
     'video-i2v': Video, 'video-comfy': Video,
     'comfyui-image': ImageIcon, 'gemini-image': ImageIcon, 'doubao-image': ImageIcon,
@@ -53,7 +53,7 @@ function getKindIcon(kind: TaskKind): React.FC<{ size?: number; className?: stri
 
 // ===== Kind label 中文 =====
 const KIND_LABEL: Record<string, string> = {
-    seedance: 'Seedance', 'seedance-fast': 'Seedance Fast',
+    seedance: 'Seedance', 'seedance-fast': 'Seedance Fast', 'seedance-mini': 'Seedance Mini', 'seedance-1.5': 'Seedance 1.5',
     wan2: 'Wan2', 'wan2-fast': 'Wan2 Fast',
     kling: '合体 · Kling', vidu: '大乘 · Vidu', happyhorse: '炼虚 · HappyHorse',
     sora2: 'Sora2', veo: 'Veo',

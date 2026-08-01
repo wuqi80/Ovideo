@@ -53,7 +53,10 @@ export const RESULT_PROMPT_READONLY_CLASS =
     'w-full max-h-[220px] overflow-y-auto bg-n0 border border-n40 rounded px-3 py-2 text-[12px] leading-5 text-n700 border-l-2 border-l-primary/40 whitespace-pre-wrap break-words';
 
 export function isSeedanceModel(model: VideoModel): boolean {
-    return model === 'Seedance2' || model === 'Seedance2Fast';
+    return model === 'Seedance15'
+        || model === 'Seedance2'
+        || model === 'Seedance2Fast'
+        || model === 'Seedance2Mini';
 }
 
 /**

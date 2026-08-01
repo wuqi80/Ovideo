@@ -110,6 +110,7 @@ def test_seedance_binding_options_are_explicit():
     assert [(item["operation"], item["model_name"]) for item in options] == [
         ("standard", "doubao-seedance-2-0-260128"),
         ("fast", "doubao-seedance-2-0-fast-260128"),
+        ("mini", "doubao-seedance-2-0-mini-260615"),
     ]
 
 
@@ -132,6 +133,11 @@ def test_seedance_agent_plan_normalizes_endpoint_and_builtin_models():
         "doubao-seedance-2-0-fast-260128",
         endpoint,
         "fast",
+    ) == "doubao-seedance-1.5-pro"
+    assert normalize_seedance_model_for_endpoint(
+        "doubao-seedance-2-0-mini-260615",
+        endpoint,
+        "mini",
     ) == "doubao-seedance-1.5-pro"
 
     standard_endpoint = normalize_seedance_endpoint("https://ark.cn-beijing.volces.com/api/v3")
@@ -333,7 +339,7 @@ def test_standby_api_card_with_same_bindings_is_not_reported_as_model_conflict()
 async def test_one_enabled_seedance_card_projects_all_bound_models(monkeypatch):
     from services import api_config_runtime_loader as loader
 
-    for env_key in ("SEEDANCE_API_KEY", "SEEDANCE_MODEL_STANDARD", "SEEDANCE_MODEL_FAST"):
+    for env_key in ("SEEDANCE_API_KEY", "SEEDANCE_MODEL_STANDARD", "SEEDANCE_MODEL_FAST", "SEEDANCE_MODEL_MINI"):
         monkeypatch.delenv(env_key, raising=False)
         monkeypatch.setitem(loader._BASE_API_ENV_VALUES, env_key, None)
 
@@ -355,6 +361,11 @@ async def test_one_enabled_seedance_card_projects_all_bound_models(monkeypatch):
                 "label": "渡劫",
                 "model_name": "seedance-fast-bound",
             },
+            {
+                "operation": "mini",
+                "label": "元婴",
+                "model_name": "seedance-mini-bound",
+            },
         ],
         "proxy_mode": "direct",
         "enabled": True,
@@ -373,6 +384,7 @@ async def test_one_enabled_seedance_card_projects_all_bound_models(monkeypatch):
     assert loader.os.environ["SEEDANCE_API_KEY"] == "key-1"
     assert loader.os.environ["SEEDANCE_MODEL_STANDARD"] == "seedance-standard-bound"
     assert loader.os.environ["SEEDANCE_MODEL_FAST"] == "seedance-fast-bound"
+    assert loader.os.environ["SEEDANCE_MODEL_MINI"] == "seedance-mini-bound"
 
 
 @pytest.mark.asyncio
@@ -384,6 +396,7 @@ async def test_agent_plan_card_projects_plan_endpoint_and_models(monkeypatch):
         "SEEDANCE_ENDPOINT",
         "SEEDANCE_MODEL_STANDARD",
         "SEEDANCE_MODEL_FAST",
+        "SEEDANCE_MODEL_MINI",
     ):
         monkeypatch.delenv(env_key, raising=False)
         monkeypatch.setitem(loader._BASE_API_ENV_VALUES, env_key, None)
@@ -397,6 +410,7 @@ async def test_agent_plan_card_projects_plan_endpoint_and_models(monkeypatch):
         "model_bindings": [
             {"operation": "standard", "model_name": "doubao-seedance-2-0-260128"},
             {"operation": "fast", "model_name": "doubao-seedance-2-0-fast-260128"},
+            {"operation": "mini", "model_name": "doubao-seedance-2-0-mini-260615"},
         ],
         "enabled": True,
     }
@@ -415,6 +429,7 @@ async def test_agent_plan_card_projects_plan_endpoint_and_models(monkeypatch):
     )
     assert loader.os.environ["SEEDANCE_MODEL_STANDARD"] == "doubao-seedance-1.5-pro"
     assert loader.os.environ["SEEDANCE_MODEL_FAST"] == "doubao-seedance-1.5-pro"
+    assert loader.os.environ["SEEDANCE_MODEL_MINI"] == "doubao-seedance-1.5-pro"
 
 
 @pytest.mark.asyncio
@@ -478,6 +493,7 @@ async def test_create_agent_plan_card_persists_plan_route_and_models(monkeypatch
         model_bindings=[
             {"operation": "standard", "model_name": "doubao-seedance-2-0-260128"},
             {"operation": "fast", "model_name": "doubao-seedance-2-0-fast-260128"},
+            {"operation": "mini", "model_name": "doubao-seedance-2-0-mini-260615"},
         ],
         reload_api_env=AsyncMock(return_value=True),
     )
@@ -492,8 +508,10 @@ async def test_create_agent_plan_card_persists_plan_route_and_models(monkeypatch
     } == {
         ("workflow", "standard", "doubao-seedance-1.5-pro"),
         ("workflow", "fast", "doubao-seedance-1.5-pro"),
+        ("workflow", "mini", "doubao-seedance-1.5-pro"),
         ("studio", "standard", "doubao-seedance-1.5-pro"),
         ("studio", "fast", "doubao-seedance-1.5-pro"),
+        ("studio", "mini", "doubao-seedance-1.5-pro"),
     }
 
 
@@ -555,7 +573,7 @@ async def test_repair_merges_duplicate_key_cards_and_keeps_bindings(monkeypatch)
     assert result["total_merged_cards"] == 1
     assert result["deleted_duplicate_config_ids"] == ["standard-card"]
     assert [row["config_id"] for row in rows] == ["fast-card"]
-    assert {item["operation"] for item in rows[0]["model_bindings"]} == {"standard", "fast"}
+    assert {item["operation"] for item in rows[0]["model_bindings"]} == {"standard", "fast", "mini"}
 
 
 @pytest.mark.asyncio
@@ -625,6 +643,8 @@ async def test_repair_absorbs_keyless_model_placeholders_into_real_card(monkeypa
     } == {
         ("workflow", "standard", "doubao-seedance-1.5-pro"),
         ("workflow", "fast", "doubao-seedance-1.5-pro"),
+        ("workflow", "mini", "doubao-seedance-1.5-pro"),
         ("studio", "standard", "doubao-seedance-1.5-pro"),
         ("studio", "fast", "doubao-seedance-1.5-pro"),
+        ("studio", "mini", "doubao-seedance-1.5-pro"),
     }

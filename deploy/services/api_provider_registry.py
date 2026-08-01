@@ -177,14 +177,16 @@ DOUBAO_IMAGE_ACCESS_MODES: List[Dict[str, Any]] = [
 SEEDANCE_DEFAULT_MODEL_MAP: Dict[str, str] = {
     "standard": "doubao-seedance-2-0-260128",
     "fast": "doubao-seedance-2-0-fast-260128",
+    "mini": "doubao-seedance-2-0-mini-260615",
 }
 
 SEEDANCE_AGENT_PLAN_MODEL_MAP: Dict[str, str] = {
     "standard": "doubao-seedance-1.5-pro",
     "fast": "doubao-seedance-1.5-pro",
+    "mini": "doubao-seedance-1.5-pro",
 }
 SEEDANCE_LEGACY_AGENT_PLAN_MODELS = frozenset(
-    {"doubao-seedance-2.0", "doubao-seedance-2.0-fast"}
+    {"doubao-seedance-2.0", "doubao-seedance-2.0-fast", "doubao-seedance-2.0-mini"}
 )
 
 SEEDANCE_STANDARD_ENDPOINT = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks"
@@ -210,6 +212,7 @@ SEEDANCE_ACCESS_MODES: List[Dict[str, Any]] = [
 SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
     "standard": "SEEDANCE_MODEL_STANDARD",
     "fast": "SEEDANCE_MODEL_FAST",
+    "mini": "SEEDANCE_MODEL_MINI",
 }
 
 ARK_OFFICIAL_HOST = "ark.cn-beijing.volces.com"
@@ -334,6 +337,11 @@ SEEDANCE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
         "operation": "fast",
         "label": "渡劫 (Seedance 2.0 Fast)",
         "model_name": SEEDANCE_DEFAULT_MODEL_MAP["fast"],
+    },
+    {
+        "operation": "mini",
+        "label": "元婴 (Seedance 2.0 Mini)",
+        "model_name": SEEDANCE_DEFAULT_MODEL_MAP["mini"],
     },
 ]
 
@@ -479,6 +487,10 @@ def is_seedance_fast_model(model_name: Optional[str]) -> bool:
     return "fast" in (model_name or "").strip().lower()
 
 
+def is_seedance_mini_model(model_name: Optional[str]) -> bool:
+    return "mini" in (model_name or "").strip().lower()
+
+
 def doubao_image_access_mode(endpoint: Optional[str]) -> str:
     """Identify the Ark billing surface from a Doubao image endpoint."""
     value = _with_default_https_for_host(str(endpoint or "").strip(), ARK_OFFICIAL_HOST)
@@ -603,7 +615,12 @@ def normalize_seedance_model_for_endpoint(
     """Translate built-in Seedance model IDs between pay-as-you-go and Plan."""
     value = str(model_name or "").strip()
     operation = normalize_seedance_sub_model(
-        sub_model or ("fast" if is_seedance_fast_model(value) else "standard")
+        sub_model
+        or (
+            "mini"
+            if is_seedance_mini_model(value)
+            else ("fast" if is_seedance_fast_model(value) else "standard")
+        )
     )
     known_models = {
         item.lower()
@@ -1003,6 +1020,11 @@ API_MODEL_PRESETS: List[dict] = [
         "model_name": "doubao-seedance-2-0-fast-260128",
     },
     {
+        "name": "元婴 (Seedance 2.0 Mini)",
+        "provider": "seedance",
+        "model_name": "doubao-seedance-2-0-mini-260615",
+    },
+    {
         "name": "laozhang GPT Image (VIP)",
         "provider": "laozhang-gpt-image",
         "model_name": "gpt-image-2-vip",
@@ -1307,6 +1329,8 @@ def infer_model_binding_operation(provider: str, model_name: Optional[str]) -> s
     if provider_id == "doubao":
         return "generate"
     if provider_id == "seedance":
+        if is_seedance_mini_model(normalized_model):
+            return "mini"
         return "fast" if is_seedance_fast_model(normalized_model) else "standard"
     if provider_id == "dashscope":
         return dashscope_sub_model_for_model(normalized_model) or "default"
