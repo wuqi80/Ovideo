@@ -45,3 +45,7 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert '$downloadScriptPath = Join-Path $InstallRoot "h3_download_models.py"' in source
     assert "& $H3Python -s $downloadScriptPath" in source
     assert "-c $pythonScript" not in source
+    assert "HuggingFaceEndpoint" in source
+    assert "https://hf-mirror.com" in source
+    assert "HF_HUB_ETAG_TIMEOUT" in source
+    assert "resume_download=True" in source
