@@ -50,6 +50,8 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert "h3_model_downloader.py" in source
     assert "requests.get" in source
     assert "timeout=(30, 60)" in source
+    assert "CHUNK_SIZE = 1 * 1024 * 1024" in source
+    assert source.index('"https://huggingface.co"') < source.index('"https://hf-mirror.com"')
     assert '"Range"' in source
     assert '"Content-Range"' in source
     assert '"Content-Length"' in source

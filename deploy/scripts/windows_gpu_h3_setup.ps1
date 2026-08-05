@@ -132,8 +132,8 @@ from pathlib import Path
 import requests
 
 
-CHUNK_SIZE = 8 * 1024 * 1024
-LOG_EVERY_BYTES = 256 * 1024 * 1024
+CHUNK_SIZE = 1 * 1024 * 1024
+LOG_EVERY_BYTES = 64 * 1024 * 1024
 
 
 def now():
@@ -300,8 +300,8 @@ function Download-H3Models {
     if ($HuggingFaceEndpoint) {
         $endpoints.Add($HuggingFaceEndpoint)
     }
-    $endpoints.Add("https://hf-mirror.com")
     $endpoints.Add("https://huggingface.co")
+    $endpoints.Add("https://hf-mirror.com")
     $uniqueEndpoints = $endpoints | Select-Object -Unique
     $downloadLog = Join-Path $Logs "h3-download.log"
     $downloader = Install-H3ModelDownloader
