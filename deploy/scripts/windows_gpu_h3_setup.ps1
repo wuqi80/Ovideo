@@ -151,6 +151,8 @@ function Download-H3Models {
             & curl.exe `
                 -L `
                 --fail `
+                --silent `
+                --show-error `
                 --retry 12 `
                 --retry-all-errors `
                 --retry-delay 10 `
@@ -159,7 +161,7 @@ function Download-H3Models {
                 --speed-limit 1024 `
                 --continue-at - `
                 --output "$target" `
-                "$url" 2>&1 | Tee-Object -FilePath $downloadLog -Append
+                "$url" >> $downloadLog 2>&1
             $curlExit = $LASTEXITCODE
             if ($curlExit -eq 0 -and (Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target).Length -gt 0)) {
                 Write-Step "Downloaded H3 model: $relativePath"

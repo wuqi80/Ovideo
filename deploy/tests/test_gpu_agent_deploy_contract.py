@@ -47,5 +47,9 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert "https://hf-mirror.com" in source
     assert 'h3-download.log' in source
     assert "& curl.exe" in source
+    assert "--silent" in source
+    assert "--show-error" in source
     assert "--continue-at" in source
     assert "--speed-time 60" in source
+    assert "Tee-Object" not in source
+    assert '>> $downloadLog 2>&1' in source
