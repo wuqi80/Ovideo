@@ -48,6 +48,11 @@ $ModelFiles = @(
     "vae/minimax_h3_video_vae_fp16.safetensors",
     "vae/minimax_h3_audio_vae_fp32.safetensors"
 )
+$ModelExpectedSizes = @{
+    "diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors" = [Int64]20970379616
+    "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors" = [Int64]15687142551
+    "vae/minimax_h3_audio_vae_fp32.safetensors" = [Int64]605254808
+}
 
 New-Item -ItemType Directory -Force -Path $Downloads, $Logs, $ScriptsRoot | Out-Null
 
@@ -135,11 +140,25 @@ function Download-H3Models {
     foreach ($relativePath in $ModelFiles) {
         $windowsRelativePath = $relativePath -replace "/", "\"
         $target = Join-Path $modelsRoot $windowsRelativePath
+        $partialTarget = "$target.part"
+        $expectedSize = [Int64]0
+        if ($ModelExpectedSizes.ContainsKey($relativePath)) {
+            $expectedSize = [Int64]$ModelExpectedSizes[$relativePath]
+        }
         $targetDir = Split-Path -Parent $target
         New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-        if ((Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target).Length -gt 0)) {
-            Write-Step "H3 model already present: $relativePath"
-            continue
+        if (Test-Path -LiteralPath $target) {
+            $targetSize = [Int64](Get-Item -LiteralPath $target).Length
+            if (($expectedSize -gt 0 -and $targetSize -eq $expectedSize) -or ($expectedSize -le 0 -and $targetSize -gt 0)) {
+                Write-Step "H3 model already present: $relativePath"
+                continue
+            }
+            Write-Step "H3 model is incomplete; keeping it for resume: $relativePath ($targetSize/$expectedSize bytes)"
+            if ((Test-Path -LiteralPath $partialTarget) -and ((Get-Item -LiteralPath $partialTarget).Length -ge $targetSize)) {
+                Remove-Item -LiteralPath $target -Force
+            } else {
+                Move-Item -LiteralPath $target -Destination $partialTarget -Force
+            }
         }
 
         $downloaded = $false
@@ -147,7 +166,7 @@ function Download-H3Models {
             $base = $endpoint.TrimEnd("/")
             $url = "$base/Comfy-Org/MiniMax-H3/resolve/main/$relativePath"
             Write-Step "Downloading H3 model via ${base}: $relativePath"
-            "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] curl $url -> $target" | Add-Content -LiteralPath $downloadLog -Encoding UTF8
+            "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] curl $url -> $partialTarget" | Add-Content -LiteralPath $downloadLog -Encoding UTF8
             & curl.exe `
                 -L `
                 --fail `
@@ -157,13 +176,20 @@ function Download-H3Models {
                 --retry-all-errors `
                 --retry-delay 10 `
                 --connect-timeout 30 `
+                --max-time 14400 `
                 --speed-time 60 `
                 --speed-limit 1024 `
                 --continue-at - `
-                --output "$target" `
+                --output "$partialTarget" `
                 "$url" >> $downloadLog 2>&1
             $curlExit = $LASTEXITCODE
-            if ($curlExit -eq 0 -and (Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target).Length -gt 0)) {
+            if ($curlExit -eq 0 -and (Test-Path -LiteralPath $partialTarget) -and ((Get-Item -LiteralPath $partialTarget).Length -gt 0)) {
+                $partialSize = [Int64](Get-Item -LiteralPath $partialTarget).Length
+                if ($expectedSize -gt 0 -and $partialSize -ne $expectedSize) {
+                    Write-Step "H3 model download size mismatch after curl success: $relativePath ($partialSize/$expectedSize bytes)"
+                    continue
+                }
+                Move-Item -LiteralPath $partialTarget -Destination $target -Force
                 Write-Step "Downloaded H3 model: $relativePath"
                 $downloaded = $true
                 break

@@ -50,6 +50,10 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert "--silent" in source
     assert "--show-error" in source
     assert "--continue-at" in source
+    assert "--max-time 14400" in source
     assert "--speed-time 60" in source
     assert "Tee-Object" not in source
     assert '>> $downloadLog 2>&1' in source
+    assert 'part' in source
+    assert 'ModelExpectedSizes' in source
+    assert '20970379616' in source
