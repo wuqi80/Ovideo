@@ -29,6 +29,15 @@ GPU_AGENT_SOURCE_NAME="comfyui_agent.py"
 GPU_AGENT_REMOTE_REL="persistent_storage/tools/$GPU_AGENT_SOURCE_NAME"
 PROCESSING_AGENT_PUBLIC_NAME="processing_agent.py"
 PROCESSING_AGENT_REMOTE_REL="persistent_storage/tools/$PROCESSING_AGENT_PUBLIC_NAME"
+GPU_AGENT_PUBLIC_TOOL_FILES=(
+  "scripts/windows_gpu_agent_runner.py"
+  "scripts/windows_gpu_h3_setup.ps1"
+  "scripts/windows_gpu_h3_setup.cmd"
+  "scripts/windows_gpu_h3_smoke.py"
+  "scripts/windows_gpu_h3_smoke.cmd"
+  "scripts/windows_gpu_start_h3_comfyui.cmd"
+  "scripts/windows_gpu_start_agent.cmd"
+)
 
 if [ ! -f "cluster_main.py" ] || [ ! -d "routers" ] || [ ! -d "schemas" ] || [ ! -d "services" ] || [ ! -d "utils" ] || [ ! -d "new_html" ]; then
   echo "ERROR: run this script from the deploy/ directory"
@@ -114,7 +123,12 @@ FILES=(
   "scripts/windows_gpu_monitor.cmd"
   "scripts/windows_gpu_start_comfyui.cmd"
   "scripts/windows_gpu_start_agent.cmd"
+  "scripts/windows_gpu_start_h3_comfyui.cmd"
   "scripts/windows_gpu_enable_lan.cmd"
+  "scripts/windows_gpu_h3_setup.ps1"
+  "scripts/windows_gpu_h3_setup.cmd"
+  "scripts/windows_gpu_h3_smoke.py"
+  "scripts/windows_gpu_h3_smoke.cmd"
   "scripts/windows_gpu_qwen_setup.ps1"
   "scripts/windows_gpu_qwen_setup.cmd"
   "scripts/windows_gpu_qwen_schedule.cmd"
@@ -407,6 +421,12 @@ cp "$GPU_AGENT_SOURCE_DIR/$GPU_AGENT_SOURCE_NAME" \
   "$STAGING_DIR/$GPU_AGENT_REMOTE_REL"
 cp "$GPU_AGENT_SOURCE_DIR/$GPU_AGENT_SOURCE_NAME" \
   "$STAGING_DIR/$PROCESSING_AGENT_REMOTE_REL"
+for tool_path in "${GPU_AGENT_PUBLIC_TOOL_FILES[@]}"; do
+  tool_name="$(basename "$tool_path")"
+  tool_remote_rel="persistent_storage/tools/$tool_name"
+  mkdir -p "$STAGING_DIR/$(dirname "$tool_remote_rel")"
+  cp "$tool_path" "$STAGING_DIR/$tool_remote_rel"
+done
 
 BACKEND_SOURCE_HASH=$(
   find "$STAGING_DIR" -type f -print0 \
@@ -456,12 +476,8 @@ if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "set -e
   chown Administrator:Administrator '$REMOTE_DIR'
   chmod 755 '$REMOTE_DIR'
   mkdir -p '$REMOTE_DIR/persistent_storage/tools'
-  chown Administrator:Administrator \
-    '$REMOTE_DIR/persistent_storage/tools/comfyui_agent.py' \
-    '$REMOTE_DIR/persistent_storage/tools/processing_agent.py'
-  chmod 644 \
-    '$REMOTE_DIR/persistent_storage/tools/comfyui_agent.py' \
-    '$REMOTE_DIR/persistent_storage/tools/processing_agent.py'
+  find '$REMOTE_DIR/persistent_storage/tools' -maxdepth 1 -type f -exec chown Administrator:Administrator {} +
+  find '$REMOTE_DIR/persistent_storage/tools' -maxdepth 1 -type f -exec chmod 644 {} +
 "; then
   rollback_remote
   echo "⚠️ 部署失败，已回滚: application root permissions failed"

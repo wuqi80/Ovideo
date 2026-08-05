@@ -162,6 +162,14 @@ async def queue_control_task(args: argparse.Namespace) -> str:
     data: dict[str, Any] = {"action": args.action}
     if args.script_url:
         data["script_url"] = args.script_url
+    if args.agent_id:
+        data["preferred_agent_id"] = args.agent_id
+    if args.action == "install_h3_sidecar":
+        data["timeout_seconds"] = args.timeout_seconds
+        if args.skip_model_downloads:
+            data["skip_model_downloads"] = True
+        if args.force_refresh_comfyui:
+            data["force_refresh_comfyui"] = True
 
     await r.hset(
         f"{RedisConfig.TASK_STATUS_PREFIX}{task_id}",
@@ -222,10 +230,27 @@ async def main_async(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Queue a constrained GPU Agent control task")
-    parser.add_argument("action", choices=["status", "self_update"])
+    parser.add_argument("action", choices=["status", "self_update", "install_h3_sidecar"])
+    parser.add_argument("--agent-id", default="", help="Pin the control task to one Agent ID")
     parser.add_argument("--script-url", default="", help="Override self-update script URL")
     parser.add_argument("--wait", action="store_true", help="Wait for the agent to report completion")
     parser.add_argument("--timeout", type=int, default=120)
+    parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=4 * 60 * 60,
+        help="GPU-side command timeout for install_h3_sidecar",
+    )
+    parser.add_argument(
+        "--skip-model-downloads",
+        action="store_true",
+        help="Pass -SkipModelDownloads to the H3 installer",
+    )
+    parser.add_argument(
+        "--force-refresh-comfyui",
+        action="store_true",
+        help="Pass -ForceRefreshComfyUI to the H3 installer",
+    )
     parser.add_argument("--force", action="store_true", help="Queue even if online Agents look legacy/unsupported")
     args = parser.parse_args()
     try:

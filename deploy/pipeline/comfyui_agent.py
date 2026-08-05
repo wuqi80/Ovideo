@@ -28,7 +28,7 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-08-05-h3-capability-port-routing"
+AGENT_VERSION = "2026-08-05-agent-control-h3-bootstrap-v1"
 PLATFORM_DOWNLOAD_RETRIES = 3
 PLATFORM_DOWNLOAD_PATH_PREFIXES = ("/api/agent/tasks/", "/storage/")
 CAPABILITY_CACHE_TTL_SECONDS = 60
@@ -451,6 +451,15 @@ class ComfyUIAgent:
                 "restart_agent": True,
             }
 
+        if action == "install_h3_sidecar":
+            result = self._install_h3_sidecar(data)
+            return {
+                "status": "completed",
+                "result_payload": result,
+                "output_files": [],
+                "restart_agent": True,
+            }
+
         return {
             "status": "failed",
             "error": f"Unsupported agent_control action: {action}",
@@ -490,6 +499,134 @@ class ComfyUIAgent:
             "script_url": script_url,
             "script_path": str(current_path),
             "backup_path": str(backup_path),
+            "restart": True,
+        }
+
+    def _download_text_tool(self, filename, markers=None):
+        safe_name = str(filename or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", safe_name):
+            raise RuntimeError(f"Unsafe tool filename: {filename!r}")
+        url = f"{self.server_url}/storage/tools/{safe_name}"
+        resp = self._get_platform_download(
+            url,
+            headers=self._headers(),
+            timeout=120,
+        )
+        resp.raise_for_status()
+        text = resp.text
+        for marker in markers or ():
+            if marker not in text:
+                raise RuntimeError(f"Downloaded {safe_name} is missing marker: {marker}")
+        return url, text
+
+    @staticmethod
+    def _write_text_with_backup(path, content):
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            old = path.read_text(encoding="utf-8", errors="replace")
+            if old == content:
+                return {"path": str(path), "changed": False, "backup": ""}
+            backup = path.with_name(f"{path.name}.bak.{time.strftime('%Y%m%d%H%M%S')}")
+            path.replace(backup)
+        else:
+            backup = None
+        path.write_text(content, encoding="utf-8")
+        return {"path": str(path), "changed": True, "backup": str(backup or "")}
+
+    def _install_h3_sidecar(self, data):
+        if platform.system().lower() != "windows":
+            raise RuntimeError("MiniMax H3 sidecar installer is only supported on Windows GPU agents")
+
+        root = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+        agent_dir = root / "agent"
+        scripts_dir = root / "scripts"
+        installed = []
+
+        tool_specs = [
+            (
+                "windows_gpu_agent_runner.py",
+                agent_dir / "windows_gpu_agent_runner.py",
+                ("GPU2_H3_PORT = 8189", "build_gpu2_minimax_h3_fl2va_workflow"),
+            ),
+            (
+                "windows_gpu_h3_setup.ps1",
+                scripts_dir / "windows_gpu_h3_setup.ps1",
+                ("MiniMax H3", "MECHA-GPU-ComfyUI-H3"),
+            ),
+            (
+                "windows_gpu_h3_setup.cmd",
+                scripts_dir / "windows_gpu_h3_setup.cmd",
+                ("windows_gpu_h3_setup.ps1",),
+            ),
+            (
+                "windows_gpu_h3_smoke.py",
+                scripts_dir / "windows_gpu_h3_smoke.py",
+                ("MiniMax H3", "build_gpu2_minimax_h3_fl2va_workflow"),
+            ),
+            (
+                "windows_gpu_h3_smoke.cmd",
+                scripts_dir / "windows_gpu_h3_smoke.cmd",
+                ("windows_gpu_h3_smoke.py",),
+            ),
+            (
+                "windows_gpu_start_h3_comfyui.cmd",
+                scripts_dir / "windows_gpu_start_h3_comfyui.cmd",
+                ("ComfyUI-H3", "8189"),
+            ),
+            (
+                "windows_gpu_start_agent.cmd",
+                scripts_dir / "windows_gpu_start_agent.cmd",
+                ("windows_gpu_agent_runner.py", "MECHA_COMFYUI_PORTS=8188,8189"),
+            ),
+        ]
+
+        downloads = []
+        for filename, destination, markers in tool_specs:
+            url, text = self._download_text_tool(filename, markers)
+            downloads.append({"filename": filename, "url": url, "destination": str(destination)})
+            installed.append(self._write_text_with_backup(destination, text))
+
+        setup_path = scripts_dir / "windows_gpu_h3_setup.ps1"
+        command = [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(setup_path),
+            "-NoAgentRestart",
+        ]
+        if data.get("skip_model_downloads"):
+            command.append("-SkipModelDownloads")
+        if data.get("force_refresh_comfyui"):
+            command.append("-ForceRefreshComfyUI")
+
+        timeout_seconds = int(data.get("timeout_seconds") or 4 * 60 * 60)
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+        stdout = completed.stdout or ""
+        stderr = completed.stderr or ""
+        if completed.returncode != 0:
+            tail = (stdout + "\n" + stderr)[-4000:]
+            raise RuntimeError(f"MiniMax H3 setup failed with exit code {completed.returncode}: {tail}")
+
+        os.environ["MECHA_COMFYUI_PORTS"] = "8188,8189"
+
+        return {
+            "action": "install_h3_sidecar",
+            "agent_id": self.agent_id,
+            "root": str(root),
+            "installed": installed,
+            "downloads": downloads,
+            "setup_returncode": completed.returncode,
+            "setup_stdout_tail": stdout[-3000:],
+            "setup_stderr_tail": stderr[-3000:],
+            "ports_after_restart": [8188, 8189],
             "restart": True,
         }
 

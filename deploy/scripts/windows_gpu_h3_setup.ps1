@@ -3,6 +3,7 @@ param(
     [int]$Port = 8189,
     [switch]$SkipModelDownloads,
     [switch]$ForceRefreshComfyUI,
+    [switch]$NoAgentRestart,
     [string]$HuggingFaceToken = $env:HF_TOKEN
 )
 
@@ -22,6 +23,7 @@ $LogFile = Join-Path $Logs "h3-setup.log"
 $ReportFile = Join-Path $InstallRoot "h3-readiness-report.json"
 $StartCmd = Join-Path $ScriptsRoot "windows_gpu_start_h3_comfyui.cmd"
 $AgentStartCmd = Join-Path $ScriptsRoot "windows_gpu_start_agent.cmd"
+$LegacyAgentStartCmd = Join-Path $InstallRoot "start_agent.cmd"
 $Curl = Join-Path $env:SystemRoot "System32\curl.exe"
 $PipIndex = if ($env:MECHA_PIP_INDEX_URL) { $env:MECHA_PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
 $RequiredNodes = @(
@@ -167,14 +169,31 @@ endlocal
 
 function Update-AgentPortList {
     [Environment]::SetEnvironmentVariable("MECHA_COMFYUI_PORTS", "8188,$Port", "Machine")
-    if (Test-Path -LiteralPath $AgentStartCmd) {
-        $source = Get-Content -LiteralPath $AgentStartCmd -Raw -Encoding UTF8
+    foreach ($candidate in @($AgentStartCmd, $LegacyAgentStartCmd)) {
+        if (-not (Test-Path -LiteralPath $candidate)) {
+            continue
+        }
+        $source = Get-Content -LiteralPath $candidate -Raw -Encoding UTF8
         $updated = $source -replace "set MECHA_COMFYUI_PORTS=.*", "set MECHA_COMFYUI_PORTS=8188,$Port"
         if ($updated -ne $source) {
-            Write-Step "Updating Agent startup command ports to 8188,$Port"
-            Set-Content -LiteralPath $AgentStartCmd -Value $updated -Encoding UTF8
+            Write-Step "Updating Agent startup command ports to 8188,$Port: $candidate"
+            Set-Content -LiteralPath $candidate -Value $updated -Encoding UTF8
         }
     }
+}
+
+function Ensure-H3FirewallRule {
+    Write-Step "Allowing H3 ComfyUI from the local subnet only on port $Port"
+    Get-NetFirewallRule -DisplayName "MECHA GPU ComfyUI H3 LAN" -ErrorAction SilentlyContinue |
+        Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    New-NetFirewallRule `
+        -DisplayName "MECHA GPU ComfyUI H3 LAN" `
+        -Direction Inbound `
+        -Action Allow `
+        -Protocol TCP `
+        -LocalPort $Port `
+        -RemoteAddress "192.168.31.0/24" `
+        -Profile Any | Out-Null
 }
 
 function Register-H3ScheduledTask {
@@ -238,11 +257,16 @@ Install-PythonRequirements
 Download-H3Models
 Install-H3StartCommand
 Update-AgentPortList
+Ensure-H3FirewallRule
 Register-H3ScheduledTask
 Test-H3Readiness
 
-Write-Step "Restarting Agent so it reports 8188,$Port"
-schtasks.exe /End /TN "MECHA-GPU-Agent" 2>$null | Out-Null
-Start-Sleep -Seconds 3
-schtasks.exe /Run /TN "MECHA-GPU-Agent" | Out-Null
+if (-not $NoAgentRestart) {
+    Write-Step "Restarting Agent so it reports 8188,$Port"
+    schtasks.exe /End /TN "MECHA-GPU-Agent" 2>$null | Out-Null
+    Start-Sleep -Seconds 3
+    schtasks.exe /Run /TN "MECHA-GPU-Agent" | Out-Null
+} else {
+    Write-Step "Skipping Agent scheduled-task restart by request; caller will restart Agent"
+}
 Write-Step "MiniMax H3 GPU2 setup completed"

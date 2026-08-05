@@ -16,6 +16,11 @@ def test_live_deploy_publishes_gpu_agent_for_self_update():
     assert '"$STAGING_DIR/$GPU_AGENT_REMOTE_REL"' in script
     assert 'PROCESSING_AGENT_PUBLIC_NAME="processing_agent.py"' in script
     assert '"$STAGING_DIR/$PROCESSING_AGENT_REMOTE_REL"' in script
+    assert 'GPU_AGENT_PUBLIC_TOOL_FILES=(' in script
+    assert '"scripts/windows_gpu_agent_runner.py"' in script
+    assert '"scripts/windows_gpu_h3_setup.ps1"' in script
+    assert '"scripts/windows_gpu_h3_smoke.py"' in script
+    assert 'persistent_storage/tools/$tool_name' in script
 
 
 def test_gpu_agent_version_keeps_control_capability_marker():
@@ -23,5 +28,17 @@ def test_gpu_agent_version_keeps_control_capability_marker():
         DEPLOY_DIR / "pipeline" / "comfyui_agent.py"
     ).read_text(encoding="utf-8")
 
-    assert 'AGENT_VERSION = "2026-08-05-h3-capability-port-routing"' in source
+    assert 'AGENT_VERSION = "2026-08-05-agent-control-h3-bootstrap-v1"' in source
+    assert "install_h3_sidecar" in source
     assert "minimax_h3_fl2va" in source
+
+
+def test_h3_setup_updates_legacy_and_public_agent_start_commands():
+    source = (
+        DEPLOY_DIR / "scripts" / "windows_gpu_h3_setup.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert "$LegacyAgentStartCmd" in source
+    assert 'foreach ($candidate in @($AgentStartCmd, $LegacyAgentStartCmd))' in source
+    assert "MECHA GPU ComfyUI H3 LAN" in source
+    assert "NoAgentRestart" in source
