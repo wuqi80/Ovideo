@@ -176,7 +176,7 @@ function Update-AgentPortList {
         $source = Get-Content -LiteralPath $candidate -Raw -Encoding UTF8
         $updated = $source -replace "set MECHA_COMFYUI_PORTS=.*", "set MECHA_COMFYUI_PORTS=8188,$Port"
         if ($updated -ne $source) {
-            Write-Step "Updating Agent startup command ports to 8188,$Port: $candidate"
+            Write-Step "Updating Agent startup command ports to 8188,${Port}: $candidate"
             Set-Content -LiteralPath $candidate -Value $updated -Encoding UTF8
         }
     }
