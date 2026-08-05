@@ -42,3 +42,6 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert 'foreach ($candidate in @($AgentStartCmd, $LegacyAgentStartCmd))' in source
     assert "MECHA GPU ComfyUI H3 LAN" in source
     assert "NoAgentRestart" in source
+    assert '$downloadScriptPath = Join-Path $InstallRoot "h3_download_models.py"' in source
+    assert "& $H3Python -s $downloadScriptPath" in source
+    assert "-c $pythonScript" not in source

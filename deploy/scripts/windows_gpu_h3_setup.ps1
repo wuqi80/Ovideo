@@ -122,6 +122,7 @@ function Download-H3Models {
     $modelsRoot = Join-Path $ComfyRoot "models"
     New-Item -ItemType Directory -Force -Path $modelsRoot | Out-Null
     $filesJson = ($ModelFiles | ConvertTo-Json -Compress)
+    $downloadScriptPath = Join-Path $InstallRoot "h3_download_models.py"
     $pythonScript = @"
 import json
 import os
@@ -141,10 +142,11 @@ for filename in files:
         token=token,
     )
 "@
+    $pythonScript | Set-Content -LiteralPath $downloadScriptPath -Encoding UTF8
     if ($HuggingFaceToken) {
         $env:HF_TOKEN = $HuggingFaceToken
     }
-    & $H3Python -s -c $pythonScript
+    & $H3Python -s $downloadScriptPath
     if ($LASTEXITCODE -ne 0) {
         throw "MiniMax H3 model download failed"
     }
