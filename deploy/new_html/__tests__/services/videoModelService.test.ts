@@ -4,9 +4,13 @@ import {
   getModelDisplayName,
   getMiniMaxVideoParamsError,
   inferSeedanceTaskType,
+  isSeedanceAgentPlanModel,
   isSeedanceVideoModel,
   normalizeMiniMaxVideoParams,
+  normalizeSeedanceMediaForSubmission,
   seedanceSubModelForVideoModel,
+  supportsSeedanceMultimodalModel,
+  validateSeedanceMediaInputs,
   withCurrentVideoModelOption,
 } from '../../services/videoModelService';
 
@@ -84,6 +88,34 @@ describe('Seedance model mapping', () => {
     expect(seedanceSubModelForVideoModel('Seedance2')).toBe('standard');
     expect(seedanceSubModelForVideoModel('Seedance2Fast')).toBe('fast');
     expect(seedanceSubModelForVideoModel('Seedance2Mini')).toBe('mini');
+    expect(isSeedanceAgentPlanModel('Seedance15')).toBe(true);
+    expect(isSeedanceAgentPlanModel('Seedance2Mini')).toBe(false);
+    expect(supportsSeedanceMultimodalModel('Seedance2Mini')).toBe(true);
+    expect(supportsSeedanceMultimodalModel('Seedance15')).toBe(false);
+  });
+
+  it('only normalizes reference images for agent-plan compatibility', () => {
+    const media = [
+      { kind: 'image' as const, url: '/start.png', role: 'reference_image' as const },
+      { kind: 'image' as const, url: '/end.png', role: 'reference_image' as const },
+    ];
+
+    expect(normalizeSeedanceMediaForSubmission(media, false)).toEqual(media);
+    expect(normalizeSeedanceMediaForSubmission(media, true).map(item => item.role)).toEqual([
+      'first_frame',
+      'last_frame',
+    ]);
+  });
+
+  it('allows multimodal media for Seedance 2.0 models but blocks it for agent-plan compatibility', () => {
+    const media = [
+      { kind: 'image' as const, url: '/ref.png', role: 'reference_image' as const },
+      { kind: 'video' as const, url: '/ref.mp4', role: 'reference_video' as const },
+      { kind: 'audio' as const, url: '/ref.mp3', role: 'reference_audio' as const },
+    ];
+
+    expect(validateSeedanceMediaInputs(media, true)).toBeNull();
+    expect(validateSeedanceMediaInputs(media, false)).toContain('1.5-pro 不支持视频/音频');
   });
 });
 

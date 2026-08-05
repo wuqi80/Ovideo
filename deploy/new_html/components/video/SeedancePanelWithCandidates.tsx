@@ -13,6 +13,7 @@ export interface SeedancePanelWithCandidatesProps {
     onUsePreviousVideoAudio?: () => void;
     previousVideoAudioBusy?: boolean;
     audioReferenceNotice?: string;
+    supportsMultimodal?: boolean;
 }
 
 export const SeedancePanelWithCandidates: React.FC<SeedancePanelWithCandidatesProps> = ({
@@ -25,6 +26,7 @@ export const SeedancePanelWithCandidates: React.FC<SeedancePanelWithCandidatesPr
     onUsePreviousVideoAudio,
     previousVideoAudioBusy,
     audioReferenceNotice,
+    supportsMultimodal,
 }) => {
     const { candidates } = useSeedanceCandidates({
         currentParams: value,
@@ -42,6 +44,7 @@ export const SeedancePanelWithCandidates: React.FC<SeedancePanelWithCandidatesPr
             onUsePreviousVideoAudio={onUsePreviousVideoAudio}
             previousVideoAudioBusy={previousVideoAudioBusy}
             audioReferenceNotice={audioReferenceNotice}
+            supportsMultimodal={supportsMultimodal}
         />
     );
 };

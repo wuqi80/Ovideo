@@ -25,6 +25,7 @@ export interface SeedanceDetailModalProps {
     onUsePreviousVideoAudio?: () => void;
     previousVideoAudioBusy?: boolean;
     audioReferenceNotice?: string;
+    supportsMultimodal?: boolean;
 }
 
 export const SeedanceDetailModal: React.FC<SeedanceDetailModalProps> = (p) => {
@@ -71,6 +72,7 @@ export const SeedanceDetailModal: React.FC<SeedanceDetailModalProps> = (p) => {
                         onUsePreviousVideoAudio={p.onUsePreviousVideoAudio}
                         previousVideoAudioBusy={p.previousVideoAudioBusy}
                         audioReferenceNotice={p.audioReferenceNotice}
+                        supportsMultimodal={p.supportsMultimodal}
                     />
                 </div>
             </div>

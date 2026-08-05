@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom';
 import { Upload, X, AlertCircle, Info, Plus, Maximize2, Volume2, Loader2 } from 'lucide-react';
 import { uploadAudio, uploadImage, uploadVideoFile } from '../services/videoMediaService';
 import type { SeedanceMediaInput, SeedanceMediaRole, SeedanceParams } from '../services/videoModelService';
-import { fetchSeedanceOmni } from '../services/videoWorkflowService';
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
 import { SeedanceMentionPromptEditor } from './SeedanceMentionPromptEditor';
 import { SeedanceAssetPickerModal } from './SeedanceAssetPickerModal';
@@ -20,6 +19,7 @@ interface Props {
     onUsePreviousVideoAudio?: () => void;
     previousVideoAudioBusy?: boolean;
     audioReferenceNotice?: string;
+    supportsMultimodal?: boolean;
 }
 
 // Role options split per mode (Issue 3/4):
@@ -47,6 +47,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
     onUsePreviousVideoAudio,
     previousVideoAudioBusy,
     audioReferenceNotice,
+    supportsMultimodal = true,
 }) => {
     const [uploadBusy, setUploadBusy] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
@@ -62,6 +63,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
     // Issue 3/4: derive mode from existing media_inputs[].role (no new persisted field).
     const isFirstLastMode = images.some(m => m.role === 'first_frame' || m.role === 'last_frame');
     const mode: 'reference' | 'first_last' = isFirstLastMode ? 'first_last' : 'reference';
+    const effectiveMode: 'reference' | 'first_last' = supportsMultimodal ? mode : 'first_last';
 
     const setMode = useCallback((newMode: 'reference' | 'first_last') => {
         if (newMode === mode) return;
@@ -79,10 +81,8 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
         onChange({ ...value, media_inputs: nextInputs });
     }, [mode, value, onChange]);
 
-    // 全能参考(r2v) 仅 Seedance 2.0 支持；账号若只开通 1.0 Pro，后端返回 false，
-    // 此处隐藏「全能参考」按钮并把已是 reference 的卡强制切回首尾帧。开通 2.0 后自动放开。
-    const [omniEnabled, setOmniEnabled] = useState<boolean>(false);
-    useEffect(() => { fetchSeedanceOmni().then(setOmniEnabled); }, []);
+    // 全能参考(r2v) 仅 Seedance 2.0 系列支持；Seedance15 / Agent Plan 走首尾帧兼容。
+    const omniEnabled = supportsMultimodal;
     useEffect(() => {
         if (!omniEnabled && mode === 'reference' && images.length > 0) {
             setMode('first_last');
@@ -99,12 +99,20 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
         if (audios.length > 0 && images.length === 0 && videos.length === 0) {
             return { ok: false, msg: '不可单独输入音频，必须至少包含 1 张图或 1 段视频' };
         }
-        if (value.sub_model === 'fast' && value.resolution === '1080p') return { ok: false, msg: '渡劫（fast）不支持 1080p' };
+        if (!omniEnabled && (videos.length > 0 || audios.length > 0)) {
+            return { ok: false, msg: '兼容通道不支持视频/音频参考输入' };
+        }
+        if (!omniEnabled && images.length > 2) {
+            return { ok: false, msg: '兼容通道最多支持 2 张图片（单图或首尾帧）' };
+        }
+        if ((value.sub_model === 'fast' || value.sub_model === 'mini') && value.resolution === '1080p') {
+            return { ok: false, msg: `${value.sub_model === 'mini' ? '元婴（mini）' : '渡劫（fast）'}不支持 1080p` };
+        }
         if (images.length > 9) return { ok: false, msg: '图片最多 9 张' };
         if (videos.length > 3) return { ok: false, msg: '参考视频最多 3 个' };
         if (audios.length > 3) return { ok: false, msg: '参考音频最多 3 个' };
         return { ok: true, msg: '' };
-    }, [images, videos, audios, value.media_inputs, value.prompt, value.sub_model, value.resolution]);
+    }, [images, videos, audios, value.media_inputs, value.prompt, value.sub_model, value.resolution, omniEnabled]);
 
     const patch = useCallback((p: Partial<SeedanceParams>) => onChange({ ...value, ...p }), [value, onChange]);
 
@@ -174,13 +182,13 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                 <div>
                     <div className="text-[11px] font-semibold text-primary tracking-wide">Seedance 2.0 多模态控制台</div>
                     <div className="text-[9px] text-n100">
-                        {mode === 'reference'
+                        {effectiveMode === 'reference'
                             ? '全能参考：图片 0-9 · 视频 0-3 · 音频 0-3'
                             : '首尾帧：首/尾图；支持通道可发送参考配音，视频不发送'}
                     </div>
                 </div>
                 <span className="text-[9px] px-1.5 py-0.5 rounded border border-primary text-primary bg-primary-light">
-                    {value.sub_model === 'fast' ? '渡劫 Fast' : '飞升 Standard'}
+                    {value.sub_model === 'mini' ? '元婴 Mini' : (value.sub_model === 'fast' ? '渡劫 Fast' : '飞升 Standard')}
                 </span>
             </div>
 
@@ -205,16 +213,16 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                     )}
                     <button
                         type="button"
-                        aria-pressed={mode === 'first_last' || !omniEnabled}
+                        aria-pressed={effectiveMode === 'first_last'}
                         onClick={() => setMode('first_last')}
                         disabled={disabled}
                         className={`px-2 py-1 transition-colors ${
-                            (mode === 'first_last' || !omniEnabled)
+                            effectiveMode === 'first_last'
                                 ? 'bg-primary text-white'
                                 : 'text-n300 hover:text-primary'
                         }`}
                     >
-                        首尾帧{!omniEnabled && <span className="ml-1 opacity-70">（飞升仅支持）</span>}
+                        首尾帧{!omniEnabled && <span className="ml-1 opacity-70">（兼容通道）</span>}
                     </button>
                 </div>
             </div>
@@ -292,7 +300,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                                             disabled={disabled}
                                             className="w-full mt-1 bg-n0 border border-n40 text-[9px] text-n800 rounded px-1"
                                         >
-                                            {(mode === 'first_last' ? ROLE_OPTIONS_FIRST_LAST : ROLE_OPTIONS_REFERENCE)
+                                            {(effectiveMode === 'first_last' ? ROLE_OPTIONS_FIRST_LAST : ROLE_OPTIONS_REFERENCE)
                                                 .map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                         </select>
                                         <button onClick={() => removeMedia(i)} disabled={disabled}
@@ -307,14 +315,14 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
 
                     <div
                         data-section="video"
-                        data-greyed={mode === 'first_last' ? 'true' : 'false'}
+                        data-greyed={effectiveMode === 'first_last' ? 'true' : 'false'}
                         className={`rounded-md border border-n40 bg-n30 p-2 min-h-[122px] ${
-                            mode === 'first_last' ? 'opacity-30 pointer-events-none' : ''
+                            effectiveMode === 'first_last' ? 'opacity-30 pointer-events-none' : ''
                         }`}
-                        title={mode === 'first_last' ? '首尾帧模式不发送视频给后端' : ''}
+                        title={effectiveMode === 'first_last' ? '首尾帧模式不发送视频给后端' : ''}
                     >
                         <div className="flex items-center justify-between text-[10px] text-n300 mb-1">
-                            <span>视频 {videos.length}/3 {mode === 'first_last' && '(跳过)'}</span>
+                            <span>视频 {videos.length}/3 {effectiveMode === 'first_last' && '(跳过)'}</span>
                             <button
                                 onClick={() => videoInputRef.current?.click()}
                                 disabled={disabled || uploadBusy || videos.length >= 3}
@@ -407,11 +415,14 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                             disabled={disabled}
                             className="w-full bg-n0 border border-n40 rounded px-2 py-1 text-n700"
                         >
-                            {RESOLUTION_OPTIONS.map(r => (
-                                <option key={r} value={r} disabled={r === '1080p' && value.sub_model === 'fast'}>
-                                    {r}{r === '1080p' && value.sub_model === 'fast' ? '（渡劫不支持）' : ''}
+                            {RESOLUTION_OPTIONS.map(r => {
+                                const disabledResolution = r === '1080p' && (value.sub_model === 'fast' || value.sub_model === 'mini');
+                                return (
+                                <option key={r} value={r} disabled={disabledResolution}>
+                                    {r}{disabledResolution ? `（${value.sub_model === 'mini' ? '元婴' : '渡劫'}不支持）` : ''}
                                 </option>
-                            ))}
+                                );
+                            })}
                         </select>
                     </label>
 

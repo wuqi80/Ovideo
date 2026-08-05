@@ -95,6 +95,14 @@ export function isSeedanceVideoModel(model: VideoModel): model is SeedanceVideoM
     || model === 'Seedance2Mini';
 }
 
+export function isSeedanceAgentPlanModel(model: VideoModel | SeedanceVideoModel): boolean {
+  return model === 'Seedance15';
+}
+
+export function supportsSeedanceMultimodalModel(model: VideoModel | SeedanceVideoModel): boolean {
+  return isSeedanceVideoModel(model as VideoModel) && !isSeedanceAgentPlanModel(model);
+}
+
 export function seedanceSubModelForVideoModel(model: SeedanceVideoModel | VideoModel): SeedanceParams['sub_model'] {
   if (model === 'Seedance2Fast') return 'fast';
   if (model === 'Seedance2Mini') return 'mini';
@@ -118,7 +126,7 @@ export function inferSeedanceTaskType(media: SeedanceMediaInput[], hasDraftId?: 
 
 export function normalizeSeedanceMediaForSubmission(
   media: SeedanceMediaInput[] = [],
-  agentPlanCompat: boolean = true,
+  agentPlanCompat: boolean = false,
 ): SeedanceMediaInput[] {
   if (!agentPlanCompat || !media.length) return media;
   if (media.some((m) => m.kind !== 'image')) return media;
@@ -146,12 +154,13 @@ export function normalizeSeedanceMediaForSubmission(
  * 1.5-pro 拒绝 video/audio kind 与 3+ 张图。前端拦截避免用户点了提交才报错、浪费扣费。
  *
  * 返回 null 表示可通过；返回 string 是禁用原因（同时也是按钮 tooltip）。
+ * supportsMultimodal=true 表示当前卡片所选模型是 Seedance 2.0 系列，不走 1.5 / Agent Plan 限制。
  */
 export function validateSeedanceMediaInputs(
     media: SeedanceMediaInput[],
-    seedanceOmniEnabled: boolean = false,
+    supportsMultimodal: boolean = false,
 ): string | null {
-    if (seedanceOmniEnabled) return null;
+    if (supportsMultimodal) return null;
     if (!media) return null;
     const hasVideoAudio = media.some((m) => m.kind === 'video' || m.kind === 'audio');
     if (hasVideoAudio) {

@@ -90,6 +90,68 @@ describe('Seedance model scope submission', () => {
         });
         fetchSpy.mockRestore();
     });
+
+    it('keeps Seedance Mini multimodal media roles and 15-second duration without agent-plan normalization', async () => {
+        localStorage.setItem('auth_token', 'test-token');
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(
+            JSON.stringify({ task_id: 'task_seedance_mini_multi' }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+        ));
+
+        await submitSeedanceTask({
+            sub_model: 'mini',
+            prompt: 'make a multimodal shot',
+            duration: 15,
+            media_inputs: [
+                { kind: 'image', url: '/ref-a.png', role: 'reference_image' },
+                { kind: 'image', url: '/ref-b.png', role: 'reference_image' },
+                { kind: 'video', url: '/ref.mp4', role: 'reference_video' },
+                { kind: 'audio', url: '/ref.mp3', role: 'reference_audio' },
+            ],
+            resolution: '720p',
+        });
+
+        const [, options] = fetchSpy.mock.calls[0];
+        expect(JSON.parse(String(options?.body || '{}'))).toMatchObject({
+            task_type: 'seedance_multi',
+            sub_model: 'mini',
+            duration: 15,
+            media_inputs: [
+                { kind: 'image', url: '/ref-a.png', role: 'reference_image' },
+                { kind: 'image', url: '/ref-b.png', role: 'reference_image' },
+                { kind: 'video', url: '/ref.mp4', role: 'reference_video' },
+                { kind: 'audio', url: '/ref.mp3', role: 'reference_audio' },
+            ],
+        });
+        fetchSpy.mockRestore();
+    });
+
+    it('maps two images to first and last frame only when agent-plan compatibility is enabled', async () => {
+        localStorage.setItem('auth_token', 'test-token');
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(
+            JSON.stringify({ task_id: 'task_seedance_plan_morph' }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+        ));
+
+        await submitSeedanceTask({
+            sub_model: 'standard',
+            prompt: 'morph between frames',
+            media_inputs: [
+                { kind: 'image', url: '/start.png', role: 'reference_image' },
+                { kind: 'image', url: '/end.png', role: 'reference_image' },
+            ],
+        }, undefined, undefined, true);
+
+        const [, options] = fetchSpy.mock.calls[0];
+        expect(JSON.parse(String(options?.body || '{}'))).toMatchObject({
+            task_type: 'seedance_morph',
+            media_inputs: [
+                { kind: 'image', url: '/start.png', role: 'first_frame' },
+                { kind: 'image', url: '/end.png', role: 'last_frame' },
+            ],
+        });
+        fetchSpy.mockRestore();
+    });
 });
 
 describe('ComfyUI video duration contract', () => {

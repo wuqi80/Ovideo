@@ -15,16 +15,6 @@ logger = logging.getLogger(__name__)
 
 SEEDANCE_AGENT_PLAN_MODEL = "doubao-seedance-1.5-pro"
 SEEDANCE_AGENT_PLAN_MAX_DURATION = 12
-SEEDANCE_PAYG_MODELS = frozenset(
-    {
-        "doubao-seedance-2-0-260128",
-        "doubao-seedance-2-0-fast-260128",
-        "doubao-seedance-2-0-mini-260615",
-        "doubao-seedance-2.0",
-        "doubao-seedance-2.0-fast",
-        "doubao-seedance-2.0-mini",
-    }
-)
 SEEDANCE_MODEL_AVAILABILITY_MARKERS = (
     "unsupportedmodel",
     "modelnotopen",
@@ -245,27 +235,7 @@ class SeedanceClient:
             payload.get("duration"),
         )
         try:
-            try:
-                data = self._submit_create_request(payload)
-            except Exception as exc:
-                should_fallback = (
-                    not _is_agent_plan_endpoint(self.base_url)
-                    and model_name in SEEDANCE_PAYG_MODELS
-                    and _is_model_availability_error(exc)
-                )
-                if not should_fallback:
-                    raise
-                logger.warning(
-                    "Seedance pay-as-you-go model unavailable; retrying with %s: requested=%s error=%s",
-                    SEEDANCE_AGENT_PLAN_MODEL,
-                    model_name,
-                    exc,
-                )
-                model_name = SEEDANCE_AGENT_PLAN_MODEL
-                payload["model"] = model_name
-                _apply_model_payload_compatibility(payload)
-                _validate_payload_duration(payload)
-                data = self._submit_create_request(payload)
+            data = self._submit_create_request(payload)
             task_id = data.get("id")
             if not task_id:
                 raise ValueError(f"Seedance response missing task id: {data}")

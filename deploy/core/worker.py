@@ -1289,7 +1289,7 @@ class Worker:
             if not contents:
                 raise ValueError("Seedance 任务无任何 prompt 或 media，无法生成")
 
-            # 7 参数（fast 不支持 1080p，自动降级 + warning）
+            # 7 参数（fast / mini 不支持 1080p，自动降级 + warning）
             kwargs = dict(
                 resolution=task.data.get('resolution'),
                 ratio=task.data.get('ratio') or 'adaptive',
@@ -1300,8 +1300,8 @@ class Worker:
                 camera_fixed=bool(task.data.get('camera_fixed', False)),
                 tools=task.data.get('tools') or None,
             )
-            if sub_model == 'fast' and kwargs.get('resolution') == '1080p':
-                logger.warning("⚠️ Seedance fast 不支持 1080p，自动降级到 720p")
+            if sub_model in ('fast', 'mini') and kwargs.get('resolution') == '1080p':
+                logger.warning("⚠️ Seedance %s 不支持 1080p，自动降级到 720p", sub_model)
                 kwargs['resolution'] = '720p'
 
             ark_task_id = client.create_video_task(sub_model, contents, usage_scope=model_scope, **kwargs)
@@ -1374,6 +1374,30 @@ class Worker:
                         getattr(response, "status_code", "-"),
                         str(getattr(response, "text", "") or "")[:300],
                     )
+                    try:
+                        from services.api_provider_health_monitor import cache_provider_health_result
+                        from services.api_provider_runtime import resolve_seedance_model_name
+
+                        failed_model = resolve_seedance_model_name(
+                            task.data.get("sub_model", "standard"),
+                            usage_scope=task.data.get("model_scope") or "workflow",
+                        )
+                        await cache_provider_health_result(
+                            {
+                                "provider": "seedance",
+                                "model_name": failed_model,
+                                "status": "error",
+                                "success": False,
+                                "message": task_error,
+                                "health": {
+                                    "ok": False,
+                                    "real_generation": True,
+                                    "error": task_error,
+                                },
+                            }
+                        )
+                    except Exception as cache_error:
+                        logger.debug("Seedance provider health cache update skipped: %s", cache_error)
                 await self.task_queue.fail_task(task.task_id, task_error, retry=not non_retryable)
             except Exception:
                 await self.task_queue.fail_task(task.task_id, str(e))

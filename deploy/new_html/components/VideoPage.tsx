@@ -14,10 +14,12 @@ import {
     formatVideoModelOptionLabel,
     getVideoModelRuntimeNames,
     isDashScopeVideoModel,
+    isSeedanceAgentPlanModel,
     isSeedanceVideoModel,
     makeDefaultDashScopeParams,
     normalizeMiniMaxVideoParams,
     seedanceSubModelForVideoModel,
+    supportsSeedanceMultimodalModel,
     withCurrentVideoModelOption,
     type DashScopeVideoModel,
     type DashScopeVideoParams,
@@ -99,7 +101,7 @@ import { applySyncStrategy } from '../utils/storyboardSync';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { LazyVideo } from './LazyVideo';
 import { extractSpokenDialogue } from '../utils/scriptPipelineParsers';
-import { clampSec, SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC } from '../utils/durationMapping';
+import { clampSec, DURATION_MAX_SEC, SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC } from '../utils/durationMapping';
 import {
     getVideoFrameLabel,
     resolveVideoFrameTime,
@@ -292,7 +294,6 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     });
     const [isLoading, setIsLoading] = useState(true);
     const [videoCapabilities, setVideoCapabilities] = useState<VideoCapabilityManifest | null>(null);
-    const seedanceOmniEnabled = videoCapabilities?.seedance_omni ?? false;
     useEffect(() => {
         let cancelled = false;
         const refresh = () => {
@@ -334,6 +335,20 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const isVideoModelAvailable = useCallback((model: VideoModel): boolean => (
         !videoCapabilityReady || availableVideoModelSet.has(model)
     ), [availableVideoModelSet, videoCapabilityReady]);
+    const seedanceSupportsMultimodal = useCallback(
+        (model: VideoModel): boolean => supportsSeedanceMultimodalModel(model),
+        [],
+    );
+    const getSeedanceMaxDuration = useCallback((model?: VideoModel): number => (
+        model && isSeedanceAgentPlanModel(model)
+            ? SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC
+            : DURATION_MAX_SEC
+    ), []);
+    const getSeedanceAudioReferenceNotice = useCallback((model: VideoModel): string | undefined => (
+        seedanceSupportsMultimodal(model)
+            ? undefined
+            : '当前通道会兼容到 Seedance 1.5-pro / Agent Plan，参考配音会保存到卡片，但提交时会自动忽略。'
+    ), [seedanceSupportsMultimodal]);
     const miniMaxCapability = getVideoCapability(videoCapabilities, 'MINI');
     const miniMaxModelOptions = useMemo(() => (
         getVideoModelRuntimeNames(miniMaxCapability)
@@ -498,13 +513,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         };
     }, [getVideoVoiceReferenceForGroup]);
 
-    const prepareSeedanceParamsForCapability = useCallback((params: SeedanceParams): SeedanceParams => {
-        if (seedanceOmniEnabled) return params;
+    const prepareSeedanceParamsForCapability = useCallback((model: VideoModel, params: SeedanceParams): SeedanceParams => {
+        if (seedanceSupportsMultimodal(model)) return params;
         return {
             ...params,
             media_inputs: (params.media_inputs || []).filter(media => media.kind !== 'audio'),
         };
-    }, [seedanceOmniEnabled]);
+    }, [seedanceSupportsMultimodal]);
 
     const resolveSeedanceDurationForGroup = useCallback((group: TaskGroup | undefined): number => {
         const itemId = group?.ids?.[0];
@@ -513,9 +528,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return clampSec(
             group?.duration ?? reactiveDur ?? 3,
             3,
-            SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC,
+            getSeedanceMaxDuration(group?.model),
         );
-    }, [storyboardMetaByItemId]);
+    }, [getSeedanceMaxDuration, storyboardMetaByItemId]);
 
     const syncSeedanceDuration = useCallback((group: TaskGroup | undefined, params: SeedanceParams): SeedanceParams => {
         if (!group) return params;
@@ -1942,7 +1957,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 },
             ];
             setSeedanceParams(uuid, { ...current, media_inputs: nextMedia });
-            showToast(seedanceOmniEnabled
+            showToast(seedanceSupportsMultimodal(group.model)
                 ? '已把上一条视频原声设为当前参考配音'
                 : '已保存参考配音；当前兼容通道生成时会忽略音频参考');
         } catch (error: any) {
@@ -1953,7 +1968,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         } finally {
             setReferenceAudioExtractingUuid(current => (current === uuid ? null : current));
         }
-    }, [projectId, episodeId, taskGroups, tasksStatus, showToast, getStoryboardItemId, ensureVideoSegmentId, getSeedanceParams, setSeedanceParams, seedanceOmniEnabled]);
+    }, [projectId, episodeId, taskGroups, tasksStatus, showToast, getStoryboardItemId, ensureVideoSegmentId, getSeedanceParams, setSeedanceParams, seedanceSupportsMultimodal]);
 
     const runTask = useCallback(async (uuid: string): Promise<string | null> => {
         const group = taskGroups.find(g => g.uuid === uuid);
@@ -1971,13 +1986,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         // Seedance 走多模态面板（params.media_inputs），完全跳过 prepareImage / submitTaskQueued
         if (isSeedanceModel(group.model)) {
             const rawParams = getSeedanceParams(group.uuid, group.model);
-            const capabilityParams = prepareSeedanceParamsForCapability(rawParams);
+            const supportsMultimodal = seedanceSupportsMultimodal(group.model);
+            const capabilityParams = prepareSeedanceParamsForCapability(group.model, rawParams);
             // 2026-07-11：Seedance 1.5-pro（Agent Plan 强制覆盖）仅支持单图/首尾帧。
             // 后端 seedance.py 对视频/音频 kind 和 3+ 张图会抛 ModelNotOpen，
             // 前端先拦截避免用户点了扣费再失败。
             const seedanceBlock = validateSeedanceMediaInputs(
                 capabilityParams.media_inputs,
-                seedanceOmniEnabled,
+                supportsMultimodal,
             );
             if (seedanceBlock) {
                 showToast(seedanceBlock);
@@ -1993,7 +2009,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 ? {
                     ...capabilityParams,
                     media_inputs: capabilityParams.media_inputs.filter(m =>
-                        m.kind === 'image' || (seedanceOmniEnabled && m.kind === 'audio')
+                        m.kind === 'image' || (supportsMultimodal && m.kind === 'audio')
                     ),
                 }
                 : capabilityParams;
@@ -2021,9 +2037,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     characterName,
                     referenceId: videoVoiceReference?.referenceId || null,
                     mode: videoVoiceReference
-                        ? (seedanceOmniEnabled ? 'character_video_voice' : 'unsupported_ignored')
+                        ? (supportsMultimodal ? 'character_video_voice' : 'unsupported_ignored')
                         : ((rawParams.media_inputs || []).some(media => media.kind === 'audio')
-                            ? (seedanceOmniEnabled ? 'storyboard_reference' : 'storyboard_reference_ignored')
+                            ? (supportsMultimodal ? 'storyboard_reference' : 'storyboard_reference_ignored')
                             : 'free_generation'),
                 });
                 const result = await submitSeedanceTask(params, {
@@ -2031,7 +2047,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     entity_id: entityId,
                     file_role: 'video',
                     episode_id: episodeId,
-                }, undefined, !seedanceOmniEnabled);
+                }, undefined, isSeedanceAgentPlanModel(group.model));
                 console.log('Seedance 任务提交成功:', result.task_id);
                 showToast('任务已提交');
                 startPolling(uuid, result.task_id);
@@ -2207,7 +2223,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             }));
             return null;
         }
-    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId, prepareSeedanceParamsForCapability, getCharacterNameForGroup, getVideoVoiceReferenceForGroup, seedanceOmniEnabled, isVideoModelAvailable, defaultMiniMaxVideoModel, isSeedanceModel]);
+    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId, prepareSeedanceParamsForCapability, getCharacterNameForGroup, getVideoVoiceReferenceForGroup, seedanceSupportsMultimodal, isVideoModelAvailable, defaultMiniMaxVideoModel, isSeedanceModel]);
 
     const waitForBatchVideoTask = useCallback((uuid: string): Promise<VideoBatchWaitResult> => {
         const existing = batchWaitersRef.current[uuid];
@@ -2956,8 +2972,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {(() => {
                         const seedanceBlock = isSeedanceModel(group.model)
                             ? validateSeedanceMediaInputs(
-                                prepareSeedanceParamsForCapability(getSeedanceParams(group.uuid, group.model)).media_inputs,
-                                seedanceOmniEnabled,
+                                prepareSeedanceParamsForCapability(group.model, getSeedanceParams(group.uuid, group.model)).media_inputs,
+                                seedanceSupportsMultimodal(group.model),
                             )
                             : null;
                         const running = status.state === 'running' || status.state === 'processing';
@@ -3060,6 +3076,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             currentParams: value,
             currentStoryboardItemId: storyboardItemId,
         });
+        const group = taskGroups.find(candidate => candidate.uuid === groupUuid);
+        const model = group?.model ?? 'Seedance15';
+        const supportsMultimodal = seedanceSupportsMultimodal(model);
         return (
             <React.Suspense fallback={<VideoModalFallback label="加载 Seedance 详情..." />}>
                 <SeedanceDetailModal
@@ -3071,9 +3090,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     onClose={onClose}
                     onUsePreviousVideoAudio={() => void usePreviousVideoAudioAsReference(groupUuid)}
                     previousVideoAudioBusy={referenceAudioExtractingUuid === groupUuid}
-                    audioReferenceNotice={!seedanceOmniEnabled
-                        ? '当前通道会兼容到 Seedance 1.5-pro / Agent Plan，参考配音会保存到卡片，但提交时会自动忽略。'
-                        : undefined}
+                    audioReferenceNotice={getSeedanceAudioReferenceNotice(model)}
+                    supportsMultimodal={supportsMultimodal}
                     onPreviewMedia={(url, kind) => {
                         if (kind === 'audio') { showToast('音频在浏览器新标签播放'); window.open(url, '_blank'); return; }
                         setLightboxUrl(url);
@@ -3252,8 +3270,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {(() => {
                         const seedanceBlock = isSeedanceModel(group.model)
                             ? validateSeedanceMediaInputs(
-                                prepareSeedanceParamsForCapability(getSeedanceParams(group.uuid, group.model)).media_inputs,
-                                seedanceOmniEnabled,
+                                prepareSeedanceParamsForCapability(group.model, getSeedanceParams(group.uuid, group.model)).media_inputs,
+                                seedanceSupportsMultimodal(group.model),
                             )
                             : null;
                         const running = status.state === 'running' || status.state === 'processing';
@@ -3518,7 +3536,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                     group={group}
                                     meta={m}
                                     onPatchGroup={patchTaskGroup}
-                                    maxDuration={SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC}
+                                    maxDuration={getSeedanceMaxDuration(group.model)}
                                 />
                             )}
                         </div>
@@ -3543,9 +3561,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 storyboardItemId={getStoryboardItemId(group.uuid)}
                                 onUsePreviousVideoAudio={() => void usePreviousVideoAudioAsReference(group.uuid)}
                                 previousVideoAudioBusy={referenceAudioExtractingUuid === group.uuid}
-                                audioReferenceNotice={!seedanceOmniEnabled
-                                    ? '当前通道会兼容到 Seedance 1.5-pro / Agent Plan，参考配音会保存到卡片，但提交时会自动忽略。'
-                                    : undefined}
+                                audioReferenceNotice={getSeedanceAudioReferenceNotice(group.model)}
+                                supportsMultimodal={seedanceSupportsMultimodal(group.model)}
                                 onPreviewMedia={(url, kind) => {
                                     if (kind === 'audio') { showToast('音频点击预览（请在浏览器新标签播放）'); window.open(url, '_blank'); return; }
                                     setLightboxUrl(url);

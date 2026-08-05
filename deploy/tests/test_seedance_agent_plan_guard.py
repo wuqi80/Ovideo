@@ -289,7 +289,7 @@ def test_seedance_agent_plan_t2v_keeps_duration(monkeypatch):
         ("mini", "doubao-seedance-2-0-mini-260615"),
     ],
 )
-def test_seedance_payg_falls_back_to_15_for_model_availability_errors(
+def test_seedance_payg_model_availability_error_does_not_fallback(
     monkeypatch,
     sub_model,
     resolved_model,
@@ -322,13 +322,13 @@ def test_seedance_payg_falls_back_to_15_for_model_availability_errors(
     monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
     client = seedance_module.SeedanceClient()
 
-    task_id = client.create_video_task(sub_model, [{"type": "text", "text": "test"}])
+    with pytest.raises(RuntimeError, match="ModelNotOpen"):
+        client.create_video_task(sub_model, [{"type": "text", "text": "test"}])
 
-    assert task_id == "payg-fallback-task"
-    assert submitted_models == [resolved_model, "doubao-seedance-1.5-pro"]
+    assert submitted_models == [resolved_model]
 
 
-def test_seedance_payg_fallback_to_agent_plan_i2v_keeps_duration_until_rejected(monkeypatch):
+def test_seedance_payg_i2v_model_availability_error_does_not_fallback(monkeypatch):
     monkeypatch.setattr(
         seedance_module,
         "resolve_provider",
@@ -357,20 +357,79 @@ def test_seedance_payg_fallback_to_agent_plan_i2v_keeps_duration_until_rejected(
     monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
     client = seedance_module.SeedanceClient()
 
-    task_id = client.create_video_task(
-        "standard",
-        [
-            {"type": "text", "text": "move gently"},
-            {"type": "image_url", "image_url": {"url": "https://cdn.example.test/frame.png"}},
-        ],
-        duration=5,
-    )
+    with pytest.raises(RuntimeError, match="ModelNotOpen"):
+        client.create_video_task(
+            "standard",
+            [
+                {"type": "text", "text": "move gently"},
+                {"type": "image_url", "image_url": {"url": "https://cdn.example.test/frame.png"}},
+            ],
+            duration=5,
+        )
 
-    assert task_id == "payg-fallback-i2v-task"
+    assert len(submitted_payloads) == 1
     assert submitted_payloads[0]["model"] == "doubao-seedance-2-0-260128"
     assert submitted_payloads[0]["duration"] == 5
-    assert submitted_payloads[1]["model"] == "doubao-seedance-1.5-pro"
-    assert submitted_payloads[1]["duration"] == 5
+
+
+def test_seedance_payg_mini_preserves_multimodal_payload_and_15s_duration(monkeypatch):
+    monkeypatch.setattr(
+        seedance_module,
+        "resolve_provider",
+        lambda provider, model=None: _PayAsYouGoResolvedConfig(),
+    )
+    monkeypatch.setattr(
+        seedance_module,
+        "resolve_seedance_model_name",
+        lambda requested_sub_model: "doubao-seedance-2-0-mini-260615",
+    )
+    request_payload = {}
+
+    def fake_request_json(*args, **kwargs):
+        request_payload.update(kwargs["json"])
+        return {"id": "payg-mini-multimodal-task"}
+
+    monkeypatch.setattr(seedance_module, "request_json", fake_request_json)
+    client = seedance_module.SeedanceClient()
+
+    task_id = client.create_video_task(
+        "mini",
+        [
+            {"type": "text", "text": "move gently"},
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://cdn.example.test/ref-a.png"},
+                "role": "reference_image",
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": "https://cdn.example.test/ref-b.png"},
+                "role": "reference_image",
+            },
+            {
+                "type": "video_url",
+                "video_url": {"url": "https://cdn.example.test/ref.mp4"},
+                "role": "reference_video",
+            },
+            {
+                "type": "audio_url",
+                "audio_url": {"url": "https://cdn.example.test/ref.mp3"},
+                "role": "reference_audio",
+            },
+        ],
+        duration=15,
+        resolution="720p",
+    )
+
+    assert task_id == "payg-mini-multimodal-task"
+    assert request_payload["model"] == "doubao-seedance-2-0-mini-260615"
+    assert request_payload["duration"] == 15
+    assert [item.get("role") for item in request_payload["content"][1:]] == [
+        "reference_image",
+        "reference_image",
+        "reference_video",
+        "reference_audio",
+    ]
 
 
 def test_seedance_rejects_invalid_duration_without_retry(monkeypatch):

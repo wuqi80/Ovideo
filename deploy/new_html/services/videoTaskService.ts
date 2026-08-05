@@ -662,7 +662,7 @@ export async function submitSeedanceTask(
         episode_id?: string;
     },
     draftTaskId?: string,
-    agentPlanCompat: boolean = true,
+    agentPlanCompat: boolean = false,
 ): Promise<{ task_id: string }> {
     // fast / mini 子型号不使用 1080p：前端兜底降级，配合后端二次校验
     const resolution = ((params.sub_model === 'fast' || params.sub_model === 'mini') && params.resolution === '1080p')
