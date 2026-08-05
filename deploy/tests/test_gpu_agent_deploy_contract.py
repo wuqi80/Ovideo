@@ -51,6 +51,11 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert "requests.get" in source
     assert "timeout=(30, 60)" in source
     assert "CHUNK_SIZE = 1 * 1024 * 1024" in source
+    assert "CONNECT_FAILURE_LIMIT = 2" in source
+    assert "skipping endpoint after repeated connection failures" in source
+    assert "download connection failed" in source
+    assert "for attempt in range(1, args.attempts + 1):" in source
+    assert "for base in endpoints:" in source
     assert source.index('"https://huggingface.co"') < source.index('"https://hf-mirror.com"')
     assert '"Range"' in source
     assert '"Content-Range"' in source

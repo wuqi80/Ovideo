@@ -134,6 +134,7 @@ import requests
 
 CHUNK_SIZE = 1 * 1024 * 1024
 LOG_EVERY_BYTES = 64 * 1024 * 1024
+CONNECT_FAILURE_LIMIT = 2
 
 
 def now():
@@ -268,17 +269,37 @@ def main():
         write_log(args.log, f"already present without expected size: {args.relative_path}")
         return 0
 
+    endpoints = []
     for endpoint in args.endpoint:
         base = endpoint.rstrip("/")
-        url = f"{base}/{args.repo_id}/resolve/main/{args.relative_path}"
-        for attempt in range(1, args.attempts + 1):
+        if base and base not in endpoints:
+            endpoints.append(base)
+
+    connect_failures = {base: 0 for base in endpoints}
+    skipped_connectivity = set()
+    for attempt in range(1, args.attempts + 1):
+        any_endpoint_tried = False
+        for base in endpoints:
+            if connect_failures.get(base, 0) >= CONNECT_FAILURE_LIMIT:
+                if base not in skipped_connectivity:
+                    write_log(args.log, f"skipping endpoint after repeated connection failures: {base}")
+                    skipped_connectivity.add(base)
+                continue
+            any_endpoint_tried = True
+            url = f"{base}/{args.repo_id}/resolve/main/{args.relative_path}"
             try:
                 if download_once(url, target, partial, args.expected_size, args.token, args.log, args.relative_path):
                     write_log(args.log, f"download complete: {args.relative_path}")
                     return 0
+            except (requests.exceptions.ConnectTimeout, requests.exceptions.ConnectionError) as exc:
+                connect_failures[base] = connect_failures.get(base, 0) + 1
+                write_log(args.log, f"download connection failed ({base}, attempt {attempt}/{args.attempts}, connection_failures={connect_failures[base]}/{CONNECT_FAILURE_LIMIT}): {type(exc).__name__}: {exc}")
             except Exception as exc:
                 write_log(args.log, f"download attempt failed ({base}, attempt {attempt}/{args.attempts}): {type(exc).__name__}: {exc}")
-            time.sleep(10)
+        if not any_endpoint_tried:
+            write_log(args.log, "all endpoints skipped after repeated connection failures")
+            break
+        time.sleep(10)
     write_log(args.log, f"download failed after all endpoints: {args.relative_path}")
     return 2
 
