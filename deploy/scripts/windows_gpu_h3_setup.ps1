@@ -122,70 +122,55 @@ function Download-H3Models {
     }
     $modelsRoot = Join-Path $ComfyRoot "models"
     New-Item -ItemType Directory -Force -Path $modelsRoot | Out-Null
-    $filesJson = ($ModelFiles | ConvertTo-Json -Compress)
     $endpoints = New-Object System.Collections.Generic.List[string]
     if ($HuggingFaceEndpoint) {
         $endpoints.Add($HuggingFaceEndpoint)
     }
     $endpoints.Add("https://hf-mirror.com")
     $endpoints.Add("https://huggingface.co")
-    $endpointsJson = (($endpoints | Select-Object -Unique) | ConvertTo-Json -Compress)
-    $downloadScriptPath = Join-Path $InstallRoot "h3_download_models.py"
-    $pythonScript = @"
-import json
-import os
-from pathlib import Path
-import time
-from huggingface_hub import hf_hub_download
+    $uniqueEndpoints = $endpoints | Select-Object -Unique
+    $downloadLog = Join-Path $Logs "h3-download.log"
+    "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Starting MiniMax H3 model downloads" | Add-Content -LiteralPath $downloadLog -Encoding UTF8
 
-repo_id = "Comfy-Org/MiniMax-H3"
-local_dir = r"$modelsRoot"
-files = json.loads(r'''$filesJson''')
-endpoints = json.loads(r'''$endpointsJson''')
-token = os.environ.get("HF_TOKEN") or None
-os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "60")
-os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "120")
-for filename in files:
-    target = Path(local_dir) / filename
-    if target.exists() and target.stat().st_size > 0:
-        print(f"Already present {filename}: {target.stat().st_size} bytes")
-        continue
-    errors = []
-    for attempt in range(1, 4):
-        for endpoint in endpoints:
-            try:
-                print(f"Downloading {repo_id}/{filename} via {endpoint} attempt {attempt}/3")
-                hf_hub_download(
-                    repo_id=repo_id,
-                    filename=filename,
-                    local_dir=local_dir,
-                    local_dir_use_symlinks=False,
-                    token=token,
-                    endpoint=endpoint,
-                    resume_download=True,
-                )
-                if target.exists() and target.stat().st_size > 0:
-                    break
-                raise RuntimeError(f"download finished but target is missing or empty: {target}")
-            except Exception as exc:
-                errors.append(f"{endpoint} attempt {attempt}: {type(exc).__name__}: {exc}")
-                print(errors[-1])
-                time.sleep(min(10 * attempt, 30))
-        if target.exists() and target.stat().st_size > 0:
-            print(f"Downloaded {filename}: {target.stat().st_size} bytes")
-            break
-    if not (target.exists() and target.stat().st_size > 0):
-        raise RuntimeError("Failed to download " + filename + "\n" + "\n".join(errors[-8:]))
-"@
-    $pythonScript | Set-Content -LiteralPath $downloadScriptPath -Encoding UTF8
-    if ($HuggingFaceToken) {
-        $env:HF_TOKEN = $HuggingFaceToken
-    }
-    $env:HF_HUB_ETAG_TIMEOUT = "60"
-    $env:HF_HUB_DOWNLOAD_TIMEOUT = "120"
-    & $H3Python -s $downloadScriptPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "MiniMax H3 model download failed"
+    foreach ($relativePath in $ModelFiles) {
+        $windowsRelativePath = $relativePath -replace "/", "\"
+        $target = Join-Path $modelsRoot $windowsRelativePath
+        $targetDir = Split-Path -Parent $target
+        New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+        if ((Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target).Length -gt 0)) {
+            Write-Step "H3 model already present: $relativePath"
+            continue
+        }
+
+        $downloaded = $false
+        foreach ($endpoint in $uniqueEndpoints) {
+            $base = $endpoint.TrimEnd("/")
+            $url = "$base/Comfy-Org/MiniMax-H3/resolve/main/$relativePath"
+            Write-Step "Downloading H3 model via ${base}: $relativePath"
+            "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] curl $url -> $target" | Add-Content -LiteralPath $downloadLog -Encoding UTF8
+            & curl.exe `
+                -L `
+                --fail `
+                --retry 12 `
+                --retry-all-errors `
+                --retry-delay 10 `
+                --connect-timeout 30 `
+                --speed-time 60 `
+                --speed-limit 1024 `
+                --continue-at - `
+                --output "$target" `
+                "$url" 2>&1 | Tee-Object -FilePath $downloadLog -Append
+            $curlExit = $LASTEXITCODE
+            if ($curlExit -eq 0 -and (Test-Path -LiteralPath $target) -and ((Get-Item -LiteralPath $target).Length -gt 0)) {
+                Write-Step "Downloaded H3 model: $relativePath"
+                $downloaded = $true
+                break
+            }
+            Write-Step "H3 model download attempt failed with curl exit ${curlExit}: $relativePath"
+        }
+        if (-not $downloaded) {
+            throw "MiniMax H3 model download failed: $relativePath"
+        }
     }
 }
 

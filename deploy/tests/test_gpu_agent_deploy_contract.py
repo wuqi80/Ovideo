@@ -42,10 +42,10 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert 'foreach ($candidate in @($AgentStartCmd, $LegacyAgentStartCmd))' in source
     assert "MECHA GPU ComfyUI H3 LAN" in source
     assert "NoAgentRestart" in source
-    assert '$downloadScriptPath = Join-Path $InstallRoot "h3_download_models.py"' in source
-    assert "& $H3Python -s $downloadScriptPath" in source
     assert "-c $pythonScript" not in source
     assert "HuggingFaceEndpoint" in source
     assert "https://hf-mirror.com" in source
-    assert "HF_HUB_ETAG_TIMEOUT" in source
-    assert "resume_download=True" in source
+    assert 'h3-download.log' in source
+    assert "& curl.exe" in source
+    assert "--continue-at" in source
+    assert "--speed-time 60" in source
