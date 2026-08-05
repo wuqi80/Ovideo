@@ -120,6 +120,175 @@ function Install-PythonRequirements {
     }
 }
 
+function Install-H3ModelDownloader {
+    $downloader = Join-Path $ScriptsRoot "h3_model_downloader.py"
+    @'
+import argparse
+import os
+import re
+import time
+from pathlib import Path
+
+import requests
+
+
+CHUNK_SIZE = 8 * 1024 * 1024
+LOG_EVERY_BYTES = 256 * 1024 * 1024
+
+
+def now():
+    return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def write_log(log_path, message):
+    with open(log_path, "a", encoding="utf-8") as handle:
+        handle.write(f"[{now()}] {message}\n")
+
+
+def size_of(path):
+    try:
+        return Path(path).stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
+def infer_expected_total(response, offset):
+    content_range = response.headers.get("Content-Range", "")
+    match = re.search(r"/(\d+)$", content_range)
+    if match:
+        return int(match.group(1))
+    content_length = response.headers.get("Content-Length", "")
+    if content_length.isdigit():
+        length = int(content_length)
+        if response.status_code == 206:
+            return offset + length
+        return length
+    return 0
+
+
+def normalize_existing(target, partial, expected_size, log_path, relative_path):
+    target_size = size_of(target)
+    if target_size <= 0:
+        return
+    if expected_size > 0 and target_size == expected_size:
+        return
+    if expected_size <= 0:
+        return
+    partial_size = size_of(partial)
+    write_log(log_path, f"existing target incomplete; moving to part for resume: {relative_path} ({target_size}/{expected_size} bytes)")
+    if partial_size >= target_size:
+        Path(target).unlink(missing_ok=True)
+    else:
+        os.replace(target, partial)
+
+
+def download_once(url, target, partial, expected_size, token, log_path, relative_path):
+    partial_path = Path(partial)
+    offset = size_of(partial_path)
+    headers = {
+        "Accept-Encoding": "identity",
+        "User-Agent": "MECHA-GPU-H3-downloader/1.0",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    if offset > 0:
+        headers["Range"] = f"bytes={offset}-"
+
+    write_log(log_path, f"python requests {url} -> {partial} (offset={offset})")
+    with requests.get(url, headers=headers, stream=True, timeout=(30, 60), allow_redirects=True) as response:
+        if offset > 0 and response.status_code == 200:
+            write_log(log_path, f"server ignored Range; restarting partial file: {relative_path}")
+            partial_path.unlink(missing_ok=True)
+            offset = 0
+            mode = "wb"
+        elif response.status_code == 206:
+            mode = "ab"
+        elif response.status_code == 200:
+            mode = "wb"
+        elif response.status_code == 416 and expected_size > 0 and offset == expected_size:
+            os.replace(partial, target)
+            return True
+        else:
+            response.raise_for_status()
+            mode = "ab" if offset else "wb"
+
+        effective_expected_size = expected_size
+        inferred_size = infer_expected_total(response, offset)
+        if effective_expected_size <= 0 and inferred_size > 0:
+            effective_expected_size = inferred_size
+            write_log(log_path, f"inferred expected size from response: {relative_path} {effective_expected_size} bytes")
+
+        written_since_log = 0
+        with open(partial_path, mode + ("" if "b" in mode else "b")) as handle:
+            for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
+                if not chunk:
+                    continue
+                handle.write(chunk)
+                handle.flush()
+                written_since_log += len(chunk)
+                if written_since_log >= LOG_EVERY_BYTES:
+                    write_log(log_path, f"download progress: {relative_path} {size_of(partial_path)} bytes")
+                    written_since_log = 0
+
+    partial_size = size_of(partial_path)
+    if effective_expected_size > 0:
+        if partial_size == effective_expected_size:
+            os.replace(partial, target)
+            return True
+        write_log(log_path, f"partial incomplete after response: {relative_path} ({partial_size}/{effective_expected_size} bytes)")
+        return False
+    if partial_size > 0:
+        os.replace(partial, target)
+        return True
+    return False
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo-id", required=True)
+    parser.add_argument("--relative-path", required=True)
+    parser.add_argument("--target", required=True)
+    parser.add_argument("--log", required=True)
+    parser.add_argument("--endpoint", action="append", required=True)
+    parser.add_argument("--expected-size", type=int, default=0)
+    parser.add_argument("--token", default="")
+    parser.add_argument("--attempts", type=int, default=12)
+    args = parser.parse_args()
+
+    target = Path(args.target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = Path(str(target) + ".part")
+    normalize_existing(target, partial, args.expected_size, args.log, args.relative_path)
+
+    target_size = size_of(target)
+    if args.expected_size > 0 and target_size == args.expected_size:
+        write_log(args.log, f"already complete: {args.relative_path}")
+        return 0
+    if args.expected_size <= 0 and target_size > 0:
+        write_log(args.log, f"already present without expected size: {args.relative_path}")
+        return 0
+
+    for endpoint in args.endpoint:
+        base = endpoint.rstrip("/")
+        url = f"{base}/{args.repo_id}/resolve/main/{args.relative_path}"
+        for attempt in range(1, args.attempts + 1):
+            try:
+                if download_once(url, target, partial, args.expected_size, args.token, args.log, args.relative_path):
+                    write_log(args.log, f"download complete: {args.relative_path}")
+                    return 0
+            except Exception as exc:
+                write_log(args.log, f"download attempt failed ({base}, attempt {attempt}/{args.attempts}): {type(exc).__name__}: {exc}")
+            time.sleep(10)
+    write_log(args.log, f"download failed after all endpoints: {args.relative_path}")
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'@ | Set-Content -LiteralPath $downloader -Encoding UTF8
+    return $downloader
+}
+
 function Download-H3Models {
     if ($SkipModelDownloads) {
         Write-Step "Skipping H3 model downloads by request"
@@ -135,6 +304,7 @@ function Download-H3Models {
     $endpoints.Add("https://huggingface.co")
     $uniqueEndpoints = $endpoints | Select-Object -Unique
     $downloadLog = Join-Path $Logs "h3-download.log"
+    $downloader = Install-H3ModelDownloader
     "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Starting MiniMax H3 model downloads" | Add-Content -LiteralPath $downloadLog -Encoding UTF8
 
     foreach ($relativePath in $ModelFiles) {
@@ -161,44 +331,34 @@ function Download-H3Models {
             }
         }
 
-        $downloaded = $false
+        $downloadArgs = @(
+            "-s",
+            $downloader,
+            "--repo-id",
+            "Comfy-Org/MiniMax-H3",
+            "--relative-path",
+            $relativePath,
+            "--target",
+            $target,
+            "--log",
+            $downloadLog
+        )
         foreach ($endpoint in $uniqueEndpoints) {
-            $base = $endpoint.TrimEnd("/")
-            $url = "$base/Comfy-Org/MiniMax-H3/resolve/main/$relativePath"
-            Write-Step "Downloading H3 model via ${base}: $relativePath"
-            "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] curl $url -> $partialTarget" | Add-Content -LiteralPath $downloadLog -Encoding UTF8
-            & curl.exe `
-                -L `
-                --fail `
-                --silent `
-                --show-error `
-                --retry 12 `
-                --retry-all-errors `
-                --retry-delay 10 `
-                --connect-timeout 30 `
-                --max-time 14400 `
-                --speed-time 60 `
-                --speed-limit 1024 `
-                --continue-at - `
-                --output "$partialTarget" `
-                "$url" >> $downloadLog 2>&1
-            $curlExit = $LASTEXITCODE
-            if ($curlExit -eq 0 -and (Test-Path -LiteralPath $partialTarget) -and ((Get-Item -LiteralPath $partialTarget).Length -gt 0)) {
-                $partialSize = [Int64](Get-Item -LiteralPath $partialTarget).Length
-                if ($expectedSize -gt 0 -and $partialSize -ne $expectedSize) {
-                    Write-Step "H3 model download size mismatch after curl success: $relativePath ($partialSize/$expectedSize bytes)"
-                    continue
-                }
-                Move-Item -LiteralPath $partialTarget -Destination $target -Force
-                Write-Step "Downloaded H3 model: $relativePath"
-                $downloaded = $true
-                break
-            }
-            Write-Step "H3 model download attempt failed with curl exit ${curlExit}: $relativePath"
+            $downloadArgs += @("--endpoint", $endpoint.TrimEnd("/"))
         }
-        if (-not $downloaded) {
+        if ($expectedSize -gt 0) {
+            $downloadArgs += @("--expected-size", "$expectedSize")
+        }
+        if ($HuggingFaceToken) {
+            $downloadArgs += @("--token", $HuggingFaceToken)
+        }
+
+        Write-Step "Downloading H3 model with resumable Python downloader: $relativePath"
+        & $H3Python @downloadArgs
+        if ($LASTEXITCODE -ne 0) {
             throw "MiniMax H3 model download failed: $relativePath"
         }
+        Write-Step "Downloaded H3 model: $relativePath"
     }
 }
 

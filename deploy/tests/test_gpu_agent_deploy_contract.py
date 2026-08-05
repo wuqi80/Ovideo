@@ -46,14 +46,15 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert "HuggingFaceEndpoint" in source
     assert "https://hf-mirror.com" in source
     assert 'h3-download.log' in source
-    assert "& curl.exe" in source
-    assert "--silent" in source
-    assert "--show-error" in source
-    assert "--continue-at" in source
-    assert "--max-time 14400" in source
-    assert "--speed-time 60" in source
     assert "Tee-Object" not in source
-    assert '>> $downloadLog 2>&1' in source
+    assert "h3_model_downloader.py" in source
+    assert "requests.get" in source
+    assert "timeout=(30, 60)" in source
+    assert '"Range"' in source
+    assert '"Content-Range"' in source
+    assert '"Content-Length"' in source
+    assert "iter_content" in source
+    assert "downloadArgs" in source
     assert 'part' in source
     assert 'ModelExpectedSizes' in source
     assert '20970379616' in source
