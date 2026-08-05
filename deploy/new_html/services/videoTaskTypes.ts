@@ -44,6 +44,9 @@ export interface MergedCardSnapshot {
   ids: string[];
   model: VideoModel;
   prompt: string;
+  shotType?: ShotType;
+  duration?: number;
+  durationUserOverride?: boolean;
   seedanceParams?: SeedanceParams;
   dashScopeParams?: DashScopeVideoParams;
 }

@@ -94,7 +94,7 @@ import { buildVideoTaskImport } from '../utils/videoTaskImport';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
 import { resolveVideoImageIdentifier } from '../utils/videoImageIdentifier';
 import { hasStoredVideoResult, mergeStoredVideoResult } from '../utils/videoResultPresentation';
-import { canCreateFirstLastPair, canMergeAdjacentGroups } from '../utils/videoTaskMerge';
+import { buildDownwardMergePlan, canCreateFirstLastPair } from '../utils/videoTaskMerge';
 import { useSeedanceCandidates } from '../hooks/useSeedanceCandidates';
 import type { SyncMode } from './video/StoryboardSyncModal';
 import { applySyncStrategy } from '../utils/storyboardSync';
@@ -1578,20 +1578,150 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         (m: VideoModel) => isSeedanceModel(m) || isDashScopeVideoModel(m),
         [isSeedanceModel],
     );
-    // 相邻 + 同模型 + 可合并模型，才允许把 index 与 index+1 合并
+    const storyboardSegmentKeyByItemId = useMemo(() => {
+        const map = new Map<string, string>();
+        const normalizeItemId = (item: any): string => String(item?.item_id ?? item?.itemId ?? '').trim();
+        const parseSegmentKey = (item: any): string => {
+            const explicit = String(
+                item?.script_segment_id
+                ?? item?.scriptSegmentId
+                ?? item?.segment_key
+                ?? item?.segmentKey
+                ?? item?.segment_id
+                ?? item?.segmentId
+                ?? '',
+            ).trim();
+            if (explicit) return explicit;
+            const rawShot = String(
+                item?.shot_number
+                ?? item?.shotNumber
+                ?? item?.localShotLabel
+                ?? item?.title
+                ?? '',
+            );
+            const match = rawShot.match(/(?:镜头|分镜)?\s*0*(\d+)\s*[-－—]/);
+            return match ? `storyboard-segment-${Number(match[1])}` : '';
+        };
+        storyboardItems.forEach((item: any) => {
+            const itemId = normalizeItemId(item);
+            const segmentKey = parseSegmentKey(item);
+            if (itemId && segmentKey) map.set(itemId, segmentKey);
+        });
+        return map;
+    }, [storyboardItems]);
+
+    const getStoryboardItemIdForImageId = useCallback((imageId: string): string => {
+        const img = uploadedImages.find(candidate => candidate.id === imageId);
+        return String(img?.storyboardItemId || imageId || '').trim();
+    }, [uploadedImages]);
+
+    const getGroupSegmentKey = useCallback((group: TaskGroup): string | null => {
+        const firstImageId = group.ids?.[0] || '';
+        const itemId = getStoryboardItemIdForImageId(firstImageId);
+        const segmentKey = storyboardSegmentKeyByItemId.get(itemId);
+        if (segmentKey) return segmentKey;
+
+        const img = uploadedImages.find(candidate => candidate.id === firstImageId);
+        const looksLikeStoryboardCard = Boolean(
+            img?.storyboardItemId
+            || storyboardMetaByItemId[itemId]
+            || /^sb[_-]/i.test(itemId),
+        );
+        // If a card clearly came from storyboard/script but the segment map is
+        // not available yet, keep it isolated instead of allowing no-key cards
+        // to merge across script segment boundaries.
+        return looksLikeStoryboardCard ? `storyboard-item:${itemId}` : null;
+    }, [getStoryboardItemIdForImageId, storyboardSegmentKeyByItemId, uploadedImages, storyboardMetaByItemId]);
+
+    const getMetaDurationSecondsForImageId = useCallback((imageId: string): number | null => {
+        const itemId = getStoryboardItemIdForImageId(imageId);
+        const meta = itemId ? storyboardMetaByItemId[itemId] : undefined;
+        if (!meta) return null;
+        const duration = computeReactiveDurationFromMeta(meta);
+        return Number.isFinite(duration) && duration > 0 ? duration : null;
+    }, [getStoryboardItemIdForImageId, storyboardMetaByItemId]);
+
+    const getGroupMergeDuration = useCallback((group: TaskGroup): number => {
+        const fromSnapshots = (group.mergedFrom || [])
+            .map(child => Number(child.duration))
+            .filter(duration => Number.isFinite(duration) && duration > 0);
+        if (group.mergedFrom?.length && fromSnapshots.length === group.mergedFrom.length) {
+            return fromSnapshots.reduce((sum, duration) => sum + duration, 0);
+        }
+
+        if (group.mergedFrom?.length) {
+            const fromIds = (group.ids || [])
+                .map(id => getMetaDurationSecondsForImageId(id))
+                .filter((duration): duration is number => duration != null);
+            if (fromIds.length > 0) {
+                return fromIds.reduce((sum, duration) => sum + duration, 0);
+            }
+        }
+
+        const ownDuration = Number(group.duration);
+        if (Number.isFinite(ownDuration) && ownDuration > 0) return ownDuration;
+
+        if ((group.ids || []).length === 1) {
+            const fromMeta = getMetaDurationSecondsForImageId(group.ids[0]);
+            if (fromMeta != null) return fromMeta;
+        }
+
+        return 5;
+    }, [getMetaDurationSecondsForImageId]);
+
+    const getDownwardMergePlan = useCallback((index: number) => {
+        const group = taskGroups[index];
+        const maxDurationSeconds = group && isSeedanceAgentPlanModel(group.model)
+            ? SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC
+            : DURATION_MAX_SEC;
+        return buildDownwardMergePlan(taskGroups, index, {
+            isMergeableModel,
+            getSegmentKey: getGroupSegmentKey,
+            getDurationSeconds: getGroupMergeDuration,
+            maxDurationSeconds,
+        });
+    }, [taskGroups, isMergeableModel, getGroupSegmentKey, getGroupMergeDuration]);
+
+    // 同一剧本分段内存在向下候选时按钮可点击；具体超时长/模型不一致在点击后给出明确提示。
     const canMergeWithNext = useCallback((index: number): boolean => {
-        return canMergeAdjacentGroups(taskGroups, index, isMergeableModel);
-    }, [taskGroups, isMergeableModel]);
+        return getDownwardMergePlan(index).hasDownwardTarget;
+    }, [getDownwardMergePlan]);
 
     const mergeWithNext = useCallback((index: number) => {
         if (index < 0 || index >= taskGroups.length - 1) return;
-        const A = taskGroups[index];
-        const B = taskGroups[index + 1];
-        if (!A || !B) return;
-        if (A.model !== B.model) { showToast('只能合并相邻且模型相同的卡片'); return; }
-        if (!isMergeableModel(A.model)) { showToast('仅 飞升/渡劫(Seedance) 与 合体/大乘/炼虚(Kling/Vidu/炼气) 卡片支持合并'); return; }
+        const plan = getDownwardMergePlan(index);
+        const A = plan.groups[0];
+        if (!A) return;
+        if (!plan.hasDownwardTarget) {
+            showToast('当前卡片下方没有可合并的同分段卡片');
+            return;
+        }
+        if (plan.blockedReason === 'model_mismatch') {
+            showToast('同一分段内只能合并相同视频模型的卡片');
+            return;
+        }
+        if (plan.blockedReason === 'unsupported_model') {
+            showToast('当前视频模型暂不支持合并，请切换到支持多图参考的视频模型');
+            return;
+        }
+        if (plan.blockedReason === 'duration_exceeded') {
+            showToast(`当前分段合并后约 ${plan.totalDuration} 秒，超过 ${plan.maxDuration} 秒，请先拆分后再生成`);
+            return;
+        }
+        if (!plan.canMerge || plan.groups.length < 2) return;
 
+        const groupsToMerge = plan.groups;
         const isDS = isDashScopeVideoModel(A.model);
+        const snapshotDuration = (snapshot: MergedCardSnapshot): number | undefined => {
+            const ownDuration = Number(snapshot.duration);
+            if (Number.isFinite(ownDuration) && ownDuration > 0) return ownDuration;
+            const fromIds = (snapshot.ids || [])
+                .map(id => getMetaDurationSecondsForImageId(id))
+                .filter((duration): duration is number => duration != null);
+            return fromIds.length > 0
+                ? fromIds.reduce((sum, duration) => sum + duration, 0)
+                : undefined;
+        };
         // 取一卡的当前有效参数快照（用于拆分还原）
         const snap = (g: TaskGroup): MergedCardSnapshot => {
             const ds = isDashScopeVideoModel(g.model);
@@ -1601,6 +1731,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 uuid: g.uuid,
                 ids: [...g.ids],
                 model: g.model,
+                shotType: g.shotType,
+                duration: getGroupMergeDuration(g),
+                durationUserOverride: g.durationUserOverride,
                 prompt: ds ? (dash?.prompt || '') : (seed?.prompt || ''),
                 seedanceParams: seed,
                 dashScopeParams: dash,
@@ -1608,48 +1741,96 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         };
         // 若本身已是合并卡，展开其 mergedFrom，从而支持多次合并后整体拆回原始子卡
         const childrenOf = (g: TaskGroup): MergedCardSnapshot[] =>
-            (g.mergedFrom && g.mergedFrom.length) ? g.mergedFrom : [snap(g)];
-        const mergedFrom = [...childrenOf(A), ...childrenOf(B)];
+            (g.mergedFrom && g.mergedFrom.length)
+                ? g.mergedFrom.map(child => ({ ...child, duration: child.duration ?? snapshotDuration(child) }))
+                : [snap(g)];
+        const mergedFrom = groupsToMerge.flatMap(childrenOf);
+        const mergedIds = groupsToMerge.flatMap(g => g.ids || []);
 
         if (isDS) {
-            const pA = getDashScopeParams(A.uuid, A.model as DashScopeVideoModel);
-            const pB = getDashScopeParams(B.uuid, B.model as DashScopeVideoModel);
-            const mergedPrompt = [pA.prompt, pB.prompt].filter(Boolean).join('\n');
-            const mergedMedia = [...(pA.media_inputs || []), ...(pB.media_inputs || [])];
+            const params = groupsToMerge.map(g => getDashScopeParams(g.uuid, g.model as DashScopeVideoModel));
+            const firstParams = params[0];
+            const mergedPrompt = params.map(p => p.prompt).filter(Boolean).join('\n');
+            const mergedMedia = params.flatMap(p => p.media_inputs || []);
             setDashScopeParamsByUuid(prev => {
-                const next = { ...prev, [A.uuid]: { ...pA, prompt: mergedPrompt, media_inputs: mergedMedia } };
-                delete next[B.uuid];
+                const next = {
+                    ...prev,
+                    [A.uuid]: {
+                        ...firstParams,
+                        prompt: mergedPrompt,
+                        media_inputs: mergedMedia,
+                        duration: plan.totalDuration,
+                        hh_duration: plan.totalDuration,
+                    },
+                };
+                groupsToMerge.slice(1).forEach(g => { delete next[g.uuid]; });
                 return next;
             });
         } else {
-            const pA = getSeedanceParams(A.uuid, A.model);
-            const pB = getSeedanceParams(B.uuid, B.model);
-            const mergedPrompt = [pA.prompt, pB.prompt].filter(Boolean).join('\n');
-            const mergedMedia = [...(pA.media_inputs || []), ...(pB.media_inputs || [])];
+            const params = groupsToMerge.map(g => getSeedanceParams(g.uuid, g.model));
+            const firstParams = params[0];
+            const mergedPrompt = params.map(p => p.prompt).filter(Boolean).join('\n');
+            const mergedMedia = params.flatMap(p => p.media_inputs || []);
             setSeedanceParamsByUuid(prev => {
-                const next = { ...prev, [A.uuid]: { ...pA, prompt: mergedPrompt, media_inputs: mergedMedia } };
-                delete next[B.uuid];
+                const next = {
+                    ...prev,
+                    [A.uuid]: {
+                        ...firstParams,
+                        prompt: mergedPrompt,
+                        media_inputs: mergedMedia,
+                        duration: plan.totalDuration,
+                    },
+                };
+                groupsToMerge.slice(1).forEach(g => { delete next[g.uuid]; });
                 return next;
             });
         }
 
         setTaskGroups(prev => {
             const next = [...prev];
-            const a = next[index];
-            const b = next[index + 1];
-            if (!a || !b || a.uuid !== A.uuid || b.uuid !== B.uuid) return prev; // stale guard
-            next.splice(index, 2, { ...a, ids: [...a.ids, ...b.ids], mergedFrom });
+            const current = next[index];
+            if (!current || current.uuid !== A.uuid) return prev; // stale guard
+            const stale = groupsToMerge.some((g, offset) => next[index + offset]?.uuid !== g.uuid);
+            if (stale) return prev;
+            next.splice(index, groupsToMerge.length, {
+                ...current,
+                ids: mergedIds,
+                duration: plan.totalDuration,
+                durationUserOverride: true,
+                mergedFrom,
+            });
             return next;
         });
-        setTasksStatus(prev => { const n = { ...prev }; delete n[B.uuid]; return n; });
+        setTasksStatus(prev => {
+            const n = { ...prev };
+            groupsToMerge.slice(1).forEach(g => { delete n[g.uuid]; });
+            return n;
+        });
+        showToast(`已合并本分段 ${groupsToMerge.length} 张卡片，约 ${plan.totalDuration} 秒`);
         setTimeout(() => saveSession(), 100);
-    }, [taskGroups, isMergeableModel, getSeedanceParams, getDashScopeParams, showToast, saveSession]);
+    }, [
+        taskGroups,
+        getDownwardMergePlan,
+        getMetaDurationSecondsForImageId,
+        getGroupMergeDuration,
+        getSeedanceParams,
+        getDashScopeParams,
+        showToast,
+        saveSession,
+    ]);
 
     const splitMergedCard = useCallback((index: number) => {
         const g = taskGroups[index];
         if (!g || !g.mergedFrom || !g.mergedFrom.length) return;
         const children = g.mergedFrom;
-        const restored: TaskGroup[] = children.map(c => ({ uuid: c.uuid, ids: [...c.ids], model: c.model }));
+        const restored: TaskGroup[] = children.map(c => ({
+            uuid: c.uuid,
+            ids: [...c.ids],
+            model: c.model,
+            shotType: c.shotType,
+            duration: c.duration,
+            durationUserOverride: c.durationUserOverride,
+        }));
 
         setSeedanceParamsByUuid(prev => {
             const next = { ...prev };
@@ -3321,7 +3502,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     )}
                     
                     {/* 2026-06-05 — 合并 / 拆分（仅 Seedance / DashScope 卡） */}
-                    {group.mergedFrom && group.mergedFrom.length > 0 ? (
+                    {group.mergedFrom && group.mergedFrom.length > 0 && (
                         <button
                             onClick={() => splitMergedCard(index)}
                             className="p-1.5 bg-n0 hover:bg-warning text-n700 hover:text-white rounded transition-colors"
@@ -3329,16 +3510,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         >
                             <Split className="w-3 h-3" />
                         </button>
-                    ) : isMergeableModel(group.model) ? (
+                    )}
+                    {isMergeableModel(group.model) && (
                         <button
                             onClick={() => mergeWithNext(index)}
                             disabled={!canMergeWithNext(index)}
                             className="p-1.5 bg-n0 hover:bg-teal text-n700 hover:text-white rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            title={canMergeWithNext(index) ? '与下一张合并（提示词追加、素材合并）' : '需与下一张相邻且同模型才能合并'}
+                            title={canMergeWithNext(index) ? '向下合并本分段卡片（总时长不超过模型上限）' : '下方没有可合并的同分段卡片'}
                         >
                             <Combine className="w-3 h-3" />
                         </button>
-                    ) : null}
+                    )}
 
                     <button
                         onClick={() => removeTask(group.uuid)}
@@ -3632,7 +3814,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             首尾帧
                         </button>
                     )}
-                    {group.mergedFrom && group.mergedFrom.length > 0 ? (
+                    {group.mergedFrom && group.mergedFrom.length > 0 && (
                         <button
                             type="button"
                             onClick={() => splitMergedCard(index)}
@@ -3642,13 +3824,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             <Split className="w-3.5 h-3.5" />
                             拆分合并
                         </button>
-                    ) : (
+                    )}
+                    {isMergeableModel(group.model) && (
                         <button
                             type="button"
                             onClick={() => mergeWithNext(index)}
                             disabled={!canMergeWithNext(index)}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-primary text-[10px] text-white hover:bg-primary-hover disabled:opacity-30 disabled:cursor-not-allowed"
-                            title={canMergeWithNext(index) ? '追加下一张的提示词和素材，可继续合并更多卡片' : '需要下一张为相同且支持合并的模型'}
+                            title={canMergeWithNext(index) ? '向下合并本分段卡片（总时长不超过模型上限）' : '下方没有可合并的同分段卡片'}
                         >
                             <Combine className="w-3.5 h-3.5" />
                             合并
