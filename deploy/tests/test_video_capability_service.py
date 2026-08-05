@@ -7,6 +7,9 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
     async def fake_list_agent_nodes():
         return [{"agent_id": "agent_1", "status": "busy"}]
 
+    async def empty_agent_instances():
+        return []
+
     async def empty_health(targets=None):
         return []
 
@@ -30,6 +33,7 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
     )
     monkeypatch.setattr(video_capability_service, "list_cached_provider_health", empty_health)
     monkeypatch.setattr(video_capability_service, "list_agent_nodes", fake_list_agent_nodes)
+    monkeypatch.setattr(video_capability_service, "list_agent_instances", empty_agent_instances)
 
     result = await video_capability_service.get_video_capabilities("studio")
 
@@ -50,6 +54,8 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
     cluster_model = next(model for model in result["models"] if model["key"] == "一阶")
     assert cluster_model["available"] is True
     assert cluster_model["parameter_rules"]["duration"]["options"] == [5, 10, 15]
+    h3 = next(model for model in result["models"] if model["key"] == "MiniMaxH3")
+    assert h3["available"] is False
     wan26 = next(model for model in result["models"] if model["key"] == "大能")
     assert wan26["available"] is True
     assert wan26["parameter_rules"]["resolution"] == ["720P", "1080P"]
@@ -70,11 +76,15 @@ async def test_video_capabilities_degrade_safely(monkeypatch):
     async def broken_list_agent_nodes():
         raise RuntimeError("agent unavailable")
 
+    async def broken_list_agent_instances():
+        raise RuntimeError("agent unavailable")
+
     async def empty_health(targets=None):
         return []
 
     monkeypatch.setattr(video_capability_service, "resolve_seedance_model_name", broken_seedance_model)
     monkeypatch.setattr(video_capability_service, "list_agent_nodes", broken_list_agent_nodes)
+    monkeypatch.setattr(video_capability_service, "list_agent_instances", broken_list_agent_instances)
     monkeypatch.setattr(video_capability_service, "list_cached_provider_health", empty_health)
     monkeypatch.setattr(
         video_capability_service,
@@ -95,15 +105,20 @@ async def test_video_capabilities_degrade_safely(monkeypatch):
     seedance_mini = next(model for model in result["models"] if model["key"] == "Seedance2Mini")
     minimax = next(model for model in result["models"] if model["key"] == "MINI")
     happyhorse = next(model for model in result["models"] if model["key"] == "HappyHorse")
+    h3 = next(model for model in result["models"] if model["key"] == "MiniMaxH3")
     assert seedance["available"] is False
     assert seedance_mini["available"] is False
     assert minimax["available"] is False
     assert happyhorse["available"] is False
+    assert h3["available"] is False
     assert "reference_audio" not in seedance["media_inputs"]
 
 
 async def test_video_capabilities_hide_seedance_model_marked_error_in_health_cache(monkeypatch):
     async def fake_list_agent_nodes():
+        return []
+
+    async def empty_agent_instances():
         return []
 
     async def fake_health(targets=None):
@@ -132,6 +147,7 @@ async def test_video_capabilities_hide_seedance_model_marked_error_in_health_cac
         ),
     )
     monkeypatch.setattr(video_capability_service, "list_agent_nodes", fake_list_agent_nodes)
+    monkeypatch.setattr(video_capability_service, "list_agent_instances", empty_agent_instances)
     monkeypatch.setattr(video_capability_service, "list_cached_provider_health", fake_health)
 
     result = await video_capability_service.get_video_capabilities()
@@ -140,6 +156,62 @@ async def test_video_capabilities_hide_seedance_model_marked_error_in_health_cac
     seedance_mini = next(model for model in result["models"] if model["key"] == "Seedance2Mini")
     assert seedance_standard["available"] is True
     assert seedance_mini["available"] is False
+
+
+async def test_video_capabilities_expose_minimax_h3_only_when_8189_reports_nodes(monkeypatch):
+    async def fake_list_agent_nodes():
+        return [{"agent_id": "agent_gpu2", "status": "online"}]
+
+    async def fake_list_agent_instances():
+        return [
+            {"agent_id": "agent_gpu2", "port": 8188, "healthy": True, "capabilities": {}},
+            {
+                "agent_id": "agent_gpu2",
+                "port": 8189,
+                "healthy": True,
+                "capabilities": {"minimax_h3_fl2va": True},
+            },
+        ]
+
+    async def empty_health(targets=None):
+        return []
+
+    monkeypatch.setattr(
+        video_capability_service,
+        "resolve_seedance_model_name",
+        lambda sub_model, usage_scope="workflow": {
+            "standard": "doubao-seedance-2-0-260128",
+            "fast": "doubao-seedance-2-0-fast-260128",
+            "mini": "doubao-seedance-2-0-mini-260615",
+        }[sub_model],
+    )
+    monkeypatch.setattr(
+        video_capability_service,
+        "resolve_provider",
+        lambda provider, model_name=None, usage_scope="workflow": SimpleNamespace(
+            has_key=False,
+            model_name=model_name or "",
+            endpoint="https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+        ),
+    )
+    monkeypatch.setattr(video_capability_service, "list_cached_provider_health", empty_health)
+    monkeypatch.setattr(video_capability_service, "list_agent_nodes", fake_list_agent_nodes)
+    monkeypatch.setattr(video_capability_service, "list_agent_instances", fake_list_agent_instances)
+
+    result = await video_capability_service.get_video_capabilities()
+
+    h3 = next(model for model in result["models"] if model["key"] == "MiniMaxH3")
+    assert h3["available"] is True
+    assert h3["provider"] == "processing_cluster"
+    assert h3["model_name"] == "MiniMax-H3 FL2VA"
+    assert h3["preferred_comfyui_port"] == 8189
+    assert h3["parameter_rules"]["duration"] == {
+        "type": "integer",
+        "default": 5,
+        "minimum": 4,
+        "maximum": 15,
+    }
+    assert h3["supports_generated_audio"] is True
 
 
 def test_video_manifest_reports_agent_plan_duration_limit_without_affecting_payg():

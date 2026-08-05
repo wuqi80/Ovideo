@@ -22,9 +22,11 @@ from services.api_provider_runtime import (
     resolve_seedance_model_name,
 )
 from services.api_provider_health_monitor import list_cached_provider_health
-from services.cluster_node_service import list_agent_nodes
+from services.cluster_node_service import list_agent_instances, list_agent_nodes
 
 logger = logging.getLogger(__name__)
+MINIMAX_H3_CAPABILITY_KEY = "minimax_h3_fl2va"
+MINIMAX_H3_PREFERRED_PORT = 8189
 
 
 def _is_seedance_omni_model(model_name: str) -> bool:
@@ -38,6 +40,21 @@ async def _has_online_comfyui_agent() -> bool:
     except Exception as exc:
         logger.debug("video capability ComfyUI agent probe failed: %s", exc)
         return False
+
+
+async def _has_minimax_h3_agent() -> bool:
+    try:
+        instances = await list_agent_instances()
+    except Exception as exc:
+        logger.debug("video capability MiniMax H3 agent probe failed: %s", exc)
+        return False
+    for instance in instances or []:
+        if int(instance.get("port") or 0) != MINIMAX_H3_PREFERRED_PORT:
+            continue
+        capabilities = instance.get("capabilities") or {}
+        if isinstance(capabilities, dict) and capabilities.get(MINIMAX_H3_CAPABILITY_KEY) is True:
+            return True
+    return False
 
 
 def _provider_runtime_state(
@@ -142,6 +159,32 @@ def _workflow_video_manifest(key: str, label: str, *, available: bool) -> Dict[s
     }
 
 
+def _minimax_h3_video_manifest(*, available: bool) -> Dict[str, Any]:
+    return {
+        "key": "MiniMaxH3",
+        "label": "MiniMax H3 本地版",
+        "provider": "processing_cluster",
+        "model_name": "MiniMax-H3 FL2VA",
+        "task_types": ["i2v", "first_last_frame"],
+        "media_inputs": ["first_frame", "last_frame"],
+        "supports_original_audio": False,
+        "supports_generated_audio": True,
+        "supports_cancel": True,
+        "requires_processing_node": True,
+        "preferred_comfyui_port": MINIMAX_H3_PREFERRED_PORT,
+        "available": available,
+        "query_mode": "queue",
+        "parameter_rules": {
+            "duration": {"type": "integer", "default": 5, "minimum": 4, "maximum": 15},
+            "fps": {"type": "integer", "default": 24},
+            "resolution": ["low_vram_16:9"],
+            "seed": {"type": "integer", "default": -1, "minimum": -1},
+            "negative_prompt": {"type": "string", "default": ""},
+            "normalization_policy": "workflow_defined",
+        },
+    }
+
+
 def _fixed_api_video_manifest(
     key: str,
     label: str,
@@ -173,6 +216,7 @@ def build_video_model_manifest(
     mini_seedance_model: str,
     seedance_omni: bool,
     comfyui_available: bool,
+    minimax_h3_available: bool = False,
     seedance_billing_mode: str = "standard",
     model_scope: str = MODEL_USAGE_SCOPE_WORKFLOW,
     api_availability: Optional[Dict[str, bool]] = None,
@@ -259,6 +303,7 @@ def build_video_model_manifest(
                     ("七阶", "七阶"),
                 )
             ],
+            _minimax_h3_video_manifest(available=minimax_h3_available),
             _fixed_api_video_manifest(
                 "Veo",
                 "筑基",
@@ -411,6 +456,7 @@ async def get_video_capabilities(
         mini_seedance_model = ""
 
     comfyui_available = await _has_online_comfyui_agent()
+    minimax_h3_available = await _has_minimax_h3_agent()
     seedance_billing_mode = "standard"
     try:
         seedance_provider_config = resolve_provider(
@@ -500,6 +546,7 @@ async def get_video_capabilities(
             seedance_omni=seedance_omni,
             seedance_billing_mode=seedance_billing_mode,
             comfyui_available=comfyui_available,
+            minimax_h3_available=minimax_h3_available,
             model_scope=model_scope,
             api_availability={
                 "Veo": veo_available,

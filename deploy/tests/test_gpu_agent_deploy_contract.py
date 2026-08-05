@@ -23,4 +23,5 @@ def test_gpu_agent_version_keeps_control_capability_marker():
         DEPLOY_DIR / "pipeline" / "comfyui_agent.py"
     ).read_text(encoding="utf-8")
 
-    assert 'AGENT_VERSION = "2026-07-25-agent-control-completion-recovery-tls-v2"' in source
+    assert 'AGENT_VERSION = "2026-08-05-h3-capability-port-routing"' in source
+    assert "minimax_h3_fl2va" in source

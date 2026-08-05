@@ -3,6 +3,9 @@ from scripts.windows_gpu_agent_runner import (
     GPU2_IMAGE_UPSCALE_MAX_RESOLUTION,
     GPU2_IMAGE_UPSCALE_TARGET,
     GPU2_HUMAN_ANGLE_PROMPTS,
+    GPU2_H3_FPS,
+    GPU2_H3_MODEL_FILES,
+    GPU2_H3_PORT,
     GPU2_QWEN_MODEL_FILES,
     GPU2_WAN_BLOCKS_TO_SWAP,
     GPU2_WAN_FRAMES,
@@ -11,15 +14,19 @@ from scripts.windows_gpu_agent_runner import (
     GPU2_WAN_WIDTH,
     build_gpu2_infinitetalk_workflow,
     build_gpu2_matting_workflow,
+    build_gpu2_minimax_h3_fl2va_workflow,
     build_gpu2_qwen_workflow,
     build_gpu2_upscale_workflow,
     build_gpu2_video_upscale_workflow,
     build_gpu2_wan_i2v_workflow,
     gpu2_infinitetalk_duration_seconds,
     gpu2_infinitetalk_total_frames,
+    gpu2_h3_duration_seconds,
+    gpu2_h3_length_frames,
     gpu2_wan_chunk_frame_counts,
     gpu2_wan_duration_seconds,
     gpu2_wan_total_frames,
+    is_gpu2_h3_task,
     is_gpu2_infinitetalk_task,
     is_gpu2_qwen_compatible_task,
     is_gpu2_wan_i2v_task,
@@ -55,6 +62,65 @@ def test_gpu2_wan_i2v_uses_one_scaled_fp8_model_and_aggressive_ram_offload():
     assert workflow["23"]["inputs"]["rope_function"] == "comfy_chunked"
     assert workflow["25"]["inputs"]["save_output"] is True
     assert prepared["workflow_name"] == "gpu2_wan21_i2v_low_vram"
+
+
+def test_gpu2_minimax_h3_routes_to_isolated_8189_sidecar_and_audio_video_nodes():
+    task = {
+        "task_type": "i2v",
+        "params": {
+            "model": "MiniMaxH3",
+            "image_path": "first.png",
+            "prompt": "slow cinematic motion with natural ambient sound",
+            "duration": 5,
+            "seed": 77,
+        },
+        "files": [{"param": "image_path", "filename": "first.png"}],
+    }
+
+    workflow = build_gpu2_minimax_h3_fl2va_workflow(task)
+    prepared = prepare_gpu2_task(task)
+
+    assert is_gpu2_h3_task(task)
+    assert workflow["1"]["inputs"]["image"] == "first.png"
+    assert workflow["6"]["inputs"]["unet_name"] == GPU2_H3_MODEL_FILES["diffusion"]
+    assert workflow["13"]["inputs"]["clip_name"] == GPU2_H3_MODEL_FILES["text_encoder"]
+    assert workflow["13"]["inputs"]["type"] == "minimax"
+    assert workflow["11"]["inputs"]["vae_name"] == GPU2_H3_MODEL_FILES["video_vae"]
+    assert workflow["24"]["inputs"]["vae_name"] == GPU2_H3_MODEL_FILES["audio_vae"]
+    assert workflow["23"]["class_type"] == "VAEDecodeAudio"
+    assert workflow["91"]["inputs"]["audio"] == ["23", 0]
+    assert workflow["91"]["inputs"]["fps"] == GPU2_H3_FPS
+    assert workflow["104"]["class_type"] == "MiniMaxH3ImageToVideo"
+    assert workflow["104"]["inputs"]["length"] == gpu2_h3_length_frames(task)
+    assert "last_frame" not in workflow["104"]["inputs"]
+    assert prepared["workflow_name"] == "gpu2_minimax_h3_fl2va"
+    assert prepared["params"]["preferred_comfyui_port"] == GPU2_H3_PORT
+    assert prepared["params"]["strict_preferred_comfyui_port"] is True
+
+
+def test_gpu2_minimax_h3_preserves_first_and_last_frame_inputs():
+    task = {
+        "task_type": "morph",
+        "params": {
+            "model": "MiniMaxH3",
+            "image_path": "first.png",
+            "image_path_end": "last.png",
+            "duration": 15,
+        },
+        "files": [
+            {"param": "image_path", "filename": "first.png"},
+            {"param": "image_path_end", "filename": "last.png"},
+        ],
+    }
+
+    workflow = build_gpu2_minimax_h3_fl2va_workflow(task)
+
+    assert workflow["1"]["inputs"]["image"] == "first.png"
+    assert workflow["2"]["inputs"]["image"] == "last.png"
+    assert workflow["104"]["inputs"]["first_frame"] == ["1", 0]
+    assert workflow["104"]["inputs"]["last_frame"] == ["2", 0]
+    assert gpu2_h3_duration_seconds(task) == 15
+    assert gpu2_h3_length_frames(task) == 362
 
 
 def test_gpu2_replaces_gpu1_ltx_baseline_when_stable_wan_operation_is_selected():

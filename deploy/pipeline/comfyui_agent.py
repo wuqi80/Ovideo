@@ -28,9 +28,25 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-07-25-agent-control-completion-recovery-tls-v2"
+AGENT_VERSION = "2026-08-05-h3-capability-port-routing"
 PLATFORM_DOWNLOAD_RETRIES = 3
 PLATFORM_DOWNLOAD_PATH_PREFIXES = ("/api/agent/tasks/", "/storage/")
+CAPABILITY_CACHE_TTL_SECONDS = 60
+MINIMAX_H3_REQUIRED_NODES = (
+    "MiniMaxH3ImageToVideo",
+    "UNETLoader",
+    "CLIPLoader",
+    "VAELoader",
+    "VAEDecode",
+    "VAEDecodeAudio",
+    "BasicScheduler",
+    "KSamplerSelect",
+    "SamplerCustomAdvanced",
+    "BasicGuider",
+    "RandomNoise",
+    "CreateVideo",
+    "SaveVideo",
+)
 
 
 class ComfyUIAgent:
@@ -41,6 +57,7 @@ class ComfyUIAgent:
         self.agent_id = None
         self.running = True
         self.current_tasks = 0
+        self._capability_cache = {}
         state_root = Path(
             os.environ.get("MECHA_AGENT_STATE_DIR")
             or (Path.home() / ".mecha-agent")
@@ -138,6 +155,35 @@ class ComfyUIAgent:
         except Exception:
             return "offline"
 
+    def _probe_comfyui_capabilities(self, port: int, status: str = "") -> dict:
+        """Return a small, cacheable capability summary for one local ComfyUI port."""
+        if status and status != "healthy":
+            return {}
+        now = time.time()
+        cached = self._capability_cache.get(port)
+        if cached and now - cached.get("checked_at", 0) < CAPABILITY_CACHE_TTL_SECONDS:
+            return dict(cached.get("capabilities") or {})
+        capabilities = {}
+        try:
+            resp = requests.get(f"http://127.0.0.1:{port}/object_info", timeout=10)
+            if resp.status_code == 200:
+                object_info = resp.json()
+                required = {
+                    node: node in object_info
+                    for node in MINIMAX_H3_REQUIRED_NODES
+                }
+                capabilities = {
+                    "minimax_h3_fl2va": all(required.values()),
+                    "minimax_h3_required_nodes": required,
+                }
+        except Exception as exc:
+            logger.debug("Capability probe failed for ComfyUI:%s: %s", port, exc)
+        self._capability_cache[port] = {
+            "checked_at": now,
+            "capabilities": capabilities,
+        }
+        return dict(capabilities)
+
     def register(self):
         logger.info(f"Registering with {self.server_url}...")
         resp = requests.post(
@@ -158,7 +204,14 @@ class ComfyUIAgent:
         logger.info(f"  ComfyUI ports: {self.ports}")
 
     def heartbeat(self):
-        instances = [{"port": p, "status": self._check_comfyui(p)} for p in self.ports]
+        instances = []
+        for p in self.ports:
+            status = self._check_comfyui(p)
+            instance = {"port": p, "status": status}
+            capabilities = self._probe_comfyui_capabilities(p, status)
+            if capabilities:
+                instance["capabilities"] = capabilities
+            instances.append(instance)
         try:
             requests.post(
                 f"{self.server_url}/api/agent/heartbeat",
@@ -187,21 +240,56 @@ class ComfyUIAgent:
             logger.info(f"poll: Got task {task.get('task_id')} (type={task.get('task_type')})")
         return task
 
+    @staticmethod
+    def _task_params(task):
+        for key in ("params", "data"):
+            value = task.get(key)
+            if isinstance(value, dict):
+                return value
+        return {}
+
+    @staticmethod
+    def _truthy(value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return False
+
     def execute_comfyui_task(self, task):
-        port = self._pick_healthy_port()
+        params = self._task_params(task)
+        preferred_port = params.get("preferred_comfyui_port") or task.get("preferred_comfyui_port")
+        try:
+            preferred_port = int(preferred_port) if preferred_port else None
+        except (TypeError, ValueError):
+            preferred_port = None
+        strict_preferred_port = self._truthy(
+            params.get("strict_preferred_comfyui_port")
+            or task.get("strict_preferred_comfyui_port")
+        )
+        port = self._pick_healthy_port(
+            preferred_port=preferred_port,
+            strict_preferred=strict_preferred_port,
+        )
         if not port:
+            if preferred_port:
+                return {
+                    "status": "failed",
+                    "error": f"No healthy ComfyUI instance on preferred port {preferred_port}",
+                    "output_files": [],
+                }
             return {"status": "failed", "error": "No healthy ComfyUI instance", "output_files": []}
 
         task_type = task.get("task_type", "comfyui")
         workflow_name = task.get("workflow_name")
         if not workflow_name:
-            params = task.get("params", {}) or {}
             workflow_name = params.get("workflow_name")
         workflow_name = workflow_name or task_type
 
         workflow_json = task.get("workflow_json")
         if not workflow_json:
-            params = task.get("params", {})
             workflow_json = params.get("workflow_json")
         if not workflow_json:
             return {"status": "failed", "error": "No workflow_json in task", "output_files": []}
@@ -510,7 +598,12 @@ class ComfyUIAgent:
         self._save_pending_completion(record)
         return self._report_pending_completion(record)
 
-    def _pick_healthy_port(self):
+    def _pick_healthy_port(self, preferred_port=None, strict_preferred=False):
+        if preferred_port:
+            if preferred_port in self.ports and self._check_comfyui(preferred_port) == "healthy":
+                return preferred_port
+            if strict_preferred:
+                return None
         for p in self.ports:
             if self._check_comfyui(p) == "healthy":
                 return p

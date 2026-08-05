@@ -41,6 +41,20 @@ GPU2_WAN_BLOCKS_TO_SWAP = 36
 GPU2_WAN_MAX_DURATION_SECONDS = 30.0
 GPU2_WAN_MAX_GENERATION_SECONDS = 15.0
 
+GPU2_H3_PORT = 8189
+GPU2_H3_MODEL_FILES = {
+    "diffusion": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+    "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+    "video_vae": "minimax_h3_video_vae_fp16.safetensors",
+    "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
+}
+GPU2_H3_WIDTH = 768
+GPU2_H3_HEIGHT = 432
+GPU2_H3_FPS = 24
+GPU2_H3_DEFAULT_DURATION_SECONDS = 5.0
+GPU2_H3_MIN_DURATION_SECONDS = 4.0
+GPU2_H3_MAX_DURATION_SECONDS = 15.0
+
 GPU2_QWEN_COMPAT_PREFIXES = (
     "qwen_",
     "qwen_lora_",
@@ -277,7 +291,10 @@ def _gpu2_input_image_names(task: Dict[str, Any]) -> list[str]:
         "image",
         "start_image",
         "end_image",
+        "first_frame",
+        "last_frame",
         "image_path",
+        "image_path_end",
         "uploaded_image",
         *[f"image_path_{index}" for index in range(1, 7)],
         *[f"uploaded_image_{index}" for index in range(1, 7)],
@@ -659,6 +676,140 @@ def _gpu2_seed(task: Dict[str, Any]) -> int:
     except (TypeError, ValueError):
         seed = -1
     return seed if seed >= 0 else random.randint(0, 2**63 - 1)
+
+
+def is_gpu2_h3_task(task: Dict[str, Any]) -> bool:
+    task_type = str(task.get("task_type") or "").strip().lower()
+    workflow_name = _gpu2_workflow_name(task)
+    params = _gpu2_task_params(task)
+    model = str(params.get("model") or params.get("model_name") or "").strip().lower()
+    return (
+        model in {"minimaxh3", "minimax-h3", "minimax_h3"}
+        or workflow_name in {"minimax_h3_fl2va", "gpu2_minimax_h3_fl2va"}
+        or workflow_name.startswith("minimax_h3")
+        or (task_type in {"i2v", "morph"} and "minimax" in model and "h3" in model)
+    )
+
+
+def gpu2_h3_duration_seconds(task: Dict[str, Any]) -> float:
+    params = _gpu2_task_params(task)
+    try:
+        duration = float(params.get("duration") or GPU2_H3_DEFAULT_DURATION_SECONDS)
+    except (TypeError, ValueError):
+        duration = GPU2_H3_DEFAULT_DURATION_SECONDS
+    return max(GPU2_H3_MIN_DURATION_SECONDS, min(GPU2_H3_MAX_DURATION_SECONDS, duration))
+
+
+def gpu2_h3_length_frames(task: Dict[str, Any]) -> int:
+    """Use the official MiniMax H3 ComfyUI template length expression."""
+    requested = max(5, round(gpu2_h3_duration_seconds(task) * GPU2_H3_FPS))
+    return int(requested + (5 - (requested % 17)) % 17)
+
+
+def build_gpu2_minimax_h3_fl2va_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the official MiniMax H3 FL2VA graph for the isolated GPU2:8189 ComfyUI."""
+    params = _gpu2_task_params(task)
+    image_names = _gpu2_input_image_names(task)
+    if not image_names:
+        raise RuntimeError("GPU2 MiniMax H3 task is missing a first-frame image filename")
+
+    prompt = str(
+        params.get("prompt")
+        or params.get("positive_prompt")
+        or "cinematic image to video, stable camera motion, natural movement, high quality"
+    ).strip()
+    seed = _gpu2_seed(task)
+    workflow: Dict[str, Any] = {
+        "1": {"class_type": "LoadImage", "inputs": {"image": image_names[0]}},
+        "6": {
+            "class_type": "UNETLoader",
+            "inputs": {
+                "unet_name": GPU2_H3_MODEL_FILES["diffusion"],
+                "weight_dtype": "default",
+            },
+        },
+        "9": {
+            "class_type": "BasicScheduler",
+            "inputs": {
+                "model": ["6", 0],
+                "scheduler": "simple",
+                "steps": 20,
+                "denoise": 1,
+            },
+        },
+        "10": {"class_type": "VAEDecode", "inputs": {"samples": ["14", 0], "vae": ["11", 0]}},
+        "11": {
+            "class_type": "VAELoader",
+            "inputs": {"vae_name": GPU2_H3_MODEL_FILES["video_vae"]},
+        },
+        "13": {
+            "class_type": "CLIPLoader",
+            "inputs": {
+                "clip_name": GPU2_H3_MODEL_FILES["text_encoder"],
+                "type": "minimax",
+                "device": "default",
+            },
+        },
+        "14": {
+            "class_type": "SamplerCustomAdvanced",
+            "inputs": {
+                "noise": ["15", 0],
+                "guider": ["16", 0],
+                "sampler": ["17", 0],
+                "sigmas": ["9", 0],
+                "latent_image": ["104", 1],
+            },
+        },
+        "15": {"class_type": "RandomNoise", "inputs": {"noise_seed": seed}},
+        "16": {
+            "class_type": "BasicGuider",
+            "inputs": {"model": ["6", 0], "conditioning": ["104", 0]},
+        },
+        "17": {"class_type": "KSamplerSelect", "inputs": {"sampler_name": "res_multistep"}},
+        "23": {
+            "class_type": "VAEDecodeAudio",
+            "inputs": {"samples": ["14", 0], "vae": ["24", 0]},
+        },
+        "24": {
+            "class_type": "VAELoader",
+            "inputs": {"vae_name": GPU2_H3_MODEL_FILES["audio_vae"]},
+        },
+        "91": {
+            "class_type": "CreateVideo",
+            "inputs": {
+                "images": ["10", 0],
+                "audio": ["23", 0],
+                "fps": GPU2_H3_FPS,
+                "bit_depth": 8,
+            },
+        },
+        "92": {
+            "class_type": "SaveVideo",
+            "inputs": {
+                "video": ["91", 0],
+                "filename_prefix": "MECHA_GPU2_minimax_h3",
+                "format": "auto",
+                "codec": "auto",
+            },
+        },
+        "104": {
+            "class_type": "MiniMaxH3ImageToVideo",
+            "inputs": {
+                "clip": ["13", 0],
+                "vae": ["11", 0],
+                "first_frame": ["1", 0],
+                "prompt": prompt,
+                "width": GPU2_H3_WIDTH,
+                "height": GPU2_H3_HEIGHT,
+                "length": gpu2_h3_length_frames(task),
+            },
+        },
+    }
+    if len(image_names) >= 2:
+        workflow["2"] = {"class_type": "LoadImage", "inputs": {"image": image_names[1]}}
+        workflow["104"]["inputs"]["last_frame"] = ["2", 0]
+        workflow["92"]["inputs"]["filename_prefix"] = "MECHA_GPU2_minimax_h3_fl2va"
+    return workflow
 
 
 def is_gpu2_wan_i2v_task(task: Dict[str, Any]) -> bool:
@@ -1128,7 +1279,16 @@ def prepare_gpu2_task(task: Dict[str, Any]) -> Dict[str, Any]:
     prepared = deepcopy(task)
     task_type = str(prepared.get("task_type") or "").lower()
     operation = str(_gpu2_task_params(prepared).get("gpu2_operation") or "").lower()
-    if is_gpu2_infinitetalk_task(prepared):
+    if is_gpu2_h3_task(prepared):
+        prepared["workflow_json"] = build_gpu2_minimax_h3_fl2va_workflow(prepared)
+        prepared["workflow_name"] = "gpu2_minimax_h3_fl2va"
+        params = prepared.get("params")
+        if not isinstance(params, dict):
+            params = {}
+            prepared["params"] = params
+        params["preferred_comfyui_port"] = GPU2_H3_PORT
+        params["strict_preferred_comfyui_port"] = True
+    elif is_gpu2_infinitetalk_task(prepared):
         prepared["workflow_json"] = build_gpu2_infinitetalk_workflow(prepared)
         prepared["workflow_name"] = "gpu2_infinitetalk_wan21_low_vram"
     elif is_gpu2_wan_i2v_task(prepared):

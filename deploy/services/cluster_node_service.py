@@ -87,6 +87,15 @@ def _agent_node(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _row_active_tasks(row: Dict[str, Any], system_info: Dict[str, Any], stats: Dict[str, Any]) -> int:
+    return int(
+        row.get("active_tasks")
+        or system_info.get("current_tasks")
+        or stats.get("current_tasks")
+        or 0
+    )
+
+
 async def list_agent_nodes(*, include_offline: bool = False) -> List[Dict[str, Any]]:
     """Return enabled GPU agents in the same shape as cluster nodes."""
     try:
@@ -107,3 +116,74 @@ async def list_agent_nodes(*, include_offline: bool = False) -> List[Dict[str, A
             continue
         nodes.append(node)
     return nodes
+
+
+async def list_agent_instances(*, include_offline: bool = False) -> List[Dict[str, Any]]:
+    """Return per-port processing-service instances exposed by enabled GPU agents."""
+    try:
+        from dao_agent import AgentDAO
+
+        rows = await AgentDAO.list_all_with_active_task_counts()
+    except Exception as exc:
+        logger.warning("list cluster agent instances failed: %s", exc)
+        return []
+
+    instances_out: List[Dict[str, Any]] = []
+    for row in rows or []:
+        data = dict(row)
+        if not data.get("enabled", True):
+            continue
+        agent_id = str(data.get("agent_id") or data.get("id") or "")
+        system_info = _jsonish(data.get("system_info"), {})
+        stats = _jsonish(data.get("stats"), {})
+        instances = _jsonish(data.get("comfyui_instances"), [])
+        if not isinstance(instances, list):
+            instances = []
+
+        row_status = str(data.get("status") or "offline").lower()
+        active_tasks = _row_active_tasks(data, system_info, stats)
+        public_name = _public_node_name(data.get("display_name") or data.get("name") or agent_id)
+        routing_name = data.get("name") or agent_id
+
+        if not instances and include_offline:
+            instances = [{}]
+
+        for instance in instances:
+            if not isinstance(instance, dict):
+                continue
+            instance_status = str(instance.get("status") or "").lower()
+            host = (
+                system_info.get("hostname")
+                or system_info.get("host")
+                or system_info.get("ip")
+                or instance.get("host")
+                or "处理节点"
+            )
+            port = instance.get("port")
+            is_healthy = row_status in {"online", "busy", "healthy"} and instance_status == "healthy"
+            if not include_offline and not is_healthy:
+                continue
+            instances_out.append(
+                {
+                    "id": f"{agent_id}:{port}" if port else agent_id,
+                    "node_id": agent_id,
+                    "agent_id": agent_id,
+                    "name": public_name,
+                    "routing_name": routing_name,
+                    "kind": "agent_instance",
+                    "type": "agent_instance",
+                    "enabled": True,
+                    "host": host,
+                    "port": port,
+                    "url": instance.get("url") or (f"http://{host}:{port}" if port else ""),
+                    "status": "busy" if active_tasks > 0 and is_healthy else row_status,
+                    "instance_status": instance_status or row_status,
+                    "healthy": is_healthy,
+                    "last_heartbeat": str(data.get("last_heartbeat") or ""),
+                    "tasks": active_tasks,
+                    "max_concurrent": 1,
+                    "capabilities": _jsonish(instance.get("capabilities"), {}),
+                    "metadata": _jsonish(instance.get("metadata"), {}),
+                }
+            )
+    return instances_out

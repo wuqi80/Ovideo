@@ -150,12 +150,20 @@ describe('buildVideoModelOptions', () => {
         model_name: 'doubao-seedance-2-0-mini-260615',
         available: true,
       },
+      {
+        key: 'MiniMaxH3',
+        label: 'MiniMax H3 本地版',
+        provider: 'processing_cluster',
+        model_name: 'MiniMax-H3 FL2VA',
+        available: true,
+      },
     ]);
 
-    expect(options.map(option => option.value)).toEqual(['HappyHorse', 'Seedance2Mini', 'MINI']);
+    expect(options.map(option => option.value)).toEqual(['HappyHorse', 'Seedance2Mini', 'MiniMaxH3', 'MINI']);
     expect(options[0].label).toContain('happyhorse-1.0-r2v');
     expect(options[1].label).toContain('doubao-seedance-2-0-mini-260615');
-    expect(options[2].label).toContain('MiniMax-Hailuo-2.3');
+    expect(options[2].label).toContain('MiniMax-H3 FL2VA');
+    expect(options[3].label).toContain('MiniMax-Hailuo-2.3');
   });
 
   it('uses backend Plan-mode manifest to expose only Seedance 1.5', () => {

@@ -1,9 +1,9 @@
 // Shared video model names, parameter types, and pure inference helpers.
 
-const COMFYUI_MODELS: string[] = ['Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶'];
+const COMFYUI_MODELS: string[] = ['Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', 'MiniMaxH3'];
 
 export type VideoModel =
-  | 'Wan2' | '一阶' | '二阶' | '三阶' | '四阶' | '五阶' | '六阶' | '七阶'
+  | 'Wan2' | '一阶' | '二阶' | '三阶' | '四阶' | '五阶' | '六阶' | '七阶' | 'MiniMaxH3'
   | 'Veo' | 'Sora2' | 'MINI' | '大能'
   | 'Seedance15' | 'Seedance2' | 'Seedance2Fast' | 'Seedance2Mini'
   | 'Kling' | 'Vidu' | 'HappyHorse';
@@ -317,6 +317,7 @@ export function getModelDisplayName(model: VideoModel): string {
     '五阶': '五阶',
     '六阶': '六阶',
     '七阶': '七阶',
+    MiniMaxH3: 'MiniMax H3 本地版',
     Veo: '筑基',
     MINI: '金丹',
     Sora2: '化神',
@@ -333,14 +334,14 @@ export function getModelDisplayName(model: VideoModel): string {
 }
 
 export const ALL_MODELS: VideoModel[] = [
-  'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶',
+  'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', 'MiniMaxH3',
   'Veo', 'Sora2', 'MINI', '大能',
   'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
   'Kling', 'Vidu', 'HappyHorse',
 ];
 
 export const SELECTABLE_MODELS: VideoModel[] = [
-  'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini', 'MINI',
+  'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini', 'MiniMaxH3', 'MINI',
 ];
 
 const ALL_MODEL_VALUES = new Set<string>(ALL_MODELS);
