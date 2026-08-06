@@ -103,6 +103,10 @@ import { LazyVideo } from './LazyVideo';
 import { extractSpokenDialogue } from '../utils/scriptPipelineParsers';
 import { clampSec, DURATION_MAX_SEC, SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC } from '../utils/durationMapping';
 import {
+    upgradeLegacyStoryboardVideoPrompt,
+    type StoryboardVideoPromptSource,
+} from '../utils/storyboardVideoPrompt';
+import {
     getVideoFrameLabel,
     resolveVideoFrameTime,
     type VideoFramePosition,
@@ -474,11 +478,38 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return img?.storyboardItemId ?? undefined;
     }, [taskGroups, uploadedImages]);
 
+    const storyboardItemById = useMemo(() => {
+        const result = new Map<string, StoryboardVideoPromptSource>();
+        storyboardItems.forEach((item: any) => {
+            const itemId = String(item?.item_id ?? item?.itemId ?? item?.id ?? '').trim();
+            if (itemId) result.set(itemId, item);
+        });
+        return result;
+    }, [storyboardItems]);
+
+    const getStoryboardPromptSourcesForGroup = useCallback((group: TaskGroup | undefined) => {
+        if (!group) return [];
+        return (group.ids || []).map(imageId => {
+            const image = uploadedImages.find(candidate => candidate.id === imageId);
+            const itemId = String(image?.storyboardItemId || imageId || '').trim();
+            return storyboardItemById.get(itemId);
+        }).filter((item): item is StoryboardVideoPromptSource => Boolean(item));
+    }, [storyboardItemById, uploadedImages]);
+
+    const getEffectiveGroupPrompt = useCallback((group: TaskGroup | undefined): string => {
+        if (!group?.ids?.[0]) return '';
+        const current = imagePrompts[group.ids[0]] || '';
+        return upgradeLegacyStoryboardVideoPrompt(
+            current,
+            getStoryboardPromptSourcesForGroup(group),
+        );
+    }, [getStoryboardPromptSourcesForGroup, imagePrompts]);
+
     const getCharacterNameForGroup = useCallback((group: TaskGroup): string => {
         const itemId = group.ids?.[0];
         if (!itemId) return '';
         const item = storyboardItems.find((candidate: any) =>
-            (candidate.item_id ?? candidate.itemId) === itemId
+            (candidate.item_id ?? candidate.itemId ?? candidate.id) === itemId
         );
         const dialogue = String(item?.dialogue ?? storyboardMetaByItemId[itemId]?.dialogue ?? '').trim();
         if (!dialogue) return '';
@@ -541,7 +572,16 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const getSeedanceParams = useCallback((uuid: string, model: VideoModel): SeedanceParams => {
         const group = taskGroups.find(g => g.uuid === uuid);
         const existing = seedanceParamsByUuid[uuid];
-        if (existing && group) return applyPreferredReferenceAudio(group, syncSeedanceDuration(group, existing));
+        if (existing && group) {
+            const prompt = upgradeLegacyStoryboardVideoPrompt(
+                existing.prompt,
+                getStoryboardPromptSourcesForGroup(group),
+            );
+            return applyPreferredReferenceAudio(
+                group,
+                syncSeedanceDuration(group, prompt === existing.prompt ? existing : { ...existing, prompt }),
+            );
+        }
         if (existing) return existing;
 
         // Issue 5a: when a card is freshly switched to Seedance, auto-pull the
@@ -583,9 +623,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             seedMedia.push({ kind: 'audio', url: refAudio, role: 'reference_audio' });
         }
 
+        const legacyPrompt = imagePrompts[itemId || ''] || '';
+        const promptSources = getStoryboardPromptSourcesForGroup(group);
         const nextParams: SeedanceParams = {
             sub_model: seedanceSubModelForVideoModel(model),
-            prompt: imagePrompts[itemId || ''] || '',
+            prompt: promptSources.length > 0
+                ? upgradeLegacyStoryboardVideoPrompt(legacyPrompt, promptSources)
+                : legacyPrompt,
             media_inputs: seedMedia,
             resolution: '720p',
             ratio: 'adaptive',
@@ -596,7 +640,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             camera_fixed: false,
         };
         return group ? applyPreferredReferenceAudio(group, nextParams) : nextParams;
-    }, [seedanceParamsByUuid, taskGroups, uploadedImages, imagePrompts, storyboardMetaByItemId, applyPreferredReferenceAudio, resolveSeedanceDurationForGroup, syncSeedanceDuration]);
+    }, [seedanceParamsByUuid, taskGroups, uploadedImages, imagePrompts, storyboardMetaByItemId, applyPreferredReferenceAudio, getStoryboardPromptSourcesForGroup, resolveSeedanceDurationForGroup, syncSeedanceDuration]);
 
     const setSeedanceParams = useCallback((uuid: string, next: SeedanceParams) => {
         const group = taskGroups.find(g => g.uuid === uuid);
@@ -615,9 +659,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         model: DashScopeVideoModel,
     ): DashScopeVideoParams => {
         const existing = dashScopeParamsByUuid[uuid];
-        if (existing && existing.model === model) return existing;
-
         const group = taskGroups.find(g => g.uuid === uuid);
+        if (existing && existing.model === model) {
+            const prompt = upgradeLegacyStoryboardVideoPrompt(
+                existing.prompt,
+                getStoryboardPromptSourcesForGroup(group),
+            );
+            return prompt === existing.prompt ? existing : { ...existing, prompt };
+        }
         const isPair = (group?.ids?.length || 0) === 2;
         const linkedImages = uploadedImages.filter(img =>
             img.url
@@ -661,9 +710,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             seedMedia = [];
         }
 
-        const seedPrompt = group?.ids?.[0] ? (imagePrompts[group.ids[0]] || '') : '';
+        const seedPrompt = getEffectiveGroupPrompt(group);
         return makeDefaultDashScopeParams(model, seedPrompt, seedMedia);
-    }, [dashScopeParamsByUuid, taskGroups, uploadedImages, imagePrompts]);
+    }, [dashScopeParamsByUuid, taskGroups, uploadedImages, getEffectiveGroupPrompt, getStoryboardPromptSourcesForGroup]);
 
     const setDashScopeParams = useCallback((uuid: string, next: DashScopeVideoParams) => {
         setDashScopeParamsByUuid(prev => ({ ...prev, [uuid]: next }));
@@ -1133,13 +1182,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const current = next[group.uuid];
             if (!current) return;
             const duration = resolveSeedanceDurationForGroup(group);
-            if (current.duration !== duration) {
-                next[group.uuid] = { ...current, duration };
+            const prompt = upgradeLegacyStoryboardVideoPrompt(
+                current.prompt,
+                getStoryboardPromptSourcesForGroup(group),
+            );
+            if (current.duration !== duration || current.prompt !== prompt) {
+                next[group.uuid] = { ...current, duration, prompt };
                 changed = true;
             }
         });
         return changed ? next : seedanceParamsByUuid;
-    }, [seedanceParamsByUuid, taskGroups, resolveSeedanceDurationForGroup]);
+    }, [seedanceParamsByUuid, taskGroups, getStoryboardPromptSourcesForGroup, resolveSeedanceDurationForGroup]);
 
     const saveSession = useCallback(async () => {
         const cleanedStatus: Record<string, TaskStatus> = {};
@@ -1580,7 +1633,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     );
     const storyboardSegmentKeyByItemId = useMemo(() => {
         const map = new Map<string, string>();
-        const normalizeItemId = (item: any): string => String(item?.item_id ?? item?.itemId ?? '').trim();
+        const normalizeItemId = (item: any): string => String(item?.item_id ?? item?.itemId ?? item?.id ?? '').trim();
         const parseSegmentKey = (item: any): string => {
             const explicit = String(
                 item?.script_segment_id
@@ -2346,7 +2399,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 throw new Error('图片缺少真实存储地址，请重新同步分镜或重新上传图片');
             }
             
-            const prompt = imagePrompts[group.ids[0]] || '';
+            const prompt = getEffectiveGroupPrompt(group);
             const minimaxParams = group.model === 'MINI'
                 ? normalizeMiniMaxVideoParams(group.minimaxParams, defaultMiniMaxVideoModel)
                 : undefined;
@@ -2407,7 +2460,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             }));
             return null;
         }
-    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId, prepareSeedanceParamsForCapability, getCharacterNameForGroup, getVideoVoiceReferenceForGroup, seedanceSupportsMultimodal, isVideoModelAvailable, defaultMiniMaxVideoModel, isSeedanceModel, videoCapabilities]);
+    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, getEffectiveGroupPrompt, ensureVideoSegmentId, episodeId, prepareSeedanceParamsForCapability, getCharacterNameForGroup, getVideoVoiceReferenceForGroup, seedanceSupportsMultimodal, isVideoModelAvailable, defaultMiniMaxVideoModel, isSeedanceModel, videoCapabilities]);
 
     const waitForBatchVideoTask = useCallback((uuid: string): Promise<VideoBatchWaitResult> => {
         const existing = batchWaitersRef.current[uuid];
@@ -2567,7 +2620,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             try { return localStorage.getItem('current_project_id') || undefined; } catch { return undefined; }
         })();
         const groupRef = taskGroups.find(g => g.uuid === uuid);
-        const promptText = groupRef ? (imagePrompts[groupRef.ids[0]] || '') : '';
+        const promptText = getEffectiveGroupPrompt(groupRef);
         const titleText = groupRef
             ? `视频 · ${groupRef.model} · ${promptText.slice(0, 24) || `#${uuid.slice(0, 6)}`}`
             : `视频 · #${uuid.slice(0, 6)}`;
@@ -2591,7 +2644,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             targetEntityType: 'video_segment',
             callbacks: buildPollCallbacks(uuid),
         });
-    }, [taskGroups, imagePrompts, sessionScope, buildPollCallbacks]);
+    }, [taskGroups, imagePrompts, sessionScope, buildPollCallbacks, getEffectiveGroupPrompt]);
     
     const runAllSelected = useCallback(async () => {
         if (isBatchRunning) return;
@@ -3067,7 +3120,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (!group.ids) return null;
         const isPair = group.ids.length === 2;
         const status = tasksStatus[group.uuid] || { state: 'idle' };
-        const promptText = imagePrompts[group.ids[0]] || '';
+        const promptText = getEffectiveGroupPrompt(group);
         const videos = status.videos || [];
         
         return (
@@ -3293,7 +3346,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const img1 = uploadedImages.find(i => i.id === group.ids[0]);
         const img2 = isPair ? uploadedImages.find(i => i.id === group.ids[1]) : null;
         const status = tasksStatus[group.uuid] || { state: 'idle' };
-        const promptText = imagePrompts[group.ids[0]] || '';
+        const promptText = getEffectiveGroupPrompt(group);
         
         if (!img1) return null;
         
@@ -3732,7 +3785,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 <div className={`${CARD_BODY_SCROLL_CLASS} flex flex-col`}>
                     {isPlaceholderCard ? (
                         <textarea
-                            value={imagePrompts[group.ids[0]] || ''}
+                            value={getEffectiveGroupPrompt(group)}
                             onChange={(e) => updatePrompt(group.ids[0], e.target.value)}
                             placeholder="先上传图片，再描述此分镜内容..."
                             className={PLACEHOLDER_PROMPT_TEXTAREA_CLASS}
@@ -3773,7 +3826,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     ) : group.model === 'MINI' ? (
                         <MiniMaxVideoPanel
                             value={normalizeMiniMaxVideoParams(group.minimaxParams, defaultMiniMaxVideoModel)}
-                            prompt={imagePrompts[group.ids[0]] || ''}
+                            prompt={getEffectiveGroupPrompt(group)}
                             modelOptions={miniMaxModelOptions}
                             onChange={(next: MiniMaxVideoParams) => patchTaskGroup(group.uuid, { minimaxParams: next })}
                             onPromptChange={(next) => updatePrompt(group.ids[0], next)}
@@ -3782,7 +3835,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <CapabilityVideoPanel
                             capability={getVideoCapability(videoCapabilities, group.model)}
                             value={group.videoParams}
-                            prompt={imagePrompts[group.ids[0]] || ''}
+                            prompt={getEffectiveGroupPrompt(group)}
                             onChange={(next) => patchTaskGroup(group.uuid, {
                                 videoParams: next,
                                 ...(group.model === '大能' && typeof next.shot_type === 'string'
@@ -3849,7 +3902,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (!group.ids) return null;
         const isPair = group.ids.length === 2;
         const status = tasksStatus[group.uuid] || { state: 'idle' };
-        const promptText = imagePrompts[group.ids[0]] || '';
+        const promptText = getEffectiveGroupPrompt(group);
         
         // 2026-05-25 hotfix：空卡（左侧 storyboard 卡走 200px 紧凑模式）右侧
         // 必须同步用 200px，否则左右又错位。参考 renderStoryboardCard 同一标记。

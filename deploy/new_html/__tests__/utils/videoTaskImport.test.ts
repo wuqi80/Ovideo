@@ -10,6 +10,8 @@ describe('buildVideoTaskImport', () => {
         storyboard_id: 'sb_1',
         scene: 'living-room',
         video_prompt: 'camera pans right',
+        action_text: '主角走向窗边。',
+        dialogue: '主角：看那边。',
       },
     ], {
       normalizeUrl: url => `secure:${url}`,
@@ -35,7 +37,11 @@ describe('buildVideoTaskImport', () => {
         createdAt: 1001,
       }),
     ]);
-    expect(result.prompts[result.images[0].id]).toBe('camera pans right');
+    expect(result.prompts[result.images[0].id]).toBe([
+      '动作说明：主角走向窗边。',
+      '对白：主角：看那边。',
+      '视频提示词：camera pans right',
+    ].join('\n'));
   });
 
   it('skips tasks without a usable image url', () => {

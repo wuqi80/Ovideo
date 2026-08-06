@@ -16,6 +16,8 @@ export interface ProjectVideoTask {
   scene?: string;
   storyboard_id?: string;
   video_prompt?: string;
+  action_text?: string;
+  dialogue?: string;
   [key: string]: any;
 }
 

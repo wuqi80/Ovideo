@@ -22,6 +22,7 @@ import { estimateDurationMs } from '../utils/durationMapping';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { secureApiUrl } from '../services/httpClient';
 import { runWhenIdle } from '../utils/idleScheduler';
+import { buildStoryboardVideoPrompt } from '../utils/storyboardVideoPrompt';
 
 const VIDEO_INITIAL_STORYBOARD_COUNT = 10;
 const VideoPage = React.lazy(() => import('../components/VideoPage').then(m => ({ default: m.VideoPage })));
@@ -49,7 +50,7 @@ function secureMediaUrl(url: string | null): string | null {
 }
 
 function getStoryboardItemId(item: any): string {
-  return (item?.item_id ?? item?.itemId ?? '').toString();
+  return (item?.item_id ?? item?.itemId ?? item?.id ?? '').toString();
 }
 
 function looksLikeStoryboardId(value: any): boolean {
@@ -209,11 +210,8 @@ export const VideoGenPage: React.FC = () => {
       for (const item of storyboardItemsForImport) {
         const rawUrl = (item as any).generated_image_url ?? (item as any).generatedImageUrl;
         const itemId = getStoryboardItemId(item);
-        // 视频页优先用 video_prompt（视频生成专用），fallback 到 image_prompt（图像生成 prompt）。
-        // storyboard_items 表两个字段都存在；此前只读 image_prompt 导致视频提示词丢失。
-        const prompt =
-            (item as any).video_prompt ?? (item as any).videoPrompt ??
-            (item as any).image_prompt ?? (item as any).imagePrompt ?? '';
+        // 视频生成除了视觉/运镜提示，还必须继承本镜头的动作说明与对白。
+        const prompt = buildStoryboardVideoPrompt(item as any);
         const sortOrder = (item as any).sort_order ?? (item as any).sortOrder ?? 0;
         if (!itemId) {
           skipped.push({ id: '(no itemId)', reason: 'missing itemId' });
@@ -278,6 +276,7 @@ export const VideoGenPage: React.FC = () => {
           mixedAudioUrl:  (item as any).mixed_audio_url ?? (item as any).mixedAudioUrl ?? undefined,
           mixedAudioHash: (item as any).mixed_audio_hash ?? (item as any).mixedAudioHash ?? undefined,
           sceneHeading: (item as any).scene_heading ?? (item as any).sceneHeading ?? undefined,
+          actionText:   (item as any).action_text ?? (item as any).actionText ?? undefined,
           dialogue:     (item as any).dialogue ?? undefined,
           lastSyncedAt: Date.now(),
         };
@@ -297,10 +296,10 @@ export const VideoGenPage: React.FC = () => {
         groups.push(group);
         upImg.linkedGroupUuids = [groupUuid];
 
-        // 初始 SeedanceParams：占位卡 prompt = '@'，方便 mention popover 自动打开
+        // 有剧本上下文时即使没有分镜图也保留完整提示词；完全无文本时才用 @ 打开素材选择。
         const sp: SeedanceParams = {
           sub_model: 'standard',
-          prompt: isPlaceholder ? '@' : (prompt || ''),
+          prompt: prompt || (isPlaceholder ? '@' : ''),
           // Default to reference_image (all-purpose reference / 全能参考).
           // Users can switch to first/last-frame mode via the panel toggle (Task 3).
           media_inputs: imgUrl

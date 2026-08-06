@@ -346,6 +346,7 @@ async def export_project_to_video_response(
                 "storyboard_id": item["id"],
                 "image_url": image_url or "",
                 "video_prompt": _legacy_or_db_text(item, db_row, "video_prompt", "videoPrompt"),
+                "action_text": _legacy_or_db_text(item, db_row, "action_text", "actionText"),
                 "dialogue": _legacy_or_db_text(item, db_row, "dialogue", "dialogue"),
                 "characters": _characters_for_task(item, db_row),
                 "scene": _scene_for_task(item, db_row),

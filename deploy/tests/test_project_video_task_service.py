@@ -101,6 +101,7 @@ def _reset_fakes():
                     {
                         "id": "shot_1",
                         "videoPrompt": "move camera",
+                        "actionText": "walk to the door",
                         "dialogue": "hello",
                         "characters": ["A"],
                         "scene": "Opening",
@@ -170,6 +171,7 @@ async def test_export_project_to_video_response_uses_selected_images_and_saves_s
                 "storyboard_id": "shot_1",
                 "image_url": "/storage/selected-thumb.webp",
                 "video_prompt": "move camera",
+                "action_text": "walk to the door",
                 "dialogue": "hello",
                 "characters": ["A"],
                 "scene": "Opening",
@@ -241,6 +243,7 @@ async def test_export_project_to_video_response_prefers_current_selected_entity_
         "shot_1": {
             "item_id": "shot_1",
             "video_prompt": "db prompt",
+            "action_text": "db action",
             "dialogue": "db line",
             "generated_image_url": "/storage/db-current.webp",
             "bound_assets": ["char:小悟", "scene:教室"],
@@ -269,6 +272,7 @@ async def test_export_project_to_video_response_prefers_current_selected_entity_
     task = result["video_tasks"][0]
     assert task["image_url"] == "/storage/entity-selected.webp"
     assert task["video_prompt"] == "db prompt"
+    assert task["action_text"] == "db action"
     assert task["dialogue"] == "db line"
     assert task["characters"] == ["小悟"]
     assert task["scene"] == "教室"
@@ -282,6 +286,7 @@ async def test_export_project_to_video_response_exports_db_only_storyboard_item(
         "sb_db_only": {
             "item_id": "sb_db_only",
             "video_prompt": "new db prompt",
+            "action_text": "new db action",
             "dialogue": "new db line",
             "generated_image_url": "/storage/db-only.webp",
             "bound_assets": ["char:小空"],
@@ -306,6 +311,7 @@ async def test_export_project_to_video_response_exports_db_only_storyboard_item(
             "storyboard_id": "sb_db_only",
             "image_url": "/storage/db-only.webp",
             "video_prompt": "new db prompt",
+            "action_text": "new db action",
             "dialogue": "new db line",
             "characters": ["小空"],
             "scene": "",

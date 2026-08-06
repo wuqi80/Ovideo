@@ -14,6 +14,7 @@ import type { SyncMode } from '../components/video/StoryboardSyncModal';
 import { generateUUID } from '../services/videoTaskService';
 import type { SeedanceParams, ShotType, VideoModel } from '../services/videoModelService';
 import type { TaskGroup, UploadedImage } from '../services/videoTaskTypes';
+import { buildStoryboardVideoPrompt } from './storyboardVideoPrompt';
 import {
     computeReactiveDurationFromMeta,
     patchWorkspaceSession,
@@ -30,14 +31,18 @@ interface PerItemArtifacts {
     prompt: string;
 }
 
+function storyboardItemId(item: any): string {
+    return String(item?.item_id ?? item?.itemId ?? item?.id ?? '').trim();
+}
+
 /**
  * 把一条 storyboard item 翻译成一组 workspace artifacts（image / group / seedance params / meta / prompt）。
  *
- * 与 VideoGenPage.handleImportAll 内联逻辑保持一致：占位卡 prompt='@'、默认模型 Seedance2、
+ * 与 VideoGenPage.handleImportAll 内联逻辑保持一致：无文本占位卡 prompt='@'、默认模型 Seedance2、
  * 初始 duration 来自 computeReactiveDuration(meta)、有 mixedAudio 时挂 reference_audio。
  */
 function buildArtifacts(item: any): PerItemArtifacts | null {
-    const itemId = item?.item_id ?? item?.itemId;
+    const itemId = storyboardItemId(item);
     if (!itemId) return null;
 
     const rawUrl = (item.generated_image_url ?? item.generatedImageUrl ?? '') as string;
@@ -50,10 +55,7 @@ function buildArtifacts(item: any): PerItemArtifacts | null {
     }
 
     const sortOrder = item.sort_order ?? item.sortOrder ?? 0;
-    // Mirror VideoGenPage.handleImportAll: video_prompt > image_prompt.
-    const prompt: string =
-        item.video_prompt ?? item.videoPrompt ??
-        item.image_prompt ?? item.imagePrompt ?? '';
+    const prompt = buildStoryboardVideoPrompt(item);
 
     const audioUrls = {
         dialogue:  item.dialogue_audio_url ?? item.dialogueAudioUrl ?? undefined,
@@ -67,6 +69,7 @@ function buildArtifacts(item: any): PerItemArtifacts | null {
         mixedAudioUrl:  item.mixed_audio_url ?? item.mixedAudioUrl ?? undefined,
         mixedAudioHash: item.mixed_audio_hash ?? item.mixedAudioHash ?? undefined,
         sceneHeading: item.scene_heading ?? item.sceneHeading ?? undefined,
+        actionText:   item.action_text ?? item.actionText ?? undefined,
         dialogue:     item.dialogue ?? undefined,
         lastSyncedAt: Date.now(),
     };
@@ -96,7 +99,7 @@ function buildArtifacts(item: any): PerItemArtifacts | null {
     };
     const sp: SeedanceParams = {
         sub_model: 'standard',
-        prompt: isPlaceholder ? '@' : prompt,
+        prompt: prompt || (isPlaceholder ? '@' : ''),
         // Mirrors VideoGenPage.handleImportAll: reference_image is the default.
         media_inputs: imgUrl
             ? [{ kind: 'image', url: imgUrl, role: 'reference_image' }]
@@ -162,7 +165,7 @@ export async function applySyncStrategy(
 
     if (mode === 'add_new') {
         const newItems = storyboardItems.filter(s => {
-            const id = (s as any).item_id ?? (s as any).itemId;
+            const id = storyboardItemId(s);
             return id && !wsIds.has(id);
         });
         if (newItems.length === 0) return {};
@@ -197,7 +200,7 @@ export async function applySyncStrategy(
     // 规则：仅当 durationUserOverride === false 且 seedance_params.media_inputs.length <= 1 时认为未编辑
     const sbByItemId = new Map<string, any>();
     for (const s of storyboardItems) {
-        const id = (s as any).item_id ?? (s as any).itemId;
+        const id = storyboardItemId(s);
         if (id) sbByItemId.set(id, s);
     }
 

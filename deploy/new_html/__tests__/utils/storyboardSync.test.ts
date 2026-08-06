@@ -34,6 +34,8 @@ describe('storyboardSync', () => {
       sort_order: 0,
       generated_image_url: '/storage/image/shot.png',
       video_prompt: 'shot prompt',
+      action_text: '角色推门进入房间。',
+      dialogue: '角色：我回来了。',
       dialogue_audio_url: '/storage/audio/dialogue.mp3',
     }], emptySession, 'ep_1');
 
@@ -46,6 +48,11 @@ describe('storyboardSync', () => {
       { kind: 'image', url: '/storage/image/shot.png', role: 'reference_image' },
       { kind: 'audio', url: '/storage/audio/dialogue.mp3', role: 'reference_audio' },
     ]);
+    expect(params.prompt).toBe([
+      '动作说明：角色推门进入房间。',
+      '对白：角色：我回来了。',
+      '视频提示词：shot prompt',
+    ].join('\n'));
   });
 
   it('prefers mixed audio over individual storyboard audio tracks', async () => {
@@ -66,5 +73,25 @@ describe('storyboardSync', () => {
       url: '/storage/audio/mixed.mp3',
       role: 'reference_audio',
     });
+  });
+
+  it('keeps storyboard text in placeholder cards that have no image', async () => {
+    await applySyncStrategy('add_new', [{
+      id: 'sb_placeholder',
+      sort_order: 2,
+      generated_image_url: '',
+      action_text: '角色转身。',
+      dialogue: '角色：出发。',
+      video_prompt: '镜头向前推进。',
+    }], emptySession, 'ep_1');
+
+    const mutator = patchWorkspaceSessionMock.mock.calls[0][1];
+    const patch = mutator(emptySession);
+    const params = Object.values(patch.seedance_params)[0] as any;
+
+    expect(params.prompt).toContain('动作说明：角色转身。');
+    expect(params.prompt).toContain('对白：角色：出发。');
+    expect(params.prompt).not.toBe('@');
+    expect(patch.uploaded_images[0].storyboardItemId).toBe('sb_placeholder');
   });
 });

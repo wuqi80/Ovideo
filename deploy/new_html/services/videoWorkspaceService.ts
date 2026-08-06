@@ -14,6 +14,7 @@ export interface StoryboardMeta {
   mixedAudioUrl?: string;
   mixedAudioHash?: string;
   sceneHeading?: string;
+  actionText?: string;
   dialogue?: string;
   lastSyncedAt?: number;
 }

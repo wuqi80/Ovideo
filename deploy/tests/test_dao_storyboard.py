@@ -7,6 +7,16 @@ import json
 import pytest
 
 
+def test_video_field_set_includes_prompt_context():
+    from dao.creative.storyboard import StoryboardDAO
+
+    fields = StoryboardDAO.FIELD_SETS["video"]
+    assert "action_text" in fields
+    assert "dialogue" in fields
+    assert "image_prompt" in fields
+    assert "video_prompt" in fields
+
+
 async def test_create_storyboard_item(test_db):
     from dao_storyboard import StoryboardDAO
     result = await StoryboardDAO.create(

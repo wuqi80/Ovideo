@@ -1,5 +1,6 @@
 import type { ProjectVideoTask } from '../services/videoMediaService';
 import type { TaskGroup, UploadedImage } from '../services/videoTaskTypes';
+import { buildStoryboardVideoPrompt } from './storyboardVideoPrompt';
 
 export interface VideoTaskImportBuildOptions {
   normalizeUrl: (url: string) => string;
@@ -49,7 +50,7 @@ export function buildVideoTaskImport(
       uploadTime: imageTs,
     });
 
-    prompts[imgId] = task.video_prompt || '';
+    prompts[imgId] = buildStoryboardVideoPrompt(task);
     groups.push({
       uuid: groupId,
       ids: [imgId],
