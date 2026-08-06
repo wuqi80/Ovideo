@@ -416,11 +416,16 @@ class TaskDAO:
     @staticmethod
     async def cleanup_stale(hours: int = 24, limit: int = 50) -> int:
         """将超时的 pending/queued/processing 任务标记为 failed"""
+        return len(await TaskDAO.cleanup_stale_ids(hours=hours, limit=limit))
+
+    @staticmethod
+    async def cleanup_stale_ids(hours: int = 24, limit: int = 50) -> List[str]:
+        """Mark stale tasks failed and return IDs for queue/credit reconciliation."""
         db = get_db_manager()
         if not db:
-            return 0
+            return []
         limit = max(1, min(int(limit or 50), 500))
-        result = await db.execute("""
+        rows = await db.fetch("""
             WITH stale_tasks AS (
                 SELECT task_id
                 FROM tasks
@@ -433,9 +438,9 @@ class TaskDAO:
                 error_message = 'Auto-cleanup: stale task exceeded timeout',
                 completed_at = COALESCE(started_at, created_at)
             WHERE task_id IN (SELECT task_id FROM stale_tasks)
+            RETURNING task_id
         """, hours, limit)
-        count = int(result.split()[-1]) if result else 0
-        return count
+        return [str(row["task_id"]) for row in (rows or []) if row.get("task_id")]
 
 class ActivityLogDAO:
     """活动日志数据访问对象"""

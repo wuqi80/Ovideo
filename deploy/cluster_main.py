@@ -93,6 +93,7 @@ from services.ai_proxy_types import AIProxyError
 from services.auth_user_service import ensure_authenticated_user_record
 from services.user_profile_service import resolve_authenticated_user_id
 from services.api_provider_runtime import build_provider_runtime_status
+from services.task_stale_reaper import reap_stale_tasks
 from routers.ai_proxy import create_ai_proxy_router
 from routers.admin_compat import create_admin_compat_router
 from routers.auth import create_auth_router
@@ -154,8 +155,12 @@ async def run_task_stale_reaper_once(cleanup_fn=None) -> int:
     settings = task_stale_reaper_settings()
     if not settings["enabled"]:
         return 0
-    cleanup = cleanup_fn or TaskDAO.cleanup_stale
-    return int(await cleanup(int(settings["hours"])))
+    if cleanup_fn is not None:
+        return int(await cleanup_fn(int(settings["hours"])))
+    return await reap_stale_tasks(
+        int(settings["hours"]),
+        task_queue=task_service.get_queue(),
+    )
 
 # 验证配置
 config_errors = validate_cluster_config()
