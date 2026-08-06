@@ -1,9 +1,9 @@
 // Shared video model names, parameter types, and pure inference helpers.
 
-const COMFYUI_MODELS: string[] = ['Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', 'MiniMaxH3'];
+const COMFYUI_MODELS: string[] = ['Wan2', 'LTXNode1', 'WanNode2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', 'MiniMaxH3'];
 
 export type VideoModel =
-  | 'Wan2' | '一阶' | '二阶' | '三阶' | '四阶' | '五阶' | '六阶' | '七阶' | 'MiniMaxH3'
+  | 'Wan2' | 'LTXNode1' | 'WanNode2' | '一阶' | '二阶' | '三阶' | '四阶' | '五阶' | '六阶' | '七阶' | 'MiniMaxH3'
   | 'Veo' | 'Sora2' | 'MINI' | '大能'
   | 'Seedance15' | 'Seedance2' | 'Seedance2Fast' | 'Seedance2Mini'
   | 'Kling' | 'Vidu' | 'HappyHorse';
@@ -309,7 +309,9 @@ export function inferDashScopeTaskType(
 
 export function getModelDisplayName(model: VideoModel): string {
   const modelNameMap: Record<VideoModel, string> = {
-    Wan2: '集群视频（处理节点1·LTX / 处理节点2·Wan）',
+    Wan2: '集群视频（旧版兼容）',
+    LTXNode1: '处理节点1 · LTX',
+    WanNode2: '处理节点2 · Wan',
     '一阶': '一阶',
     '二阶': '二阶',
     '三阶': '三阶',
@@ -334,13 +336,14 @@ export function getModelDisplayName(model: VideoModel): string {
 }
 
 export const ALL_MODELS: VideoModel[] = [
-  'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', 'MiniMaxH3',
+  'Wan2', 'LTXNode1', 'WanNode2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', 'MiniMaxH3',
   'Veo', 'Sora2', 'MINI', '大能',
   'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
   'Kling', 'Vidu', 'HappyHorse',
 ];
 
 export const SELECTABLE_MODELS: VideoModel[] = [
+  'LTXNode1', 'WanNode2',
   'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini', 'MiniMaxH3', 'MINI',
 ];
 

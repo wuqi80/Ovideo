@@ -54,6 +54,10 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
     cluster_model = next(model for model in result["models"] if model["key"] == "一阶")
     assert cluster_model["available"] is True
     assert cluster_model["parameter_rules"]["duration"]["options"] == [5, 10, 15]
+    ltx_node1 = next(model for model in result["models"] if model["key"] == "LTXNode1")
+    wan_node2 = next(model for model in result["models"] if model["key"] == "WanNode2")
+    assert ltx_node1["available"] is False
+    assert wan_node2["available"] is False
     h3 = next(model for model in result["models"] if model["key"] == "MiniMaxH3")
     assert h3["available"] is False
     wan26 = next(model for model in result["models"] if model["key"] == "大能")
@@ -112,6 +116,71 @@ async def test_video_capabilities_degrade_safely(monkeypatch):
     assert happyhorse["available"] is False
     assert h3["available"] is False
     assert "reference_audio" not in seedance["media_inputs"]
+
+
+async def test_video_capabilities_expose_split_processing_node_models(monkeypatch):
+    async def fake_list_agent_nodes():
+        return [
+            {
+                "id": "agent_gpu1",
+                "agent_id": "agent_gpu1",
+                "node_id": "agent_gpu1",
+                "routing_name": "GPU1",
+                "name": "处理节点1",
+                "status": "online",
+            },
+            {
+                "id": "agent_gpu2",
+                "agent_id": "agent_gpu2",
+                "node_id": "agent_gpu2",
+                "routing_name": "GPU2",
+                "name": "处理节点2",
+                "status": "busy",
+            },
+        ]
+
+    async def empty_agent_instances():
+        return []
+
+    async def empty_health(targets=None):
+        return []
+
+    monkeypatch.setattr(
+        video_capability_service,
+        "resolve_seedance_model_name",
+        lambda sub_model, usage_scope="workflow": {
+            "standard": "doubao-seedance-2-0-260128",
+            "fast": "doubao-seedance-2-0-fast-260128",
+            "mini": "doubao-seedance-2-0-mini-260615",
+        }[sub_model],
+    )
+    monkeypatch.setattr(
+        video_capability_service,
+        "resolve_provider",
+        lambda provider, model_name=None, usage_scope="workflow": SimpleNamespace(
+            has_key=False,
+            model_name=model_name or "",
+            endpoint="https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+        ),
+    )
+    monkeypatch.setattr(video_capability_service, "list_agent_nodes", fake_list_agent_nodes)
+    monkeypatch.setattr(video_capability_service, "list_agent_instances", empty_agent_instances)
+    monkeypatch.setattr(video_capability_service, "list_cached_provider_health", empty_health)
+
+    result = await video_capability_service.get_video_capabilities()
+
+    ltx_node1 = next(model for model in result["models"] if model["key"] == "LTXNode1")
+    wan_node2 = next(model for model in result["models"] if model["key"] == "WanNode2")
+    assert ltx_node1["available"] is True
+    assert ltx_node1["model_name"] == "LTX"
+    assert ltx_node1["preferred_agent_id"] == "agent_gpu1"
+    assert ltx_node1["preferred_node_id"] == "agent_gpu1"
+    assert ltx_node1["strict_preferred_routing"] is True
+    assert wan_node2["available"] is True
+    assert wan_node2["model_name"] == "Wan"
+    assert wan_node2["preferred_agent_id"] == "agent_gpu2"
+    assert wan_node2["preferred_node_id"] == "agent_gpu2"
+    assert wan_node2["strict_preferred_routing"] is True
 
 
 async def test_video_capabilities_hide_seedance_model_marked_error_in_health_cache(monkeypatch):

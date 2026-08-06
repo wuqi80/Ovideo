@@ -229,6 +229,8 @@ def test_stable_wan_operation_id_routes_to_node_specific_verified_engines():
 
     assert handler.resolve_workflow_name("i2v", {"model": "Wan2"}) == "ltx_i2v"
     assert handler.resolve_workflow_name("morph", {"model": "Wan2"}) == "ltx_morph"
+    assert handler.resolve_workflow_name("i2v", {"model": "LTXNode1"}) == "ltx_i2v"
+    assert handler.resolve_workflow_name("i2v", {"model": "WanNode2"}) == "wan2_i2v"
 
     morph = handler.build_workflow_for_task(
         "morph",

@@ -27,6 +27,8 @@ from services.cluster_node_service import list_agent_instances, list_agent_nodes
 logger = logging.getLogger(__name__)
 MINIMAX_H3_CAPABILITY_KEY = "minimax_h3_fl2va"
 MINIMAX_H3_PREFERRED_PORT = 8189
+GPU1_ROUTING_NAME = "GPU1"
+GPU2_ROUTING_NAME = "GPU2"
 
 
 def _is_seedance_omni_model(model_name: str) -> bool:
@@ -40,6 +42,35 @@ async def _has_online_comfyui_agent() -> bool:
     except Exception as exc:
         logger.debug("video capability ComfyUI agent probe failed: %s", exc)
         return False
+
+
+def _node_matches_routing_name(node: Dict[str, Any], routing_name: str) -> bool:
+    requested = str(routing_name or "").strip().lower()
+    return any(
+        str(node.get(field) or "").strip().lower() == requested
+        for field in ("routing_name", "name", "node_id", "agent_id", "id")
+    )
+
+
+def _node_target(node: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not node:
+        return {}
+    agent_id = str(node.get("agent_id") or node.get("id") or "").strip()
+    node_id = str(node.get("node_id") or agent_id or node.get("id") or "").strip()
+    target: Dict[str, Any] = {}
+    if agent_id:
+        target["preferred_agent_id"] = agent_id
+    if node_id:
+        target["preferred_node_id"] = node_id
+    target["strict_preferred_routing"] = True
+    return target
+
+
+def _find_node_target(nodes: Iterable[Dict[str, Any]], routing_name: str) -> Dict[str, Any]:
+    for node in nodes or []:
+        if _node_matches_routing_name(node, routing_name):
+            return _node_target(node)
+    return {}
 
 
 def _is_minimax_h3_instance(instance: Dict[str, Any]) -> bool:
@@ -163,18 +194,29 @@ def _seedance_manifest(
     }
 
 
-def _workflow_video_manifest(key: str, label: str, *, available: bool) -> Dict[str, Any]:
+def _workflow_video_manifest(
+    key: str,
+    label: str,
+    *,
+    available: bool,
+    model_name: Optional[str] = None,
+    target: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Describe the parameters that the processing-cluster workflow really accepts."""
+    target = target or {}
     return {
         "key": key,
         "label": label,
         "provider": "processing_cluster",
-        "model_name": None,
+        "model_name": model_name,
         "task_types": ["i2v", "first_last_frame"],
         "media_inputs": ["first_frame", "last_frame"],
         "supports_original_audio": False,
         "supports_cancel": True,
         "requires_processing_node": True,
+        "preferred_agent_id": target.get("preferred_agent_id"),
+        "preferred_node_id": target.get("preferred_node_id"),
+        "strict_preferred_routing": bool(target.get("strict_preferred_routing")),
         "available": available,
         "query_mode": "queue",
         "parameter_rules": {
@@ -250,6 +292,10 @@ def build_video_model_manifest(
     mini_seedance_model: str,
     seedance_omni: bool,
     comfyui_available: bool,
+    ltx_node1_available: bool = False,
+    ltx_node1_target: Optional[Dict[str, Any]] = None,
+    wan_node2_available: bool = False,
+    wan_node2_target: Optional[Dict[str, Any]] = None,
     minimax_h3_available: bool = False,
     minimax_h3_target: Optional[Dict[str, Any]] = None,
     seedance_billing_mode: str = "standard",
@@ -328,7 +374,7 @@ def build_video_model_manifest(
             *[
                 _workflow_video_manifest(key, label, available=comfyui_available)
                 for key, label in (
-                    ("Wan2", "处理集群视频"),
+                    ("Wan2", "集群视频（旧版兼容）"),
                     ("一阶", "一阶"),
                     ("二阶", "二阶"),
                     ("三阶", "三阶"),
@@ -338,6 +384,20 @@ def build_video_model_manifest(
                     ("七阶", "七阶"),
                 )
             ],
+            _workflow_video_manifest(
+                "LTXNode1",
+                "处理节点1 · LTX",
+                available=ltx_node1_available,
+                model_name="LTX",
+                target=ltx_node1_target,
+            ),
+            _workflow_video_manifest(
+                "WanNode2",
+                "处理节点2 · Wan",
+                available=wan_node2_available,
+                model_name="Wan",
+                target=wan_node2_target,
+            ),
             _minimax_h3_video_manifest(
                 available=minimax_h3_available,
                 target=minimax_h3_target,
@@ -493,7 +553,14 @@ async def get_video_capabilities(
         fast_seedance_model = ""
         mini_seedance_model = ""
 
-    comfyui_available = await _has_online_comfyui_agent()
+    try:
+        agent_nodes = await list_agent_nodes()
+    except Exception as exc:
+        logger.debug("video capability ComfyUI agent probe failed: %s", exc)
+        agent_nodes = []
+    comfyui_available = bool(agent_nodes)
+    ltx_node1_target = _find_node_target(agent_nodes, GPU1_ROUTING_NAME)
+    wan_node2_target = _find_node_target(agent_nodes, GPU2_ROUTING_NAME)
     minimax_h3_target = await resolve_minimax_h3_agent_target()
     minimax_h3_available = bool(minimax_h3_target.get("preferred_agent_id"))
     seedance_billing_mode = "standard"
@@ -585,6 +652,10 @@ async def get_video_capabilities(
             seedance_omni=seedance_omni,
             seedance_billing_mode=seedance_billing_mode,
             comfyui_available=comfyui_available,
+            ltx_node1_available=bool(ltx_node1_target.get("preferred_node_id")),
+            ltx_node1_target=ltx_node1_target,
+            wan_node2_available=bool(wan_node2_target.get("preferred_node_id")),
+            wan_node2_target=wan_node2_target,
             minimax_h3_available=minimax_h3_available,
             minimax_h3_target=minimax_h3_target,
             model_scope=model_scope,

@@ -15,8 +15,10 @@ import {
 } from '../../services/videoModelService';
 
 describe('processing cluster model label', () => {
-  it('uses neutral processing-node names behind the stable Wan2 operation ID', () => {
-    expect(getModelDisplayName('Wan2')).toBe('集群视频（处理节点1·LTX / 处理节点2·Wan）');
+  it('shows node-specific processing model labels and keeps Wan2 as a legacy ID', () => {
+    expect(getModelDisplayName('LTXNode1')).toBe('处理节点1 · LTX');
+    expect(getModelDisplayName('WanNode2')).toBe('处理节点2 · Wan');
+    expect(getModelDisplayName('Wan2')).toBe('集群视频（旧版兼容）');
   });
 });
 
@@ -123,6 +125,20 @@ describe('buildVideoModelOptions', () => {
   it('filters unavailable capability models and shows runtime model names', () => {
     const options = buildVideoModelOptions([
       {
+        key: 'LTXNode1',
+        label: '处理节点1 · LTX',
+        provider: 'processing_cluster',
+        model_name: 'LTX',
+        available: false,
+      },
+      {
+        key: 'WanNode2',
+        label: '处理节点2 · Wan',
+        provider: 'processing_cluster',
+        model_name: 'Wan',
+        available: true,
+      },
+      {
         key: 'HappyHorse',
         label: '炼虚',
         provider: 'dashscope',
@@ -159,11 +175,12 @@ describe('buildVideoModelOptions', () => {
       },
     ]);
 
-    expect(options.map(option => option.value)).toEqual(['HappyHorse', 'Seedance2Mini', 'MiniMaxH3', 'MINI']);
-    expect(options[0].label).toContain('happyhorse-1.0-r2v');
-    expect(options[1].label).toContain('doubao-seedance-2-0-mini-260615');
-    expect(options[2].label).toContain('MiniMax-H3 FL2VA');
-    expect(options[3].label).toContain('MiniMax-Hailuo-2.3');
+    expect(options.map(option => option.value)).toEqual(['WanNode2', 'HappyHorse', 'Seedance2Mini', 'MiniMaxH3', 'MINI']);
+    expect(options[0].label).toContain('Wan');
+    expect(options[1].label).toContain('happyhorse-1.0-r2v');
+    expect(options[2].label).toContain('doubao-seedance-2-0-mini-260615');
+    expect(options[3].label).toContain('MiniMax-H3 FL2VA');
+    expect(options[4].label).toContain('MiniMax-Hailuo-2.3');
   });
 
   it('uses backend Plan-mode manifest to expose only Seedance 1.5', () => {

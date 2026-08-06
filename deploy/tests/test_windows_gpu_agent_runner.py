@@ -158,6 +158,23 @@ def test_gpu2_replaces_gpu1_ltx_baseline_when_stable_wan_operation_is_selected()
     )
 
 
+def test_gpu2_accepts_explicit_wan_node_model_key():
+    task = {
+        "task_type": "i2v",
+        "params": {
+            "model": "WanNode2",
+            "image_path": "start.png",
+            "duration": 2,
+        },
+        "files": [{"param": "image_path", "filename": "start.png"}],
+    }
+
+    prepared = prepare_gpu2_task(task)
+
+    assert is_gpu2_wan_i2v_task(task)
+    assert prepared["workflow_name"] == "gpu2_wan21_i2v_low_vram"
+
+
 def test_gpu2_wan_morph_preserves_start_and_end_images():
     task = {
         "task_type": "morph",

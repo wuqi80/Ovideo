@@ -845,7 +845,7 @@ def is_gpu2_wan_i2v_task(task: Dict[str, Any]) -> bool:
         workflow_name in {"wan2_i2v", "wan2_morph"}
         or workflow_name.startswith("wan2_i2v")
         or workflow_name.startswith("wan2_morph")
-        or (task_type in {"i2v", "morph"} and "wan" in model)
+        or (task_type in {"i2v", "morph"} and ("wan" in model or model == "wannode2"))
     )
 
 

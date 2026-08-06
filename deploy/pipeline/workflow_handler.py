@@ -305,6 +305,8 @@ class WorkflowHandler:
             # verified LTX graph; GPU2 replaces it with its isolated low-VRAM
             # Wan graph inside windows_gpu_agent_runner.py.
             'Wan2': 'ltx',
+            'LTXNode1': 'ltx',
+            'WanNode2': 'wan2',
             '一阶': 'smooth',
             '二阶': 'dawasi',
             '三阶': 'hunyuan',

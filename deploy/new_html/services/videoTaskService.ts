@@ -56,6 +56,10 @@ export function buildComfyUIVideoTaskPayload(
     return payload;
 }
 
+function requiresStrictProcessingNode(model: VideoModel): boolean {
+    return model === 'MiniMaxH3' || model === 'LTXNode1' || model === 'WanNode2';
+}
+
 function hasAuthHeader(): boolean {
     const headers = buildAuthHeaders(undefined, { requireAuth: false, includeContentType: false });
     return Object.keys(headers).some(key => key.toLowerCase() === 'authorization');
@@ -267,7 +271,7 @@ export async function submitTask(
 
     if (isComfyUIModel(model)) {
         const preferredTarget = entityOptions?.preferred_agent_id || entityOptions?.preferred_node_id;
-        const strictPreferredRouting = model === 'MiniMaxH3' && Boolean(preferredTarget);
+        const strictPreferredRouting = requiresStrictProcessingNode(model) && Boolean(preferredTarget);
         const routing = await resolveGpuTaskRouting(
             preferredTarget,
             { strict: strictPreferredRouting },

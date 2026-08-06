@@ -2632,7 +2632,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 : groupRef?.model === 'Seedance2Fast' ? 'seedance-fast'
                 : groupRef?.model === 'Seedance2Mini' ? 'seedance-mini'
                 : groupRef?.model === 'Seedance15' ? 'seedance-1.5'
-                : groupRef?.model === 'Wan2' ? 'wan2'
+                : groupRef?.model === 'Wan2' || groupRef?.model === 'LTXNode1' || groupRef?.model === 'WanNode2' ? 'wan2'
                 : groupRef?.model === 'Kling' ? 'kling'
                 : groupRef?.model === 'Vidu' ? 'vidu'
                 : groupRef?.model === 'HappyHorse' ? 'happyhorse'
