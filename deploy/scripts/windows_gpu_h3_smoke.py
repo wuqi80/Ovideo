@@ -124,7 +124,18 @@ def _submit_and_wait(workflow: dict[str, Any]) -> dict[str, Any]:
                 (
                     item
                     for output in outputs.values()
-                    for item in (output.get("gifs") or []) + (output.get("videos") or [])
+                    for item in (
+                        (output.get("gifs") or [])
+                        + (output.get("videos") or [])
+                        + [
+                            image
+                            for image, animated in zip(
+                                output.get("images") or [],
+                                output.get("animated") or [],
+                            )
+                            if animated or str(image.get("filename", "")).lower().endswith((".mp4", ".webm", ".mov"))
+                        ]
+                    )
                 ),
                 None,
             )

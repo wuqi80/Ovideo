@@ -50,9 +50,10 @@ GPU2_H3_MODEL_FILES = {
 }
 # MiniMax H3's sampler reshapes latents on a 32px grid. 768x432 looks like
 # 16:9, but 432 / 32 = 13.5 and causes SamplerCustomAdvanced shape mismatches.
-# Keep the GPU2 local preset on the official fast-preview 16:9 grid.
-GPU2_H3_WIDTH = 864
-GPU2_H3_HEIGHT = 480
+# GPU2 currently runs H3 on a 12GB RTX 3060, so keep this preset low-VRAM
+# while still aligned to the model's 32px grid.
+GPU2_H3_WIDTH = 768
+GPU2_H3_HEIGHT = 416
 GPU2_H3_FPS = 24
 GPU2_H3_DEFAULT_DURATION_SECONDS = 5.0
 GPU2_H3_MIN_DURATION_SECONDS = 4.0
