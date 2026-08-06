@@ -1,6 +1,6 @@
 param(
     [string]$InstallRoot = "E:\MECHA-GPU",
-    [string]$ServerUrl = "https://spti.ai"
+    [string]$ServerUrl = "https://192.168.31.134"
 )
 
 $ErrorActionPreference = "Continue"

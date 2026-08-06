@@ -54,7 +54,7 @@ def public_base_url() -> str:
         os.getenv("PUBLIC_BASE_URL")
         or os.getenv("SERVER_BASE_URL")
         or os.getenv("SMOKE_BASE_URL")
-        or "https://spti.ai"
+        or "https://192.168.31.134"
     ).rstrip("/")
 
 
