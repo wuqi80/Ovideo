@@ -24,7 +24,9 @@ sys.path.insert(0, str(AGENT_DIR))
 sys.path.insert(0, str(ROOT))
 
 from windows_gpu_agent_runner import (  # noqa: E402
+    GPU2_H3_HEIGHT,
     GPU2_H3_MODEL_FILES,
+    GPU2_H3_WIDTH,
     build_gpu2_minimax_h3_fl2va_workflow,
 )
 
@@ -70,9 +72,10 @@ def check_readiness() -> dict[str, Any]:
 
 
 def _make_test_image(path: Path, *, ending: bool = False) -> None:
-    image = Image.new("RGB", (768, 432), (23, 38, 62) if not ending else (54, 24, 68))
+    image = Image.new("RGB", (GPU2_H3_WIDTH, GPU2_H3_HEIGHT), (23, 38, 62) if not ending else (54, 24, 68))
     draw = ImageDraw.Draw(image)
-    draw.rectangle((0, 300, 768, 432), fill=(33, 54, 38) if not ending else (70, 38, 82))
+    ground_y = int(GPU2_H3_HEIGHT * 0.69)
+    draw.rectangle((0, ground_y, GPU2_H3_WIDTH, GPU2_H3_HEIGHT), fill=(33, 54, 38) if not ending else (70, 38, 82))
     x_offset = 0 if not ending else 90
     draw.ellipse((276 + x_offset, 82, 452 + x_offset, 258), fill=(226, 192, 150))
     draw.rectangle((304 + x_offset, 250, 424 + x_offset, 408), fill=(82, 124, 188))

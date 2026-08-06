@@ -48,8 +48,11 @@ GPU2_H3_MODEL_FILES = {
     "video_vae": "minimax_h3_video_vae_fp16.safetensors",
     "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
 }
-GPU2_H3_WIDTH = 768
-GPU2_H3_HEIGHT = 432
+# MiniMax H3's sampler reshapes latents on a 32px grid. 768x432 looks like
+# 16:9, but 432 / 32 = 13.5 and causes SamplerCustomAdvanced shape mismatches.
+# Keep the GPU2 local preset on the official fast-preview 16:9 grid.
+GPU2_H3_WIDTH = 864
+GPU2_H3_HEIGHT = 480
 GPU2_H3_FPS = 24
 GPU2_H3_DEFAULT_DURATION_SECONDS = 5.0
 GPU2_H3_MIN_DURATION_SECONDS = 4.0

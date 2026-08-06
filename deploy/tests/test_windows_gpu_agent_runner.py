@@ -88,6 +88,10 @@ def test_gpu2_minimax_h3_routes_to_isolated_8189_sidecar_and_audio_video_nodes()
     assert workflow["3"]["inputs"]["image"] == ["1", 0]
     assert workflow["3"]["inputs"]["width"] == GPU2_H3_WIDTH
     assert workflow["3"]["inputs"]["height"] == GPU2_H3_HEIGHT
+    assert GPU2_H3_WIDTH == 864
+    assert GPU2_H3_HEIGHT == 480
+    assert GPU2_H3_WIDTH % 32 == 0
+    assert GPU2_H3_HEIGHT % 32 == 0
     assert workflow["3"]["inputs"]["crop"] == "center"
     assert workflow["6"]["inputs"]["unet_name"] == GPU2_H3_MODEL_FILES["diffusion"]
     assert workflow["13"]["inputs"]["clip_name"] == GPU2_H3_MODEL_FILES["text_encoder"]
