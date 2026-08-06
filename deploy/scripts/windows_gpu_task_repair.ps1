@@ -45,15 +45,48 @@ function Register-MechaTask {
         -RestartInterval (New-TimeSpan -Minutes 1) `
         -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
 
-    Register-ScheduledTask `
-        -TaskName $TaskName `
-        -Action $action `
-        -Trigger $trigger `
-        -Principal $principal `
-        -Settings $settings `
-        -Force | Out-Null
+    try {
+        Register-ScheduledTask `
+            -TaskName $TaskName `
+            -Action $action `
+            -Trigger $trigger `
+            -Principal $principal `
+            -Settings $settings `
+            -Force | Out-Null
+    } catch {
+        Write-RepairLog ("Register-ScheduledTask failed for {0}, fallback to schtasks.exe: {1}" -f $TaskName, $_.Exception.Message)
+        Register-ScheduledTaskFallback -TaskName $TaskName -CommandPath $CommandPath
+    }
 
     Write-RepairLog "Registered $TaskName (delay=$StartupDelay, restart every 1 minute)."
+}
+
+function Register-ScheduledTaskFallback {
+    param(
+        [string]$TaskName,
+        [string]$CommandPath
+    )
+    try {
+        schtasks.exe /Delete /TN $TaskName /F | Out-Null
+    } catch {
+        # ignore delete failures
+    }
+    $cmd = 'cmd.exe /c "{0}"' -f $CommandPath
+    $createArgs = @(
+        "/Create",
+        "/F",
+        "/TN",
+        "`"$TaskName`"",
+        "/SC",
+        "ONSTART",
+        "/RU",
+        "SYSTEM",
+        "/RL",
+        "HIGHEST",
+        "/TR",
+        "`"$cmd`""
+    )
+    & schtasks.exe @createArgs | Out-Null
 }
 
 function Ensure-AgentServerAddress {
@@ -85,7 +118,10 @@ function Start-OptionalTask {
         return
     }
     if ($task.State -ne "Ready" -and $task.State -ne "Running") {
-        Register-ScheduledTaskFallback -TaskName $TaskName
+        $command = Join-Path $root "scripts\windows_gpu_start_h3_comfyui.cmd"
+        if (Test-Path $command) {
+            Register-ScheduledTaskFallback -TaskName $TaskName -CommandPath $command
+        }
     }
     Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Write-RepairLog "Triggered startup for $TaskName."
@@ -123,10 +159,18 @@ Register-MechaTask `
     -CommandPath (Join-Path $root "start_agent.cmd") `
     -StartupDelay "PT1M"
 
-Start-ScheduledTask -TaskName "MECHA-GPU-ComfyUI"
+try {
+    Start-ScheduledTask -TaskName "MECHA-GPU-ComfyUI"
+} catch {
+    schtasks.exe /Run /TN "MECHA-GPU-ComfyUI" | Out-Null
+}
 Write-RepairLog "Started MECHA-GPU-ComfyUI."
 Start-Sleep -Seconds 15
-Start-ScheduledTask -TaskName "MECHA-GPU-Agent"
+try {
+    Start-ScheduledTask -TaskName "MECHA-GPU-Agent"
+} catch {
+    schtasks.exe /Run /TN "MECHA-GPU-Agent" | Out-Null
+}
 Write-RepairLog "Started MECHA-GPU-Agent."
 Start-OptionalTask -TaskName "MECHA-GPU-ComfyUI-H3"
 
