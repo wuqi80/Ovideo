@@ -343,8 +343,11 @@ export const ALL_MODELS: VideoModel[] = [
 ];
 
 export const SELECTABLE_MODELS: VideoModel[] = [
+  'MiniMaxH3', 'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶',
   'LTXNode1', 'WanNode2',
-  'HappyHorse', 'Vidu', 'Kling', '大能', 'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini', 'MiniMaxH3', 'MINI',
+  'Veo', 'Sora2', 'MINI', '大能',
+  'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
+  'Kling', 'Vidu', 'HappyHorse',
 ];
 
 const ALL_MODEL_VALUES = new Set<string>(ALL_MODELS);
@@ -423,14 +426,14 @@ export function buildVideoModelOptions(
 
   return fallbackModels.flatMap((model) => {
     const capability = capabilityByKey.get(model);
-    if (hasManifest && (!capability || capability.available === false)) return [];
+    const available = capability ? capability.available !== false : false;
     const runtimeLabel = formatVideoModelRuntimeLabel(capability);
     return [{
       value: model,
       label: formatVideoModelOptionLabel(model, capability),
       baseLabel: getModelDisplayName(model),
       runtimeLabel,
-      available: capability?.available !== false,
+      available,
       provider: capability?.provider,
       capability,
     }];

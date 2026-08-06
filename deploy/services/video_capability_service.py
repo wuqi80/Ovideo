@@ -114,6 +114,17 @@ async def resolve_minimax_h3_agent_target() -> Dict[str, Any]:
     return target
 
 
+def _minimax_h3_gpu2_fallback_target(agent_nodes: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    """Keep local H3 visible while the GPU2 sidecar capability heartbeat catches up."""
+    target = _find_node_target(agent_nodes, GPU2_ROUTING_NAME)
+    if not target:
+        return {}
+    target["preferred_comfyui_port"] = MINIMAX_H3_PREFERRED_PORT
+    target["strict_preferred_comfyui_port"] = True
+    target["strict_preferred_routing"] = True
+    return target
+
+
 async def _has_minimax_h3_agent() -> bool:
     return bool(await find_minimax_h3_agent_instance())
 
@@ -561,7 +572,10 @@ async def get_video_capabilities(
     comfyui_available = bool(agent_nodes)
     ltx_node1_target = _find_node_target(agent_nodes, GPU1_ROUTING_NAME)
     wan_node2_target = _find_node_target(agent_nodes, GPU2_ROUTING_NAME)
-    minimax_h3_target = await resolve_minimax_h3_agent_target()
+    minimax_h3_target = (
+        await resolve_minimax_h3_agent_target()
+        or _minimax_h3_gpu2_fallback_target(agent_nodes)
+    )
     minimax_h3_available = bool(minimax_h3_target.get("preferred_agent_id"))
     seedance_billing_mode = "standard"
     try:

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildVideoModelOptions,
+  SELECTABLE_MODELS,
   getModelDisplayName,
   getMiniMaxVideoParamsError,
   inferSeedanceTaskType,
@@ -122,7 +123,21 @@ describe('Seedance model mapping', () => {
 });
 
 describe('buildVideoModelOptions', () => {
-  it('filters unavailable capability models and shows runtime model names', () => {
+  it('keeps the local and legacy workflow entries visible at the top of the selector', () => {
+    expect(SELECTABLE_MODELS.slice(0, 9)).toEqual([
+      'MiniMaxH3',
+      'Wan2',
+      '一阶',
+      '二阶',
+      '三阶',
+      '四阶',
+      '五阶',
+      '六阶',
+      '七阶',
+    ]);
+  });
+
+  it('keeps all selectable models and marks unavailable ones with runtime labels', () => {
     const options = buildVideoModelOptions([
       {
         key: 'LTXNode1',
@@ -175,12 +190,13 @@ describe('buildVideoModelOptions', () => {
       },
     ]);
 
-    expect(options.map(option => option.value)).toEqual(['WanNode2', 'HappyHorse', 'Seedance2Mini', 'MiniMaxH3', 'MINI']);
-    expect(options[0].label).toContain('Wan');
-    expect(options[1].label).toContain('happyhorse-1.0-r2v');
-    expect(options[2].label).toContain('doubao-seedance-2-0-mini-260615');
-    expect(options[3].label).toContain('MiniMax-H3 FL2VA');
-    expect(options[4].label).toContain('MiniMax-Hailuo-2.3');
+    expect(options.map(option => option.value)).toEqual(SELECTABLE_MODELS);
+    expect(options.find(option => option.value === 'LTXNode1')?.available).toBe(false);
+    expect(options.find(option => option.value === 'WanNode2')?.available).toBe(true);
+    expect(options.find(option => option.value === 'HappyHorse')?.label).toContain('happyhorse-1.0-r2v');
+    expect(options.find(option => option.value === 'Seedance2Mini')?.label).toContain('doubao-seedance-2-0-mini-260615');
+    expect(options.find(option => option.value === 'MiniMaxH3')?.label).toContain('MiniMax-H3 FL2VA');
+    expect(options.find(option => option.value === 'MINI')?.label).toContain('MiniMax-Hailuo-2.3');
   });
 
   it('uses backend Plan-mode manifest to expose only Seedance 1.5', () => {
@@ -192,7 +208,7 @@ describe('buildVideoModelOptions', () => {
         model_name: 'doubao-seedance-1.5-pro',
         available: true,
       },
-    ]);
+    ], ['Seedance15']);
 
     expect(options.map(option => option.value)).toEqual(['Seedance15']);
     expect(options[0].label).toContain('doubao-seedance-1.5-pro');
@@ -207,7 +223,7 @@ describe('buildVideoModelOptions', () => {
         model_name: 'happyhorse-1.0-r2v',
         available: true,
       },
-    ]);
+    ], ['MiniMaxH3']);
 
     const withCurrent = withCurrentVideoModelOption(options, 'Seedance2', [
       {

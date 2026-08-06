@@ -24,6 +24,7 @@ import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '
 import { apiFetch, secureApiUrl } from '../services/httpClient';
 import { syncTimelineAudioPlayback } from '../utils/enhanceTimelineAudio';
 import LazyVideo from '../components/LazyVideo';
+import { withEntityFileVideoFallbacks } from '../utils/enhanceSourceClips';
 import {
   clusterNodePreferenceId,
   DEFAULT_GPU_NODE_NAME,
@@ -124,20 +125,23 @@ function buildEnhanceSourceClips(
     const seg = sortedSegs[i];
     const storyboard = seg.storyboardItemId ? storyboardById.get(seg.storyboardItemId) : undefined;
     const dur = (seg.durationMs || 5000) / 1000;
-    allClips.push({
-      id: seg.segmentId || `vid_${i}`,
-      url: secureMediaUrl(seg.videoUrl || ''),
-      thumbnailUrl: seg.thumbnailUrl ? secureMediaUrl(seg.thumbnailUrl) : undefined,
-      referenceImageUrl: storyboard?.generatedImageUrl
-        ? secureMediaUrl(storyboard.generatedImageUrl)
-        : undefined,
-      model: seg.model,
-      startTime: videoTime,
-      duration: dur,
-      sourceOffset: 0,
-      type: 'video',
-      settings: { upscale: false, interpolate: false, lipSync: false },
-    });
+    const videoUrl = seg.videoUrl ? secureMediaUrl(seg.videoUrl) : '';
+    if (videoUrl) {
+      allClips.push({
+        id: seg.segmentId || `vid_${i}`,
+        url: videoUrl,
+        thumbnailUrl: seg.thumbnailUrl ? secureMediaUrl(seg.thumbnailUrl) : undefined,
+        referenceImageUrl: storyboard?.generatedImageUrl
+          ? secureMediaUrl(storyboard.generatedImageUrl)
+          : undefined,
+        model: seg.model,
+        startTime: videoTime,
+        duration: dur,
+        sourceOffset: 0,
+        type: 'video',
+        settings: { upscale: false, interpolate: false, lipSync: false },
+      });
+    }
     videoTime += dur;
   }
 
@@ -234,10 +238,43 @@ export const EnhancePage: React.FC = () => {
   const [actorDubbingClips, setActorDubbingClips] = useState<MediaClip[]>([]);
   const [storyboardAudioLoaded, setStoryboardAudioLoaded] = useState(false);
   const [storyboardAudioReloadKey, setStoryboardAudioReloadKey] = useState(0);
+  const [segmentVideoFallbacks, setSegmentVideoFallbacks] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadSlices('videoSegments', 'audioTracks');
   }, [loadSlices]);
+
+  useEffect(() => {
+    let active = true;
+    const segmentsWithId = videoSegments.filter(segment => segment.segmentId);
+    if (segmentsWithId.length === 0) {
+      setSegmentVideoFallbacks({});
+      return () => { active = false; };
+    }
+
+    Promise.all(segmentsWithId.map(async segment => {
+      try {
+        const files = await fetchEntityFiles('video_segment', segment.segmentId, 'video');
+        const latestVideo = files.items.find(file => file.isSelected && file.fileUrl)
+          || files.items.find(file => file.fileUrl);
+        return latestVideo?.fileUrl
+          ? [segment.segmentId, latestVideo.fileUrl] as const
+          : null;
+      } catch (err) {
+        console.warn('[EnhancePage] video fallback load failed:', segment.segmentId, err);
+        return null;
+      }
+    })).then(entries => {
+      if (!active) return;
+      const next: Record<string, string> = {};
+      for (const entry of entries) {
+        if (entry) next[entry[0]] = entry[1];
+      }
+      setSegmentVideoFallbacks(next);
+    });
+
+    return () => { active = false; };
+  }, [videoSegments]);
 
   useEffect(() => {
     let active = true;
@@ -411,10 +448,15 @@ export const EnhancePage: React.FC = () => {
     return () => { active = false; };
   }, [videoSegments]);
 
+  const enhanceVideoSegments = useMemo(
+    () => withEntityFileVideoFallbacks(videoSegments, segmentVideoFallbacks),
+    [videoSegments, segmentVideoFallbacks],
+  );
+
   useEffect(() => {
     if (!storyboardAudioLoaded) return;
     const sourceClips = [
-      ...buildEnhanceSourceClips(videoSegments, storyboardAudioItems, audioTracks),
+      ...buildEnhanceSourceClips(enhanceVideoSegments, storyboardAudioItems, audioTracks),
       ...actorDubbingClips,
     ];
     if (sourceClips.length === 0) return;
@@ -423,7 +465,7 @@ export const EnhancePage: React.FC = () => {
       if (prev && sourceClips.some(c => c.id === prev)) return prev;
       return sourceClips.find(c => c.type === 'video')?.id ?? sourceClips[0]?.id ?? null;
     });
-  }, [videoSegments, storyboardAudioItems, audioTracks, actorDubbingClips, storyboardAudioLoaded]);
+  }, [enhanceVideoSegments, storyboardAudioItems, audioTracks, actorDubbingClips, storyboardAudioLoaded]);
 
   useEffect(() => {
     const scope = episodeId || '';

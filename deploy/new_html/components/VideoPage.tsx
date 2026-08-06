@@ -569,6 +569,18 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return params.duration === duration ? params : { ...params, duration };
     }, [resolveSeedanceDurationForGroup]);
 
+    const getLatestVideoUrl = useCallback((videos?: string[]) => {
+        if (!videos || videos.length === 0) return '';
+        return videos[videos.length - 1];
+    }, []);
+
+    const getVideoByIndexOrLatest = useCallback((videos?: string[], index = -1) => {
+        if (!videos || videos.length === 0) return '';
+        if (index < 0) return videos[videos.length - 1];
+        const safeIndex = Math.max(0, Math.min(index, videos.length - 1));
+        return videos[safeIndex];
+    }, []);
+
     const getSeedanceParams = useCallback((uuid: string, model: VideoModel): SeedanceParams => {
         const group = taskGroups.find(g => g.uuid === uuid);
         const existing = seedanceParamsByUuid[uuid];
@@ -2762,7 +2774,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             return;
         }
         setUpscaleModalUuid(uuid);
-        setSelectedVideoIndex(0);
+        setSelectedVideoIndex(status.videos.length - 1);
     }, [tasksStatus, showToast]);
     
     const submitUpscale = useCallback(async () => {
@@ -2774,7 +2786,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             return;
         }
         
-        const videoUrl = status.videos[selectedVideoIndex] || status.videos[0];
+        const videoUrl = getVideoByIndexOrLatest(status.videos, selectedVideoIndex);
         const filename = videoUrl;
         
         if (!filename) {
@@ -2813,7 +2825,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             return;
         }
         setVoiceModalUuid(uuid);
-        setSelectedVideoIndex(0);
+        setSelectedVideoIndex(status.videos.length - 1);
         setVoiceAudioFile(null);
         setVoiceStartTime(0);
         setVoicePrompt('');
@@ -2841,7 +2853,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const group = taskGroups.find(g => g.uuid === voiceModalUuid);
         if (!group) return;
         
-        const videoUrl = status.videos[selectedVideoIndex] || status.videos[0];
+        const videoUrl = getVideoByIndexOrLatest(status.videos, selectedVideoIndex);
         const videoFilename = videoUrl;
         const img = uploadedImages.find(i => i.id === group.ids[0]);
         const imageFilename = img ? resolveVideoImageIdentifier(img, false) : '';
@@ -2886,7 +2898,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             return;
         }
         setEditModalUuid(uuid);
-        setSelectedVideoIndex(0);
+        setSelectedVideoIndex(status.videos.length - 1);
         setCropStartTime(0);
         setCropEndTime(5);
     }, [tasksStatus, showToast]);
@@ -2895,7 +2907,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (!editModalUuid) return '';
         const status = tasksStatus[editModalUuid];
         if (!status || !status.videos) return '';
-        return status.videos[selectedVideoIndex] || status.videos[0] || '';
+        return getVideoByIndexOrLatest(status.videos, selectedVideoIndex);
     };
     
     const extractVideoFrame = useCallback(async (position: VideoFramePosition) => {
@@ -3146,14 +3158,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 
                 {/* 视频缩略图/状态（与左侧 w-20 h-14 对齐） */}
                 <div className="w-20 h-14 shrink-0 bg-n800 rounded overflow-hidden border border-n40">
-                    {hasStoredVideoResult(status) ? (
-                        <LazyVideo
-                            src={videos[0]}
-                            preload="none"
-                            className="w-full h-full object-cover cursor-pointer"
-                            onClick={() => { setLightboxUrl(videos[0]); setLightboxType('video'); }}
-                        />
-                    ) : status.state === 'running' || status.state === 'processing' ? (
+                {hasStoredVideoResult(status) ? (
+                    <LazyVideo
+                        src={getLatestVideoUrl(videos)}
+                        preload="none"
+                        className="w-full h-full object-cover cursor-pointer"
+                        onClick={() => { setLightboxUrl(getLatestVideoUrl(videos)); setLightboxType('video'); }}
+                    />
+                ) : status.state === 'running' || status.state === 'processing' ? (
                         <div className="w-full h-full flex items-center justify-center bg-n20">
                             <Loader2 className="w-5 h-5 animate-spin text-primary" />
                         </div>
@@ -4510,7 +4522,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (!editModalUuid) return null;
         const status = tasksStatus[editModalUuid];
         const videos = status?.videos || [];
-        const currentVideoUrl = videos[selectedVideoIndex] || videos[0] || '';
+        const currentVideoUrl = getVideoByIndexOrLatest(videos, selectedVideoIndex);
         
         return (
             <div className="fixed inset-0 z-50 bg-n900/80 flex items-center justify-center" onClick={() => setEditModalUuid(null)}>

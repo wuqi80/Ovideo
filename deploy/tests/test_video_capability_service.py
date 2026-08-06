@@ -286,6 +286,53 @@ async def test_video_capabilities_expose_minimax_h3_only_when_8189_reports_nodes
     assert h3["supports_generated_audio"] is True
 
 
+async def test_video_capabilities_keep_minimax_h3_visible_when_gpu2_is_online(monkeypatch):
+    async def fake_list_agent_nodes():
+        return [{
+            "agent_id": "agent_gpu2",
+            "node_id": "agent_gpu2",
+            "routing_name": "GPU2",
+            "status": "healthy",
+        }]
+
+    async def empty_agent_instances():
+        return []
+
+    async def empty_health(targets=None):
+        return []
+
+    monkeypatch.setattr(
+        video_capability_service,
+        "resolve_seedance_model_name",
+        lambda sub_model, usage_scope="workflow": {
+            "standard": "doubao-seedance-2-0-260128",
+            "fast": "doubao-seedance-2-0-fast-260128",
+            "mini": "doubao-seedance-2-0-mini-260615",
+        }[sub_model],
+    )
+    monkeypatch.setattr(
+        video_capability_service,
+        "resolve_provider",
+        lambda provider, model_name=None, usage_scope="workflow": SimpleNamespace(
+            has_key=False,
+            model_name=model_name or "",
+            endpoint="https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+        ),
+    )
+    monkeypatch.setattr(video_capability_service, "list_cached_provider_health", empty_health)
+    monkeypatch.setattr(video_capability_service, "list_agent_nodes", fake_list_agent_nodes)
+    monkeypatch.setattr(video_capability_service, "list_agent_instances", empty_agent_instances)
+
+    result = await video_capability_service.get_video_capabilities()
+
+    h3 = next(model for model in result["models"] if model["key"] == "MiniMaxH3")
+    assert h3["available"] is True
+    assert h3["preferred_agent_id"] == "agent_gpu2"
+    assert h3["preferred_node_id"] == "agent_gpu2"
+    assert h3["preferred_comfyui_port"] == 8189
+    assert h3["strict_preferred_routing"] is True
+
+
 def test_video_manifest_reports_agent_plan_duration_limit_without_affecting_payg():
     manifest = video_capability_service.build_video_model_manifest(
         standard_seedance_model="doubao-seedance-1.5-pro",
