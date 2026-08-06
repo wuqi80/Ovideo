@@ -62,7 +62,7 @@ class FakeComposeService:
         user_id: str,
         project_id: str,
         selections,
-        audio_mode="video_original",
+        audio_mode="reference_dubbing",
     ):
         cls.started = {
             "episode_id": episode_id,
@@ -188,15 +188,29 @@ async def test_start_episode_compose_uses_project_id_and_selections():
         "status": "running",
         "total": 3,
         "done": 1,
-        "audio_mode": "video_original",
+        "audio_mode": "reference_dubbing",
     }
     assert FakeComposeService.started == {
         "episode_id": "ep_1",
         "user_id": "user_1",
         "project_id": "proj_1",
         "selections": {"shot_1": "seg_1"},
-        "audio_mode": "video_original",
+        "audio_mode": "reference_dubbing",
     }
+
+
+async def test_start_episode_compose_preserves_explicit_video_original_mode():
+    result = await episode_video_service.start_episode_compose(
+        "ep_1",
+        "user_1",
+        None,
+        "video_original",
+        episode_dao=FakeEpisodeDAO,
+        compose_service=FakeComposeService,
+    )
+
+    assert result["audio_mode"] == "video_original"
+    assert FakeComposeService.started["audio_mode"] == "video_original"
 
 
 async def test_start_episode_compose_raises_when_episode_missing():

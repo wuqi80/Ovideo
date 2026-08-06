@@ -501,7 +501,7 @@ async def _compose(
     project_id: str,
     job: Dict[str, Any],
     selections: Optional[Dict[str, str]] = None,
-    audio_mode: str = "video_original",
+    audio_mode: str = "reference_dubbing",
 ) -> None:
     _ensure_media_tools()
     shots = await _get_shots(episode_id, selections)
@@ -803,6 +803,7 @@ async def _compose(
                 "output_width": output_width,
                 "output_height": output_height,
                 "output_aspect": output_aspect,
+                "audio_mode": audio_mode,
             },
         )
 
@@ -819,7 +820,7 @@ def start_compose(
     user_id: str,
     project_id: str,
     selections: Optional[Dict[str, str]] = None,
-    audio_mode: str = "video_original",
+    audio_mode: str = "reference_dubbing",
 ) -> Dict[str, Any]:
     current = _jobs.get(episode_id)
     if current and current.get("status") == "running":

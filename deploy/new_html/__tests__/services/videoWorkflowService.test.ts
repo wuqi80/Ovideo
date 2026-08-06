@@ -169,7 +169,20 @@ describe('video workflow service', () => {
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toBe('/api/episodes/ep_1/compose');
     expect(opts.method).toBe('POST');
-    expect(JSON.parse(opts.body).selections.sb_1).toBe('seg_1');
+    expect(JSON.parse(opts.body)).toEqual({
+      selections: { sb_1: 'seg_1' },
+      audio_mode: 'reference_dubbing',
+    });
+  });
+
+  it('keeps an explicit video-original compose choice', async () => {
+    const { startCompose } = await loadService();
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ status: 'running', total: 2, done: 0 }));
+
+    await startCompose('ep_1', undefined, 'video_original');
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(JSON.parse(opts.body)).toEqual({ audio_mode: 'video_original' });
   });
 
   it('loads episode compose status', async () => {

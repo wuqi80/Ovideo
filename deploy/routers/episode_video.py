@@ -97,14 +97,14 @@ def create_episode_video_router(
         """Start async episode composition; frontend polls `/compose/status`."""
         await require_episode(episode_id, user_id, 'member')
         selections = None
-        audio_mode = "video_original"
+        audio_mode = "reference_dubbing"
         try:
             body = await request.json()
             selections = (body or {}).get("selections")
-            audio_mode = (body or {}).get("audio_mode") or "video_original"
+            audio_mode = (body or {}).get("audio_mode") or "reference_dubbing"
         except Exception:
             selections = None
-            audio_mode = "video_original"
+            audio_mode = "reference_dubbing"
 
         try:
             return await start_episode_compose(

@@ -9,7 +9,14 @@ import type { VideoSegment, StoryboardItemDB, AudioTrack } from '../types';
 // 2026-05-20 (Task System Overhaul M4)：把 EnhancePage 的「假进度」改成真后端 worker。
 // All enhancement actions use real GPU tasks and report through videoTaskPoller.
 import { submitInterpolateTaskQueued, submitUpscaleTaskQueued, submitVoiceTaskQueued } from '../services/videoTaskService';
-import { startCompose, getComposeStatus, updateVideoSegment, type ComposeStatus } from '../services/videoWorkflowService';
+import {
+  DEFAULT_COMPOSE_AUDIO_MODE,
+  startCompose,
+  getComposeStatus,
+  updateVideoSegment,
+  type ComposeAudioMode,
+  type ComposeStatus,
+} from '../services/videoWorkflowService';
 import { getStoryboardItems } from '../services/episodeDataService';
 import { fetchEntityFiles, uploadEntityFile } from '../services/entityFileService';
 import { uploadAudio } from '../services/videoMediaService';
@@ -270,7 +277,7 @@ export const EnhancePage: React.FC = () => {
   const [targetResolution, setTargetResolution] = useState<'720p' | '1080p' | '4K'>('1080p');
   const [targetFps, setTargetFps] = useState<30 | 60 | 120>(60);
   const [dubVoiceStyle, setDubVoiceStyle] = useState<'neutral' | 'dramatic' | 'soft'>('neutral');
-  const [composeAudioMode, setComposeAudioMode] = useState<'video_original' | 'reference_dubbing'>('video_original');
+  const [composeAudioMode, setComposeAudioMode] = useState<ComposeAudioMode>(DEFAULT_COMPOSE_AUDIO_MODE);
   const [lipSyncAudioClipId, setLipSyncAudioClipId] = useState<string>('');
   const [audioUploading, setAudioUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -352,7 +359,9 @@ export const EnhancePage: React.FC = () => {
     getComposeStatus(episodeId).then(s => {
       if (s.status && s.status !== 'idle') {
         setCompose(s);
-        if (s.audio_mode) setComposeAudioMode(s.audio_mode);
+        // A completed legacy job must not override the safer default for the next compose.
+        // While a job is running, show the mode that job is actually using.
+        if (s.status === 'running' && s.audio_mode) setComposeAudioMode(s.audio_mode);
         if (s.status === 'running') composeTimerRef.current = window.setTimeout(pollCompose, 3000);
       }
     }).catch(() => {});
@@ -918,7 +927,7 @@ export const EnhancePage: React.FC = () => {
                   type="button"
                   onClick={() => setComposeAudioMode('video_original')}
                   className={`px-2 text-[11px] transition-colors ${composeAudioMode === 'video_original' ? 'bg-primary text-white' : 'bg-n0 text-n300 hover:text-n700'}`}
-                  title="默认保留视频模型生成的情绪、呼吸和语气；静音视频自动使用参考配音"
+                  title="使用源视频音轨，并忽略时间线中的参考对白和旁白；仅当源视频没有音轨时才回退参考配音"
                 >
                   视频原声
                 </button>
@@ -931,6 +940,11 @@ export const EnhancePage: React.FC = () => {
                   参考配音
                 </button>
               </div>
+              {audioClips.length > 0 && composeAudioMode === 'video_original' && (
+                <span className="text-[10px] text-amber-600" title="切换到参考配音后，时间线对白和旁白才会进入成品">
+                  将忽略时间线配音
+                </span>
+              )}
               {isLoading && <Loader size={14} className="animate-spin text-primary" />}
               <button
                 onClick={reloadEnhanceData}

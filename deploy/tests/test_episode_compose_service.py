@@ -535,7 +535,7 @@ async def test_compose_concats_ordered_speech_and_silence_segments(monkeypatch, 
 
 
 @pytest.mark.asyncio
-async def test_compose_prefers_video_audio_over_reference_dubbing_by_default(monkeypatch, tmp_path):
+async def test_compose_respects_explicit_video_original_mode(monkeypatch, tmp_path):
     storage = tmp_path / "storage"
     video = storage / "video" / "one.mp4"
     reference_audio = storage / "audio" / "reference.mp3"
@@ -585,7 +585,13 @@ async def test_compose_prefers_video_audio_over_reference_dubbing_by_default(mon
     monkeypatch.setattr(episode_compose_service.EpisodeComposeDAO, "create_final_cut_records", fake_create_final_cut_records)
 
     job = {}
-    await episode_compose_service._compose("ep_1", "user_1", "proj_1", job)
+    await episode_compose_service._compose(
+        "ep_1",
+        "user_1",
+        "proj_1",
+        job,
+        audio_mode="video_original",
+    )
 
     clip_cmd = commands[0]
     filter_arg = clip_cmd[clip_cmd.index("-filter_complex") + 1]
@@ -649,6 +655,7 @@ async def test_compose_uses_portrait_canvas_for_vertical_clips(monkeypatch, tmp_
         assert kwargs["metadata"]["output_width"] == 1080
         assert kwargs["metadata"]["output_height"] == 1920
         assert kwargs["metadata"]["output_aspect"] == "9:16"
+        assert kwargs["metadata"]["audio_mode"] == "reference_dubbing"
 
     monkeypatch.setattr(episode_compose_service, "_STORAGE", str(storage))
     monkeypatch.setattr(episode_compose_service, "_ensure_media_tools", lambda: None)
