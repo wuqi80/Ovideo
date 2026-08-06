@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi import HTTPException
 
+import routers.tasks as tasks_router_module
 from routers.tasks import _should_prepare_workflow, create_task_router
 from schemas.generation import GenerateRequest
 from services.generation_access_service import GenerationAccessDenied
@@ -65,6 +66,58 @@ async def test_generate_route_submits_i2v_with_prepare_enabled():
 
     assert response["success"] is True
     service.submit.assert_awaited_once()
+    assert service.submit.call_args.kwargs["prepare"] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_route_targets_minimax_h3_to_owning_gpu2_agent(monkeypatch):
+    async def require_auth():
+        return "u-test"
+
+    async def fake_h3_target():
+        return {
+            "preferred_agent_id": "agent_gpu2",
+            "preferred_node_id": "agent_gpu2",
+            "preferred_comfyui_port": 8189,
+            "strict_preferred_comfyui_port": True,
+        }
+
+    monkeypatch.setattr(tasks_router_module, "resolve_minimax_h3_agent_target", fake_h3_target)
+
+    service = Mock()
+    service.submit = AsyncMock(return_value="task-h3")
+    queue = Mock()
+    queue.get_queue_length = AsyncMock(return_value=0)
+    task_service_module = Mock()
+    task_service_module.get.return_value = service
+    task_service_module.get_queue.return_value = queue
+
+    router = create_task_router(
+        require_auth_dependency=require_auth,
+        jwt_auth_module=Mock(),
+        task_service_module=task_service_module,
+        task_dao=Mock(),
+        file_dao=Mock(),
+        get_pubsub_redis_client=Mock(),
+        logger=Mock(),
+    )
+    create_generate_task = next(
+        route.endpoint
+        for route in router.routes
+        if getattr(route, "path", None) == "/api/generate"
+    )
+
+    response = await create_generate_task(
+        GenerateRequest(task_type="i2v", model="MiniMaxH3", image_path="first.png", prompt="x"),
+        username="u-test",
+    )
+
+    assert response["success"] is True
+    task_data = service.submit.call_args.args[1]
+    assert task_data["preferred_agent_id"] == "agent_gpu2"
+    assert task_data["preferred_node_id"] == "agent_gpu2"
+    assert task_data["preferred_comfyui_port"] == 8189
+    assert task_data["strict_preferred_comfyui_port"] is True
     assert service.submit.call_args.kwargs["prepare"] is True
 
 

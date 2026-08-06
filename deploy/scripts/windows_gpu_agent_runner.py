@@ -721,6 +721,16 @@ def build_gpu2_minimax_h3_fl2va_workflow(task: Dict[str, Any]) -> Dict[str, Any]
     seed = _gpu2_seed(task)
     workflow: Dict[str, Any] = {
         "1": {"class_type": "LoadImage", "inputs": {"image": image_names[0]}},
+        "3": {
+            "class_type": "ImageScale",
+            "inputs": {
+                "image": ["1", 0],
+                "upscale_method": "lanczos",
+                "width": GPU2_H3_WIDTH,
+                "height": GPU2_H3_HEIGHT,
+                "crop": "center",
+            },
+        },
         "6": {
             "class_type": "UNETLoader",
             "inputs": {
@@ -797,7 +807,7 @@ def build_gpu2_minimax_h3_fl2va_workflow(task: Dict[str, Any]) -> Dict[str, Any]
             "inputs": {
                 "clip": ["13", 0],
                 "vae": ["11", 0],
-                "first_frame": ["1", 0],
+                "first_frame": ["3", 0],
                 "prompt": prompt,
                 "width": GPU2_H3_WIDTH,
                 "height": GPU2_H3_HEIGHT,
@@ -807,7 +817,17 @@ def build_gpu2_minimax_h3_fl2va_workflow(task: Dict[str, Any]) -> Dict[str, Any]
     }
     if len(image_names) >= 2:
         workflow["2"] = {"class_type": "LoadImage", "inputs": {"image": image_names[1]}}
-        workflow["104"]["inputs"]["last_frame"] = ["2", 0]
+        workflow["4"] = {
+            "class_type": "ImageScale",
+            "inputs": {
+                "image": ["2", 0],
+                "upscale_method": "lanczos",
+                "width": GPU2_H3_WIDTH,
+                "height": GPU2_H3_HEIGHT,
+                "crop": "center",
+            },
+        }
+        workflow["104"]["inputs"]["last_frame"] = ["4", 0]
         workflow["92"]["inputs"]["filename_prefix"] = "MECHA_GPU2_minimax_h3_fl2va"
     return workflow
 

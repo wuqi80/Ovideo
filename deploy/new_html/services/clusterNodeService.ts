@@ -25,6 +25,10 @@ export interface GpuTaskRouting {
   node?: ClusterNodeOption;
 }
 
+export interface GpuTaskRoutingOptions {
+  strict?: boolean;
+}
+
 const PREFERRED_GPU_NODE_KEY = 'mecha:preferred-gpu-node-id';
 export const DEFAULT_GPU_NODE_NAME = 'GPU1';
 
@@ -110,7 +114,12 @@ function hasClusterNodeCapacity(node: ClusterNodeOption): boolean {
 export function selectGpuTaskNode(
   nodes: ClusterNodeOption[],
   requested?: string,
+  options?: GpuTaskRoutingOptions,
 ): ClusterNodeOption | undefined {
+  if (requested && options?.strict) {
+    return nodes.find((node) => matchesClusterNode(node, requested) && isClusterNodeUsable(node));
+  }
+
   const usableNodes = nodes.filter(hasClusterNodeCapacity);
   if (requested) {
     const requestedNode = usableNodes.find((node) => matchesClusterNode(node, requested));
@@ -158,14 +167,19 @@ export async function fetchClusterNodes(): Promise<{ nodes: ClusterNodeOption[];
   };
 }
 
-export async function resolveGpuTaskRouting(explicitNodeId?: string): Promise<GpuTaskRouting> {
+export async function resolveGpuTaskRouting(
+  explicitNodeId?: string,
+  options?: GpuTaskRoutingOptions,
+): Promise<GpuTaskRouting> {
   const result = await fetchClusterNodes();
   const requested = explicitNodeId || getPreferredGpuNodeId();
   const requestedNode = result.nodes.find((item) => matchesClusterNode(item, requested));
-  const node = selectGpuTaskNode(result.nodes, requested);
+  const node = selectGpuTaskNode(result.nodes, requested, options);
 
   if (!node) {
-    const message = '处理集群当前没有可用节点，请检查节点状态后重试。';
+    const message = options?.strict && requested
+      ? `处理节点「${formatProcessingNodeName(requested)}」当前不可用，请检查节点状态后重试。`
+      : '处理集群当前没有可用节点，请检查节点状态后重试。';
     crmMessage.warning(message);
     throw new Error(message);
   }
@@ -174,7 +188,7 @@ export async function resolveGpuTaskRouting(explicitNodeId?: string): Promise<Gp
     setPreferredGpuNodeId(clusterNodePreferenceId(requestedNode));
   }
 
-  if (!requestedNode || !hasClusterNodeCapacity(requestedNode)) {
+  if (!options?.strict && (!requestedNode || !hasClusterNodeCapacity(requestedNode))) {
     crmMessage.info(`处理节点「${formatProcessingNodeName(requested)}」当前不可用，任务已自动切换到「${node.name}」。`);
   }
 

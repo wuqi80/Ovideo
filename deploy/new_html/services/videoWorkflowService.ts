@@ -14,6 +14,10 @@ export interface VideoModelCapability {
   requires_gpu_node?: boolean;
   requires_processing_node?: boolean;
   available?: boolean;
+  preferred_agent_id?: string | null;
+  preferred_node_id?: string | null;
+  preferred_comfyui_port?: number | null;
+  strict_preferred_routing?: boolean;
   query_mode: 'async' | 'queue' | string;
   parameter_rules: Record<string, unknown>;
 }

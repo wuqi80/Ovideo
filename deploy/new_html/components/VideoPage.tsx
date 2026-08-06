@@ -2350,6 +2350,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const minimaxParams = group.model === 'MINI'
                 ? normalizeMiniMaxVideoParams(group.minimaxParams, defaultMiniMaxVideoModel)
                 : undefined;
+            const modelCapability = getVideoCapability(videoCapabilities, group.model);
             const capabilityParams = group.videoParams || {};
             const capabilityDuration = Number(capabilityParams.duration);
             const capabilitySeed = Number(capabilityParams.seed);
@@ -2370,6 +2371,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     entity_id: entityId,
                     file_role: 'video',
                     episode_id: episodeId,
+                    preferred_agent_id: modelCapability?.preferred_agent_id || undefined,
+                    preferred_node_id: modelCapability?.preferred_node_id || undefined,
                 },
                 {
                     duration: minimaxParams?.duration
@@ -2404,7 +2407,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             }));
             return null;
         }
-    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId, prepareSeedanceParamsForCapability, getCharacterNameForGroup, getVideoVoiceReferenceForGroup, seedanceSupportsMultimodal, isVideoModelAvailable, defaultMiniMaxVideoModel, isSeedanceModel]);
+    }, [taskGroups, uploadedImages, imagePrompts, showToast, getSeedanceParams, getDashScopeParams, ensureVideoSegmentId, episodeId, prepareSeedanceParamsForCapability, getCharacterNameForGroup, getVideoVoiceReferenceForGroup, seedanceSupportsMultimodal, isVideoModelAvailable, defaultMiniMaxVideoModel, isSeedanceModel, videoCapabilities]);
 
     const waitForBatchVideoTask = useCallback((uuid: string): Promise<VideoBatchWaitResult> => {
         const existing = batchWaitersRef.current[uuid];

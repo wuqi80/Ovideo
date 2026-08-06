@@ -25,6 +25,7 @@ from services.video_enhancement_service import (
     prepare_video_voice_task,
 )
 from services.video_interpolation_service import prepare_video_interpolation_task
+from services.video_capability_service import resolve_minimax_h3_agent_target
 from external_api.video.minimax import normalize_minimax_generation_options
 from services.generation_access_service import (
     GenerationAccessDenied,
@@ -35,6 +36,12 @@ from services.generation_access_service import (
 def _should_prepare_workflow(task_type: str) -> bool:
     """Return whether /api/generate should attach a ComfyUI workflow."""
     return not is_external_api_task(task_type)
+
+
+def _is_minimax_h3_request(request: GenerateRequest) -> bool:
+    model = str(getattr(request, "model", "") or "").strip().lower()
+    task_type = str(getattr(request, "task_type", "") or "").strip().lower()
+    return task_type in {"i2v", "morph"} and model in {"minimaxh3", "minimax-h3", "minimax_h3"}
 
 
 def create_task_router(
@@ -91,6 +98,11 @@ def create_task_router(
                 task_data["project_id"] = request.project_id
             if request.episode_id:
                 task_data["episode_id"] = request.episode_id
+            if _is_minimax_h3_request(request):
+                target = await resolve_minimax_h3_agent_target()
+                if not target.get("preferred_agent_id"):
+                    raise HTTPException(status_code=503, detail="MiniMax H3 本地模型仅部署在集群节点2，当前节点不可用")
+                task_data.update(target)
             task_service = task_service_module.get()
             prepare_workflow = _should_prepare_workflow(request.task_type)
             explicit_preparers = {

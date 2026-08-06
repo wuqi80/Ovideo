@@ -266,8 +266,11 @@ export async function submitTask(
     }
 
     if (isComfyUIModel(model)) {
+        const preferredTarget = entityOptions?.preferred_agent_id || entityOptions?.preferred_node_id;
+        const strictPreferredRouting = model === 'MiniMaxH3' && Boolean(preferredTarget);
         const routing = await resolveGpuTaskRouting(
-            entityOptions?.preferred_agent_id || entityOptions?.preferred_node_id,
+            preferredTarget,
+            { strict: strictPreferredRouting },
         );
         requestData.preferred_agent_id = entityOptions?.preferred_agent_id || routing.preferredAgentId;
         requestData.preferred_node_id = entityOptions?.preferred_node_id || routing.preferredNodeId;
@@ -547,6 +550,8 @@ export async function submitTaskQueued(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        preferred_agent_id?: string;
+        preferred_node_id?: string;
     },
     generationOptions?: VideoGenerationOptions
 ): Promise<{ task_id: string }> {

@@ -4,8 +4,10 @@ from scripts.windows_gpu_agent_runner import (
     GPU2_IMAGE_UPSCALE_TARGET,
     GPU2_HUMAN_ANGLE_PROMPTS,
     GPU2_H3_FPS,
+    GPU2_H3_HEIGHT,
     GPU2_H3_MODEL_FILES,
     GPU2_H3_PORT,
+    GPU2_H3_WIDTH,
     GPU2_QWEN_MODEL_FILES,
     GPU2_WAN_BLOCKS_TO_SWAP,
     GPU2_WAN_FRAMES,
@@ -82,6 +84,11 @@ def test_gpu2_minimax_h3_routes_to_isolated_8189_sidecar_and_audio_video_nodes()
 
     assert is_gpu2_h3_task(task)
     assert workflow["1"]["inputs"]["image"] == "first.png"
+    assert workflow["3"]["class_type"] == "ImageScale"
+    assert workflow["3"]["inputs"]["image"] == ["1", 0]
+    assert workflow["3"]["inputs"]["width"] == GPU2_H3_WIDTH
+    assert workflow["3"]["inputs"]["height"] == GPU2_H3_HEIGHT
+    assert workflow["3"]["inputs"]["crop"] == "center"
     assert workflow["6"]["inputs"]["unet_name"] == GPU2_H3_MODEL_FILES["diffusion"]
     assert workflow["13"]["inputs"]["clip_name"] == GPU2_H3_MODEL_FILES["text_encoder"]
     assert workflow["13"]["inputs"]["type"] == "minimax"
@@ -91,6 +98,7 @@ def test_gpu2_minimax_h3_routes_to_isolated_8189_sidecar_and_audio_video_nodes()
     assert workflow["91"]["inputs"]["audio"] == ["23", 0]
     assert workflow["91"]["inputs"]["fps"] == GPU2_H3_FPS
     assert workflow["104"]["class_type"] == "MiniMaxH3ImageToVideo"
+    assert workflow["104"]["inputs"]["first_frame"] == ["3", 0]
     assert workflow["104"]["inputs"]["length"] == gpu2_h3_length_frames(task)
     assert "last_frame" not in workflow["104"]["inputs"]
     assert prepared["workflow_name"] == "gpu2_minimax_h3_fl2va"
@@ -117,8 +125,10 @@ def test_gpu2_minimax_h3_preserves_first_and_last_frame_inputs():
 
     assert workflow["1"]["inputs"]["image"] == "first.png"
     assert workflow["2"]["inputs"]["image"] == "last.png"
-    assert workflow["104"]["inputs"]["first_frame"] == ["1", 0]
-    assert workflow["104"]["inputs"]["last_frame"] == ["2", 0]
+    assert workflow["3"]["inputs"]["image"] == ["1", 0]
+    assert workflow["4"]["inputs"]["image"] == ["2", 0]
+    assert workflow["104"]["inputs"]["first_frame"] == ["3", 0]
+    assert workflow["104"]["inputs"]["last_frame"] == ["4", 0]
     assert gpu2_h3_duration_seconds(task) == 15
     assert gpu2_h3_length_frames(task) == 362
 

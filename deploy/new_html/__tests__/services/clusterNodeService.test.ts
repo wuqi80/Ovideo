@@ -131,6 +131,19 @@ describe('processing cluster routing', () => {
     expect(selected?.name).toBe('GPU1');
   });
 
+  it('keeps a strict preferred node even when it is already busy', async () => {
+    mockFetch.mockResolvedValueOnce(response({
+      success: true,
+      nodes: [
+        { id: 'agent_gpu2', agent_id: 'agent_gpu2', name: 'GPU2', status: 'busy', tasks: 1, max_concurrent: 1 },
+        { id: 'agent_gpu1', agent_id: 'agent_gpu1', name: 'GPU1', status: 'online', tasks: 0, max_concurrent: 1 },
+      ],
+    }));
+
+    const routing = await resolveGpuTaskRouting('agent_gpu2', { strict: true });
+    expect(routing.preferredAgentId).toBe('agent_gpu2');
+  });
+
   it('fails only when the whole cluster has no usable nodes', async () => {
     mockFetch.mockResolvedValueOnce(response({
       success: true,

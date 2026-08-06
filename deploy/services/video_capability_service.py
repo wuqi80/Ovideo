@@ -42,19 +42,49 @@ async def _has_online_comfyui_agent() -> bool:
         return False
 
 
-async def _has_minimax_h3_agent() -> bool:
+def _is_minimax_h3_instance(instance: Dict[str, Any]) -> bool:
+    try:
+        if int(instance.get("port") or 0) != MINIMAX_H3_PREFERRED_PORT:
+            return False
+    except (TypeError, ValueError):
+        return False
+    capabilities = instance.get("capabilities") or {}
+    return isinstance(capabilities, dict) and capabilities.get(MINIMAX_H3_CAPABILITY_KEY) is True
+
+
+async def find_minimax_h3_agent_instance() -> Optional[Dict[str, Any]]:
+    """Return the healthy agent instance that owns the local MiniMax H3 sidecar."""
     try:
         instances = await list_agent_instances()
     except Exception as exc:
         logger.debug("video capability MiniMax H3 agent probe failed: %s", exc)
-        return False
+        return None
     for instance in instances or []:
-        if int(instance.get("port") or 0) != MINIMAX_H3_PREFERRED_PORT:
-            continue
-        capabilities = instance.get("capabilities") or {}
-        if isinstance(capabilities, dict) and capabilities.get(MINIMAX_H3_CAPABILITY_KEY) is True:
-            return True
-    return False
+        if _is_minimax_h3_instance(instance):
+            return instance
+    return None
+
+
+async def resolve_minimax_h3_agent_target() -> Dict[str, Any]:
+    """Return routing fields for MiniMax H3 tasks, or an empty dict when unavailable."""
+    instance = await find_minimax_h3_agent_instance()
+    if not instance:
+        return {}
+    agent_id = str(instance.get("agent_id") or instance.get("node_id") or "").strip()
+    node_id = str(instance.get("node_id") or agent_id).strip()
+    target: Dict[str, Any] = {
+        "preferred_comfyui_port": MINIMAX_H3_PREFERRED_PORT,
+        "strict_preferred_comfyui_port": True,
+    }
+    if agent_id:
+        target["preferred_agent_id"] = agent_id
+    if node_id:
+        target["preferred_node_id"] = node_id
+    return target
+
+
+async def _has_minimax_h3_agent() -> bool:
+    return bool(await find_minimax_h3_agent_instance())
 
 
 def _provider_runtime_state(
@@ -159,7 +189,8 @@ def _workflow_video_manifest(key: str, label: str, *, available: bool) -> Dict[s
     }
 
 
-def _minimax_h3_video_manifest(*, available: bool) -> Dict[str, Any]:
+def _minimax_h3_video_manifest(*, available: bool, target: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    target = target or {}
     return {
         "key": "MiniMaxH3",
         "label": "MiniMax H3 本地版",
@@ -171,7 +202,10 @@ def _minimax_h3_video_manifest(*, available: bool) -> Dict[str, Any]:
         "supports_generated_audio": True,
         "supports_cancel": True,
         "requires_processing_node": True,
+        "preferred_agent_id": target.get("preferred_agent_id"),
+        "preferred_node_id": target.get("preferred_node_id"),
         "preferred_comfyui_port": MINIMAX_H3_PREFERRED_PORT,
+        "strict_preferred_routing": True,
         "available": available,
         "query_mode": "queue",
         "parameter_rules": {
@@ -217,6 +251,7 @@ def build_video_model_manifest(
     seedance_omni: bool,
     comfyui_available: bool,
     minimax_h3_available: bool = False,
+    minimax_h3_target: Optional[Dict[str, Any]] = None,
     seedance_billing_mode: str = "standard",
     model_scope: str = MODEL_USAGE_SCOPE_WORKFLOW,
     api_availability: Optional[Dict[str, bool]] = None,
@@ -303,7 +338,10 @@ def build_video_model_manifest(
                     ("七阶", "七阶"),
                 )
             ],
-            _minimax_h3_video_manifest(available=minimax_h3_available),
+            _minimax_h3_video_manifest(
+                available=minimax_h3_available,
+                target=minimax_h3_target,
+            ),
             _fixed_api_video_manifest(
                 "Veo",
                 "筑基",
@@ -456,7 +494,8 @@ async def get_video_capabilities(
         mini_seedance_model = ""
 
     comfyui_available = await _has_online_comfyui_agent()
-    minimax_h3_available = await _has_minimax_h3_agent()
+    minimax_h3_target = await resolve_minimax_h3_agent_target()
+    minimax_h3_available = bool(minimax_h3_target.get("preferred_agent_id"))
     seedance_billing_mode = "standard"
     try:
         seedance_provider_config = resolve_provider(
@@ -547,6 +586,7 @@ async def get_video_capabilities(
             seedance_billing_mode=seedance_billing_mode,
             comfyui_available=comfyui_available,
             minimax_h3_available=minimax_h3_available,
+            minimax_h3_target=minimax_h3_target,
             model_scope=model_scope,
             api_availability={
                 "Veo": veo_available,

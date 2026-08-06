@@ -202,3 +202,63 @@ describe('ComfyUI video duration contract', () => {
         });
     });
 });
+
+describe('MiniMax H3 local routing', () => {
+    it('preserves the capability-selected GPU2 agent when submitting local H3 tasks', async () => {
+        localStorage.setItem('auth_token', 'test-token');
+        const fetchSpy = vi.spyOn(globalThis, 'fetch')
+            .mockResolvedValueOnce(new Response(JSON.stringify({
+                success: true,
+                nodes: [
+                    {
+                        id: 'agent_gpu2',
+                        agent_id: 'agent_gpu2',
+                        node_id: 'agent_gpu2',
+                        name: 'GPU2',
+                        status: 'busy',
+                        tasks: 1,
+                        max_concurrent: 1,
+                    },
+                    {
+                        id: 'agent_gpu1',
+                        agent_id: 'agent_gpu1',
+                        node_id: 'agent_gpu1',
+                        name: 'GPU1',
+                        status: 'online',
+                        tasks: 0,
+                        max_concurrent: 1,
+                    },
+                ],
+            }), { status: 200, headers: { 'content-type': 'application/json' } }))
+            .mockResolvedValueOnce(new Response(
+                JSON.stringify({ task_id: 'task_h3_1' }),
+                { status: 200, headers: { 'content-type': 'application/json' } },
+            ));
+
+        await submitTask(
+            'first.png',
+            null,
+            'slow camera push',
+            'MiniMaxH3',
+            undefined,
+            undefined,
+            'multi',
+            {
+                entity_type: 'video_segment',
+                entity_id: 'seg_1',
+                preferred_agent_id: 'agent_gpu2',
+                preferred_node_id: 'agent_gpu2',
+            },
+            { duration: 5 },
+        );
+
+        const [, options] = fetchSpy.mock.calls[1];
+        expect(JSON.parse(String(options?.body || '{}'))).toMatchObject({
+            task_type: 'i2v',
+            model: 'MiniMaxH3',
+            preferred_agent_id: 'agent_gpu2',
+            preferred_node_id: 'agent_gpu2',
+        });
+        fetchSpy.mockRestore();
+    });
+});

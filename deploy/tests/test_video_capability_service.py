@@ -204,7 +204,10 @@ async def test_video_capabilities_expose_minimax_h3_only_when_8189_reports_nodes
     assert h3["available"] is True
     assert h3["provider"] == "processing_cluster"
     assert h3["model_name"] == "MiniMax-H3 FL2VA"
+    assert h3["preferred_agent_id"] == "agent_gpu2"
+    assert h3["preferred_node_id"] == "agent_gpu2"
     assert h3["preferred_comfyui_port"] == 8189
+    assert h3["strict_preferred_routing"] is True
     assert h3["parameter_rules"]["duration"] == {
         "type": "integer",
         "default": 5,

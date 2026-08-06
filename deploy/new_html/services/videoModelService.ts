@@ -353,6 +353,10 @@ export interface VideoCapabilityModelLike {
   model_name?: string | null;
   model_options?: string[];
   available?: boolean;
+  preferred_agent_id?: string | null;
+  preferred_node_id?: string | null;
+  preferred_comfyui_port?: number | null;
+  strict_preferred_routing?: boolean;
 }
 
 export interface VideoModelOption {
