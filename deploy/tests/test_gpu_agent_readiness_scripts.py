@@ -15,6 +15,24 @@ queue_agent_control = importlib.import_module("queue_agent_control")
 check_gpu_agent_readiness = importlib.import_module("check_gpu_agent_readiness")
 
 
+def test_windows_gpu_task_repair_registers_all_startup_services_safely():
+    repair_script = (SCRIPTS_DIR / "windows_gpu_task_repair.ps1").read_text(encoding="utf-8")
+    launcher = (SCRIPTS_DIR / "windows_gpu_task_repair.cmd").read_text(encoding="utf-8")
+
+    assert repair_script.lstrip().startswith("param(")
+    assert repair_script.count("function Register-MechaTaskCom") == 1
+    assert "-LogonType ServiceAccount" in repair_script
+    assert 'Name = "MECHA-GPU-ComfyUI"' in repair_script
+    assert 'Name = "MECHA-GPU-ComfyUI-H3"' in repair_script
+    assert 'Name = "MECHA-GPU-Agent"' in repair_script
+    assert 'Delay = "PT30S"' in repair_script
+    assert 'Delay = "PT1M30S"' in repair_script
+    assert "-RestartCount 999" in repair_script
+    assert "without stopping running processes" in repair_script
+    assert "https://spti.ai" in launcher
+    assert "https://192.168.31.134" not in launcher
+
+
 @pytest.mark.asyncio
 async def test_queue_agent_control_rejects_legacy_agent(monkeypatch):
     async def fake_fetch_online_agents():

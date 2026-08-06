@@ -1,8 +1,9 @@
-$ErrorActionPreference = "Stop"
-
 param(
-    [string]$ServerUrl = "https://192.168.31.134"
+    [string]$ServerUrl = "https://spti.ai",
+    [switch]$StartNow
 )
+
+$ErrorActionPreference = "Stop"
 
 $root = "E:\MECHA-GPU"
 $logDir = Join-Path $root "logs"
@@ -17,6 +18,54 @@ function Write-RepairLog {
 
     "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message |
         Out-File -FilePath $logFile -Append -Encoding utf8
+}
+
+function Register-MechaTaskCom {
+    param(
+        [string]$TaskName,
+        [string]$CommandPath,
+        [string]$StartupDelay
+    )
+
+    $scheduler = New-Object -ComObject "Schedule.Service"
+    $scheduler.Connect()
+    $folder = $scheduler.GetFolder("\")
+    $definition = $scheduler.NewTask(0)
+
+    $definition.RegistrationInfo.Description = "MECHA GPU startup task: $TaskName"
+    $definition.Principal.UserId = "SYSTEM"
+    $definition.Principal.LogonType = 5 # TASK_LOGON_SERVICE_ACCOUNT
+    $definition.Principal.RunLevel = 1 # TASK_RUNLEVEL_HIGHEST
+
+    $trigger = $definition.Triggers.Create(8) # TASK_TRIGGER_BOOT
+    $trigger.Enabled = $true
+    $trigger.Delay = $StartupDelay
+
+    $action = $definition.Actions.Create(0) # TASK_ACTION_EXEC
+    $action.Path = "cmd.exe"
+    $action.Arguments = '/c "{0}"' -f $CommandPath
+    $action.WorkingDirectory = $root
+
+    $settings = $definition.Settings
+    $settings.Enabled = $true
+    $settings.AllowDemandStart = $true
+    $settings.StartWhenAvailable = $true
+    $settings.DisallowStartIfOnBatteries = $false
+    $settings.StopIfGoingOnBatteries = $false
+    $settings.ExecutionTimeLimit = "PT0S"
+    $settings.MultipleInstances = 2 # TASK_INSTANCES_IGNORE_NEW
+    $settings.RestartCount = 999
+    $settings.RestartInterval = "PT1M"
+
+    [void]$folder.RegisterTaskDefinition(
+        $TaskName,
+        $definition,
+        6, # TASK_CREATE_OR_UPDATE
+        "SYSTEM",
+        $null,
+        5, # TASK_LOGON_SERVICE_ACCOUNT
+        $null
+    )
 }
 
 function Register-MechaTask {
@@ -54,46 +103,27 @@ function Register-MechaTask {
             -Settings $settings `
             -Force | Out-Null
     } catch {
-        Write-RepairLog ("Register-ScheduledTask failed for {0}, fallback to schtasks.exe: {1}" -f $TaskName, $_.Exception.Message)
-        Register-ScheduledTaskFallback -TaskName $TaskName -CommandPath $CommandPath
+        Write-RepairLog (
+            "Register-ScheduledTask failed for {0}; using Task Scheduler COM fallback: {1}" -f `
+                $TaskName,
+            $_.Exception.Message
+        )
+        Register-MechaTaskCom `
+            -TaskName $TaskName `
+            -CommandPath $CommandPath `
+            -StartupDelay $StartupDelay
     }
 
-    Write-RepairLog "Registered $TaskName (delay=$StartupDelay, restart every 1 minute)."
-}
-
-function Register-ScheduledTaskFallback {
-    param(
-        [string]$TaskName,
-        [string]$CommandPath
-    )
-    try {
-        schtasks.exe /Delete /TN $TaskName /F | Out-Null
-    } catch {
-        # ignore delete failures
-    }
-    $cmd = 'cmd.exe /c "{0}"' -f $CommandPath
-    $createArgs = @(
-        "/Create",
-        "/F",
-        "/TN",
-        "`"$TaskName`"",
-        "/SC",
-        "ONSTART",
-        "/RU",
-        "SYSTEM",
-        "/RL",
-        "HIGHEST",
-        "/TR",
-        "`"$cmd`""
-    )
-    & schtasks.exe @createArgs | Out-Null
+    Write-RepairLog "Registered $TaskName (delay=$StartupDelay, SYSTEM service account, restart every 1 minute)."
 }
 
 function Ensure-AgentServerAddress {
     param([string]$Path)
+
     if (-not (Test-Path -Path $Path)) {
         return
     }
+
     $content = Get-Content -Path $Path -Raw -Encoding UTF8
     if ($content -match 'MECHA_SERVER_URL=') {
         $replacement = ('set "MECHA_SERVER_URL={0}"' -f $ServerUrl)
@@ -105,79 +135,61 @@ function Ensure-AgentServerAddress {
     } else {
         $content = "$content`r`nset MECHA_SERVER_URL=$ServerUrl"
     }
-    $content | Set-Content -Path $Path -Encoding UTF8
+
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $content, $utf8NoBom)
     Write-RepairLog "Ensured MECHA_SERVER_URL=$ServerUrl in $Path"
 }
 
-function Start-OptionalTask {
-    param([string]$TaskName)
-
-    try {
-        $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
-    } catch {
-        return
-    }
-    if ($task.State -ne "Ready" -and $task.State -ne "Running") {
-        $command = Join-Path $root "scripts\windows_gpu_start_h3_comfyui.cmd"
-        if (Test-Path $command) {
-            Register-ScheduledTaskFallback -TaskName $TaskName -CommandPath $command
-        }
-    }
-    Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    Write-RepairLog "Triggered startup for $TaskName."
-}
-
-function Register-ScheduledTaskFallback {
-    param([string]$TaskName)
-    if ($TaskName -ne "MECHA-GPU-ComfyUI-H3") {
-        return
-    }
-    $command = Join-Path $root "scripts\windows_gpu_start_h3_comfyui.cmd"
-    if (-not (Test-Path $command)) {
-        return
-    }
-    Register-MechaTask `
-        -TaskName $TaskName `
-        -CommandPath $command
-}
-
 Set-Content -Path $logFile -Value "" -Encoding utf8
-Write-RepairLog "Rebuilding MECHA GPU startup tasks."
-
-Stop-ScheduledTask -TaskName "MECHA-GPU-Agent" -ErrorAction SilentlyContinue
-Stop-ScheduledTask -TaskName "MECHA-GPU-ComfyUI" -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 3
+Write-RepairLog "Rebuilding MECHA GPU startup tasks without stopping running processes."
 
 Ensure-AgentServerAddress -Path $startAgentPath
 Ensure-AgentServerAddress -Path $startAgentScriptPath
 
-Register-MechaTask `
-    -TaskName "MECHA-GPU-ComfyUI" `
-    -CommandPath (Join-Path $root "start_comfyui.cmd")
-Register-MechaTask `
-    -TaskName "MECHA-GPU-Agent" `
-    -CommandPath (Join-Path $root "start_agent.cmd") `
-    -StartupDelay "PT1M"
+$taskDefinitions = @(
+    @{
+        Name = "MECHA-GPU-ComfyUI"
+        Command = Join-Path $root "start_comfyui.cmd"
+        Delay = "PT0S"
+    },
+    @{
+        Name = "MECHA-GPU-ComfyUI-H3"
+        Command = Join-Path $root "scripts\windows_gpu_start_h3_comfyui.cmd"
+        Delay = "PT30S"
+    },
+    @{
+        Name = "MECHA-GPU-Agent"
+        Command = Join-Path $root "start_agent.cmd"
+        Delay = "PT1M30S"
+    }
+)
 
-try {
-    Start-ScheduledTask -TaskName "MECHA-GPU-ComfyUI"
-} catch {
-    schtasks.exe /Run /TN "MECHA-GPU-ComfyUI" | Out-Null
+foreach ($taskDefinition in $taskDefinitions) {
+    if (-not (Test-Path $taskDefinition.Command)) {
+        throw "Missing startup command: $($taskDefinition.Command)"
+    }
+    Register-MechaTask `
+        -TaskName $taskDefinition.Name `
+        -CommandPath $taskDefinition.Command `
+        -StartupDelay $taskDefinition.Delay
 }
-Write-RepairLog "Started MECHA-GPU-ComfyUI."
-Start-Sleep -Seconds 15
-try {
-    Start-ScheduledTask -TaskName "MECHA-GPU-Agent"
-} catch {
-    schtasks.exe /Run /TN "MECHA-GPU-Agent" | Out-Null
-}
-Write-RepairLog "Started MECHA-GPU-Agent."
-Start-OptionalTask -TaskName "MECHA-GPU-ComfyUI-H3"
 
-Get-ScheduledTask -TaskName "MECHA-GPU-ComfyUI", "MECHA-GPU-Agent" |
+if ($StartNow) {
+    foreach ($taskDefinition in $taskDefinitions) {
+        try {
+            Start-ScheduledTask -TaskName $taskDefinition.Name
+        } catch {
+            schtasks.exe /Run /TN $taskDefinition.Name | Out-Null
+        }
+        Write-RepairLog "Triggered startup for $($taskDefinition.Name)."
+    }
+}
+
+Get-ScheduledTask -TaskName ($taskDefinitions.Name) |
     Select-Object TaskName, State |
     Format-Table -AutoSize |
     Out-String |
     Out-File -FilePath $logFile -Append -Encoding utf8
 
-Write-RepairLog "Startup tasks rebuilt and launched."
+Write-RepairLog "Startup tasks rebuilt successfully."
