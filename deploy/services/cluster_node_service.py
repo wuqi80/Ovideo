@@ -140,8 +140,9 @@ async def list_agent_instances(*, include_offline: bool = False) -> List[Dict[st
         if not isinstance(instances, list):
             instances = []
 
-        row_status = str(data.get("status") or "offline").lower()
         active_tasks = _row_active_tasks(data, system_info, stats)
+        effective_node = _agent_node(data)
+        row_status = str(effective_node.get("status") or data.get("status") or "offline").lower()
         public_name = _public_node_name(data.get("display_name") or data.get("name") or agent_id)
         routing_name = data.get("name") or agent_id
 

@@ -76,6 +76,41 @@ async def test_list_agent_instances_preserves_per_port_capabilities(monkeypatch)
     assert h3["capabilities"] == {"minimax_h3_fl2va": True}
 
 
+async def test_list_agent_instances_treats_busy_agent_with_stale_row_status_as_healthy(monkeypatch):
+    class FakeAgentDAO:
+        @staticmethod
+        async def list_all_with_active_task_counts():
+            return [
+                {
+                    "agent_id": "agent_gpu2",
+                    "name": "GPU2",
+                    "status": "offline",
+                    "enabled": True,
+                    "active_tasks": 1,
+                    "comfyui_instances": [
+                        {"host": "192.168.31.134", "port": 8188, "status": "healthy"},
+                        {
+                            "host": "192.168.31.134",
+                            "port": 8189,
+                            "status": "healthy",
+                            "capabilities": {"minimax_h3_fl2va": True},
+                        },
+                    ],
+                    "system_info": {"hostname": "GPU2"},
+                },
+            ]
+
+    monkeypatch.setitem(sys.modules, "dao_agent", SimpleNamespace(AgentDAO=FakeAgentDAO))
+
+    instances = await cluster_node_service.list_agent_instances()
+
+    assert [instance["port"] for instance in instances] == [8188, 8189]
+    h3 = next(instance for instance in instances if instance["port"] == 8189)
+    assert h3["status"] == "busy"
+    assert h3["healthy"] is True
+    assert h3["capabilities"] == {"minimax_h3_fl2va": True}
+
+
 async def test_list_agent_nodes_hides_agent_when_comfyui_is_unhealthy(monkeypatch):
     class FakeAgentDAO:
         @staticmethod
