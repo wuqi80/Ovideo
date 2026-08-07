@@ -546,15 +546,16 @@ async function fetchAgents() {
       systemInfo = {};
     }
     const agentVersion = systemInfo.agent_version || 'legacy';
-    const isOnline = a.status === 'online' || a.status === 'busy';
+    const displayStatus = a.effective_status || a.status || 'offline';
+    const isOnline = displayStatus === 'online' || displayStatus === 'busy';
     const dotClass = isOnline ? 'dot-green dot-pulse' : 'dot-red';
-    const statusBadge = a.status === 'online' ? 'badge-green' : a.status === 'busy' ? 'badge-yellow' : 'badge-red';
+    const statusBadge = displayStatus === 'online' ? 'badge-green' : displayStatus === 'busy' ? 'badge-yellow' : 'badge-red';
     return `
       <div class="agent-card">
         <div class="agent-left">
           <span class="dot ${dotClass}"></span>
           <span class="agent-name">${escapeHtml(displayName)}</span>
-          <span class="badge ${statusBadge}">${a.status}</span>
+          <span class="badge ${statusBadge}">${displayStatus}</span>
           ${!a.enabled ? '<span class="badge badge-red">暂停</span>' : ''}
         </div>
         <div class="agent-mid">

@@ -404,8 +404,22 @@ async def admin_create_agent(body: AgentCreateBody):
 @router.get("/agents")
 async def admin_list_agents():
     _require_db()
-    rows = await AgentDAO.list_all()
-    return {"success": True, "agents": [_row_to_jsonable(r) for r in rows]}
+    rows = await AgentDAO.list_all_with_active_task_counts()
+    agents = []
+    for row in rows:
+        agent = _row_to_jsonable(row)
+        try:
+            active_tasks = max(0, int(agent.get("active_tasks") or 0))
+        except (TypeError, ValueError):
+            active_tasks = 0
+        agent["active_tasks"] = active_tasks
+        agent["effective_status"] = (
+            "busy"
+            if agent.get("enabled", True) and active_tasks > 0
+            else str(agent.get("status") or "offline").lower()
+        )
+        agents.append(agent)
+    return {"success": True, "agents": agents}
 
 
 @router.get("/agents/{agent_id}")

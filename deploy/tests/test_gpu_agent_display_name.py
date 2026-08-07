@@ -75,6 +75,41 @@ async def test_admin_rename_rejects_blank_name(monkeypatch):
     assert exc_info.value.status_code == 400
 
 
+async def test_admin_list_agents_reports_active_offline_agent_as_busy(monkeypatch):
+    async def fake_list():
+        return [
+            {
+                "agent_id": "agent_gpu2",
+                "name": "GPU2",
+                "display_name": "集群节点2",
+                "status": "offline",
+                "enabled": True,
+                "active_tasks": 1,
+            },
+            {
+                "agent_id": "agent_gpu1",
+                "name": "GPU1",
+                "status": "offline",
+                "enabled": True,
+                "active_tasks": 0,
+            },
+        ]
+
+    monkeypatch.setattr(admin_routes, "_require_db", lambda: None)
+    monkeypatch.setattr(
+        admin_routes.AgentDAO,
+        "list_all_with_active_task_counts",
+        fake_list,
+    )
+
+    response = await admin_routes.admin_list_agents()
+
+    assert response["agents"][0]["status"] == "offline"
+    assert response["agents"][0]["effective_status"] == "busy"
+    assert response["agents"][0]["active_tasks"] == 1
+    assert response["agents"][1]["effective_status"] == "offline"
+
+
 def test_display_name_migration_and_admin_ui_contract():
     migration = (
         DEPLOY_DIR / "sql/db_migration_gpu_agent_display_name.sql"
@@ -89,3 +124,4 @@ def test_display_name_migration_and_admin_ui_contract():
     assert "/api/admin/agents/${id}/name" in admin_js
     assert "escapeHtml(displayName)" in admin_js
     assert "encodeURIComponent(displayName).replace(/'/g, '%27')" in admin_js
+    assert "a.effective_status || a.status || 'offline'" in admin_js
