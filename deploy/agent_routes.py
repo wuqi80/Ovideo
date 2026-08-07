@@ -249,6 +249,14 @@ async def _task_info_from_queue_member(redis_client, task_status_prefix: str, ra
     try:
         parsed = json.loads(raw_member)
         if isinstance(parsed, dict) and parsed.get("task_id"):
+            raw_hash = await redis_client.hgetall(
+                f"{task_status_prefix}{parsed['task_id']}"
+            )
+            task_hash = _decode_task_hash(raw_hash)
+            if str(task_hash.get("status") or "").lower() in {
+                "completed", "failed", "cancelled", "timeout"
+            }:
+                return None
             return parsed
     except (json.JSONDecodeError, TypeError):
         pass

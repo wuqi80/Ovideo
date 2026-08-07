@@ -53,6 +53,12 @@ async def test_final_failure_removes_task_from_pending_and_processing_queues(mon
     task.max_retries = 1
     queue.get_task = AsyncMock(return_value=task)
     queue._save_task = AsyncMock()
+    legacy_member = '{"task_id":"task-final-failure","task_type":"i2v","data":{}}'
+
+    async def matching_members(*_args, **_kwargs):
+        yield legacy_member
+
+    redis.zscan_iter = matching_members
 
     from dao_task import TaskDAO
     from dao_notification import NotificationDAO
@@ -68,5 +74,6 @@ async def test_final_failure_removes_task_from_pending_and_processing_queues(mon
     assert task.status == TaskStatus.FAILED
     assert redis.zrem.await_args_list == [
         call(RedisConfig.TASK_QUEUE_KEY, task.task_id),
+        call(RedisConfig.TASK_QUEUE_KEY, legacy_member),
         call(RedisConfig.PROCESSING_QUEUE_KEY, task.task_id),
     ]

@@ -150,3 +150,21 @@ async def test_agent_claim_respects_preferred_agent_without_requeueing():
 
     assert claimed is None
     assert redis.members == [(pinned_member, 1.0)]
+
+
+@pytest.mark.asyncio
+async def test_agent_claim_discards_legacy_member_for_terminal_task():
+    failed_member = json.dumps({
+        "task_id": "task_failed",
+        "task_type": "i2v",
+        "data": {},
+    })
+    redis = _FakeRedis(
+        [(failed_member, 1.0)],
+        hashes={"task:task_failed": {"status": "failed"}},
+    )
+
+    claimed = await _claim_next_agent_task(redis, _RedisConfig, "agent_a")
+
+    assert claimed is None
+    assert redis.members == []
