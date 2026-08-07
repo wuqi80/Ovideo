@@ -510,6 +510,7 @@ select.input {
 }
 .port-tag.healthy { background: var(--success-muted); color: var(--success); }
 .port-tag.unhealthy { background: var(--error-muted); color: var(--error); }
+.port-tag.unknown { background: var(--warning-muted); color: var(--warning); }
 
 /* ── Register Panel ── */
 .register-panel {

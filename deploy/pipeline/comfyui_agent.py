@@ -153,11 +153,17 @@ class ComfyUIAgent:
         return info
 
     def _check_comfyui(self, port: int) -> str:
-        try:
-            resp = requests.get(f"http://127.0.0.1:{port}/system_stats", timeout=5)
-            return "healthy" if resp.status_code == 200 else "unhealthy"
-        except Exception:
-            return "offline"
+        endpoints = ["/system_stats", "/"]
+        had_connection_issue = False
+        for path in endpoints:
+            try:
+                resp = requests.get(f"http://127.0.0.1:{port}{path}", timeout=5)
+                if resp.status_code == 200:
+                    return "healthy"
+            except Exception:
+                had_connection_issue = True
+                continue
+        return "offline" if had_connection_issue else "unhealthy"
 
     def _probe_comfyui_capabilities(self, port: int, status: str = "") -> dict:
         """Return a small, cacheable capability summary for one local ComfyUI port."""

@@ -559,9 +559,36 @@ async function fetchAgents() {
           ${!a.enabled ? '<span class="badge badge-red">暂停</span>' : ''}
         </div>
         <div class="agent-mid">
-          ${instances.map(i =>
-            `<span class="port-tag ${i.status === 'healthy' ? 'healthy' : 'unhealthy'}">:${i.port} ${i.status === 'healthy' ? '✓' : '✗'}</span>`
-          ).join('')}
+          ${instances.map(i => {
+            const portStatus = String(i.status || 'offline').toLowerCase();
+            let tagClass = 'unhealthy';
+            let mark = '✗';
+            let tip = portStatus;
+            if (portStatus === 'healthy') {
+              tagClass = 'healthy';
+              mark = '✓';
+              tip = '正常';
+            } else if (['offline', 'unhealthy', 'error', 'down', 'failed'].includes(portStatus)) {
+              if (displayStatus === 'online' || displayStatus === 'busy') {
+                tagClass = 'unknown';
+                mark = '↻';
+                tip = '检测中';
+              } else {
+                tagClass = 'unhealthy';
+                mark = '✗';
+              }
+              tip = tip || (displayStatus === 'online' || displayStatus === 'busy' ? '检测中' : '离线');
+            } else if (['unknown', 'checking'].includes(portStatus)) {
+              tagClass = 'unknown';
+              mark = '↻';
+              tip = '检测中';
+            } else {
+              tagClass = 'unknown';
+              mark = '?';
+              tip = portStatus || '未知';
+            }
+            return `<span class="port-tag ${tagClass}" title="端口${i.port}: ${tip}" data-port="${i.port}">:${i.port} ${mark}</span>`;
+          }).join('')}
         </div>
         <div class="agent-stats">
           <span>完成 <b style="color:var(--text-0)">${stats.tasks_completed || 0}</b></span>
