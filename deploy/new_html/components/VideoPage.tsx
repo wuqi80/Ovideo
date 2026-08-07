@@ -2591,7 +2591,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 ...prev,
                 [uuid]: {
                     ...prev[uuid],
-                    state: 'processing',
+                    state: status === 'queued' ? 'pending' : 'processing',
                     progress,
                 },
             }));
@@ -3925,6 +3925,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const activeVideoVoiceReference = getVideoVoiceReferenceForGroup(group);
         
         const renderStatusBadge = () => {
+            if (status.state === 'pending') {
+                return (
+                    <div className="text-xs text-warning flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        排队中
+                    </div>
+                );
+            }
             if (status.state === 'running') {
                 return (
                     <div className="text-xs text-primary flex items-center gap-1">
@@ -3964,6 +3972,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const videos = status.videos || [];
             const videoCount = videos.length;
             const isPair = group.ids.length === 2;
+            const isQueued = status.state === 'pending';
             const isRunning = status.state === 'running' || status.state === 'processing';
             const isBeautifyVideo = (videoUrl: string) =>
                 !!status.result && normVideoKey(status.result) === normVideoKey(videoUrl);
@@ -4062,6 +4071,19 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 }
             }
             
+            // 后端尚未分配节点时明确显示排队，避免 0% 被误认为已经开始生成。
+            if (isQueued) {
+                return (
+                    <div className={`grid w-full grid-cols-4 gap-2 ${CARD_MEDIA_HEIGHT_CLASS}`} data-testid="video-result-grid">
+                        <div className="h-full rounded border border-warning/30 flex flex-col items-center justify-center bg-warning/5">
+                            <Clock className="w-5 h-5 mb-1 text-warning" />
+                            <div className="text-warning text-[10px] font-medium">排队中...</div>
+                        </div>
+                        {renderEmptyResultSlots(3)}
+                    </div>
+                );
+            }
+
             // 运行中状态（没有旧视频）- 根据任务类型调整高度
             if (status.state === 'running' || status.state === 'processing') {
                 return (

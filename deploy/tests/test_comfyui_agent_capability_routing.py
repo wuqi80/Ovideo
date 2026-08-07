@@ -1,4 +1,5 @@
 import signal
+import threading
 
 import requests
 
@@ -67,3 +68,19 @@ def test_capability_probe_reports_minimax_h3_only_when_all_nodes_exist(monkeypat
 
     assert capabilities["minimax_h3_fl2va"] is True
     assert capabilities["minimax_h3_required_nodes"]["MiniMaxH3ImageToVideo"] is True
+
+
+def test_background_heartbeat_continues_independently_of_task_loop(monkeypatch):
+    agent = _agent(monkeypatch)
+    heartbeat_seen = threading.Event()
+    monkeypatch.setattr(agent, "heartbeat", heartbeat_seen.set)
+
+    agent._start_heartbeat_thread()
+    try:
+        assert heartbeat_seen.wait(timeout=1)
+        assert agent._heartbeat_thread.is_alive()
+    finally:
+        agent.running = False
+        agent._stop_heartbeat_thread()
+
+    assert not agent._heartbeat_thread.is_alive()

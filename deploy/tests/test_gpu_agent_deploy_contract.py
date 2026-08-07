@@ -28,9 +28,20 @@ def test_gpu_agent_version_keeps_control_capability_marker():
         DEPLOY_DIR / "pipeline" / "comfyui_agent.py"
     ).read_text(encoding="utf-8")
 
-    assert 'AGENT_VERSION = "2026-08-05-agent-control-h3-bootstrap-v1"' in source
+    assert 'AGENT_VERSION = "2026-08-07-background-heartbeat-v1"' in source
     assert "install_h3_sidecar" in source
     assert "minimax_h3_fl2va" in source
+
+
+def test_gpu_agent_heartbeats_on_a_background_thread_during_long_tasks():
+    source = (
+        DEPLOY_DIR / "pipeline" / "comfyui_agent.py"
+    ).read_text(encoding="utf-8")
+
+    assert "def _heartbeat_loop(self):" in source
+    assert "self._start_heartbeat_thread()" in source
+    assert 'name="mecha-agent-heartbeat"' in source
+    assert "self._heartbeat_stop.wait(HEARTBEAT_INTERVAL)" in source
 
 
 def test_h3_setup_updates_legacy_and_public_agent_start_commands():

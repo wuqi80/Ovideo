@@ -14,6 +14,7 @@ import re
 import signal
 import subprocess
 import sys
+import threading
 import time
 import requests
 from datetime import datetime
@@ -28,7 +29,7 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-08-05-agent-control-h3-bootstrap-v1"
+AGENT_VERSION = "2026-08-07-background-heartbeat-v1"
 PLATFORM_DOWNLOAD_RETRIES = 3
 PLATFORM_DOWNLOAD_PATH_PREFIXES = ("/api/agent/tasks/", "/storage/")
 CAPABILITY_CACHE_TTL_SECONDS = 60
@@ -58,6 +59,8 @@ class ComfyUIAgent:
         self.running = True
         self.current_tasks = 0
         self._capability_cache = {}
+        self._heartbeat_stop = threading.Event()
+        self._heartbeat_thread = None
         state_root = Path(
             os.environ.get("MECHA_AGENT_STATE_DIR")
             or (Path.home() / ".mecha-agent")
@@ -75,6 +78,7 @@ class ComfyUIAgent:
     def _shutdown(self, *args):
         logger.info("Shutting down gracefully...")
         self.running = False
+        self._heartbeat_stop.set()
 
     def _headers(self):
         return {"Authorization": f"Bearer {self.token}"}
@@ -226,6 +230,32 @@ class ComfyUIAgent:
             )
         except Exception as e:
             logger.warning(f"Heartbeat failed: {e}")
+
+    def _heartbeat_loop(self):
+        """Keep node presence fresh while the main thread runs a long GPU task."""
+        while self.running and not self._heartbeat_stop.is_set():
+            try:
+                self.heartbeat()
+            except Exception as exc:
+                logger.warning("Heartbeat loop failed: %s", exc)
+            self._heartbeat_stop.wait(HEARTBEAT_INTERVAL)
+
+    def _start_heartbeat_thread(self):
+        if self._heartbeat_thread and self._heartbeat_thread.is_alive():
+            return
+        self._heartbeat_stop.clear()
+        self._heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            name="mecha-agent-heartbeat",
+            daemon=True,
+        )
+        self._heartbeat_thread.start()
+
+    def _stop_heartbeat_thread(self):
+        self._heartbeat_stop.set()
+        thread = self._heartbeat_thread
+        if thread and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout=2)
 
     def poll(self):
         resp = requests.get(
@@ -876,16 +906,11 @@ class ComfyUIAgent:
                 retry_delay = min(retry_delay * 2, 60)
 
         logger.info(f"Agent running. Polling every {POLL_INTERVAL}s...")
-        last_heartbeat = 0
         empty_polls = 0
+        self._start_heartbeat_thread()
 
         while self.running:
             try:
-                now = time.time()
-                if now - last_heartbeat >= HEARTBEAT_INTERVAL:
-                    self.heartbeat()
-                    last_heartbeat = now
-
                 if not self._flush_pending_completions():
                     logger.warning(
                         "Pending completion report is still unavailable; "
@@ -936,6 +961,8 @@ class ComfyUIAgent:
             except Exception as e:
                 logger.error(f"Unexpected error: {e}")
                 time.sleep(POLL_INTERVAL)
+
+        self._stop_heartbeat_thread()
 
 
 def main():
