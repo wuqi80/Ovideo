@@ -1,8 +1,9 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import pytest
 
 from task_queue import Task, TaskQueue, TaskStatus
+from cluster_config import RedisConfig
 from task_service import TaskService
 
 
@@ -42,3 +43,30 @@ async def test_cancelled_task_rejects_late_terminal_write(method_name):
     assert result is False
     queue._save_task.assert_not_awaited()
     redis.zrem.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_final_failure_removes_task_from_pending_and_processing_queues(monkeypatch):
+    redis = AsyncMock()
+    queue = TaskQueue(redis)
+    task = Task('task-final-failure', 'i2v', {}, user_id='user-1')
+    task.max_retries = 1
+    queue.get_task = AsyncMock(return_value=task)
+    queue._save_task = AsyncMock()
+
+    from dao_task import TaskDAO
+    from dao_notification import NotificationDAO
+    import db_manager
+
+    monkeypatch.setattr(db_manager, 'get_db_manager', lambda: object())
+    monkeypatch.setattr(TaskDAO, 'update_task_status', AsyncMock())
+    monkeypatch.setattr(NotificationDAO, 'create', AsyncMock())
+
+    result = await queue.fail_task(task.task_id, 'terminal failure', retry=False)
+
+    assert result is True
+    assert task.status == TaskStatus.FAILED
+    assert redis.zrem.await_args_list == [
+        call(RedisConfig.TASK_QUEUE_KEY, task.task_id),
+        call(RedisConfig.PROCESSING_QUEUE_KEY, task.task_id),
+    ]

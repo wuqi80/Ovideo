@@ -373,6 +373,10 @@ class TaskQueue:
                 task.completed_at = datetime.now().isoformat()
                 await self._save_task(task)
 
+                # 终态任务绝不能继续留在待处理集合。否则 SQL 已失败但 Agent
+                # 恢复后仍会再次领取同一任务，造成重复生成和状态/积分错乱。
+                await self.redis.zrem(RedisConfig.TASK_QUEUE_KEY, task_id)
+
                 # 同步到 SQL，避免 Redis 已终态但 /api/tasks/active 从 DB 继续读到 processing。
                 try:
                     from dao_task import TaskDAO
