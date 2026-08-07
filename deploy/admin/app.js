@@ -569,16 +569,10 @@ async function fetchAgents() {
               mark = '✓';
               tip = '正常';
             } else if (['offline', 'unhealthy', 'error', 'down', 'failed'].includes(portStatus)) {
-              if (displayStatus === 'online' || displayStatus === 'busy') {
-                tagClass = 'unknown';
-                mark = '↻';
-                tip = '检测中';
-              } else {
-                tagClass = 'unhealthy';
-                mark = '✗';
-              }
-              tip = tip || (displayStatus === 'online' || displayStatus === 'busy' ? '检测中' : '离线');
-            } else if (['unknown', 'checking'].includes(portStatus)) {
+              tagClass = 'unhealthy';
+              mark = '✗';
+              tip = '离线';
+            } else if (['unknown', 'checking', 'unavailable'].includes(portStatus)) {
               tagClass = 'unknown';
               mark = '↻';
               tip = '检测中';

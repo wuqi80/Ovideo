@@ -1,0 +1,74 @@
+param(
+    [Parameter(Mandatory = $true)]
+    [int]$Port,
+
+    [Parameter(Mandatory = $true)]
+    [string]$PythonExe,
+
+    [Parameter(Mandatory = $true)]
+    [string]$CommandMatch,
+
+    [string]$LogFile = "E:\MECHA-GPU\logs\agent-port-cleanup.log"
+)
+
+$ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
+
+function Write-Log {
+    param([string]$Message)
+    try {
+        $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        if (-not (Test-Path -Path (Split-Path -Parent $LogFile))) {
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogFile) | Out-Null
+        }
+        "[{0}] {1}" -f $time, $Message | Out-File -FilePath $LogFile -Append -Encoding UTF8
+    } catch {
+        # Logging must not block startup.
+    }
+}
+
+try {
+    Write-Log "Preparing port $Port for ComfyUI startup (match: $CommandMatch)"
+    $listeners = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if (-not $listeners) {
+        Write-Log "Port $Port is currently free."
+        exit 0
+    }
+
+    $pids = $listeners | Select-Object -ExpandProperty OwningProcess -Unique
+    Write-Log "Port $Port occupied by PIDs: $($pids -join ',')"
+
+    $foreignPids = @()
+    foreach ($pid in $pids) {
+        if (-not $pid) { continue }
+        $proc = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $pid) -ErrorAction SilentlyContinue
+        if (-not $proc) { continue }
+        $cmd = $proc.CommandLine
+        if ($cmd -and ($cmd -like "*$CommandMatch*" -or $cmd -like "*$PythonExe*")) {
+            Write-Log "Terminating ComfyUI process PID=$pid Cmd=$cmd"
+            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+        } else {
+            $foreignPids += $pid
+            Write-Log "Keep-running non-target process on port $Port PID=$pid: $cmd"
+        }
+    }
+
+    if ($foreignPids.Count -gt 0) {
+        $foreignList = $foreignPids -join ","
+        Write-Log "Port $Port is still occupied by non-target processes: $foreignList"
+        exit 2
+    }
+
+    Start-Sleep -Seconds 1
+    $left = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+    if ($left) {
+        Write-Log "Port $Port still has listeners after cleanup: $($left -join ',')"
+        exit 3
+    }
+
+    Write-Log "Port $Port cleanup complete."
+    exit 0
+} catch {
+    Write-Log "Port cleanup failed on $Port: $($_.Exception.Message)"
+    exit 1
+}
