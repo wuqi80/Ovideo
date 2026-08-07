@@ -56,7 +56,7 @@ async def test_final_failure_removes_task_from_pending_and_processing_queues(mon
     legacy_member = '{"task_id":"task-final-failure","task_type":"i2v","data":{}}'
 
     async def matching_members(*_args, **_kwargs):
-        yield legacy_member
+        yield legacy_member, 10.0
 
     redis.zscan_iter = matching_members
 

@@ -451,11 +451,12 @@ class TaskQueue:
         """Remove both canonical and legacy JSON queue members for one task."""
         await self.redis.zrem(RedisConfig.TASK_QUEUE_KEY, task_id)
         pattern = f"*{task_id}*"
-        async for raw_member in self.redis.zscan_iter(
+        async for entry in self.redis.zscan_iter(
             RedisConfig.TASK_QUEUE_KEY,
             match=pattern,
             count=100,
         ):
+            raw_member = entry[0] if isinstance(entry, (tuple, list)) else entry
             member = raw_member.decode("utf-8") if isinstance(raw_member, bytes) else raw_member
             try:
                 parsed = json.loads(member)
