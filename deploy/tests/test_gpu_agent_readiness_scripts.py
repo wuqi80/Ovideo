@@ -29,8 +29,13 @@ def test_windows_gpu_task_repair_registers_all_startup_services_safely():
     assert 'Disable-ScheduledTask -TaskName $legacyH3TaskName' in repair_script
     assert 'Ensure-AgentComfyUIPorts -Path $startAgentPath' in repair_script
     assert 'Ensure-AgentComfyUIPorts -Path $startAgentScriptPath' in repair_script
-    assert 'Delay = "PT1M30S"' in repair_script
-    assert "-RestartCount 999" in repair_script
+    assert '$startupGateTaskName = "MECHA-GPU-After-DFS"' in repair_script
+    assert repair_script.count('\n        AtStartup = $false') == 2
+    assert repair_script.count('\n        AtStartup = $true') == 1
+    assert 'Triggered DFS-gated startup task $startupGateTaskName' in repair_script
+    assert repair_script.count('\n        RestartCount = 999') == 2
+    assert repair_script.count('\n        RestartCount = 0') == 1
+    assert '$settings.RestartCount = $RestartCount' in repair_script
     assert "without stopping running processes" in repair_script
     assert "https://spti.ai" in launcher
     assert "https://192.168.31.134" not in launcher
@@ -42,6 +47,27 @@ def test_windows_gpu_agent_start_defaults_to_public_backend_and_both_gpu2_ports(
     assert 'MECHA_SERVER_URL=https://spti.ai' in launcher
     assert 'MECHA_COMFYUI_PORTS=8188' in launcher
     assert 'MECHA_COMFYUI_PORTS=8188,8189' not in launcher
+
+
+def test_windows_gpu_dfs_gate_uses_only_the_fixed_http_readiness_contract():
+    gate = (SCRIPTS_DIR / "windows_gpu_wait_for_dfs.ps1").read_text(encoding="utf-8")
+    launcher = (SCRIPTS_DIR / "windows_gpu_wait_for_dfs.cmd").read_text(encoding="utf-8")
+
+    assert '$dfsHealthUrl = "http://192.168.31.121:4213/health"' in gate
+    assert "$requiredConsecutivePasses = 6" in gate
+    assert "$probeIntervalSeconds = 10" in gate
+    assert "$stabilizationSeconds = 120" in gate
+    assert "[int]$response.StatusCode -ne 200" in gate
+    assert "$payload.ready -is [bool]" in gate
+    assert "$payload.ready -eq $true" in gate
+    assert "Start-Sleep -Seconds $stabilizationSeconds" in gate
+    assert 'http://127.0.0.1:8188/system_stats' in gate
+    assert "Start-MechaScheduledTask -TaskName $wanTaskName" in gate
+    assert "Start-MechaScheduledTask -TaskName $agentTaskName" in gate
+    assert "vmware-vmx" not in gate.lower()
+    assert "4210" not in gate
+    assert "Test-NetConnection" not in gate
+    assert "windows_gpu_wait_for_dfs.ps1" in launcher
 
 
 @pytest.mark.asyncio

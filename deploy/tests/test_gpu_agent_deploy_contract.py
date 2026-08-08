@@ -19,6 +19,8 @@ def test_live_deploy_publishes_gpu_agent_for_self_update():
     assert 'GPU_AGENT_PUBLIC_TOOL_FILES=(' in script
     assert '"scripts/windows_gpu_agent_runner.py"' in script
     assert '"scripts/windows_gpu_cleanup_port.ps1"' in script
+    assert '"scripts/windows_gpu_wait_for_dfs.ps1"' in script
+    assert '"scripts/windows_gpu_wait_for_dfs.cmd"' in script
     assert '"scripts/windows_gpu_h3_setup.ps1"' in script
     assert '"scripts/windows_gpu_h3_smoke.py"' in script
     assert 'persistent_storage/tools/$tool_name' in script

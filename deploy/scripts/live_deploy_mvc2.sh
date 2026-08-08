@@ -32,6 +32,8 @@ PROCESSING_AGENT_REMOTE_REL="persistent_storage/tools/$PROCESSING_AGENT_PUBLIC_N
 GPU_AGENT_PUBLIC_TOOL_FILES=(
   "scripts/windows_gpu_agent_runner.py"
   "scripts/windows_gpu_cleanup_port.ps1"
+  "scripts/windows_gpu_wait_for_dfs.ps1"
+  "scripts/windows_gpu_wait_for_dfs.cmd"
   "scripts/windows_gpu_h3_setup.ps1"
   "scripts/windows_gpu_h3_setup.cmd"
   "scripts/windows_gpu_h3_smoke.py"
@@ -108,6 +110,8 @@ FILES=(
   "scripts/test_gpu2_end_to_end.py"
   "scripts/windows_gpu_agent_runner.py"
   "scripts/windows_gpu_cleanup_port.ps1"
+  "scripts/windows_gpu_wait_for_dfs.ps1"
+  "scripts/windows_gpu_wait_for_dfs.cmd"
   "scripts/windows_gpu_node_diagnose.cmd"
   "scripts/windows_gpu_node_diagnose.ps1"
   "scripts/windows_gpu_node_install.cmd"

@@ -11,6 +11,7 @@ $logFile = Join-Path $logDir "task-repair.log"
 $startAgentPath = Join-Path $root "start_agent.cmd"
 $startAgentScriptPath = Join-Path $root "scripts\windows_gpu_start_agent.cmd"
 $legacyH3TaskName = "MECHA-GPU-ComfyUI-H3"
+$startupGateTaskName = "MECHA-GPU-After-DFS"
 
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
@@ -25,7 +26,9 @@ function Register-MechaTaskCom {
     param(
         [string]$TaskName,
         [string]$CommandPath,
-        [string]$StartupDelay
+        [string]$StartupDelay,
+        [bool]$AtStartup,
+        [int]$RestartCount
     )
 
     $scheduler = New-Object -ComObject "Schedule.Service"
@@ -38,9 +41,11 @@ function Register-MechaTaskCom {
     $definition.Principal.LogonType = 5 # TASK_LOGON_SERVICE_ACCOUNT
     $definition.Principal.RunLevel = 1 # TASK_RUNLEVEL_HIGHEST
 
-    $trigger = $definition.Triggers.Create(8) # TASK_TRIGGER_BOOT
-    $trigger.Enabled = $true
-    $trigger.Delay = $StartupDelay
+    if ($AtStartup) {
+        $trigger = $definition.Triggers.Create(8) # TASK_TRIGGER_BOOT
+        $trigger.Enabled = $true
+        $trigger.Delay = $StartupDelay
+    }
 
     $action = $definition.Actions.Create(0) # TASK_ACTION_EXEC
     $action.Path = "cmd.exe"
@@ -55,8 +60,10 @@ function Register-MechaTaskCom {
     $settings.StopIfGoingOnBatteries = $false
     $settings.ExecutionTimeLimit = "PT0S"
     $settings.MultipleInstances = 2 # TASK_INSTANCES_IGNORE_NEW
-    $settings.RestartCount = 999
-    $settings.RestartInterval = "PT1M"
+    $settings.RestartCount = $RestartCount
+    if ($RestartCount -gt 0) {
+        $settings.RestartInterval = "PT1M"
+    }
 
     [void]$folder.RegisterTaskDefinition(
         $TaskName,
@@ -73,36 +80,49 @@ function Register-MechaTask {
     param(
         [string]$TaskName,
         [string]$CommandPath,
-        [string]$StartupDelay = "PT0S"
+        [string]$StartupDelay = "PT0S",
+        [bool]$AtStartup = $true,
+        [int]$RestartCount = 999
     )
 
     $action = New-ScheduledTaskAction `
         -Execute "cmd.exe" `
         -Argument ('/c "{0}"' -f $CommandPath) `
         -WorkingDirectory $root
-    $trigger = New-ScheduledTaskTrigger -AtStartup
-    $trigger.Delay = $StartupDelay
+    $trigger = $null
+    if ($AtStartup) {
+        $trigger = New-ScheduledTaskTrigger -AtStartup
+        $trigger.Delay = $StartupDelay
+    }
     $principal = New-ScheduledTaskPrincipal `
         -UserId "SYSTEM" `
         -LogonType ServiceAccount `
         -RunLevel Highest
-    $settings = New-ScheduledTaskSettingsSet `
-        -AllowStartIfOnBatteries `
-        -DontStopIfGoingOnBatteries `
-        -StartWhenAvailable `
-        -MultipleInstances IgnoreNew `
-        -RestartCount 999 `
-        -RestartInterval (New-TimeSpan -Minutes 1) `
-        -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
+    $settingsParams = @{
+        AllowStartIfOnBatteries = $true
+        DontStopIfGoingOnBatteries = $true
+        StartWhenAvailable = $true
+        MultipleInstances = "IgnoreNew"
+        ExecutionTimeLimit = (New-TimeSpan -Seconds 0)
+    }
+    if ($RestartCount -gt 0) {
+        $settingsParams.RestartCount = $RestartCount
+        $settingsParams.RestartInterval = (New-TimeSpan -Minutes 1)
+    }
+    $settings = New-ScheduledTaskSettingsSet @settingsParams
 
     try {
-        Register-ScheduledTask `
-            -TaskName $TaskName `
-            -Action $action `
-            -Trigger $trigger `
-            -Principal $principal `
-            -Settings $settings `
-            -Force | Out-Null
+        $registerParams = @{
+            TaskName = $TaskName
+            Action = $action
+            Principal = $principal
+            Settings = $settings
+            Force = $true
+        }
+        if ($AtStartup) {
+            $registerParams.Trigger = $trigger
+        }
+        Register-ScheduledTask @registerParams | Out-Null
     } catch {
         Write-RepairLog (
             "Register-ScheduledTask failed for {0}; using Task Scheduler COM fallback: {1}" -f `
@@ -112,10 +132,12 @@ function Register-MechaTask {
         Register-MechaTaskCom `
             -TaskName $TaskName `
             -CommandPath $CommandPath `
-            -StartupDelay $StartupDelay
+            -StartupDelay $StartupDelay `
+            -AtStartup $AtStartup `
+            -RestartCount $RestartCount
     }
 
-    Write-RepairLog "Registered $TaskName (delay=$StartupDelay, SYSTEM service account, restart every 1 minute)."
+    Write-RepairLog "Registered $TaskName (at_startup=$AtStartup, delay=$StartupDelay, restart_count=$RestartCount, SYSTEM service account)."
 }
 
 function Ensure-AgentServerAddress {
@@ -179,11 +201,22 @@ $taskDefinitions = @(
         Name = "MECHA-GPU-ComfyUI"
         Command = Join-Path $root "start_comfyui.cmd"
         Delay = "PT0S"
+        AtStartup = $false
+        RestartCount = 0
     },
     @{
         Name = "MECHA-GPU-Agent"
         Command = Join-Path $root "start_agent.cmd"
-        Delay = "PT1M30S"
+        Delay = "PT0S"
+        AtStartup = $false
+        RestartCount = 999
+    },
+    @{
+        Name = $startupGateTaskName
+        Command = Join-Path $root "scripts\windows_gpu_wait_for_dfs.cmd"
+        Delay = "PT0S"
+        AtStartup = $true
+        RestartCount = 999
     }
 )
 
@@ -194,7 +227,9 @@ foreach ($taskDefinition in $taskDefinitions) {
     Register-MechaTask `
         -TaskName $taskDefinition.Name `
         -CommandPath $taskDefinition.Command `
-        -StartupDelay $taskDefinition.Delay
+        -StartupDelay $taskDefinition.Delay `
+        -AtStartup $taskDefinition.AtStartup `
+        -RestartCount $taskDefinition.RestartCount
 }
 
 # H3 now shares port 8188 with Wan and is started on demand by the Agent.
@@ -206,14 +241,12 @@ if ($legacyH3Task) {
 }
 
 if ($StartNow) {
-    foreach ($taskDefinition in $taskDefinitions) {
-        try {
-            Start-ScheduledTask -TaskName $taskDefinition.Name
-        } catch {
-            schtasks.exe /Run /TN $taskDefinition.Name | Out-Null
-        }
-        Write-RepairLog "Triggered startup for $($taskDefinition.Name)."
+    try {
+        Start-ScheduledTask -TaskName $startupGateTaskName
+    } catch {
+        schtasks.exe /Run /TN $startupGateTaskName | Out-Null
     }
+    Write-RepairLog "Triggered DFS-gated startup task $startupGateTaskName."
 }
 
 Get-ScheduledTask -TaskName ($taskDefinitions.Name) |
