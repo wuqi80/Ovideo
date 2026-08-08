@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 275
-DEFAULT_EXPECTED_OPERATIONS = 334
+DEFAULT_EXPECTED_PATHS = 276
+DEFAULT_EXPECTED_OPERATIONS = 335
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -952,8 +952,11 @@ def check_task_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 6:
-        fail(f"routers/tasks.py should own 6 task route registrations, found {route_count}")
+    if route_count != 7:
+        fail(f"routers/tasks.py should own 7 task route registrations, found {route_count}")
+    tasks_text = tasks_path.read_text(encoding="utf-8")
+    if '@router.post("/api/generate/preflight")' not in tasks_text:
+        fail("routers/tasks.py must expose the authenticated GPU queue preflight route")
     return route_count
 
 

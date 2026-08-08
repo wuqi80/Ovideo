@@ -7,7 +7,7 @@ beforeEach(() => {
 });
 
 describe('ComfyUI browser submission queue', () => {
-  it('allows preprocessing and submission to run concurrently', async () => {
+  it('serializes preprocessing and submission', async () => {
     let releaseTasks: (() => void) | undefined;
     const firstStarted = vi.fn();
     const secondStarted = vi.fn();
@@ -26,11 +26,12 @@ describe('ComfyUI browser submission queue', () => {
 
     await Promise.resolve();
     expect(firstStarted).toHaveBeenCalledTimes(1);
-    expect(secondStarted).toHaveBeenCalledTimes(1);
-    expect(comfyuiTaskQueue.getStatus().queueLength).toBe(0);
+    expect(secondStarted).not.toHaveBeenCalled();
+    expect(comfyuiTaskQueue.getStatus().queueLength).toBe(1);
 
     releaseTasks?.();
     await expect(first).resolves.toBe('first');
+    expect(secondStarted).toHaveBeenCalledTimes(1);
     await expect(second).resolves.toBe('second');
   });
 });

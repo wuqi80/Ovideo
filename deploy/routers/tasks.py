@@ -44,6 +44,44 @@ def _is_minimax_h3_request(request: GenerateRequest) -> bool:
     return task_type in {"i2v", "morph"} and model in {"minimaxh3", "minimax-h3", "minimax_h3"}
 
 
+def _runtime_profile(request: GenerateRequest) -> str:
+    return "h3" if _is_minimax_h3_request(request) else "wan"
+
+
+async def _gpu_queue_snapshot(task_queue: Any, request: GenerateRequest) -> dict[str, Any]:
+    """Return anonymous queue counts only; never disclose another user's task data."""
+    if is_external_api_task(request.task_type):
+        return {
+            "queue_mode": "external",
+            "runtime_profile": None,
+            "tasks_ahead": 0,
+            "estimated_wait_seconds": 0,
+            "requires_confirmation": False,
+            "can_cancel_before_submit": True,
+        }
+    queued = int(await task_queue.get_queue_length())
+    processing = 0
+    try:
+        processing = int(await task_queue.get_processing_count())
+    except (AttributeError, TypeError):
+        processing = 0
+    tasks_ahead = max(0, queued) + max(0, processing)
+    profile = _runtime_profile(request)
+    seconds_per_task = 900 if profile == "h3" else 480
+    switch_seconds = 120 if profile == "h3" else 45
+    estimated_wait = tasks_ahead * seconds_per_task + (switch_seconds if tasks_ahead else 0)
+    return {
+        "queue_mode": "gpu2_serial",
+        "runtime_profile": profile,
+        "public_comfyui_port": 8188,
+        "tasks_ahead": tasks_ahead,
+        "estimated_wait_seconds": estimated_wait,
+        "estimated_wait_time": estimated_wait,
+        "requires_confirmation": tasks_ahead > 0,
+        "can_cancel_before_submit": True,
+    }
+
+
 def create_task_router(
     *,
     require_auth_dependency: Any,
@@ -57,6 +95,17 @@ def create_task_router(
 ) -> APIRouter:
     router = APIRouter()
     FileDAO = file_dao
+
+    @router.post("/api/generate/preflight")
+    async def generate_queue_preflight(
+        request: GenerateRequest,
+        username: str = Depends(require_auth_dependency),
+    ):
+        del username
+        return {
+            "success": True,
+            **await _gpu_queue_snapshot(task_service_module.get_queue(), request),
+        }
 
     @router.post("/api/generate")
     async def create_generate_task(request: GenerateRequest, username: str = Depends(require_auth_dependency)):
@@ -125,6 +174,7 @@ def create_task_router(
                     )
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail=str(exc)) from exc
+            queue_snapshot = await _gpu_queue_snapshot(task_service_module.get_queue(), request)
             task_id = await task_service.submit(
                 request.task_type,
                 task_data,
@@ -134,14 +184,12 @@ def create_task_router(
             )
             logger.info("用户 %s 创建任务 %s", username, task_id)
 
-            queue_length = await task_service_module.get_queue().get_queue_length()
-
             return {
                 "success": True,
                 "task_id": task_id,
                 "message": "任务已加入队列",
-                "queue_position": queue_length,
-                "estimated_wait_time": queue_length * 60,
+                "queue_position": queue_snapshot["tasks_ahead"] + 1,
+                **queue_snapshot,
             }
 
         except HTTPException:

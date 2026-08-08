@@ -7,7 +7,9 @@ import random
 import socket
 import subprocess
 import sys
+import threading
 import time
+import urllib.request
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable, Dict
@@ -44,7 +46,8 @@ GPU2_WAN_BLOCKS_TO_SWAP = 36
 GPU2_WAN_MAX_DURATION_SECONDS = 30.0
 GPU2_WAN_MAX_GENERATION_SECONDS = 15.0
 
-GPU2_H3_PORT = 8189
+GPU2_COMFYUI_PORT = 8188
+GPU2_H3_PORT = GPU2_COMFYUI_PORT
 GPU2_H3_MODEL_FILES = {
     "diffusion": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
     "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
@@ -66,7 +69,10 @@ COMFYUI_RECOVERY_FAILURE_THRESHOLD = 10
 COMFYUI_RECOVERY_COOLDOWN_SECONDS = 5 * 60
 COMFYUI_START_COMMANDS = {
     8188: ROOT / "start_comfyui.cmd",
-    8189: ROOT / "scripts" / "windows_gpu_start_h3_comfyui.cmd",
+}
+GPU2_RUNTIME_COMMANDS = {
+    "wan": ROOT / "start_comfyui.cmd",
+    "h3": ROOT / "scripts" / "windows_gpu_start_h3_comfyui.cmd",
 }
 
 GPU2_QWEN_COMPAT_PREFIXES = (
@@ -191,6 +197,106 @@ class ComfyUIPortRecovery:
                     f"[MECHA] Restarted ComfyUI:{port} after sustained TCP outage",
                     flush=True,
                 )
+
+
+def gpu2_runtime_profile(task: Dict[str, Any]) -> str:
+    """Map every GPU2 task to one of the two isolated ComfyUI runtimes."""
+    return "h3" if is_gpu2_h3_task(task) else "wan"
+
+
+def _stop_gpu2_runtime(profile: str) -> bool:
+    """Stop only a known Drama ComfyUI listener; never match a generic python.exe."""
+    if os.name != "nt":
+        return False
+    cleanup = ROOT / "scripts" / "windows_gpu_cleanup_port.ps1"
+    if profile == "h3":
+        python_exe = ROOT / "ComfyUI-H3" / "python_embeded" / "python.exe"
+        command_match = ROOT / "ComfyUI-H3" / "ComfyUI" / "main.py"
+    else:
+        python_exe = ROOT / "ComfyUI_windows_portable" / "python_embeded" / "python.exe"
+        command_match = ROOT / "ComfyUI_windows_portable" / "ComfyUI" / "main.py"
+    result = subprocess.run(
+        [
+            "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+            "-File", str(cleanup), "-Port", str(GPU2_COMFYUI_PORT),
+            "-PythonExe", str(python_exe), "-CommandMatch", str(command_match),
+        ],
+        cwd=str(ROOT),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=30,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def _free_gpu2_models() -> None:
+    payload = b'{"unload_models":true,"free_memory":true}'
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{GPU2_COMFYUI_PORT}/free",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10):
+            pass
+    except OSError:
+        pass
+
+
+class Gpu2RuntimeManager:
+    """Serialize Wan/H3 runtime switching on the single public port 8188."""
+
+    def __init__(
+        self,
+        *,
+        commands: Dict[str, Path] | None = None,
+        listener: Callable[[int], bool] = _tcp_port_is_listening,
+        launcher: Callable[[Path], bool] = _launch_comfyui_command,
+        stopper: Callable[[str], bool] = _stop_gpu2_runtime,
+        model_releaser: Callable[[], None] = _free_gpu2_models,
+        sleeper: Callable[[float], None] = time.sleep,
+        startup_timeout: int = 180,
+    ) -> None:
+        self.commands = commands or GPU2_RUNTIME_COMMANDS
+        self.listener = listener
+        self.launcher = launcher
+        self.stopper = stopper
+        self.model_releaser = model_releaser
+        self.sleeper = sleeper
+        self.startup_timeout = max(1, int(startup_timeout))
+        self.active_profile: str | None = "wan" if listener(GPU2_COMFYUI_PORT) else None
+        self._lock = threading.Lock()
+
+    def ensure(self, profile: str) -> None:
+        if profile not in self.commands:
+            raise RuntimeError(f"Unsupported GPU2 runtime profile: {profile}")
+        with self._lock:
+            if self.active_profile == profile and self.listener(GPU2_COMFYUI_PORT):
+                return
+            if self.listener(GPU2_COMFYUI_PORT):
+                current = self.active_profile
+                if not current or not self.stopper(current):
+                    raise RuntimeError("Refused to replace an unknown ComfyUI listener on port 8188")
+            command = Path(self.commands[profile])
+            if not command.is_file():
+                raise RuntimeError(f"GPU2 runtime launcher is missing: {command}")
+            if not self.launcher(command):
+                raise RuntimeError(f"Failed to launch GPU2 {profile} runtime")
+            deadline = time.monotonic() + self.startup_timeout
+            while time.monotonic() < deadline:
+                if self.listener(GPU2_COMFYUI_PORT):
+                    self.active_profile = profile
+                    return
+                self.sleeper(1)
+            raise RuntimeError(f"GPU2 {profile} runtime did not open port 8188 in time")
+
+    def release_models(self) -> None:
+        with self._lock:
+            if self.listener(GPU2_COMFYUI_PORT):
+                self.model_releaser()
 
 
 def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -1419,6 +1525,7 @@ def prepare_gpu2_task(task: Dict[str, Any]) -> Dict[str, Any]:
             prepared["params"] = params
         params["preferred_comfyui_port"] = GPU2_H3_PORT
         params["strict_preferred_comfyui_port"] = True
+        params["gpu2_runtime_profile"] = "h3"
     elif is_gpu2_infinitetalk_task(prepared):
         prepared["workflow_json"] = build_gpu2_infinitetalk_workflow(prepared)
         prepared["workflow_name"] = "gpu2_infinitetalk_wan21_low_vram"
@@ -1449,6 +1556,14 @@ def prepare_gpu2_task(task: Dict[str, Any]) -> Dict[str, Any]:
         prepared["workflow_name"] = f"gpu2_{task_type}_qwen_fp8"
     elif isinstance(prepared.get("workflow_json"), dict):
         prepared["workflow_json"] = tune_gpu2_qwen_workflow(prepared["workflow_json"])
+    if prepared != task:
+        params = prepared.get("params")
+        if not isinstance(params, dict):
+            params = {}
+            prepared["params"] = params
+        params.setdefault("preferred_comfyui_port", GPU2_COMFYUI_PORT)
+        params.setdefault("strict_preferred_comfyui_port", True)
+        params.setdefault("gpu2_runtime_profile", gpu2_runtime_profile(prepared))
     return prepared
 
 
@@ -1460,15 +1575,21 @@ def main() -> None:
         for value in os.environ.get("MECHA_COMFYUI_PORTS", "8188").split(",")
         if value.strip()
     ]
-    port_recovery = ComfyUIPortRecovery(ports)
+    runtime_manager = Gpu2RuntimeManager()
 
     class Gpu2ComfyUIAgent(ComfyUIAgent):
         def heartbeat(self):
-            port_recovery.check()
             return super().heartbeat()
 
         def execute_comfyui_task(self, task):
-            return super().execute_comfyui_task(prepare_gpu2_task(task))
+            prepared = prepare_gpu2_task(task)
+            params = prepared.get("params") or {}
+            profile = params.get("gpu2_runtime_profile") or gpu2_runtime_profile(prepared)
+            runtime_manager.ensure(profile)
+            try:
+                return super().execute_comfyui_task(prepared)
+            finally:
+                runtime_manager.release_models()
 
         def _wait_for_completion(self, port, prompt_id, timeout=GPU2_LONG_TASK_TIMEOUT_SECONDS):
             return super()._wait_for_completion(

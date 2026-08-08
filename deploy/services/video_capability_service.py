@@ -26,7 +26,7 @@ from services.cluster_node_service import list_agent_instances, list_agent_nodes
 
 logger = logging.getLogger(__name__)
 MINIMAX_H3_CAPABILITY_KEY = "minimax_h3_fl2va"
-MINIMAX_H3_PREFERRED_PORT = 8189
+MINIMAX_H3_PREFERRED_PORT = 8188
 GPU1_ROUTING_NAME = "GPU1"
 GPU2_ROUTING_NAME = "GPU2"
 
@@ -100,7 +100,11 @@ async def resolve_minimax_h3_agent_target() -> Dict[str, Any]:
     """Return routing fields for MiniMax H3 tasks, or an empty dict when unavailable."""
     instance = await find_minimax_h3_agent_instance()
     if not instance:
-        return {}
+        try:
+            return _minimax_h3_gpu2_fallback_target(await list_agent_nodes())
+        except Exception as exc:
+            logger.debug("video capability MiniMax H3 GPU2 fallback failed: %s", exc)
+            return {}
     agent_id = str(instance.get("agent_id") or instance.get("node_id") or "").strip()
     node_id = str(instance.get("node_id") or agent_id).strip()
     target: Dict[str, Any] = {

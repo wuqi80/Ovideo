@@ -227,7 +227,7 @@ async def test_video_capabilities_hide_seedance_model_marked_error_in_health_cac
     assert seedance_mini["available"] is False
 
 
-async def test_video_capabilities_expose_minimax_h3_only_when_8189_reports_nodes(monkeypatch):
+async def test_video_capabilities_expose_minimax_h3_on_unified_8188_runtime(monkeypatch):
     async def fake_list_agent_nodes():
         return [{"agent_id": "agent_gpu2", "status": "online"}]
 
@@ -236,7 +236,7 @@ async def test_video_capabilities_expose_minimax_h3_only_when_8189_reports_nodes
             {"agent_id": "agent_gpu2", "port": 8188, "healthy": True, "capabilities": {}},
             {
                 "agent_id": "agent_gpu2",
-                "port": 8189,
+                "port": 8188,
                 "healthy": True,
                 "capabilities": {"minimax_h3_fl2va": True},
             },
@@ -275,7 +275,7 @@ async def test_video_capabilities_expose_minimax_h3_only_when_8189_reports_nodes
     assert h3["model_name"] == "MiniMax-H3 FL2VA"
     assert h3["preferred_agent_id"] == "agent_gpu2"
     assert h3["preferred_node_id"] == "agent_gpu2"
-    assert h3["preferred_comfyui_port"] == 8189
+    assert h3["preferred_comfyui_port"] == 8188
     assert h3["strict_preferred_routing"] is True
     assert h3["parameter_rules"]["duration"] == {
         "type": "integer",
@@ -329,7 +329,7 @@ async def test_video_capabilities_keep_minimax_h3_visible_when_gpu2_is_online(mo
     assert h3["available"] is True
     assert h3["preferred_agent_id"] == "agent_gpu2"
     assert h3["preferred_node_id"] == "agent_gpu2"
-    assert h3["preferred_comfyui_port"] == 8189
+    assert h3["preferred_comfyui_port"] == 8188
     assert h3["strict_preferred_routing"] is True
 
 

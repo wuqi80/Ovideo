@@ -37,7 +37,8 @@ def test_windows_gpu_agent_start_defaults_to_public_backend_and_both_gpu2_ports(
     launcher = (SCRIPTS_DIR / "windows_gpu_start_agent.cmd").read_text(encoding="utf-8")
 
     assert 'MECHA_SERVER_URL=https://spti.ai' in launcher
-    assert 'MECHA_COMFYUI_PORTS=8188,8189' in launcher
+    assert 'MECHA_COMFYUI_PORTS=8188' in launcher
+    assert 'MECHA_COMFYUI_PORTS=8188,8189' not in launcher
 
 
 @pytest.mark.asyncio

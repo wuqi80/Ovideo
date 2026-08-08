@@ -17,6 +17,7 @@ import {
 } from './videoModelService';
 import type { VideoTask } from './videoTaskTypes';
 import { resolveGpuTaskRouting } from './clusterNodeService';
+import { confirmProcessingQueue } from './processingQueueService';
 
 export type { VideoTask } from './videoTaskTypes';
 export { cancelTask, deleteTask } from './taskControlService';
@@ -278,6 +279,7 @@ export async function submitTask(
         );
         requestData.preferred_agent_id = entityOptions?.preferred_agent_id || routing.preferredAgentId;
         requestData.preferred_node_id = entityOptions?.preferred_node_id || routing.preferredNodeId;
+        await confirmProcessingQueue(requestData);
     }
 
     const response = await apiFetch('/api/generate', {
@@ -330,6 +332,7 @@ export async function submitUpscaleTask(
     );
     requestData.preferred_agent_id = entityOptions?.preferred_agent_id || routing.preferredAgentId;
     requestData.preferred_node_id = entityOptions?.preferred_node_id || routing.preferredNodeId;
+    await confirmProcessingQueue(requestData);
 
     const response = await apiFetch('/api/generate', {
         method: 'POST',

@@ -10,6 +10,8 @@ from scripts.windows_gpu_agent_runner import (
     GPU2_H3_HEIGHT,
     GPU2_H3_MODEL_FILES,
     GPU2_H3_PORT,
+    GPU2_COMFYUI_PORT,
+    Gpu2RuntimeManager,
     GPU2_H3_WIDTH,
     GPU2_QWEN_MODEL_FILES,
     GPU2_WAN_BLOCKS_TO_SWAP,
@@ -137,7 +139,7 @@ def test_gpu2_wan_i2v_uses_one_scaled_fp8_model_and_aggressive_ram_offload():
     assert prepared["workflow_name"] == "gpu2_wan21_i2v_low_vram"
 
 
-def test_gpu2_minimax_h3_routes_to_isolated_8189_sidecar_and_audio_video_nodes():
+def test_gpu2_minimax_h3_routes_to_single_8188_port_and_audio_video_nodes():
     task = {
         "task_type": "i2v",
         "params": {
@@ -178,7 +180,42 @@ def test_gpu2_minimax_h3_routes_to_isolated_8189_sidecar_and_audio_video_nodes()
     assert "last_frame" not in workflow["104"]["inputs"]
     assert prepared["workflow_name"] == "gpu2_minimax_h3_fl2va"
     assert prepared["params"]["preferred_comfyui_port"] == GPU2_H3_PORT
+    assert GPU2_H3_PORT == GPU2_COMFYUI_PORT == 8188
     assert prepared["params"]["strict_preferred_comfyui_port"] is True
+    assert prepared["params"]["gpu2_runtime_profile"] == "h3"
+
+
+def test_gpu2_runtime_manager_stops_previous_profile_before_single_port_switch(tmp_path):
+    wan = tmp_path / "wan.cmd"
+    h3 = tmp_path / "h3.cmd"
+    wan.write_text("@echo off\n", encoding="utf-8")
+    h3.write_text("@echo off\n", encoding="utf-8")
+    listening = [True]
+    stopped = []
+    launched = []
+
+    def stop(profile):
+        stopped.append(profile)
+        listening[0] = False
+        return True
+
+    def launch(command):
+        launched.append(command)
+        listening[0] = True
+        return True
+
+    manager = Gpu2RuntimeManager(
+        commands={"wan": wan, "h3": h3},
+        listener=lambda _port: listening[0],
+        stopper=stop,
+        launcher=launch,
+        sleeper=lambda _seconds: None,
+    )
+    manager.ensure("h3")
+
+    assert stopped == ["wan"]
+    assert launched == [h3]
+    assert manager.active_profile == "h3"
 
 
 def test_gpu2_minimax_h3_preserves_first_and_last_frame_inputs():

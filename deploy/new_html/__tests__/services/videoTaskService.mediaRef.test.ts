@@ -230,6 +230,14 @@ describe('MiniMax H3 local routing', () => {
                     },
                 ],
             }), { status: 200, headers: { 'content-type': 'application/json' } }))
+            .mockResolvedValueOnce(new Response(JSON.stringify({
+                queue_mode: 'gpu2_serial',
+                runtime_profile: 'h3',
+                tasks_ahead: 0,
+                estimated_wait_seconds: 0,
+                requires_confirmation: false,
+                can_cancel_before_submit: true,
+            }), { status: 200, headers: { 'content-type': 'application/json' } }))
             .mockResolvedValueOnce(new Response(
                 JSON.stringify({ task_id: 'task_h3_1' }),
                 { status: 200, headers: { 'content-type': 'application/json' } },
@@ -252,7 +260,8 @@ describe('MiniMax H3 local routing', () => {
             { duration: 5 },
         );
 
-        const [, options] = fetchSpy.mock.calls[1];
+        expect(String(fetchSpy.mock.calls[1][0])).toContain('/api/generate/preflight');
+        const [, options] = fetchSpy.mock.calls[2];
         expect(JSON.parse(String(options?.body || '{}'))).toMatchObject({
             task_type: 'i2v',
             model: 'MiniMaxH3',

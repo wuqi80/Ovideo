@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException
 
 import routers.tasks as tasks_router_module
-from routers.tasks import _should_prepare_workflow, create_task_router
+from routers.tasks import _gpu_queue_snapshot, _should_prepare_workflow, create_task_router
 from schemas.generation import GenerateRequest
 from services.generation_access_service import GenerationAccessDenied
 
@@ -29,6 +29,26 @@ def test_generate_route_prepares_comfyui_workflows(task_type):
 )
 def test_generate_route_skips_prepare_for_external_api_tasks(task_type):
     assert _should_prepare_workflow(task_type) is False
+
+
+@pytest.mark.asyncio
+async def test_gpu_queue_preflight_reports_anonymous_serial_position_and_eta():
+    queue = Mock()
+    queue.get_queue_length = AsyncMock(return_value=2)
+    queue.get_processing_count = AsyncMock(return_value=1)
+
+    result = await _gpu_queue_snapshot(
+        queue,
+        GenerateRequest(task_type="i2v", model="MiniMaxH3", prompt="x"),
+    )
+
+    assert result["queue_mode"] == "gpu2_serial"
+    assert result["public_comfyui_port"] == 8188
+    assert result["runtime_profile"] == "h3"
+    assert result["tasks_ahead"] == 3
+    assert result["estimated_wait_seconds"] == 2820
+    assert result["requires_confirmation"] is True
+    assert result["can_cancel_before_submit"] is True
 
 
 @pytest.mark.asyncio
@@ -78,7 +98,7 @@ async def test_generate_route_targets_minimax_h3_to_owning_gpu2_agent(monkeypatc
         return {
             "preferred_agent_id": "agent_gpu2",
             "preferred_node_id": "agent_gpu2",
-            "preferred_comfyui_port": 8189,
+            "preferred_comfyui_port": 8188,
             "strict_preferred_comfyui_port": True,
         }
 
@@ -116,7 +136,7 @@ async def test_generate_route_targets_minimax_h3_to_owning_gpu2_agent(monkeypatc
     task_data = service.submit.call_args.args[1]
     assert task_data["preferred_agent_id"] == "agent_gpu2"
     assert task_data["preferred_node_id"] == "agent_gpu2"
-    assert task_data["preferred_comfyui_port"] == 8189
+    assert task_data["preferred_comfyui_port"] == 8188
     assert task_data["strict_preferred_comfyui_port"] is True
     assert service.submit.call_args.kwargs["prepare"] is True
 

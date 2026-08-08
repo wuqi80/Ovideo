@@ -4,11 +4,12 @@ chcp 65001 >nul
 set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 set "MECHA_GPU_ROOT=E:\MECHA-GPU"
-set "COMFY_PORT=8189"
+if not defined MECHA_COMFYUI_PORT set "MECHA_COMFYUI_PORT=8188"
+set "COMFY_PORT=%MECHA_COMFYUI_PORT%"
 set "COMFYUI_ROOT=E:\MECHA-GPU\ComfyUI-H3"
 set "COMFYUI_MAIN=%COMFYUI_ROOT%\ComfyUI\main.py"
 set "PYTHON_EXE=%COMFYUI_ROOT%\python_embeded\python.exe"
-set "LOG_FILE=%MECHA_GPU_ROOT%\logs\comfyui-h3-8189.log"
+set "LOG_FILE=%MECHA_GPU_ROOT%\logs\comfyui-h3-%COMFY_PORT%.log"
 set "CLEANUP_SCRIPT=%~dp0windows_gpu_cleanup_port.ps1"
 if not exist "%PYTHON_EXE%" (
   echo [ERROR] missing python embed: %PYTHON_EXE%
