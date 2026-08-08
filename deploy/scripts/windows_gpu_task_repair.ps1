@@ -142,11 +142,37 @@ function Ensure-AgentServerAddress {
     Write-RepairLog "Ensured MECHA_SERVER_URL=$ServerUrl in $Path"
 }
 
+function Ensure-AgentComfyUIPorts {
+    param([string]$Path)
+
+    if (-not (Test-Path -Path $Path)) {
+        return
+    }
+
+    $content = Get-Content -Path $Path -Raw -Encoding UTF8
+    $replacement = 'set MECHA_COMFYUI_PORTS=8188'
+    if ($content -match 'MECHA_COMFYUI_PORTS=') {
+        $content = [regex]::Replace(
+            $content,
+            '(?im)^set\s+"?MECHA_COMFYUI_PORTS=.*$',
+            $replacement
+        )
+    } else {
+        $content = "$content`r`n$replacement"
+    }
+
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $content, $utf8NoBom)
+    Write-RepairLog "Ensured MECHA_COMFYUI_PORTS=8188 in $Path"
+}
+
 Set-Content -Path $logFile -Value "" -Encoding utf8
 Write-RepairLog "Rebuilding MECHA GPU startup tasks without stopping running processes."
 
 Ensure-AgentServerAddress -Path $startAgentPath
 Ensure-AgentServerAddress -Path $startAgentScriptPath
+Ensure-AgentComfyUIPorts -Path $startAgentPath
+Ensure-AgentComfyUIPorts -Path $startAgentScriptPath
 
 $taskDefinitions = @(
     @{
