@@ -20,16 +20,30 @@ class EpisodeComposeDAO:
                    si.dialogue_audio_url, si.narration_audio_url, si.sfx_audio_url,
                    si.audio_segments,
                    COALESCE(si.audio_duration_ms,0) AS audio_ms,
-                   vs.segment_id, vs.video_url, vs.created_at,
-                   f.thumbnail_url
+                   vs.segment_id,
+                   COALESCE(entity_video.file_url, vs.video_url) AS video_url,
+                   COALESCE(entity_video.created_at, vs.created_at) AS created_at,
+                   COALESCE(entity_video.thumbnail_url, legacy_file.thumbnail_url) AS thumbnail_url
             FROM storyboard_items si
             JOIN video_segments vs
               ON vs.storyboard_item_id = si.item_id
-             AND vs.video_url IS NOT NULL
-            LEFT JOIN files f
-              ON f.file_url = split_part(vs.video_url, '?', 1)
+            LEFT JOIN LATERAL (
+                SELECT f.file_url, f.thumbnail_url, f.created_at
+                FROM files f
+                WHERE f.entity_type = 'video_segment'
+                  AND f.entity_id = vs.segment_id
+                  AND f.file_type = 'video'
+                  AND f.file_role = 'video'
+                  AND f.is_deleted = FALSE
+                  AND f.file_url IS NOT NULL
+                ORDER BY f.is_selected DESC, f.created_at DESC
+                LIMIT 1
+            ) entity_video ON TRUE
+            LEFT JOIN files legacy_file
+              ON legacy_file.file_url = split_part(vs.video_url, '?', 1)
             WHERE si.episode_id = $1
-            ORDER BY si.sort_order, vs.created_at DESC
+              AND COALESCE(entity_video.file_url, vs.video_url) IS NOT NULL
+            ORDER BY si.sort_order, COALESCE(entity_video.created_at, vs.created_at) DESC
             """,
             episode_id,
         )

@@ -96,6 +96,27 @@ async def _persist_to_db(entries: list, task_id: str, task_data: dict, user_id: 
             )
             entry["file_id"] = record["file_id"]
             logger.info(f"✅ Agent file persisted: file_id={record['file_id']}, entity={entity_type}/{entity_id}")
+
+            # Agent-completed tasks persist the canonical entity file directly.
+            # Keep legacy URL columns synchronized for compatibility consumers.
+            if entity_type and entity_id and role:
+                try:
+                    from file_service import _sync_legacy_on_file_create
+
+                    await _sync_legacy_on_file_create(
+                        entity_type,
+                        entity_id,
+                        role,
+                        entry["url"],
+                    )
+                except Exception as sync_error:
+                    logger.warning(
+                        "Agent file legacy URL sync failed for %s/%s/%s: %s",
+                        entity_type,
+                        entity_id,
+                        role,
+                        sync_error,
+                    )
         except Exception as e:
             logger.error(f"❌ _persist_to_db FAILED for {entry['filename']}: {e}", exc_info=True)
 
