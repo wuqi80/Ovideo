@@ -18,6 +18,7 @@ def test_live_deploy_publishes_gpu_agent_for_self_update():
     assert '"$STAGING_DIR/$PROCESSING_AGENT_REMOTE_REL"' in script
     assert 'GPU_AGENT_PUBLIC_TOOL_FILES=(' in script
     assert '"scripts/windows_gpu_agent_runner.py"' in script
+    assert '"scripts/windows_gpu_cleanup_port.ps1"' in script
     assert '"scripts/windows_gpu_h3_setup.ps1"' in script
     assert '"scripts/windows_gpu_h3_smoke.py"' in script
     assert 'persistent_storage/tools/$tool_name' in script
