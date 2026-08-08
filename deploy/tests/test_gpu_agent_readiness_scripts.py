@@ -33,6 +33,13 @@ def test_windows_gpu_task_repair_registers_all_startup_services_safely():
     assert "https://192.168.31.134" not in launcher
 
 
+def test_windows_gpu_agent_start_defaults_to_public_backend_and_both_gpu2_ports():
+    launcher = (SCRIPTS_DIR / "windows_gpu_start_agent.cmd").read_text(encoding="utf-8")
+
+    assert 'MECHA_SERVER_URL=https://spti.ai' in launcher
+    assert 'MECHA_COMFYUI_PORTS=8188,8189' in launcher
+
+
 @pytest.mark.asyncio
 async def test_queue_agent_control_rejects_legacy_agent(monkeypatch):
     async def fake_fetch_online_agents():

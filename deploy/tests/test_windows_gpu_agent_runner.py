@@ -1,4 +1,7 @@
 from scripts.windows_gpu_agent_runner import (
+    COMFYUI_RECOVERY_COOLDOWN_SECONDS,
+    COMFYUI_RECOVERY_FAILURE_THRESHOLD,
+    ComfyUIPortRecovery,
     GPU2_BACKGROUND_REMOVAL_MODEL,
     GPU2_IMAGE_UPSCALE_MAX_RESOLUTION,
     GPU2_IMAGE_UPSCALE_TARGET,
@@ -37,6 +40,74 @@ from scripts.windows_gpu_agent_runner import (
     prepare_gpu2_task,
     tune_gpu2_qwen_workflow,
 )
+
+
+def test_gpu2_port_recovery_waits_for_sustained_outage_and_respects_cooldown(tmp_path):
+    command = tmp_path / "start_h3.cmd"
+    command.write_text("@echo off\n", encoding="utf-8")
+    launched = []
+    now = [1000.0]
+    recovery = ComfyUIPortRecovery(
+        [8189],
+        command_map={8189: command},
+        port_is_listening=lambda _port: False,
+        launcher=lambda path: launched.append(path) or True,
+        clock=lambda: now[0],
+        failure_threshold=3,
+        cooldown_seconds=60,
+    )
+
+    recovery.check()
+    recovery.check()
+    assert launched == []
+
+    recovery.check()
+    assert launched == [command]
+
+    recovery.check()
+    recovery.check()
+    recovery.check()
+    assert launched == [command]
+
+    now[0] += 61
+    recovery.check()
+    assert launched == [command, command]
+
+
+def test_gpu2_port_recovery_resets_failure_count_when_port_listens(tmp_path):
+    command = tmp_path / "start_comfyui.cmd"
+    command.write_text("@echo off\n", encoding="utf-8")
+    listening = iter([False, True, False, False])
+    launched = []
+    recovery = ComfyUIPortRecovery(
+        [8188],
+        command_map={8188: command},
+        port_is_listening=lambda _port: next(listening),
+        launcher=lambda path: launched.append(path) or True,
+        failure_threshold=2,
+    )
+
+    for _ in range(4):
+        recovery.check()
+
+    assert launched == [command]
+    assert COMFYUI_RECOVERY_FAILURE_THRESHOLD * 3 == 30
+    assert COMFYUI_RECOVERY_COOLDOWN_SECONDS == 300
+
+
+def test_gpu2_port_recovery_launcher_failure_does_not_break_heartbeats(tmp_path):
+    command = tmp_path / "start_comfyui.cmd"
+    command.write_text("@echo off\n", encoding="utf-8")
+    recovery = ComfyUIPortRecovery(
+        [8188],
+        command_map={8188: command},
+        port_is_listening=lambda _port: False,
+        launcher=lambda _path: (_ for _ in ()).throw(OSError("launch failed")),
+        failure_threshold=1,
+    )
+
+    recovery.check()
+    assert recovery.failures[8188] == 0
 
 
 def test_gpu2_wan_i2v_uses_one_scaled_fp8_model_and_aggressive_ram_offload():

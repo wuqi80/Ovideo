@@ -4,10 +4,13 @@ from __future__ import annotations
 import math
 import os
 import random
+import socket
+import subprocess
 import sys
+import time
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 
 ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
@@ -59,6 +62,13 @@ GPU2_H3_DEFAULT_DURATION_SECONDS = 5.0
 GPU2_H3_MIN_DURATION_SECONDS = 4.0
 GPU2_H3_MAX_DURATION_SECONDS = 15.0
 
+COMFYUI_RECOVERY_FAILURE_THRESHOLD = 10
+COMFYUI_RECOVERY_COOLDOWN_SECONDS = 5 * 60
+COMFYUI_START_COMMANDS = {
+    8188: ROOT / "start_comfyui.cmd",
+    8189: ROOT / "scripts" / "windows_gpu_start_h3_comfyui.cmd",
+}
+
 GPU2_QWEN_COMPAT_PREFIXES = (
     "qwen_",
     "qwen_lora_",
@@ -84,6 +94,103 @@ GPU2_QWEN_COMPAT_TASKS = {
 GPU2_LONG_TASK_TIMEOUT_SECONDS = 6 * 60 * 60
 
 sys.path.insert(0, str(AGENT_DIR))
+
+
+def _tcp_port_is_listening(port: int) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", int(port)), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+def _launch_comfyui_command(command: Path) -> bool:
+    if os.name != "nt":
+        return False
+    creation_flags = (
+        getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        | getattr(subprocess, "DETACHED_PROCESS", 0)
+        | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    )
+    subprocess.Popen(
+        ["cmd.exe", "/d", "/c", str(command)],
+        cwd=str(ROOT),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+        creationflags=creation_flags,
+    )
+    return True
+
+
+class ComfyUIPortRecovery:
+    """Restart configured local ComfyUI services only after a sustained TCP outage."""
+
+    def __init__(
+        self,
+        ports: list[int],
+        *,
+        command_map: Dict[int, Path] | None = None,
+        port_is_listening: Callable[[int], bool] = _tcp_port_is_listening,
+        launcher: Callable[[Path], bool] = _launch_comfyui_command,
+        clock: Callable[[], float] = time.monotonic,
+        failure_threshold: int = COMFYUI_RECOVERY_FAILURE_THRESHOLD,
+        cooldown_seconds: int = COMFYUI_RECOVERY_COOLDOWN_SECONDS,
+    ) -> None:
+        commands = command_map or COMFYUI_START_COMMANDS
+        self.commands = {
+            int(port): Path(commands[int(port)])
+            for port in ports
+            if int(port) in commands
+        }
+        self.port_is_listening = port_is_listening
+        self.launcher = launcher
+        self.clock = clock
+        self.failure_threshold = max(1, int(failure_threshold))
+        self.cooldown_seconds = max(0, int(cooldown_seconds))
+        self.failures = {port: 0 for port in self.commands}
+        self.last_launch_at: Dict[int, float] = {}
+
+    def check(self) -> None:
+        now = self.clock()
+        for port, command in self.commands.items():
+            if self.port_is_listening(port):
+                self.failures[port] = 0
+                continue
+
+            self.failures[port] += 1
+            if self.failures[port] < self.failure_threshold:
+                continue
+            if now - self.last_launch_at.get(port, float("-inf")) < self.cooldown_seconds:
+                continue
+            if not command.is_file():
+                self.last_launch_at[port] = now
+                print(
+                    f"[MECHA] ComfyUI:{port} recovery command is missing: {command}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                continue
+
+            self.last_launch_at[port] = now
+            try:
+                launched = self.launcher(command)
+            except Exception as exc:
+                self.failures[port] = 0
+                print(
+                    f"[MECHA] Failed to restart ComfyUI:{port}: {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                continue
+
+            if launched:
+                self.failures[port] = 0
+                print(
+                    f"[MECHA] Restarted ComfyUI:{port} after sustained TCP outage",
+                    flush=True,
+                )
 
 
 def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -1348,7 +1455,18 @@ def prepare_gpu2_task(task: Dict[str, Any]) -> Dict[str, Any]:
 def main() -> None:
     from comfyui_agent import ComfyUIAgent
 
+    ports = [
+        int(value.strip())
+        for value in os.environ.get("MECHA_COMFYUI_PORTS", "8188").split(",")
+        if value.strip()
+    ]
+    port_recovery = ComfyUIPortRecovery(ports)
+
     class Gpu2ComfyUIAgent(ComfyUIAgent):
+        def heartbeat(self):
+            port_recovery.check()
+            return super().heartbeat()
+
         def execute_comfyui_task(self, task):
             return super().execute_comfyui_task(prepare_gpu2_task(task))
 
@@ -1363,12 +1481,7 @@ def main() -> None:
     if not token:
         raise RuntimeError(f"Agent token is empty: {TOKEN_FILE}")
 
-    server_url = os.environ.get("MECHA_SERVER_URL", "https://192.168.31.134")
-    ports = [
-        int(value.strip())
-        for value in os.environ.get("MECHA_COMFYUI_PORTS", "8188").split(",")
-        if value.strip()
-    ]
+    server_url = os.environ.get("MECHA_SERVER_URL", "https://spti.ai")
     Gpu2ComfyUIAgent(server_url, token, ports).run()
 
 
