@@ -23,9 +23,9 @@ def test_windows_gpu_task_repair_registers_all_startup_services_safely():
     assert repair_script.count("function Register-MechaTaskCom") == 1
     assert "-LogonType ServiceAccount" in repair_script
     assert 'Name = "MECHA-GPU-ComfyUI"' in repair_script
-    assert 'Name = "MECHA-GPU-ComfyUI-H3"' in repair_script
+    assert '\n        Name = "MECHA-GPU-ComfyUI-H3"' not in repair_script
     assert 'Name = "MECHA-GPU-Agent"' in repair_script
-    assert 'Delay = "PT30S"' in repair_script
+    assert 'Disable-ScheduledTask -TaskName $legacyH3TaskName' in repair_script
     assert 'Delay = "PT1M30S"' in repair_script
     assert "-RestartCount 999" in repair_script
     assert "without stopping running processes" in repair_script

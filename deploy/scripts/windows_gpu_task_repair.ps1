@@ -10,6 +10,7 @@ $logDir = Join-Path $root "logs"
 $logFile = Join-Path $logDir "task-repair.log"
 $startAgentPath = Join-Path $root "start_agent.cmd"
 $startAgentScriptPath = Join-Path $root "scripts\windows_gpu_start_agent.cmd"
+$legacyH3TaskName = "MECHA-GPU-ComfyUI-H3"
 
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
@@ -154,11 +155,6 @@ $taskDefinitions = @(
         Delay = "PT0S"
     },
     @{
-        Name = "MECHA-GPU-ComfyUI-H3"
-        Command = Join-Path $root "scripts\windows_gpu_start_h3_comfyui.cmd"
-        Delay = "PT30S"
-    },
-    @{
         Name = "MECHA-GPU-Agent"
         Command = Join-Path $root "start_agent.cmd"
         Delay = "PT1M30S"
@@ -173,6 +169,14 @@ foreach ($taskDefinition in $taskDefinitions) {
         -TaskName $taskDefinition.Name `
         -CommandPath $taskDefinition.Command `
         -StartupDelay $taskDefinition.Delay
+}
+
+# H3 now shares port 8188 with Wan and is started on demand by the Agent.
+# Keep the legacy task recoverable, but never let it race the Wan startup task.
+$legacyH3Task = Get-ScheduledTask -TaskName $legacyH3TaskName -ErrorAction SilentlyContinue
+if ($legacyH3Task) {
+    Disable-ScheduledTask -TaskName $legacyH3TaskName | Out-Null
+    Write-RepairLog "Disabled legacy $legacyH3TaskName; H3 is Agent-managed on port 8188."
 }
 
 if ($StartNow) {
