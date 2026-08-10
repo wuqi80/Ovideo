@@ -145,7 +145,10 @@ def _env_int_at_least(name: str, default: int, minimum: int) -> int:
 def task_stale_reaper_settings() -> dict[str, int | bool]:
     return {
         "enabled": _env_bool("TASK_STALE_REAPER_ENABLED", True),
-        "hours": _env_int_at_least("TASK_STALE_REAPER_HOURS", 1, 1),
+        # GPU2 serializes Wan/H3/Qwen work and one healthy task can legitimately
+        # spend several hours queued or processing.  A one-hour default races
+        # those tasks and turns live work into a false stale failure.
+        "hours": _env_int_at_least("TASK_STALE_REAPER_HOURS", 24, 1),
         "initial_delay_seconds": _env_int_at_least("TASK_STALE_REAPER_INITIAL_DELAY_SECONDS", 60, 0),
         "interval_seconds": _env_int_at_least("TASK_STALE_REAPER_INTERVAL_SECONDS", 300, 60),
     }

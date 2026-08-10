@@ -1,6 +1,16 @@
+from pathlib import Path
+
 import pytest
 
 from services.task_stale_reaper import STALE_TASK_MESSAGE, reap_stale_tasks
+
+
+def test_cluster_reaper_default_preserves_long_running_gpu_tasks():
+    cluster_main_source = (Path(__file__).parents[1] / "cluster_main.py").read_text(
+        encoding="utf-8",
+    )
+
+    assert '_env_int_at_least("TASK_STALE_REAPER_HOURS", 24, 1)' in cluster_main_source
 
 
 class _Queue:

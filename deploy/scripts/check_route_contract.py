@@ -1073,8 +1073,11 @@ def check_task_stale_cleanup_notification_contract(root: Path) -> int:
     """Auto-cleaned stale tasks must not create a recent notification burst."""
     task_dao_path = root / "dao" / "business" / "task.py"
     task_dao_text = task_dao_path.read_text(encoding="utf-8")
+    cluster_main_text = (root / "cluster_main.py").read_text(encoding="utf-8")
 
     marker = "Auto-cleanup: stale task exceeded timeout"
+    if '_env_int_at_least("TASK_STALE_REAPER_HOURS", 24, 1)' not in cluster_main_text:
+        fail("Task stale reaper must not expire serialized GPU work after only one hour")
     if "async def cleanup_stale(hours: int = 24, limit: int = 50)" not in task_dao_text:
         fail("TaskDAO.cleanup_stale must keep a bounded batch limit")
     if "LIMIT $2" not in task_dao_text:
@@ -1085,7 +1088,7 @@ def check_task_stale_cleanup_notification_contract(root: Path) -> int:
         fail("TaskDAO.cleanup_stale must preserve old completion time for auto-cleaned stale tasks")
     if marker not in task_dao_text:
         fail("TaskDAO notification lookup must filter auto-cleaned stale task failures")
-    return 2
+    return 3
 
 
 def check_task_notification_toast_dedupe_contract(root: Path) -> int:
