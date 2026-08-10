@@ -1,6 +1,7 @@
 """Run the MECHA ComfyUI Agent without exposing its token in process arguments."""
 from __future__ import annotations
 
+import json
 import math
 import os
 import random
@@ -98,6 +99,15 @@ GPU2_QWEN_COMPAT_TASKS = {
     "auto_storyboard",
 }
 GPU2_LONG_TASK_TIMEOUT_SECONDS = 6 * 60 * 60
+GPU2_MODEL_RELEASE_TIMEOUT_SECONDS = 120
+GPU2_MODEL_RELEASE_POLL_SECONDS = 5
+GPU2_MODEL_RELEASE_STABLE_SAMPLES = 3
+GPU2_MODEL_RELEASE_MIN_FREE_RAM_GIB = 8
+GPU2_MODEL_RELEASE_MIN_FREE_VRAM_GIB = 8
+GPU2_MODEL_RELEASE_RAM_TOLERANCE_GIB = 4
+GPU2_MODEL_RELEASE_VRAM_TOLERANCE_GIB = 1
+GPU2_MODEL_RELEASE_MIN_FREE_VRAM_RATIO = 0.75
+GIB = 1024 ** 3
 
 sys.path.insert(0, str(AGENT_DIR))
 
@@ -231,7 +241,7 @@ def _stop_gpu2_runtime(profile: str) -> bool:
     return result.returncode == 0
 
 
-def _free_gpu2_models() -> None:
+def _free_gpu2_models() -> bool:
     payload = b'{"unload_models":true,"free_memory":true}'
     request = urllib.request.Request(
         f"http://127.0.0.1:{GPU2_COMFYUI_PORT}/free",
@@ -240,10 +250,152 @@ def _free_gpu2_models() -> None:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=10):
-            pass
-    except OSError:
-        pass
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return 200 <= int(getattr(response, "status", 200)) < 300
+    except (OSError, ValueError):
+        return False
+
+
+def _read_gpu2_memory_snapshot() -> Dict[str, int] | None:
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{GPU2_COMFYUI_PORT}/system_stats",
+            timeout=10,
+        ) as response:
+            payload = json.load(response)
+    except (OSError, ValueError, TypeError):
+        return None
+
+    system = payload.get("system")
+    devices = payload.get("devices")
+    if not isinstance(system, dict) or not isinstance(devices, list):
+        return None
+    try:
+        ram_total = int(system["ram_total"])
+        ram_free = int(system["ram_free"])
+        vram_totals = [
+            int(device["vram_total"])
+            for device in devices
+            if isinstance(device, dict)
+            and device.get("vram_total") is not None
+            and device.get("vram_free") is not None
+        ]
+        vram_free_values = [
+            int(device["vram_free"])
+            for device in devices
+            if isinstance(device, dict)
+            and device.get("vram_total") is not None
+            and device.get("vram_free") is not None
+        ]
+    except (KeyError, TypeError, ValueError):
+        return None
+    if ram_total <= 0 or ram_free < 0 or not vram_totals:
+        return None
+    if any(total <= 0 for total in vram_totals) or len(vram_totals) != len(vram_free_values):
+        return None
+    return {
+        "ram_total": ram_total,
+        "ram_free": ram_free,
+        "vram_total": sum(vram_totals),
+        "vram_free": sum(vram_free_values),
+    }
+
+
+class Gpu2ModelReleaseGate:
+    """Fail closed until ComfyUI proves the previous model is unloaded."""
+
+    def __init__(
+        self,
+        *,
+        release_request: Callable[[], bool] = _free_gpu2_models,
+        memory_reader: Callable[[], Dict[str, int] | None] = _read_gpu2_memory_snapshot,
+        sleeper: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic,
+        timeout_seconds: int = GPU2_MODEL_RELEASE_TIMEOUT_SECONDS,
+        poll_seconds: int = GPU2_MODEL_RELEASE_POLL_SECONDS,
+        stable_samples: int = GPU2_MODEL_RELEASE_STABLE_SAMPLES,
+        min_free_ram_gib: int = GPU2_MODEL_RELEASE_MIN_FREE_RAM_GIB,
+        min_free_vram_gib: int = GPU2_MODEL_RELEASE_MIN_FREE_VRAM_GIB,
+        ram_tolerance_gib: int = GPU2_MODEL_RELEASE_RAM_TOLERANCE_GIB,
+        vram_tolerance_gib: int = GPU2_MODEL_RELEASE_VRAM_TOLERANCE_GIB,
+        min_free_vram_ratio: float = GPU2_MODEL_RELEASE_MIN_FREE_VRAM_RATIO,
+    ) -> None:
+        self.release_request = release_request
+        self.memory_reader = memory_reader
+        self.sleeper = sleeper
+        self.clock = clock
+        self.timeout_seconds = max(1, int(timeout_seconds))
+        self.poll_seconds = max(1, int(poll_seconds))
+        self.stable_samples = max(1, int(stable_samples))
+        self.min_free_ram = max(0, int(min_free_ram_gib)) * GIB
+        self.min_free_vram = max(0, int(min_free_vram_gib)) * GIB
+        self.ram_tolerance = max(0, int(ram_tolerance_gib)) * GIB
+        self.vram_tolerance = max(0, int(vram_tolerance_gib)) * GIB
+        self.min_free_vram_ratio = min(1.0, max(0.0, float(min_free_vram_ratio)))
+        self.baseline: Dict[str, int] | None = None
+        self.released = False
+        self.last_error = "startup model state has not been verified"
+
+    def mark_models_loaded(self) -> None:
+        baseline = self.memory_reader()
+        self.baseline = baseline
+        self.released = False
+        self.last_error = "previous task models have not been released"
+
+    def mark_process_stopped(self) -> None:
+        self.released = True
+        self.baseline = None
+        self.last_error = ""
+
+    def _is_safe_snapshot(self, snapshot: Dict[str, int] | None) -> bool:
+        if snapshot is None:
+            return False
+        try:
+            ram_free = int(snapshot["ram_free"])
+            vram_total = int(snapshot["vram_total"])
+            vram_free = int(snapshot["vram_free"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        if ram_free < self.min_free_ram or vram_free < self.min_free_vram:
+            return False
+        if vram_total <= 0 or vram_free / vram_total < self.min_free_vram_ratio:
+            return False
+        if self.baseline is None:
+            return True
+        return (
+            ram_free >= int(self.baseline.get("ram_free", 0)) - self.ram_tolerance
+            and vram_free >= int(self.baseline.get("vram_free", 0)) - self.vram_tolerance
+        )
+
+    def release_and_wait(self) -> bool:
+        self.released = False
+        if not self.release_request():
+            self.last_error = "ComfyUI rejected or did not answer the model release request"
+            return False
+
+        deadline = self.clock() + self.timeout_seconds
+        consecutive = 0
+        while self.clock() <= deadline:
+            snapshot = self.memory_reader()
+            if self._is_safe_snapshot(snapshot):
+                consecutive += 1
+                if consecutive >= self.stable_samples:
+                    self.released = True
+                    self.baseline = snapshot
+                    self.last_error = ""
+                    return True
+            else:
+                consecutive = 0
+            self.sleeper(self.poll_seconds)
+
+        self.last_error = (
+            "model release did not recover the pre-task RAM/VRAM baseline "
+            f"within {self.timeout_seconds}s"
+        )
+        return False
+
+    def ensure_released(self) -> bool:
+        return self.released or self.release_and_wait()
 
 
 class Gpu2RuntimeManager:
@@ -256,7 +408,7 @@ class Gpu2RuntimeManager:
         listener: Callable[[int], bool] = _tcp_port_is_listening,
         launcher: Callable[[Path], bool] = _launch_comfyui_command,
         stopper: Callable[[str], bool] = _stop_gpu2_runtime,
-        model_releaser: Callable[[], None] = _free_gpu2_models,
+        model_gate: Gpu2ModelReleaseGate | None = None,
         sleeper: Callable[[float], None] = time.sleep,
         startup_timeout: int = 180,
     ) -> None:
@@ -264,7 +416,7 @@ class Gpu2RuntimeManager:
         self.listener = listener
         self.launcher = launcher
         self.stopper = stopper
-        self.model_releaser = model_releaser
+        self.model_gate = model_gate or Gpu2ModelReleaseGate()
         self.sleeper = sleeper
         self.startup_timeout = max(1, int(startup_timeout))
         self.active_profile: str | None = "wan" if listener(GPU2_COMFYUI_PORT) else None
@@ -293,10 +445,23 @@ class Gpu2RuntimeManager:
                 self.sleeper(1)
             raise RuntimeError(f"GPU2 {profile} runtime did not open port 8188 in time")
 
-    def release_models(self) -> None:
+    def mark_models_loaded(self) -> None:
         with self._lock:
-            if self.listener(GPU2_COMFYUI_PORT):
-                self.model_releaser()
+            self.model_gate.mark_models_loaded()
+
+    def release_models(self) -> bool:
+        with self._lock:
+            if not self.listener(GPU2_COMFYUI_PORT):
+                self.model_gate.mark_process_stopped()
+                return True
+            return self.model_gate.release_and_wait()
+
+    def ready_for_next_task(self) -> bool:
+        with self._lock:
+            if not self.listener(GPU2_COMFYUI_PORT):
+                self.model_gate.mark_process_stopped()
+                return True
+            return self.model_gate.ensure_released()
 
 
 def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -1581,15 +1746,33 @@ def main() -> None:
         def heartbeat(self):
             return super().heartbeat()
 
+        def poll(self):
+            if not runtime_manager.ready_for_next_task():
+                print(
+                    "[MECHA] New task claim blocked until the previous model is released: "
+                    f"{runtime_manager.model_gate.last_error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return None
+            return super().poll()
+
         def execute_comfyui_task(self, task):
             prepared = prepare_gpu2_task(task)
             params = prepared.get("params") or {}
             profile = params.get("gpu2_runtime_profile") or gpu2_runtime_profile(prepared)
             runtime_manager.ensure(profile)
+            runtime_manager.mark_models_loaded()
             try:
                 return super().execute_comfyui_task(prepared)
             finally:
-                runtime_manager.release_models()
+                if not runtime_manager.release_models():
+                    print(
+                        "[MECHA] Model release gate is closed; queued tasks will remain unclaimed: "
+                        f"{runtime_manager.model_gate.last_error}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
 
         def _wait_for_completion(self, port, prompt_id, timeout=GPU2_LONG_TASK_TIMEOUT_SECONDS):
             return super()._wait_for_completion(

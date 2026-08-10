@@ -11,6 +11,8 @@ from scripts.windows_gpu_agent_runner import (
     GPU2_H3_MODEL_FILES,
     GPU2_H3_PORT,
     GPU2_COMFYUI_PORT,
+    GIB,
+    Gpu2ModelReleaseGate,
     Gpu2RuntimeManager,
     GPU2_H3_WIDTH,
     GPU2_QWEN_MODEL_FILES,
@@ -216,6 +218,119 @@ def test_gpu2_runtime_manager_stops_previous_profile_before_single_port_switch(t
     assert stopped == ["wan"]
     assert launched == [h3]
     assert manager.active_profile == "h3"
+
+
+def test_gpu2_model_release_gate_requires_three_consecutive_safe_samples():
+    now = [0.0]
+    released = []
+    snapshots = iter([
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+        {"ram_free": 7 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+    ])
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    gate = Gpu2ModelReleaseGate(
+        release_request=lambda: released.append(True) or True,
+        memory_reader=lambda: next(snapshots),
+        sleeper=sleep,
+        clock=lambda: now[0],
+        timeout_seconds=30,
+        poll_seconds=1,
+        stable_samples=3,
+        min_free_ram_gib=8,
+        min_free_vram_gib=8,
+    )
+    assert gate.released is False
+    gate.mark_models_loaded()
+
+    assert gate.release_and_wait() is True
+    assert gate.released is True
+    assert released == [True]
+
+
+def test_gpu2_model_release_gate_fails_closed_when_memory_does_not_release():
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    gate = Gpu2ModelReleaseGate(
+        release_request=lambda: True,
+        memory_reader=lambda: {
+            "ram_free": 20 * GIB,
+            "vram_total": 48 * GIB,
+            "vram_free": 12 * GIB,
+        },
+        sleeper=sleep,
+        clock=lambda: now[0],
+        timeout_seconds=3,
+        poll_seconds=1,
+        stable_samples=2,
+        min_free_ram_gib=8,
+        min_free_vram_gib=8,
+    )
+    gate.mark_models_loaded()
+
+    assert gate.release_and_wait() is False
+    assert gate.ensure_released() is False
+    assert gate.released is False
+    assert "RAM/VRAM baseline" in gate.last_error
+
+
+def test_gpu2_model_release_gate_requires_pre_task_memory_recovery():
+    now = [0.0]
+    snapshots = iter([
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 44 * GIB},
+        {"ram_free": 19 * GIB, "vram_total": 48 * GIB, "vram_free": 42 * GIB},
+        {"ram_free": 19 * GIB, "vram_total": 48 * GIB, "vram_free": 42 * GIB},
+    ])
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    gate = Gpu2ModelReleaseGate(
+        release_request=lambda: True,
+        memory_reader=lambda: next(snapshots),
+        sleeper=sleep,
+        clock=lambda: now[0],
+        timeout_seconds=1,
+        poll_seconds=1,
+        stable_samples=1,
+        min_free_ram_gib=8,
+        min_free_vram_gib=8,
+        ram_tolerance_gib=4,
+        vram_tolerance_gib=1,
+    )
+    gate.mark_models_loaded()
+
+    assert gate.release_and_wait() is False
+    assert gate.released is False
+
+
+def test_gpu2_runtime_manager_blocks_next_task_until_release_gate_opens(tmp_path):
+    wan = tmp_path / "wan.cmd"
+    wan.write_text("@echo off\n", encoding="utf-8")
+    attempts = []
+    gate = Gpu2ModelReleaseGate(
+        release_request=lambda: attempts.append(True) or False,
+        memory_reader=lambda: None,
+    )
+    manager = Gpu2RuntimeManager(
+        commands={"wan": wan},
+        listener=lambda _port: True,
+        model_gate=gate,
+    )
+    manager.mark_models_loaded()
+
+    assert manager.release_models() is False
+    assert manager.ready_for_next_task() is False
+    assert attempts == [True, True]
 
 
 def test_gpu2_minimax_h3_preserves_first_and_last_frame_inputs():
