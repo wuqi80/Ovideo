@@ -24,6 +24,7 @@ import {
 import type { GeneratedImageResult, ComfyUITaskRegistryMeta } from '../services/comfyuiTaskWaitService';
 import type { TaskKind } from '../types';
 import { generateThumbnail } from '../utils/imageOptimization';
+import { buildStoryboardSegmentLookup } from '../utils/storyboardSegments';
 import { loadShotImages, clearImageCache, getCachedBlobUrl, setCachedBlobUrl, removeImageFromCache, getImageThumbnailUrl } from '../services/imageLoaderService';
 import { saveRunningTask, removeRunningTask, getRecoverableTasks } from '../services/taskRecovery';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
@@ -213,6 +214,13 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const visibleStoryboardItems = useMemo(
     () => selectedFile?.storyboard?.items.slice(0, visibleShotCount) || [],
     [selectedFile?.storyboard?.items, visibleShotCount],
+  );
+  const storyboardSegmentLookup = useMemo(
+    () => buildStoryboardSegmentLookup(
+      selectedFile?.storyboard?.items || [],
+      selectedFile?.scriptSegments || [],
+    ),
+    [selectedFile?.scriptSegments, selectedFile?.storyboard?.items],
   );
 
   useEffect(() => {
@@ -2582,6 +2590,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           >
                <div className="workflow-stage-scroll flex-1 overflow-y-auto custom-scrollbar pb-2">
                    {hasStoryboard && visibleStoryboardItems.map((item, index) => {
+                       const segmentInfo = storyboardSegmentLookup.get(item.id);
+                       const shotLabel = segmentInfo?.localShotLabel || `镜头${String(index + 1).padStart(2, '0')}`;
                        const isSelected = item.id === selectedShotId;
                        const hasImage = (item.generatedImages && item.generatedImages.length > 0) || !!item.generatedImage;
                        const isChecked = selectedShotIds.has(item.id);
@@ -2619,13 +2629,20 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                       type="button"
                                       onClick={(e) => toggleShotSelection(e, item.id)}
                                       className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border border-transparent text-n100 transition-colors hover:border-n40 hover:bg-n30 hover:text-n800"
-                                      aria-label={`选择镜头 ${String(index + 1).padStart(2, '0')}`}
+                                      aria-label={`选择${shotLabel}`}
                                  >
                                      {isChecked ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4" />}
                                  </button>
-                                 <span className={`min-w-0 flex-1 truncate text-sm font-semibold ${isSelected ? 'text-n800' : 'text-n700 group-hover:text-n800'}`}>
-                                     镜头 {String(index + 1).padStart(2, '0')}
-                                 </span>
+                                 <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                   {segmentInfo?.isFirstInSegment && (
+                                     <span className="inline-flex shrink-0 items-baseline gap-1 rounded border border-warning/30 bg-y50 px-1.5 py-0.5 text-[9px] font-semibold text-n500">
+                                       分段 <span className="font-mono text-warning">{String(segmentInfo.segmentNo).padStart(2, '0')}</span>
+                                     </span>
+                                   )}
+                                   <span className={`min-w-0 truncate text-sm font-semibold ${isSelected ? 'text-n800' : 'text-n700 group-hover:text-n800'}`}>
+                                     {shotLabel}
+                                   </span>
+                                 </div>
                                  <div className="flex shrink-0 items-center gap-1">
                                    {/* Model Indicator */}
                                    <button

@@ -21,6 +21,12 @@ export interface UploadedImage {
   isPlaceholder?: boolean;
   storyboardItemId?: string;
   sortOrder?: number;
+  /** Canonical script/storyboard position persisted with the video workspace. */
+  storyboardSegmentKey?: string;
+  storyboardSegmentNo?: number;
+  storyboardLocalShotNo?: number;
+  storyboardShotLabel?: string;
+  isStoryboardSegmentStart?: boolean;
   tags?: string[];
   linkedGroupUuids?: string[];
 }

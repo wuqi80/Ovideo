@@ -15,6 +15,9 @@ def test_video_field_set_includes_prompt_context():
     assert "dialogue" in fields
     assert "image_prompt" in fields
     assert "video_prompt" in fields
+    assert "script_segment_id" in fields
+    assert "source_video_shot_no" in fields
+    assert "video_script_block" in fields
 
 
 async def test_create_storyboard_item(test_db):

@@ -94,7 +94,13 @@ import { buildVideoTaskImport } from '../utils/videoTaskImport';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
 import { resolveVideoImageIdentifier } from '../utils/videoImageIdentifier';
 import { hasStoredVideoResult, mergeStoredVideoResult } from '../utils/videoResultPresentation';
-import { buildDownwardMergePlan, canCreateFirstLastPair } from '../utils/videoTaskMerge';
+import {
+    buildDownwardMergePlan,
+    buildVideoStoryboardShotLookup,
+    canCreateFirstLastPair,
+    partitionMergedSnapshots,
+    type VideoStoryboardShotInfo,
+} from '../utils/videoTaskMerge';
 import { useSeedanceCandidates } from '../hooks/useSeedanceCandidates';
 import type { SyncMode } from './video/StoryboardSyncModal';
 import { applySyncStrategy } from '../utils/storyboardSync';
@@ -391,6 +397,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const [referenceAudioExtractingUuid, setReferenceAudioExtractingUuid] = useState<string | null>(null);
     const [videoVoiceReferences, setVideoVoiceReferences] = useState<VideoVoiceReference[]>([]);
     const [editModalUuid, setEditModalUuid] = useState<string | null>(null);
+    const [mergeDialog, setMergeDialog] = useState<{
+        groupUuid: string;
+        selectedEndIndex: number;
+    } | null>(null);
+    const [mergedCardDialogUuid, setMergedCardDialogUuid] = useState<string | null>(null);
     // Issue 7: list-view ⚙ detail modal
     const [seedanceDetailUuid, setSeedanceDetailUuid] = useState<string | null>(null);
     const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
@@ -486,6 +497,55 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         });
         return result;
     }, [storyboardItems]);
+
+    const storyboardShotInfoByItemId = useMemo(
+        () => buildVideoStoryboardShotLookup(storyboardItems),
+        [storyboardItems],
+    );
+
+    const getImageShotInfo = useCallback((imageId: string): VideoStoryboardShotInfo | null => {
+        const image = uploadedImages.find(candidate => candidate.id === imageId);
+        const itemId = String(image?.storyboardItemId || imageId || '').trim();
+        const persistedLabel = String(image?.storyboardShotLabel || '').trim();
+        if (persistedLabel && image?.storyboardSegmentNo && image?.storyboardLocalShotNo) {
+            return {
+                itemId,
+                segmentKey: image.storyboardSegmentKey || `storyboard-segment-${image.storyboardSegmentNo}`,
+                segmentNo: image.storyboardSegmentNo,
+                localShotNo: image.storyboardLocalShotNo,
+                label: persistedLabel,
+                isFirstInSegment: Boolean(image.isStoryboardSegmentStart),
+            };
+        }
+        const current = storyboardShotInfoByItemId.get(itemId);
+        if (current) return current;
+        if (image?.storyboardItemId && image.sortOrder != null) {
+            return {
+                itemId,
+                segmentKey: 'storyboard-segment-unassigned',
+                segmentNo: 1,
+                localShotNo: image.sortOrder + 1,
+                label: `镜头1-${image.sortOrder + 1}`,
+                isFirstInSegment: image.sortOrder === 0,
+            };
+        }
+        return null;
+    }, [storyboardShotInfoByItemId, uploadedImages]);
+
+    const getGroupShotRange = useCallback((group: TaskGroup, index: number) => {
+        const start = getImageShotInfo(group.ids?.[0] || '');
+        const end = getImageShotInfo(group.ids?.[group.ids.length - 1] || '');
+        const label = start && end
+            ? (start.itemId === end.itemId ? start.label : `${start.label} 至 ${end.label}`)
+            : (start?.label || end?.label || `#${index + 1}`);
+        return {
+            start,
+            end,
+            label,
+            isSegmentStart: Boolean(start?.isFirstInSegment),
+            crossesSegment: Boolean(start && end && start.segmentKey !== end.segmentKey),
+        };
+    }, [getImageShotInfo]);
 
     const getStoryboardPromptSourcesForGroup = useCallback((group: TaskGroup | undefined) => {
         if (!group) return [];
@@ -679,7 +739,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             );
             return prompt === existing.prompt ? existing : { ...existing, prompt };
         }
-        const isPair = (group?.ids?.length || 0) === 2;
+        const isPair = (group?.ids?.length || 0) === 2 && !group?.mergedFrom?.length;
         const linkedImages = uploadedImages.filter(img =>
             img.url
             && !img.isPlaceholder
@@ -1645,35 +1705,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     );
     const storyboardSegmentKeyByItemId = useMemo(() => {
         const map = new Map<string, string>();
-        const normalizeItemId = (item: any): string => String(item?.item_id ?? item?.itemId ?? item?.id ?? '').trim();
-        const parseSegmentKey = (item: any): string => {
-            const explicit = String(
-                item?.script_segment_id
-                ?? item?.scriptSegmentId
-                ?? item?.segment_key
-                ?? item?.segmentKey
-                ?? item?.segment_id
-                ?? item?.segmentId
-                ?? '',
-            ).trim();
-            if (explicit) return explicit;
-            const rawShot = String(
-                item?.shot_number
-                ?? item?.shotNumber
-                ?? item?.localShotLabel
-                ?? item?.title
-                ?? '',
-            );
-            const match = rawShot.match(/(?:镜头|分镜)?\s*0*(\d+)\s*[-－—]/);
-            return match ? `storyboard-segment-${Number(match[1])}` : '';
-        };
-        storyboardItems.forEach((item: any) => {
-            const itemId = normalizeItemId(item);
-            const segmentKey = parseSegmentKey(item);
-            if (itemId && segmentKey) map.set(itemId, segmentKey);
+        storyboardShotInfoByItemId.forEach((info, itemId) => {
+            map.set(itemId, info.segmentKey);
         });
         return map;
-    }, [storyboardItems]);
+    }, [storyboardShotInfoByItemId]);
 
     const getStoryboardItemIdForImageId = useCallback((imageId: string): string => {
         const img = uploadedImages.find(candidate => candidate.id === imageId);
@@ -1682,13 +1718,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
 
     const getGroupSegmentKey = useCallback((group: TaskGroup): string | null => {
         const firstImageId = group.ids?.[0] || '';
+        const image = uploadedImages.find(candidate => candidate.id === firstImageId);
+        if (image?.storyboardSegmentKey) return image.storyboardSegmentKey;
         const itemId = getStoryboardItemIdForImageId(firstImageId);
         const segmentKey = storyboardSegmentKeyByItemId.get(itemId);
         if (segmentKey) return segmentKey;
 
-        const img = uploadedImages.find(candidate => candidate.id === firstImageId);
         const looksLikeStoryboardCard = Boolean(
-            img?.storyboardItemId
+            image?.storyboardItemId
             || storyboardMetaByItemId[itemId]
             || /^sb[_-]/i.test(itemId),
         );
@@ -1734,7 +1771,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return 5;
     }, [getMetaDurationSecondsForImageId]);
 
-    const getDownwardMergePlan = useCallback((index: number) => {
+    const getDownwardMergePlan = useCallback((index: number, selectedEndIndex?: number) => {
         const group = taskGroups[index];
         const maxDurationSeconds = group && isSeedanceAgentPlanModel(group.model)
             ? SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC
@@ -1744,33 +1781,51 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             getSegmentKey: getGroupSegmentKey,
             getDurationSeconds: getGroupMergeDuration,
             maxDurationSeconds,
+            maxImages: 9,
+            selectedEndIndex,
         });
     }, [taskGroups, isMergeableModel, getGroupSegmentKey, getGroupMergeDuration]);
 
-    // 同一剧本分段内存在向下候选时按钮可点击；具体超时长/模型不一致在点击后给出明确提示。
+    // 存在连续、同模型且不超过 9 张图的向下候选时按钮可点击。
     const canMergeWithNext = useCallback((index: number): boolean => {
         return getDownwardMergePlan(index).hasDownwardTarget;
     }, [getDownwardMergePlan]);
 
-    const mergeWithNext = useCallback((index: number) => {
-        if (index < 0 || index >= taskGroups.length - 1) return;
+    const openMergeDialog = useCallback((index: number) => {
+        const group = taskGroups[index];
+        if (!group) return;
         const plan = getDownwardMergePlan(index);
+        if (!plan.hasDownwardTarget) {
+            if (plan.blockedReason === 'model_mismatch') {
+                showToast('下一个镜头使用了不同的视频模型，不能连续合并');
+            } else if (plan.blockedReason === 'image_limit') {
+                showToast('当前卡片已达到 9 张图上限，不能继续向下合并');
+            } else {
+                showToast('当前卡片下方没有可合并的连续镜头');
+            }
+            return;
+        }
+        setMergeDialog({
+            groupUuid: group.uuid,
+            selectedEndIndex: plan.recommendedEndIndex,
+        });
+    }, [getDownwardMergePlan, showToast, taskGroups]);
+
+    const mergeWithNext = useCallback((index: number, selectedEndIndex: number) => {
+        if (index < 0 || index >= taskGroups.length - 1) return;
+        const plan = getDownwardMergePlan(index, selectedEndIndex);
         const A = plan.groups[0];
         if (!A) return;
         if (!plan.hasDownwardTarget) {
-            showToast('当前卡片下方没有可合并的同分段卡片');
+            showToast('当前卡片下方没有可合并的连续镜头');
             return;
         }
         if (plan.blockedReason === 'model_mismatch') {
-            showToast('同一分段内只能合并相同视频模型的卡片');
+            showToast('只能连续合并相同视频模型的卡片');
             return;
         }
         if (plan.blockedReason === 'unsupported_model') {
             showToast('当前视频模型暂不支持合并，请切换到支持多图参考的视频模型');
-            return;
-        }
-        if (plan.blockedReason === 'duration_exceeded') {
-            showToast(`当前分段合并后约 ${plan.totalDuration} 秒，超过 ${plan.maxDuration} 秒，请先拆分后再生成`);
             return;
         }
         if (!plan.canMerge || plan.groups.length < 2) return;
@@ -1871,7 +1926,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             groupsToMerge.slice(1).forEach(g => { delete n[g.uuid]; });
             return n;
         });
-        showToast(`已合并本分段 ${groupsToMerge.length} 张卡片，约 ${plan.totalDuration} 秒`);
+        showToast(`已合并 ${mergedFrom.length} 个镜头，共 ${plan.imageCount} 张图，约 ${plan.totalDuration} 秒`);
+        setMergeDialog(null);
         setTimeout(() => saveSession(), 100);
     }, [
         taskGroups,
@@ -1917,8 +1973,100 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             return next;
         });
         setTasksStatus(prev => { const n = { ...prev }; delete n[g.uuid]; return n; });
+        setMergedCardDialogUuid(null);
         setTimeout(() => saveSession(), 100);
     }, [taskGroups, saveSession]);
+
+    const removeShotFromMergedCard = useCallback((groupUuid: string, childIndex: number) => {
+        const index = taskGroups.findIndex(group => group.uuid === groupUuid);
+        const current = taskGroups[index];
+        if (!current?.mergedFrom?.length) return;
+        const partition = partitionMergedSnapshots(current.mergedFrom, childIndex);
+        if (!partition) return;
+
+        const ranges = [
+            partition.before,
+            [partition.removed],
+            partition.after,
+        ].filter((range): range is MergedCardSnapshot[][][number] => range.length > 0);
+        const durationOf = (snapshot: MergedCardSnapshot): number => {
+            const duration = Number(snapshot.duration);
+            return Number.isFinite(duration) && duration > 0 ? duration : 5;
+        };
+        const rangeDuration = (range: MergedCardSnapshot[]): number => (
+            range.reduce((sum, snapshot) => sum + durationOf(snapshot), 0)
+        );
+        const rebuilt = ranges.map((range) => {
+            const first = range[0];
+            const duration = rangeDuration(range);
+            const group: TaskGroup = {
+                uuid: first.uuid,
+                ids: range.flatMap(snapshot => snapshot.ids || []),
+                model: first.model,
+                shotType: first.shotType,
+                duration,
+                durationUserOverride: range.length > 1 ? true : first.durationUserOverride,
+                mergedFrom: range.length > 1 ? range.map(snapshot => ({ ...snapshot })) : undefined,
+            };
+            return { group, range, duration };
+        });
+
+        setSeedanceParamsByUuid(prev => {
+            const next = { ...prev };
+            delete next[current.uuid];
+            rebuilt.forEach(({ group, range, duration }) => {
+                if (isDashScopeVideoModel(group.model)) return;
+                if (range.length === 1 && range[0].seedanceParams) {
+                    next[group.uuid] = range[0].seedanceParams;
+                    return;
+                }
+                const base = range.find(snapshot => snapshot.seedanceParams)?.seedanceParams;
+                if (!base) return;
+                next[group.uuid] = {
+                    ...base,
+                    prompt: range.map(snapshot => snapshot.seedanceParams?.prompt || snapshot.prompt).filter(Boolean).join('\n'),
+                    media_inputs: range.flatMap(snapshot => snapshot.seedanceParams?.media_inputs || []),
+                    duration,
+                };
+            });
+            return next;
+        });
+        setDashScopeParamsByUuid(prev => {
+            const next = { ...prev };
+            delete next[current.uuid];
+            rebuilt.forEach(({ group, range, duration }) => {
+                if (!isDashScopeVideoModel(group.model)) return;
+                if (range.length === 1 && range[0].dashScopeParams) {
+                    next[group.uuid] = range[0].dashScopeParams;
+                    return;
+                }
+                const base = range.find(snapshot => snapshot.dashScopeParams)?.dashScopeParams;
+                if (!base) return;
+                next[group.uuid] = {
+                    ...base,
+                    prompt: range.map(snapshot => snapshot.dashScopeParams?.prompt || snapshot.prompt).filter(Boolean).join('\n'),
+                    media_inputs: range.flatMap(snapshot => snapshot.dashScopeParams?.media_inputs || []),
+                    duration,
+                    hh_duration: duration,
+                };
+            });
+            return next;
+        });
+        setTaskGroups(prev => {
+            const next = [...prev];
+            if (next[index]?.uuid !== current.uuid) return prev;
+            next.splice(index, 1, ...rebuilt.map(item => item.group));
+            return next;
+        });
+        setTasksStatus(prev => {
+            const next = { ...prev };
+            delete next[current.uuid];
+            return next;
+        });
+        setMergedCardDialogUuid(null);
+        showToast('已移出所选镜头，并按原顺序保留前后连续合并组');
+        setTimeout(() => saveSession(), 100);
+    }, [saveSession, showToast, taskGroups]);
 
     // 2026-05-25 (Task B2)：手工在 insertIndex 位置之后插入一张空卡；insertIndex = -1 表示插到最前
     const insertEmptyTaskGroup = useCallback((insertIndex: number) => {
@@ -3130,10 +3278,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 右侧列表结果卡片
     const renderListResultCard = (group: TaskGroup, index: number) => {
         if (!group.ids) return null;
-        const isPair = group.ids.length === 2;
+        const isPair = group.ids.length === 2 && !group.mergedFrom?.length;
         const status = tasksStatus[group.uuid] || { state: 'idle' };
         const promptText = getEffectiveGroupPrompt(group);
         const videos = status.videos || [];
+        const shotRange = getGroupShotRange(group, index);
         
         return (
             <div
@@ -3145,15 +3294,20 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 {/* 拖拽占位（与左侧 GripVertical w-4 对齐，2026-05-20 Bug 1） */}
                 <div className="w-4 shrink-0" />
                 
-                {/* 序号和选择框（与左侧 w-16 对齐） */}
-                <div className="flex items-center gap-2 w-16 shrink-0">
+                {/* 镜头编号和选择框（与左侧 w-32 对齐） */}
+                <div className="flex items-center gap-2 w-32 shrink-0">
                     <input
                         type="checkbox"
                         checked={status.selected || false}
                         onChange={() => toggleTaskSelection(group.uuid)}
                         className="w-4 h-4 rounded bg-n0 border-n40 text-primary cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-n300">#{index + 1}</span>
+                    <div className="min-w-0" title={shotRange.label}>
+                        <div className="truncate text-xs font-bold text-n300">{shotRange.label}</div>
+                        {shotRange.isSegmentStart && shotRange.start && (
+                            <div className="text-[9px] font-semibold text-warning">分段 {String(shotRange.start.segmentNo).padStart(2, '0')}</div>
+                        )}
+                    </div>
                 </div>
                 
                 {/* 视频缩略图/状态（与左侧 w-20 h-14 对齐） */}
@@ -3354,11 +3508,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     // 左侧列表卡片
     const renderListViewCard = (group: TaskGroup, index: number) => {
         if (!group.ids) return null;
-        const isPair = group.ids.length === 2;
+        const isPair = group.ids.length === 2 && !group.mergedFrom?.length;
         const img1 = uploadedImages.find(i => i.id === group.ids[0]);
         const img2 = isPair ? uploadedImages.find(i => i.id === group.ids[1]) : null;
         const status = tasksStatus[group.uuid] || { state: 'idle' };
         const promptText = getEffectiveGroupPrompt(group);
+        const shotRange = getGroupShotRange(group, index);
         
         if (!img1) return null;
         
@@ -3379,14 +3534,19 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 </div>
                 
                 {/* 序号和选择框 */}
-                <div className="flex items-center gap-2 w-16 shrink-0">
+                <div className="flex items-center gap-2 w-32 shrink-0">
                     <input
                         type="checkbox"
                         checked={status.selected || false}
                         onChange={() => toggleTaskSelection(group.uuid)}
                         className="w-4 h-4 rounded bg-n0 border-n40 text-primary cursor-pointer"
                     />
-                    <span className="text-xs font-bold text-n300">#{index + 1}</span>
+                    <div className="min-w-0" title={shotRange.label}>
+                        <div className="truncate text-xs font-bold text-n300">{shotRange.label}</div>
+                        {shotRange.isSegmentStart && shotRange.start && (
+                            <div className="text-[9px] font-semibold text-warning">分段 {String(shotRange.start.segmentNo).padStart(2, '0')}</div>
+                        )}
+                    </div>
                 </div>
                 
                 {/* 缩略图 */}
@@ -3572,19 +3732,19 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {/* 2026-06-05 — 合并 / 拆分（仅 Seedance / DashScope 卡） */}
                     {group.mergedFrom && group.mergedFrom.length > 0 && (
                         <button
-                            onClick={() => splitMergedCard(index)}
+                            onClick={() => setMergedCardDialogUuid(group.uuid)}
                             className="p-1.5 bg-n0 hover:bg-warning text-n700 hover:text-white rounded transition-colors"
-                            title={`拆分为 ${group.mergedFrom.length} 张原始卡片`}
+                            title={`管理 ${group.mergedFrom.length} 个已合并镜头`}
                         >
                             <Split className="w-3 h-3" />
                         </button>
                     )}
                     {isMergeableModel(group.model) && (
                         <button
-                            onClick={() => mergeWithNext(index)}
+                            onClick={() => openMergeDialog(index)}
                             disabled={!canMergeWithNext(index)}
                             className="p-1.5 bg-n0 hover:bg-teal text-n700 hover:text-white rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            title={canMergeWithNext(index) ? '向下合并本分段卡片（总时长不超过模型上限）' : '下方没有可合并的同分段卡片'}
+                            title={canMergeWithNext(index) ? '选择连续向下合并的镜头' : '下方没有可合并的连续同模型镜头'}
                         >
                             <Combine className="w-3 h-3" />
                         </button>
@@ -3606,7 +3766,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     
     const renderStoryboardCard = (group: TaskGroup, index: number) => {
         if (!group.ids) return null;
-        const isPair = group.ids.length === 2;
+        const isPair = group.ids.length === 2 && !group.mergedFrom?.length;
         const img1 = uploadedImages.find(i => i.id === group.ids[0]);
         const img2 = isPair ? uploadedImages.find(i => i.id === group.ids[1]) : null;
         
@@ -3618,6 +3778,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const previewHeight = isPlaceholderCard ? 'h-24 shrink-0' : getPreviewImageHeightClass(group.model, isPair);
         const seedanceCard = isSeedanceModel(group.model);
         const activeVideoVoiceReference = getVideoVoiceReferenceForGroup(group);
+        const shotRange = getGroupShotRange(group, index);
         
         return (
             <div
@@ -3637,14 +3798,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <div className="cursor-grab active:cursor-grabbing text-n100 hover:text-n300 mr-1">
                             <GripVertical className="w-4 h-4" />
                         </div>
-                        {/* 2026-05-20 (Bug 2)：卡片视图也显示分镜编号，与列表视图 #N 一致；
-                            对应 storyboard sort_order，没有 linkedImg 的卡退化用 index+1。 */}
+                        {shotRange.isSegmentStart && shotRange.start && (
+                            <span className="inline-flex items-baseline gap-1 rounded border border-warning/30 bg-y50 px-1.5 py-0.5 text-[10px] font-semibold text-n500">
+                                分段 <span className="font-mono text-warning">{String(shotRange.start.segmentNo).padStart(2, '0')}</span>
+                            </span>
+                        )}
                         <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-n30 text-n700 mr-1 tabular-nums">
-                            {(() => {
-                                const sortOrder = img1.sortOrder;
-                                return sortOrder != null ? `SB-${sortOrder + 1}` : `#${index + 1}`;
-                            })()}
+                            {shotRange.label}
                         </span>
+                        {shotRange.crossesSegment && (
+                            <span className="rounded border border-warning/40 bg-y50 px-1.5 py-0.5 text-[9px] font-semibold text-warning">跨分段</span>
+                        )}
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase border mr-2 ${
                             isPair ? 'bg-p50 text-p400 border-p75' : 'bg-b50 text-b400 border-b75'
                         }`}>
@@ -3885,21 +4049,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     {group.mergedFrom && group.mergedFrom.length > 0 && (
                         <button
                             type="button"
-                            onClick={() => splitMergedCard(index)}
+                            onClick={() => setMergedCardDialogUuid(group.uuid)}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-n40 bg-n0 text-[10px] text-n700 hover:border-warning hover:text-warning"
-                            title={`拆分为 ${group.mergedFrom.length} 张原始卡片`}
+                            title={`管理 ${group.mergedFrom.length} 个已合并镜头`}
                         >
                             <Split className="w-3.5 h-3.5" />
-                            拆分合并
+                            管理合并
                         </button>
                     )}
                     {isMergeableModel(group.model) && (
                         <button
                             type="button"
-                            onClick={() => mergeWithNext(index)}
+                            onClick={() => openMergeDialog(index)}
                             disabled={!canMergeWithNext(index)}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-primary text-[10px] text-white hover:bg-primary-hover disabled:opacity-30 disabled:cursor-not-allowed"
-                            title={canMergeWithNext(index) ? '向下合并本分段卡片（总时长不超过模型上限）' : '下方没有可合并的同分段卡片'}
+                            title={canMergeWithNext(index) ? '选择连续向下合并的镜头' : '下方没有可合并的连续同模型镜头'}
                         >
                             <Combine className="w-3.5 h-3.5" />
                             合并
@@ -3912,7 +4076,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     
     const renderResultCard = (group: TaskGroup, index: number) => {
         if (!group.ids) return null;
-        const isPair = group.ids.length === 2;
+        const isPair = group.ids.length === 2 && !group.mergedFrom?.length;
         const status = tasksStatus[group.uuid] || { state: 'idle' };
         const promptText = getEffectiveGroupPrompt(group);
         
@@ -3923,6 +4087,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const cardHeight = getCardHeightClass(group.model, isPlaceholderCard);
         const seedanceCard = isSeedanceModel(group.model);
         const activeVideoVoiceReference = getVideoVoiceReferenceForGroup(group);
+        const shotRange = getGroupShotRange(group, index);
         
         const renderStatusBadge = () => {
             if (status.state === 'pending') {
@@ -3971,7 +4136,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const renderVisual = () => {
             const videos = status.videos || [];
             const videoCount = videos.length;
-            const isPair = group.ids.length === 2;
+            const isPair = group.ids.length === 2 && !group.mergedFrom?.length;
             const isQueued = status.state === 'pending';
             const isRunning = status.state === 'running' || status.state === 'processing';
             const isBeautifyVideo = (videoUrl: string) =>
@@ -4126,9 +4291,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             onChange={() => toggleTaskSelection(group.uuid)}
                             className="w-4 h-4 rounded bg-n0 border-n40 text-primary cursor-pointer"
                         />
-                        <span className="text-xs font-bold text-n700">
-                            #{index + 1} {isPair ? 'Morph' : 'I2V'}
-                        </span>
+                        {shotRange.isSegmentStart && shotRange.start && (
+                            <span className="rounded border border-warning/30 bg-y50 px-1.5 py-0.5 text-[9px] font-semibold text-warning">
+                                分段 {String(shotRange.start.segmentNo).padStart(2, '0')}
+                            </span>
+                        )}
+                        <span className="text-xs font-bold text-n700">{shotRange.label} {isPair ? 'Morph' : 'I2V'}</span>
                         <span
                             className="text-[10px] px-1 rounded border border-n40 text-n300 truncate max-w-[180px]"
                             title={formatVideoModelOptionLabel(group.model, getVideoCapability(videoCapabilities, group.model))}
@@ -4698,6 +4866,195 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             </div>
         );
     };
+
+    const renderMergeDialog = () => {
+        if (!mergeDialog) return null;
+        const startIndex = taskGroups.findIndex(group => group.uuid === mergeDialog.groupUuid);
+        if (startIndex < 0) return null;
+        const plan = getDownwardMergePlan(startIndex, mergeDialog.selectedEndIndex);
+        const displayDuration = (seconds: number) => Math.round(seconds * 10) / 10;
+        const selectedShotCount = plan.groups.reduce(
+            (sum, group) => sum + (group.mergedFrom?.length || 1),
+            0,
+        );
+
+        return (
+            <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-n900/70 p-4"
+                onClick={() => setMergeDialog(null)}
+                data-testid="video-merge-dialog"
+            >
+                <div
+                    className="flex max-h-[min(760px,calc(100vh-2rem))] w-[min(680px,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-n40 bg-n0 shadow-bottom"
+                    onClick={event => event.stopPropagation()}
+                >
+                    <div className="flex items-start justify-between border-b border-n40 px-5 py-4">
+                        <div>
+                            <h3 className="text-base font-semibold text-n800">向下合并镜头</h3>
+                            <p className="mt-1 text-xs text-n300">选择结束镜头，中间所有镜头会按顺序一起选中；建议总时长保持在 10–15 秒。</p>
+                        </div>
+                        <button type="button" onClick={() => setMergeDialog(null)} className="rounded p-1 text-n300 hover:bg-n20 hover:text-n800">
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+
+                    <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                        <div className="mb-3 grid grid-cols-3 gap-2 rounded-md border border-primary/20 bg-primary-light px-3 py-2 text-xs">
+                            <div><span className="text-n300">镜头</span><strong className="ml-1 text-n800">{selectedShotCount}</strong></div>
+                            <div><span className="text-n300">图片</span><strong className="ml-1 text-n800">{plan.imageCount}/{plan.maxImages}</strong></div>
+                            <div><span className="text-n300">预计时长</span><strong className="ml-1 text-n800">{displayDuration(plan.totalDuration)} 秒</strong></div>
+                        </div>
+
+                        <div className="space-y-2">
+                            {plan.availableGroups.map((candidate, offset) => {
+                                const candidateIndex = startIndex + offset;
+                                const selected = candidateIndex <= plan.endIndex;
+                                const shotRange = getGroupShotRange(candidate, candidateIndex);
+                                const duration = displayDuration(getGroupMergeDuration(candidate));
+                                return (
+                                    <button
+                                        key={candidate.uuid}
+                                        type="button"
+                                        disabled={offset === 0}
+                                        onClick={() => setMergeDialog(current => current ? { ...current, selectedEndIndex: candidateIndex } : current)}
+                                        className={`flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors ${
+                                            selected ? 'border-primary bg-primary-light/60' : 'border-n40 bg-n0 hover:border-primary/50'
+                                        } ${offset === 0 ? 'cursor-default' : ''}`}
+                                    >
+                                        <span className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border ${selected ? 'border-primary bg-primary text-white' : 'border-n40 text-transparent'}`}>
+                                            <Check className="h-3.5 w-3.5" />
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="text-sm font-semibold text-n800">{shotRange.label}</span>
+                                                {shotRange.isSegmentStart && shotRange.start && (
+                                                    <span className="rounded border border-warning/30 bg-y50 px-1.5 py-0.5 text-[9px] font-semibold text-warning">
+                                                        分段 {String(shotRange.start.segmentNo).padStart(2, '0')} 开始
+                                                    </span>
+                                                )}
+                                                {candidate.mergedFrom?.length ? (
+                                                    <span className="text-[10px] text-primary">已含 {candidate.mergedFrom.length} 个镜头</span>
+                                                ) : null}
+                                            </div>
+                                            <div className="mt-0.5 text-[11px] text-n300">约 {duration} 秒 · {candidate.ids.length} 张图</div>
+                                        </div>
+                                        <span className="shrink-0 text-[10px] text-n100">{offset === 0 ? '起点' : '选到这里'}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {plan.hardStopReason === 'image_limit' && (
+                            <div className="mt-3 flex gap-2 rounded-md border border-warning/30 bg-y50 px-3 py-2 text-xs text-warning">
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                合并内容最多包含 9 张图，后续镜头已停止加入候选。
+                            </div>
+                        )}
+                        {plan.hardStopReason === 'model_mismatch' && (
+                            <div className="mt-3 flex gap-2 rounded-md border border-n40 bg-n20 px-3 py-2 text-xs text-n500">
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                后续镜头使用了不同的视频模型，因此不能继续连续选择。
+                            </div>
+                        )}
+                        {plan.crossesSegment && (
+                            <div className="mt-3 flex gap-2 rounded-md border border-warning/40 bg-y50 px-3 py-2 text-xs text-warning" data-testid="video-merge-cross-segment-warning">
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                当前选择跨越了剧本分段。确认后会合并为一个视频段落卡片，镜头编号仍保留分段范围。
+                            </div>
+                        )}
+                        {plan.exceedsDuration && (
+                            <div className="mt-3 flex gap-2 rounded-md border border-danger/30 bg-r50 px-3 py-2 text-xs text-danger" data-testid="video-merge-duration-warning">
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                当前约 {displayDuration(plan.totalDuration)} 秒，超过该模型建议上限 {displayDuration(plan.maxDuration)} 秒。接口可能拒绝或截断，确认后仍会合并。
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-n40 px-5 py-4">
+                        <span className="text-[11px] text-n300">合并后可在“管理合并”中移出单个镜头。</span>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setMergeDialog(null)} className="rounded border border-n40 bg-n0 px-4 py-2 text-xs text-n700 hover:bg-n20">取消</button>
+                            <button
+                                type="button"
+                                disabled={!plan.canMerge}
+                                onClick={() => mergeWithNext(startIndex, plan.endIndex)}
+                                className="rounded bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover disabled:opacity-40"
+                            >
+                                确认合并
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderMergedCardDialog = () => {
+        if (!mergedCardDialogUuid) return null;
+        const groupIndex = taskGroups.findIndex(group => group.uuid === mergedCardDialogUuid);
+        const group = taskGroups[groupIndex];
+        if (!group?.mergedFrom?.length) return null;
+
+        return (
+            <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-n900/70 p-4"
+                onClick={() => setMergedCardDialogUuid(null)}
+                data-testid="video-merged-card-dialog"
+            >
+                <div
+                    className="flex max-h-[min(720px,calc(100vh-2rem))] w-[min(620px,calc(100vw-2rem))] flex-col overflow-hidden rounded-lg border border-n40 bg-n0 shadow-bottom"
+                    onClick={event => event.stopPropagation()}
+                >
+                    <div className="flex items-start justify-between border-b border-n40 px-5 py-4">
+                        <div>
+                            <h3 className="text-base font-semibold text-n800">管理已合并镜头</h3>
+                            <p className="mt-1 text-xs text-n300">移出中间镜头时，前后镜头会自动保留为两个连续合并组。</p>
+                        </div>
+                        <button type="button" onClick={() => setMergedCardDialogUuid(null)} className="rounded p-1 text-n300 hover:bg-n20 hover:text-n800">
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                    <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-4">
+                        {group.mergedFrom.map((snapshot, childIndex) => {
+                            const childGroup: TaskGroup = {
+                                uuid: snapshot.uuid,
+                                ids: snapshot.ids,
+                                model: snapshot.model,
+                            };
+                            const shotRange = getGroupShotRange(childGroup, childIndex);
+                            return (
+                                <div key={`${snapshot.uuid}-${childIndex}`} className="flex items-center gap-3 rounded-md border border-n40 px-3 py-2.5">
+                                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-n30 text-[10px] font-semibold text-n500">{childIndex + 1}</div>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="text-sm font-semibold text-n800">{shotRange.label}</div>
+                                        <div className="mt-0.5 text-[11px] text-n300">约 {Math.round((Number(snapshot.duration) || 5) * 10) / 10} 秒 · {snapshot.ids.length} 张图</div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => removeShotFromMergedCard(group.uuid, childIndex)}
+                                        className="rounded border border-warning/40 bg-y50 px-2.5 py-1.5 text-[11px] font-semibold text-warning hover:border-warning"
+                                    >
+                                        移出
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="flex items-center justify-between border-t border-n40 px-5 py-4">
+                        <button
+                            type="button"
+                            onClick={() => splitMergedCard(groupIndex)}
+                            className="inline-flex items-center gap-1.5 rounded border border-warning/40 bg-n0 px-3 py-2 text-xs font-semibold text-warning hover:bg-y50"
+                        >
+                            <Split className="h-3.5 w-3.5" />
+                            全部拆分
+                        </button>
+                        <button type="button" onClick={() => setMergedCardDialogUuid(null)} className="rounded bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary-hover">完成</button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
     
     // ==================== 主渲染 ====================
     
@@ -5114,6 +5471,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             {renderVoiceModal()}
             {renderEditModal()}
             {renderVideoVoiceReferenceModal()}
+            {renderMergeDialog()}
+            {renderMergedCardDialog()}
 
             {/* Task 6：同步分镜弹窗 */}
             {syncModalOpen && (

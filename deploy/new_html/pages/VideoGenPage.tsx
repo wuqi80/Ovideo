@@ -23,6 +23,7 @@ import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } f
 import { secureApiUrl } from '../services/httpClient';
 import { runWhenIdle } from '../utils/idleScheduler';
 import { buildStoryboardVideoPrompt } from '../utils/storyboardVideoPrompt';
+import { buildVideoStoryboardShotLookup } from '../utils/videoTaskMerge';
 
 const VIDEO_INITIAL_STORYBOARD_COUNT = 10;
 const VideoPage = React.lazy(() => import('../components/VideoPage').then(m => ({ default: m.VideoPage })));
@@ -183,6 +184,13 @@ export const VideoGenPage: React.FC = () => {
   const totalStoryboardCount = Math.max(storyboardTotalCount || 0, allStoryboardItems.length);
   const isStoryboardPagePartial = totalStoryboardCount > allStoryboardItems.length;
 
+  // Shot labels and segment-start markers require the complete ordered list,
+  // including when an existing workspace is opened without re-importing it.
+  useEffect(() => {
+    if (!isStoryboardPagePartial || totalStoryboardCount <= 0) return;
+    void loadStoryboardItemsPage({ limit: totalStoryboardCount, includeTotal: false });
+  }, [isStoryboardPagePartial, loadStoryboardItemsPage, totalStoryboardCount]);
+
   const ensureAllStoryboardItemsForImport = useCallback(async () => {
     if (!episodeId || !isStoryboardPagePartial) return allStoryboardItems;
     const res = await getStoryboardItems(episodeId, selectedScriptId || undefined, { fields: 'video' });
@@ -206,6 +214,7 @@ export const VideoGenPage: React.FC = () => {
       const seedanceParams: Record<string, SeedanceParams> = {};
       const groups: TaskGroup[] = [];
       const skipped: { id: string; reason: string; sample?: string }[] = [];
+      const shotLookup = buildVideoStoryboardShotLookup(storyboardItemsForImport);
 
       for (const item of storyboardItemsForImport) {
         const rawUrl = (item as any).generated_image_url ?? (item as any).generatedImageUrl;
@@ -213,6 +222,7 @@ export const VideoGenPage: React.FC = () => {
         // 视频生成除了视觉/运镜提示，还必须继承本镜头的动作说明与对白。
         const prompt = buildStoryboardVideoPrompt(item as any);
         const sortOrder = (item as any).sort_order ?? (item as any).sortOrder ?? 0;
+        const shotInfo = shotLookup.get(itemId);
         if (!itemId) {
           skipped.push({ id: '(no itemId)', reason: 'missing itemId' });
           continue;
@@ -245,6 +255,11 @@ export const VideoGenPage: React.FC = () => {
           isPlaceholder,
           storyboardItemId: itemId,
           sortOrder,
+          storyboardSegmentKey: shotInfo?.segmentKey,
+          storyboardSegmentNo: shotInfo?.segmentNo,
+          storyboardLocalShotNo: shotInfo?.localShotNo,
+          storyboardShotLabel: shotInfo?.label,
+          isStoryboardSegmentStart: shotInfo?.isFirstInSegment,
           tags: [],
           linkedGroupUuids: [],
         };

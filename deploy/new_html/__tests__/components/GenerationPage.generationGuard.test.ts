@@ -79,6 +79,13 @@ describe('GenerationPage storyboard rail layout', () => {
     expect(source).toContain("? 'border-l-primary bg-primary-light'");
     expect(source).toContain('line-clamp-2 min-h-10');
   });
+
+  it('uses segmented hierarchical shot labels and marks only segment starts', () => {
+    expect(source).toContain('buildStoryboardSegmentLookup(');
+    expect(source).toContain('segmentInfo?.localShotLabel');
+    expect(source).toContain('segmentInfo?.isFirstInSegment');
+    expect(source).toContain('分段 <span className="font-mono text-warning">');
+  });
 });
 
 describe('GenerationPage other storyboard references', () => {
