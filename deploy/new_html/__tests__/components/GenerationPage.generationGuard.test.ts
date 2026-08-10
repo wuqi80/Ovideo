@@ -71,6 +71,12 @@ describe('GenerationPage progress feedback', () => {
 });
 
 describe('GenerationPage storyboard rail layout', () => {
+  it('gives double-digit segmented shot labels enough default rail width', () => {
+    expect(source).toMatch(
+      /page: 'GenerationPage:sidebarWidth',[\s\S]*?version: 2,[\s\S]*?defaultValue: 340,/,
+    );
+  });
+
   it('matches the script file rail with a compact title row and blue active edge', () => {
     expect(source).toContain('data-testid="storyboard-shot-list-title-row"');
     expect(source).toContain('({storyboardTotalCount})');

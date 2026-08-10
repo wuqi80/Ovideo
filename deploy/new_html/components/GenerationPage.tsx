@@ -612,8 +612,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const [sidebarWidth, setSidebarWidth] = usePersistedPageState<number>({
     page: 'GenerationPage:sidebarWidth',
     episodeId: 'global', // 宽度是全局偏好，不按剧集隔离
-    version: 1,
-    defaultValue: 260,
+    version: 2,
+    defaultValue: 340,
   });
   const [isResizing, setIsResizing] = useState(false);
 
