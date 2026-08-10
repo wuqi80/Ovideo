@@ -1,3 +1,4 @@
+import type { VideoModel } from '../services/videoModelService';
 import type { TaskStatus } from '../services/videoTaskTypes';
 
 /**
@@ -21,13 +22,25 @@ export function normalizeVideoResultKey(value: unknown): unknown {
 export function mergeStoredVideoResult(
   status: TaskStatus | null | undefined,
   videoUrl: string,
+  model?: VideoModel,
 ): TaskStatus {
   const url = typeof videoUrl === 'string' ? videoUrl.trim() : '';
   const current = status || {};
   if (!url) return current;
 
   const currentVideos = current.videos || [];
-  if (currentVideos.some(video => normalizeVideoResultKey(video) === normalizeVideoResultKey(url))) {
+  const existingIndex = currentVideos.findIndex(
+    video => normalizeVideoResultKey(video) === normalizeVideoResultKey(url),
+  );
+  if (existingIndex >= 0) {
+    if (model && !current.videoModels?.[existingIndex]) {
+      return {
+        ...current,
+        videoModels: currentVideos.map((_, index) => (
+          index === existingIndex ? model : current.videoModels?.[index]
+        )),
+      };
+    }
     return current;
   }
 
@@ -36,6 +49,7 @@ export function mergeStoredVideoResult(
     ...current,
     ...(shouldMarkDone ? { state: 'done' as const, progress: 100 } : {}),
     videos: [...currentVideos, url],
+    videoModels: [...currentVideos.map((_, index) => current.videoModels?.[index]), model],
     result: current.result || url,
     keepResult: true,
   };

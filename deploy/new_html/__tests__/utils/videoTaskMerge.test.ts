@@ -6,6 +6,8 @@ import {
   buildVideoStoryboardShotLookup,
   canCreateFirstLastPair,
   canMergeAdjacentGroups,
+  getTaskStatusHistoryDelta,
+  mergeTaskStatusHistories,
   partitionMergedSnapshots,
 } from '../../utils/videoTaskMerge';
 
@@ -20,7 +22,6 @@ const mergeOptions = (
   segments: Record<string, string>,
   selectedEndIndex?: number,
 ) => ({
-  isMergeableModel: (model: TaskGroup['model']) => model === 'Seedance2',
   getSegmentKey: (item: TaskGroup) => segments[item.uuid],
   getDurationSeconds: (item: TaskGroup) => item.duration,
   maxDurationSeconds: 15,
@@ -59,15 +60,29 @@ describe('video task merge eligibility', () => {
     expect(canCreateFirstLastPair([group('a', 'Seedance2', ['a', 'b']), group('c', 'Seedance2')], 0)).toBe(false);
   });
 
-  it('allows repeated content merges while the next model remains compatible', () => {
+  it('allows content merges regardless of the models used by historical runs', () => {
     const groups = [
       { ...group('a', 'Seedance2', ['a', 'b']), mergedFrom: [] },
-      group('c', 'Seedance2'),
+      group('c', 'Kling'),
       group('d', 'MINI'),
     ];
-    const supportsMerge = (model: TaskGroup['model']) => model === 'Seedance2';
-    expect(canMergeAdjacentGroups(groups, 0, supportsMerge)).toBe(true);
-    expect(canMergeAdjacentGroups(groups, 1, supportsMerge)).toBe(false);
+    expect(canMergeAdjacentGroups(groups, 0)).toBe(true);
+    expect(canMergeAdjacentGroups(groups, 1)).toBe(true);
+  });
+
+  it('keeps different-model cards in one continuous downward range', () => {
+    const groups = [
+      group('a', 'Seedance2', ['a'], 5),
+      group('b', 'Kling', ['b'], 5),
+      group('c', 'MINI', ['c'], 5),
+    ];
+    const plan = buildDownwardMergePlan(groups, 0, mergeOptions({
+      a: 'segment-1', b: 'segment-1', c: 'segment-1',
+    }));
+
+    expect(plan.canMerge).toBe(true);
+    expect(plan.availableGroups.map(item => item.uuid)).toEqual(['a', 'b', 'c']);
+    expect(plan.groups.map(item => item.uuid)).toEqual(['a', 'b', 'c']);
   });
 
   it('recommends the furthest continuous range that remains within 15 seconds', () => {
@@ -147,6 +162,53 @@ describe('video task merge eligibility', () => {
     expect(plan.imageCount).toBe(9);
     expect(plan.hardStopReason).toBe('image_limit');
     expect(plan.blockingIndex).toBe(2);
+  });
+});
+
+describe('merged video result history', () => {
+  it('keeps videos, generation times, and per-video models aligned in storyboard order', () => {
+    const merged = mergeTaskStatusHistories([
+      {
+        state: 'done',
+        result: '/video/a.mp4',
+        videos: ['/video/a.mp4'],
+        videoGenerateTimes: [21],
+        videoModels: ['Seedance2Mini'],
+      },
+      {
+        state: 'done',
+        result: '/video/b.mp4',
+        videos: ['/video/b.mp4'],
+        videoGenerateTimes: [34],
+        videoModels: ['Kling'],
+      },
+    ]);
+
+    expect(merged?.videos).toEqual(['/video/a.mp4', '/video/b.mp4']);
+    expect(merged?.videoGenerateTimes).toEqual([21, 34]);
+    expect(merged?.videoModels).toEqual(['Seedance2Mini', 'Kling']);
+    expect(merged?.result).toBe('/video/a.mp4');
+  });
+
+  it('separates a video generated after the cards were merged', () => {
+    const delta = getTaskStatusHistoryDelta(
+      {
+        state: 'done',
+        videos: ['/video/a.mp4', '/video/b.mp4', '/video/merged.mp4'],
+        videoGenerateTimes: [20, 30, 55],
+        videoModels: ['Seedance2Mini', 'Kling', 'Seedance2'],
+        result: '/video/merged.mp4',
+      },
+      [
+        { videos: ['/video/a.mp4'], videoModels: ['Seedance2Mini'] },
+        { videos: ['/video/b.mp4'], videoModels: ['Kling'] },
+      ],
+    );
+
+    expect(delta?.videos).toEqual(['/video/merged.mp4']);
+    expect(delta?.videoGenerateTimes).toEqual([55]);
+    expect(delta?.videoModels).toEqual(['Seedance2']);
+    expect(delta?.result).toBe('/video/merged.mp4');
   });
 });
 

@@ -37,4 +37,13 @@ describe('video workspace storyboard prompt wiring', () => {
     expect(videoPageSource).toContain('removeShotFromMergedCard(group.uuid, childIndex)');
     expect(videoPageSource).toContain('group.ids.length === 2 && !group.mergedFrom?.length');
   });
+
+  it('labels every historical video with the model that generated it', () => {
+    expect(videoPageSource).toContain('const videoModel = status.videoModels?.[idx]');
+    expect(videoPageSource).toContain('const latestVideoModel = status.videoModels?.[Math.max(0, videos.length - 1)]');
+    expect(videoPageSource).toContain('pendingVideoModel: status.pendingVideoModel');
+    expect(videoPageSource).toContain("'历史模型未记录'");
+    expect(videoPageSource).toContain('title={`#${idx + 1} · ${videoModelLabel}`}');
+    expect(videoPageSource).toContain('{videoModelLabel}');
+  });
 });

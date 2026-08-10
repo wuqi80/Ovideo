@@ -1,4 +1,4 @@
-import type { MergedCardSnapshot, TaskGroup } from '../services/videoTaskTypes';
+import type { MergedCardSnapshot, TaskGroup, TaskStatus } from '../services/videoTaskTypes';
 
 const normalizeSegmentKey = (key: string | null | undefined): string => String(key || '').trim();
 
@@ -126,17 +126,14 @@ export function canCreateFirstLastPair(groups: TaskGroup[], index: number): bool
 export function canMergeAdjacentGroups(
   groups: TaskGroup[],
   index: number,
-  isMergeableModel: (model: TaskGroup['model']) => boolean,
 ): boolean {
   const current = groups[index];
   const next = groups[index + 1];
-  return Boolean(current && next && current.model === next.model && isMergeableModel(current.model));
+  return Boolean(current && next);
 }
 
 export type DownwardMergeBlockedReason =
-  | 'unsupported_model'
   | 'no_downward_target'
-  | 'model_mismatch'
   | 'image_limit';
 
 export interface DownwardMergePlan {
@@ -161,7 +158,6 @@ export interface DownwardMergePlan {
 }
 
 export interface BuildDownwardMergePlanOptions {
-  isMergeableModel: (model: TaskGroup['model']) => boolean;
   getSegmentKey: (group: TaskGroup) => string | null | undefined;
   getDurationSeconds: (group: TaskGroup) => number | null | undefined;
   maxDurationSeconds: number;
@@ -172,7 +168,9 @@ export interface BuildDownwardMergePlanOptions {
 /**
  * Builds a contiguous downward range for the merge dialog. Crossing a script
  * segment or exceeding the model duration are explicit warnings, not hard
- * blockers. A model mismatch and the nine-image API ceiling remain hard stops.
+ * blockers. The nine-image API ceiling is the only hard stop; the model saved
+ * on an existing card describes a past/future generation choice, not whether
+ * adjacent storyboard content can be regrouped.
  */
 export function buildDownwardMergePlan(
   groups: TaskGroup[],
@@ -201,9 +199,6 @@ export function buildDownwardMergePlan(
     blockedReason: 'no_downward_target',
   };
   if (!current) return base;
-  if (!options.isMergeableModel(current.model)) {
-    return { ...base, blockedReason: 'unsupported_model' };
-  }
   if (currentImages >= maxImages) {
     return { ...base, blockedReason: 'image_limit', blockingIndex: index + 1 };
   }
@@ -216,16 +211,6 @@ export function buildDownwardMergePlan(
   for (let i = index + 1; i < groups.length; i += 1) {
     const next = groups[i];
     if (!next) break;
-    if (next.model !== current.model) {
-      hardStopReason = 'model_mismatch';
-      blockingIndex = i;
-      break;
-    }
-    if (!options.isMergeableModel(next.model)) {
-      hardStopReason = 'unsupported_model';
-      blockingIndex = i;
-      break;
-    }
     const nextImageCount = next.ids?.length || 0;
     if (availableImages + nextImageCount > maxImages) {
       hardStopReason = 'image_limit';
@@ -279,6 +264,85 @@ export function buildDownwardMergePlan(
     blockedReason: undefined,
     hardStopReason,
     blockingIndex: hardStopReason ? blockingIndex : undefined,
+  };
+}
+
+const normalizeVideoHistoryKey = (value: unknown): string => (
+  typeof value === 'string'
+    ? value.split('?')[0].replace(/^https?:\/\/[^/]+/, '')
+    : ''
+);
+
+/**
+ * Combines already-generated videos when storyboard cards are regrouped.
+ * The first status remains authoritative for the latest attempt/result; all
+ * videos are immutable history and are appended in storyboard order.
+ */
+export function mergeTaskStatusHistories(
+  statuses: Array<TaskStatus | null | undefined>,
+): TaskStatus | undefined {
+  const existing = statuses.filter((status): status is TaskStatus => Boolean(status));
+  if (existing.length === 0) return undefined;
+
+  const primary = statuses[0] || existing[0];
+  const videos: string[] = [];
+  const times: number[] = [];
+  const models: NonNullable<TaskStatus['videoModels']> = [];
+  const seen = new Set<string>();
+
+  existing.forEach((status) => {
+    (status.videos || []).forEach((videoUrl, index) => {
+      const key = normalizeVideoHistoryKey(videoUrl);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      videos.push(videoUrl);
+      times.push(status.videoGenerateTimes?.[index] || 0);
+      models.push(status.videoModels?.[index]);
+    });
+  });
+
+  return {
+    ...primary,
+    state: primary.state || (videos.length > 0 ? 'done' : undefined),
+    progress: primary.progress ?? (videos.length > 0 ? 100 : undefined),
+    result: primary.result || '',
+    videos,
+    videoGenerateTimes: times,
+    videoModels: models,
+  };
+}
+
+/** Returns videos generated after the child histories were merged. */
+export function getTaskStatusHistoryDelta(
+  current: TaskStatus | null | undefined,
+  baselineStatuses: Array<TaskStatus | null | undefined>,
+): TaskStatus | undefined {
+  if (!current) return undefined;
+  const baselineKeys = new Set<string>();
+  baselineStatuses.forEach((status) => {
+    (status?.videos || []).forEach(videoUrl => baselineKeys.add(normalizeVideoHistoryKey(videoUrl)));
+  });
+
+  const videos: string[] = [];
+  const times: number[] = [];
+  const models: NonNullable<TaskStatus['videoModels']> = [];
+  (current.videos || []).forEach((videoUrl, index) => {
+    if (baselineKeys.has(normalizeVideoHistoryKey(videoUrl))) return;
+    videos.push(videoUrl);
+    times.push(current.videoGenerateTimes?.[index] || 0);
+    models.push(current.videoModels?.[index]);
+  });
+  if (videos.length === 0) return undefined;
+
+  const resultKey = normalizeVideoHistoryKey(current.result);
+  return {
+    ...current,
+    result: resultKey && videos.some(videoUrl => normalizeVideoHistoryKey(videoUrl) === resultKey)
+      ? current.result
+      : '',
+    videos,
+    videoGenerateTimes: times,
+    videoModels: models,
   };
 }
 

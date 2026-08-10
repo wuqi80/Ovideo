@@ -98,6 +98,8 @@ import {
     buildDownwardMergePlan,
     buildVideoStoryboardShotLookup,
     canCreateFirstLastPair,
+    getTaskStatusHistoryDelta,
+    mergeTaskStatusHistories,
     partitionMergedSnapshots,
     type VideoStoryboardShotInfo,
 } from '../utils/videoTaskMerge';
@@ -244,20 +246,34 @@ const toPersistedVideoUrl = (url: string): string => {
     return clean;
 };
 
+const securePersistedTaskStatus = (status: TaskStatus | undefined): TaskStatus | undefined => (
+    status ? {
+        ...status,
+        videos: (status.videos || []).map(url => secureMediaUrl(url, { absolute: true })),
+        result: status.result ? secureMediaUrl(status.result, { absolute: true }) : '',
+    } : undefined
+);
+
 // 对 videos 与并行的 videoGenerateTimes 同步去重（保留首次），修复同一视频被
 // onComplete/DB兜底/会话恢复重复追加导致"一个镜头两个一模一样"的问题。
-function dedupVideosWithTimes(videos: any[], times: any[]): { videos: any[]; times: any[] } {
+function dedupVideosWithTimes(
+    videos: any[],
+    times: any[],
+    models: Array<VideoModel | undefined> = [],
+): { videos: any[]; times: any[]; models: Array<VideoModel | undefined> } {
     const seen = new Set<any>();
     const v: any[] = [];
     const t: any[] = [];
+    const m: Array<VideoModel | undefined> = [];
     for (let i = 0; i < (videos || []).length; i++) {
         const k = normVideoKey(videos[i]);
         if (seen.has(k)) continue;
         seen.add(k);
         v.push(videos[i]);
         t.push(times ? times[i] : undefined);
+        m.push(models[i]);
     }
-    return { videos: v, times: t };
+    return { videos: v, times: t, models: m };
 }
 
 const VIDEO_GROUP_PAGE_SIZE = 10;
@@ -941,11 +957,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         (async () => {
             try {
                 const res: any = await getVideoSegments(episodeId);
-                const byItem: Record<string, string> = {};
+                const byItem: Record<string, { url: string; model?: VideoModel }> = {};
                 for (const sg of (res?.segments || [])) {
                     const item = sg.storyboard_item_id ?? sg.storyboardItemId;
                     const url = sg.video_url ?? sg.videoUrl;
-                    if (item && url) byItem[item] = url;
+                    const rawModel = String(sg.model || '').trim() as VideoModel;
+                    const model = ALL_MODELS.includes(rawModel) ? rawModel : undefined;
+                    if (item && url) byItem[item] = { url, model };
                 }
                 if (cancelled || Object.keys(byItem).length === 0) return;
                 setTasksStatus(prev => {
@@ -953,12 +971,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     let changed = false;
                     for (const g of taskGroups) {
                         const item = g.ids && g.ids[0];
-                        const raw0 = item ? byItem[item] : undefined;
-                        if (!raw0) continue;
+                        const stored = item ? byItem[item] : undefined;
+                        if (!stored) continue;
                         // 与 onComplete 一致：相对路径补成绝对 URL，再附 token
-                        const url = secureMediaUrl(raw0, { absolute: true });
+                        const url = secureMediaUrl(stored.url, { absolute: true });
                         const cur: TaskStatus = next[g.uuid] || {};
-                        const merged = mergeStoredVideoResult(cur, url);
+                        const merged = mergeStoredVideoResult(cur, url, stored.model);
                         if (merged !== cur) {
                             next[g.uuid] = merged;
                             changed = true;
@@ -1144,11 +1162,21 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         return typeof url === 'string' ? secureMediaUrl(url) : url;
                     });
                     // 去重：旧会话可能已存了重复视频（历史 bug 落盘的），恢复时清掉
-                    const dd = dedupVideosWithTimes(videosRaw, status.videoGenerateTimes || []);
+                    const dd = dedupVideosWithTimes(
+                        videosRaw,
+                        status.videoGenerateTimes || [],
+                        status.videoModels || [],
+                    );
                     const videos = dd.videos;
                     let result = status.result || '';
                     if (result) result = secureMediaUrl(result);
-                    statusWithToken[uuid] = { ...status, videos, videoGenerateTimes: dd.times, result };
+                    statusWithToken[uuid] = {
+                        ...status,
+                        videos,
+                        videoGenerateTimes: dd.times,
+                        videoModels: dd.models,
+                        result,
+                    };
                     
                     if (status.state === 'pending' && status.taskId) {
                         pendingTaskIds.push({ uuid, taskId: status.taskId });
@@ -1280,6 +1308,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 taskId: status.taskId, // 保留 taskId 以便恢复后继续轮询
                 videos: (status.videos || []).map(url => typeof url === 'string' ? url.split('?')[0] : url),
                 videoGenerateTimes: status.videoGenerateTimes || [], // 保留视频生成时间
+                videoModels: status.videoModels || [],
+                pendingVideoModel: status.pendingVideoModel,
                 result: status.result ? status.result.split('?')[0] : '',
                 isUpscaled: status.isUpscaled,
                 selected: status.selected
@@ -1692,16 +1722,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         });
     }, [taskGroups]);
 
-    // 2026-06-05 — 合并相邻同模型卡片（Seedance / DashScope，可多次合并 + 可拆分）
+    // 合并相邻镜头只改变下一次生成的输入分组；历史视频及其生成模型一并归档到合并卡。
     // 与 linkGroups（拼首尾帧）不同：这里是把两卡的提示词追加合并、媒体素材拼接（保留各自 role），
     // 结果写回上卡 uuid 的 params map；记录 mergedFrom 快照供 splitMergedCard 原位还原。
     const isSeedanceModel = useCallback(
         (m: VideoModel) => isSeedanceVideoModel(m),
         [],
-    );
-    const isMergeableModel = useCallback(
-        (m: VideoModel) => isSeedanceModel(m) || isDashScopeVideoModel(m),
-        [isSeedanceModel],
     );
     const storyboardSegmentKeyByItemId = useMemo(() => {
         const map = new Map<string, string>();
@@ -1777,16 +1803,15 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             ? SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC
             : DURATION_MAX_SEC;
         return buildDownwardMergePlan(taskGroups, index, {
-            isMergeableModel,
             getSegmentKey: getGroupSegmentKey,
             getDurationSeconds: getGroupMergeDuration,
             maxDurationSeconds,
             maxImages: 9,
             selectedEndIndex,
         });
-    }, [taskGroups, isMergeableModel, getGroupSegmentKey, getGroupMergeDuration]);
+    }, [taskGroups, getGroupSegmentKey, getGroupMergeDuration]);
 
-    // 存在连续、同模型且不超过 9 张图的向下候选时按钮可点击。
+    // 存在连续且不超过 9 张图的向下候选时按钮可点击，历史模型不参与资格判断。
     const canMergeWithNext = useCallback((index: number): boolean => {
         return getDownwardMergePlan(index).hasDownwardTarget;
     }, [getDownwardMergePlan]);
@@ -1796,9 +1821,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (!group) return;
         const plan = getDownwardMergePlan(index);
         if (!plan.hasDownwardTarget) {
-            if (plan.blockedReason === 'model_mismatch') {
-                showToast('下一个镜头使用了不同的视频模型，不能连续合并');
-            } else if (plan.blockedReason === 'image_limit') {
+            if (plan.blockedReason === 'image_limit') {
                 showToast('当前卡片已达到 9 张图上限，不能继续向下合并');
             } else {
                 showToast('当前卡片下方没有可合并的连续镜头');
@@ -1820,14 +1843,6 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             showToast('当前卡片下方没有可合并的连续镜头');
             return;
         }
-        if (plan.blockedReason === 'model_mismatch') {
-            showToast('只能连续合并相同视频模型的卡片');
-            return;
-        }
-        if (plan.blockedReason === 'unsupported_model') {
-            showToast('当前视频模型暂不支持合并，请切换到支持多图参考的视频模型');
-            return;
-        }
         if (!plan.canMerge || plan.groups.length < 2) return;
 
         const groupsToMerge = plan.groups;
@@ -1843,10 +1858,30 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 : undefined;
         };
         // 取一卡的当前有效参数快照（用于拆分还原）
+        const persistTaskStatus = (status: TaskStatus | undefined): TaskStatus | undefined => (
+            status ? {
+                ...status,
+                videos: (status.videos || []).map(toPersistedVideoUrl),
+                result: status.result ? toPersistedVideoUrl(status.result) : '',
+            } : undefined
+        );
         const snap = (g: TaskGroup): MergedCardSnapshot => {
             const ds = isDashScopeVideoModel(g.model);
-            const seed = ds ? undefined : getSeedanceParams(g.uuid, g.model);
+            const seed = isSeedanceModel(g.model) ? getSeedanceParams(g.uuid, g.model) : undefined;
             const dash = ds ? getDashScopeParams(g.uuid, g.model as DashScopeVideoModel) : undefined;
+            const fallbackMedia = (g.ids || []).flatMap<SeedanceMediaInput>((imageId) => {
+                const image = uploadedImages.find(candidate => candidate.id === imageId);
+                const url = String(image?.storageUrl || image?.url || '').split('?')[0];
+                return url ? [{
+                    kind: 'image' as const,
+                    role: 'reference_image' as const,
+                    url,
+                    file_id: imageId,
+                }] : [];
+            });
+            const mediaInputs = seed?.media_inputs?.length
+                ? seed.media_inputs
+                : (dash?.media_inputs?.length ? dash.media_inputs : fallbackMedia);
             return {
                 uuid: g.uuid,
                 ids: [...g.ids],
@@ -1854,24 +1889,47 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 shotType: g.shotType,
                 duration: getGroupMergeDuration(g),
                 durationUserOverride: g.durationUserOverride,
-                prompt: ds ? (dash?.prompt || '') : (seed?.prompt || ''),
+                prompt: dash?.prompt || seed?.prompt || getEffectiveGroupPrompt(g),
+                mediaInputs,
                 seedanceParams: seed,
                 dashScopeParams: dash,
+                taskStatus: persistTaskStatus(tasksStatus[g.uuid]),
             };
         };
         // 若本身已是合并卡，展开其 mergedFrom，从而支持多次合并后整体拆回原始子卡
-        const childrenOf = (g: TaskGroup): MergedCardSnapshot[] =>
-            (g.mergedFrom && g.mergedFrom.length)
-                ? g.mergedFrom.map(child => ({ ...child, duration: child.duration ?? snapshotDuration(child) }))
-                : [snap(g)];
+        const childrenOf = (g: TaskGroup): MergedCardSnapshot[] => {
+            if (!g.mergedFrom?.length) return [snap(g)];
+            const children = g.mergedFrom.map(child => ({
+                ...child,
+                duration: child.duration ?? snapshotDuration(child),
+            }));
+            const extraHistory = getTaskStatusHistoryDelta(
+                persistTaskStatus(tasksStatus[g.uuid]),
+                children.map(child => child.taskStatus),
+            );
+            if (extraHistory && children[0]) {
+                children[0] = {
+                    ...children[0],
+                    taskStatus: mergeTaskStatusHistories([children[0].taskStatus, extraHistory]),
+                };
+            }
+            return children;
+        };
         const mergedFrom = groupsToMerge.flatMap(childrenOf);
         const mergedIds = groupsToMerge.flatMap(g => g.ids || []);
+        const mergedPrompt = mergedFrom
+            .map(snapshot => snapshot.seedanceParams?.prompt || snapshot.dashScopeParams?.prompt || snapshot.prompt)
+            .filter(Boolean)
+            .join('\n');
+        const mergedMedia = mergedFrom.flatMap(snapshot => (
+            snapshot.mediaInputs
+            || snapshot.seedanceParams?.media_inputs
+            || snapshot.dashScopeParams?.media_inputs
+            || []
+        ));
 
         if (isDS) {
-            const params = groupsToMerge.map(g => getDashScopeParams(g.uuid, g.model as DashScopeVideoModel));
-            const firstParams = params[0];
-            const mergedPrompt = params.map(p => p.prompt).filter(Boolean).join('\n');
-            const mergedMedia = params.flatMap(p => p.media_inputs || []);
+            const firstParams = getDashScopeParams(A.uuid, A.model as DashScopeVideoModel);
             setDashScopeParamsByUuid(prev => {
                 const next = {
                     ...prev,
@@ -1886,11 +1944,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 groupsToMerge.slice(1).forEach(g => { delete next[g.uuid]; });
                 return next;
             });
-        } else {
-            const params = groupsToMerge.map(g => getSeedanceParams(g.uuid, g.model));
-            const firstParams = params[0];
-            const mergedPrompt = params.map(p => p.prompt).filter(Boolean).join('\n');
-            const mergedMedia = params.flatMap(p => p.media_inputs || []);
+        } else if (isSeedanceModel(A.model)) {
+            const firstParams = getSeedanceParams(A.uuid, A.model);
             setSeedanceParamsByUuid(prev => {
                 const next = {
                     ...prev,
@@ -1923,6 +1978,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         });
         setTasksStatus(prev => {
             const n = { ...prev };
+            const mergedStatus = mergeTaskStatusHistories(groupsToMerge.map(group => prev[group.uuid]));
+            if (mergedStatus) n[A.uuid] = mergedStatus;
+            else delete n[A.uuid];
             groupsToMerge.slice(1).forEach(g => { delete n[g.uuid]; });
             return n;
         });
@@ -1934,8 +1992,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         getDownwardMergePlan,
         getMetaDurationSecondsForImageId,
         getGroupMergeDuration,
+        getEffectiveGroupPrompt,
         getSeedanceParams,
         getDashScopeParams,
+        isSeedanceModel,
+        tasksStatus,
+        uploadedImages,
         showToast,
         saveSession,
     ]);
@@ -1944,6 +2006,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const g = taskGroups[index];
         if (!g || !g.mergedFrom || !g.mergedFrom.length) return;
         const children = g.mergedFrom;
+        const generatedAfterMerge = getTaskStatusHistoryDelta(
+            tasksStatus[g.uuid],
+            children.map(child => child.taskStatus),
+        );
+        const restoredStatuses = children.map(child => child.taskStatus);
+        if (generatedAfterMerge && restoredStatuses.length > 0) {
+            restoredStatuses[0] = mergeTaskStatusHistories([
+                restoredStatuses[0],
+                generatedAfterMerge,
+            ]);
+        }
         const restored: TaskGroup[] = children.map(c => ({
             uuid: c.uuid,
             ids: [...c.ids],
@@ -1972,16 +2045,36 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             next.splice(index, 1, ...restored);
             return next;
         });
-        setTasksStatus(prev => { const n = { ...prev }; delete n[g.uuid]; return n; });
+        setTasksStatus(prev => {
+            const next = { ...prev };
+            delete next[g.uuid];
+            children.forEach((child, childIndex) => {
+                const restoredStatus = securePersistedTaskStatus(restoredStatuses[childIndex]);
+                if (restoredStatus) next[child.uuid] = restoredStatus;
+                else delete next[child.uuid];
+            });
+            return next;
+        });
         setMergedCardDialogUuid(null);
         setTimeout(() => saveSession(), 100);
-    }, [taskGroups, saveSession]);
+    }, [taskGroups, tasksStatus, saveSession]);
 
     const removeShotFromMergedCard = useCallback((groupUuid: string, childIndex: number) => {
         const index = taskGroups.findIndex(group => group.uuid === groupUuid);
         const current = taskGroups[index];
         if (!current?.mergedFrom?.length) return;
-        const partition = partitionMergedSnapshots(current.mergedFrom, childIndex);
+        const snapshots = current.mergedFrom.map(snapshot => ({ ...snapshot }));
+        const generatedAfterMerge = getTaskStatusHistoryDelta(
+            tasksStatus[current.uuid],
+            snapshots.map(snapshot => snapshot.taskStatus),
+        );
+        if (generatedAfterMerge && snapshots[0]) {
+            snapshots[0].taskStatus = mergeTaskStatusHistories([
+                snapshots[0].taskStatus,
+                generatedAfterMerge,
+            ]);
+        }
+        const partition = partitionMergedSnapshots(snapshots, childIndex);
         if (!partition) return;
 
         const ranges = [
@@ -2008,7 +2101,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 durationUserOverride: range.length > 1 ? true : first.durationUserOverride,
                 mergedFrom: range.length > 1 ? range.map(snapshot => ({ ...snapshot })) : undefined,
             };
-            return { group, range, duration };
+            return {
+                group,
+                range,
+                duration,
+                taskStatus: mergeTaskStatusHistories(range.map(snapshot => snapshot.taskStatus)),
+            };
         });
 
         setSeedanceParamsByUuid(prev => {
@@ -2061,12 +2159,16 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         setTasksStatus(prev => {
             const next = { ...prev };
             delete next[current.uuid];
+            rebuilt.forEach(({ group, taskStatus }) => {
+                const restoredStatus = securePersistedTaskStatus(taskStatus);
+                if (restoredStatus) next[group.uuid] = restoredStatus;
+            });
             return next;
         });
         setMergedCardDialogUuid(null);
         showToast('已移出所选镜头，并按原顺序保留前后连续合并组');
         setTimeout(() => saveSession(), 100);
-    }, [saveSession, showToast, taskGroups]);
+    }, [saveSession, showToast, taskGroups, tasksStatus]);
 
     // 2026-05-25 (Task B2)：手工在 insertIndex 位置之后插入一张空卡；insertIndex = -1 表示插到最前
     const insertEmptyTaskGroup = useCallback((insertIndex: number) => {
@@ -2096,6 +2198,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             
             const newVideos = status.videos.filter((_, idx) => idx !== videoIndex);
             const newTimes = (status.videoGenerateTimes || []).filter((_, idx) => idx !== videoIndex);
+            const newModels = (status.videoModels || []).filter((_, idx) => idx !== videoIndex);
             
             // 如果删完了，状态改为 idle
             if (newVideos.length === 0) {
@@ -2106,6 +2209,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         state: 'idle',
                         videos: [],
                         videoGenerateTimes: [],
+                        videoModels: [],
                         result: ''
                     }
                 };
@@ -2117,6 +2221,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     ...status,
                     videos: newVideos,
                     videoGenerateTimes: newTimes,
+                    videoModels: newModels,
                     result: wasBeautifyVideo
                         ? ''
                         : (newVideos.some(url => normVideoKey(url) === normVideoKey(status.result))
@@ -2417,6 +2522,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         keepResult: true,
                         videos: oldStatus.videos || [],
                         videoGenerateTimes: oldStatus.videoGenerateTimes || [],
+                        videoModels: oldStatus.videoModels || [],
+                        pendingVideoModel: group.model,
                         selected: oldStatus.selected,
                         isUpscaled: oldStatus.isUpscaled,
                     },
@@ -2481,6 +2588,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         keepResult: true,
                         videos: oldStatus.videos || [],
                         videoGenerateTimes: oldStatus.videoGenerateTimes || [],
+                        videoModels: oldStatus.videoModels || [],
+                        pendingVideoModel: group.model,
                         selected: oldStatus.selected,
                         isUpscaled: oldStatus.isUpscaled,
                     },
@@ -2544,6 +2653,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     keepResult: true,
                     videos: oldStatus.videos || [],  // 保留旧视频
                     videoGenerateTimes: oldStatus.videoGenerateTimes || [],  // 保留旧视频时间
+                    videoModels: oldStatus.videoModels || [],
+                    pendingVideoModel: group.model,
                     selected: oldStatus.selected,
                     isUpscaled: oldStatus.isUpscaled
                 }
@@ -2682,10 +2793,19 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 const oldStatus: TaskStatus = prev[uuid] || {};
                 const oldVideos = oldStatus.videos || [];
                 const oldTimes = oldStatus.videoGenerateTimes || [];
+                const oldModels = oldVideos.map((_, index) => oldStatus.videoModels?.[index]);
+                const generatedModel = oldStatus.pendingVideoModel
+                    || taskGroups.find(group => group.uuid === uuid)?.model;
+                const generatedModels = videos.map(() => generatedModel);
                 // 去重：oldVideos 里可能已有同一视频（DB兜底/会话恢复加过），盲目追加会出现两个一模一样
-                const deduped = dedupVideosWithTimes([...oldVideos, ...videos], [...oldTimes, ...videoTimes]);
+                const deduped = dedupVideosWithTimes(
+                    [...oldVideos, ...videos],
+                    [...oldTimes, ...videoTimes],
+                    [...oldModels, ...generatedModels],
+                );
                 const allVideos = deduped.videos.slice(-12);
                 const allTimes = deduped.times.slice(-12);
+                const allModels = deduped.models.slice(-12);
 
                 return {
                     ...prev,
@@ -2696,6 +2816,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         result: allVideos[allVideos.length - 1] || '',
                         videos: allVideos,
                         videoGenerateTimes: allTimes,
+                        videoModels: allModels,
+                        pendingVideoModel: undefined,
                         keepResult: true,
                     },
                 };
@@ -2744,7 +2866,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 },
             }));
         },
-    }), [onAddNotification, resolveBatchVideoTask]);
+    }), [onAddNotification, resolveBatchVideoTask, taskGroups]);
 
     // 2026-05-20 (M2)：mount / 重新 mount 时把全局已存活的 video poller 回调
     // 重新接到本组件 setState 上。必须放在 `buildPollCallbacks` 定义之后，
@@ -3175,9 +3297,18 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 if (!status) return prev;
                 
                 const newVideos = [...(status.videos || []), croppedUrl];
+                const sourceModel = status.videoModels?.[selectedVideoIndex]
+                    || taskGroups.find(group => group.uuid === editModalUuid)?.model;
                 return {
                     ...prev,
-                    [editModalUuid]: { ...status, videos: newVideos }
+                    [editModalUuid]: {
+                        ...status,
+                        videos: newVideos,
+                        videoModels: [
+                            ...(status.videos || []).map((_, index) => status.videoModels?.[index]),
+                            sourceModel,
+                        ],
+                    }
                 };
             });
             
@@ -3189,7 +3320,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         } finally {
             setIsSubmitting(false);
         }
-    }, [editModalUuid, cropStartTime, cropEndTime, showToast]);
+    }, [editModalUuid, cropStartTime, cropEndTime, selectedVideoIndex, taskGroups, showToast]);
     
     const seekToTime = (seconds: number) => {
         if (editVideoRef.current) {
@@ -3282,6 +3413,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const status = tasksStatus[group.uuid] || { state: 'idle' };
         const promptText = getEffectiveGroupPrompt(group);
         const videos = status.videos || [];
+        const latestVideoModel = status.videoModels?.[Math.max(0, videos.length - 1)];
+        const latestVideoModelLabel = latestVideoModel
+            ? formatVideoModelOptionLabel(latestVideoModel, getVideoCapability(videoCapabilities, latestVideoModel))
+            : '历史模型未记录';
         const shotRange = getGroupShotRange(group, index);
         
         return (
@@ -3339,9 +3474,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     </span>
                     <span
                         className="text-[10px] text-n100 text-center truncate"
-                        title={formatVideoModelOptionLabel(group.model, getVideoCapability(videoCapabilities, group.model))}
+                        title={latestVideoModelLabel}
                     >
-                        {formatVideoModelOptionLabel(group.model, getVideoCapability(videoCapabilities, group.model))}
+                        {latestVideoModelLabel}
                     </span>
                 </div>
                 
@@ -3729,7 +3864,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         </>
                     )}
                     
-                    {/* 2026-06-05 — 合并 / 拆分（仅 Seedance / DashScope 卡） */}
+                    {/* 镜头内容合并与历史视频模型解耦。 */}
                     {group.mergedFrom && group.mergedFrom.length > 0 && (
                         <button
                             onClick={() => setMergedCardDialogUuid(group.uuid)}
@@ -3739,16 +3874,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             <Split className="w-3 h-3" />
                         </button>
                     )}
-                    {isMergeableModel(group.model) && (
-                        <button
-                            onClick={() => openMergeDialog(index)}
-                            disabled={!canMergeWithNext(index)}
-                            className="p-1.5 bg-n0 hover:bg-teal text-n700 hover:text-white rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            title={canMergeWithNext(index) ? '选择连续向下合并的镜头' : '下方没有可合并的连续同模型镜头'}
-                        >
-                            <Combine className="w-3 h-3" />
-                        </button>
-                    )}
+                    <button
+                        onClick={() => openMergeDialog(index)}
+                        disabled={!canMergeWithNext(index)}
+                        className="p-1.5 bg-n0 hover:bg-teal text-n700 hover:text-white rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        title={canMergeWithNext(index) ? '选择连续向下合并的镜头' : '下方没有可合并的连续镜头'}
+                    >
+                        <Combine className="w-3 h-3" />
+                    </button>
 
                     <button
                         onClick={() => removeTask(group.uuid)}
@@ -4057,18 +4190,16 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             管理合并
                         </button>
                     )}
-                    {isMergeableModel(group.model) && (
-                        <button
-                            type="button"
-                            onClick={() => openMergeDialog(index)}
-                            disabled={!canMergeWithNext(index)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-primary text-[10px] text-white hover:bg-primary-hover disabled:opacity-30 disabled:cursor-not-allowed"
-                            title={canMergeWithNext(index) ? '选择连续向下合并的镜头' : '下方没有可合并的连续同模型镜头'}
-                        >
-                            <Combine className="w-3.5 h-3.5" />
-                            合并
-                        </button>
-                    )}
+                    <button
+                        type="button"
+                        onClick={() => openMergeDialog(index)}
+                        disabled={!canMergeWithNext(index)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-primary text-[10px] text-white hover:bg-primary-hover disabled:opacity-30 disabled:cursor-not-allowed"
+                        title={canMergeWithNext(index) ? '选择连续向下合并的镜头' : '下方没有可合并的连续镜头'}
+                    >
+                        <Combine className="w-3.5 h-3.5" />
+                        合并
+                    </button>
                 </div>
             </div>
         );
@@ -4183,6 +4314,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             <div className="grid h-full grid-cols-4 gap-2 overflow-y-auto">
                                 {videos.map((videoUrl, idx) => {
                                     const active = isBeautifyVideo(videoUrl);
+                                    const videoModel = status.videoModels?.[idx];
+                                    const videoModelLabel = videoModel
+                                        ? formatVideoModelOptionLabel(
+                                            videoModel,
+                                            getVideoCapability(videoCapabilities, videoModel),
+                                        )
+                                        : '历史模型未记录';
                                     return (
                                         <div
                                             key={idx}
@@ -4196,10 +4334,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                                 className="w-full h-full object-contain cursor-pointer"
                                                 onClick={() => { setLightboxUrl(videoUrl); setLightboxType('video'); }}
                                             />
-                                            {/* 视频编号 - 左上角 */}
-                                            <span className="absolute top-1 left-1 bg-primary/90 text-white text-[10px] px-1.5 py-0.5 rounded font-bold z-10 backdrop-blur-sm">
-                                                #{idx + 1}
-                                            </span>
+                                            {/* 每条历史视频显示自己的生成模型，而不是卡片当前模型。 */}
+                                            <div
+                                                className="absolute left-1 top-1 z-10 flex max-w-[calc(100%-2rem)] items-center gap-1 rounded bg-primary/90 px-1.5 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm"
+                                                title={`#${idx + 1} · ${videoModelLabel}`}
+                                            >
+                                                <span className="shrink-0">#{idx + 1}</span>
+                                                <span className="truncate border-l border-white/40 pl-1 font-medium">{videoModelLabel}</span>
+                                            </div>
                                             {/* 生成时间 - 左下角 */}
                                             {status.videoGenerateTimes && status.videoGenerateTimes[idx] && (
                                                 <span className="absolute bottom-1 left-1 bg-success/80 text-white text-[10px] px-1.5 py-0.5 rounded font-bold z-10 backdrop-blur-sm">
@@ -4297,12 +4439,6 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             </span>
                         )}
                         <span className="text-xs font-bold text-n700">{shotRange.label} {isPair ? 'Morph' : 'I2V'}</span>
-                        <span
-                            className="text-[10px] px-1 rounded border border-n40 text-n300 truncate max-w-[180px]"
-                            title={formatVideoModelOptionLabel(group.model, getVideoCapability(videoCapabilities, group.model))}
-                        >
-                            {formatVideoModelOptionLabel(group.model, getVideoCapability(videoCapabilities, group.model))}
-                        </span>
                         {renderStatusBadge()}
                         {activeVideoVoiceReference && (
                             <span
@@ -4948,12 +5084,6 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             <div className="mt-3 flex gap-2 rounded-md border border-warning/30 bg-y50 px-3 py-2 text-xs text-warning">
                                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                                 合并内容最多包含 9 张图，后续镜头已停止加入候选。
-                            </div>
-                        )}
-                        {plan.hardStopReason === 'model_mismatch' && (
-                            <div className="mt-3 flex gap-2 rounded-md border border-n40 bg-n20 px-3 py-2 text-xs text-n500">
-                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                                后续镜头使用了不同的视频模型，因此不能继续连续选择。
                             </div>
                         )}
                         {plan.crossesSegment && (

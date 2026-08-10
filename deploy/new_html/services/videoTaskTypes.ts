@@ -1,6 +1,7 @@
 import type {
   DashScopeVideoParams,
   MiniMaxVideoParams,
+  SeedanceMediaInput,
   SeedanceParams,
   ShotType,
   VideoModel,
@@ -53,8 +54,11 @@ export interface MergedCardSnapshot {
   shotType?: ShotType;
   duration?: number;
   durationUserOverride?: boolean;
+  mediaInputs?: SeedanceMediaInput[];
   seedanceParams?: SeedanceParams;
   dashScopeParams?: DashScopeVideoParams;
+  /** Historical outputs owned by this child before it joined a merged card. */
+  taskStatus?: TaskStatus;
 }
 
 export interface TaskStatus {
@@ -64,6 +68,10 @@ export interface TaskStatus {
   result?: string;
   videos?: string[];
   videoGenerateTimes?: number[];
+  /** Model used for each entry in videos; indexes are kept aligned. */
+  videoModels?: Array<VideoModel | undefined>;
+  /** Captured at submission so changing the card model cannot relabel a running result. */
+  pendingVideoModel?: VideoModel;
   totalGenerationTime?: number;
   isUpscaled?: boolean;
   isExpired?: boolean;

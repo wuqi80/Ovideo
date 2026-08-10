@@ -19,12 +19,14 @@ describe('hasStoredVideoResult', () => {
     const merged = mergeStoredVideoResult(
       { state: 'failed', progress: 0, error: 'latest generation failed' },
       'https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=x',
+      'Seedance2Mini',
     );
 
     expect(merged.state).toBe('failed');
     expect(merged.progress).toBe(0);
     expect(merged.result).toBe('https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=x');
     expect(merged.videos).toEqual(['https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=x']);
+    expect(merged.videoModels).toEqual(['Seedance2Mini']);
     expect(merged.keepResult).toBe(true);
   });
 
@@ -36,5 +38,19 @@ describe('hasStoredVideoResult', () => {
     const merged = mergeStoredVideoResult(original, '/storage/video/u/p/e/202607/ok.mp4');
 
     expect(merged).toBe(original);
+  });
+
+  it('backfills a missing historical model when the persisted segment identifies it', () => {
+    const original = {
+      state: 'done' as const,
+      videos: ['https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=old'],
+    };
+    const merged = mergeStoredVideoResult(
+      original,
+      '/storage/video/u/p/e/202607/ok.mp4',
+      'Kling',
+    );
+
+    expect(merged.videoModels).toEqual(['Kling']);
   });
 });
