@@ -105,6 +105,9 @@ describe('Webflow design-system contract', () => {
     expect(login).toContain('var(--shadow-cascade)');
     expect(login).not.toContain('transform: translateX(6px)');
     expect(login).toContain('transition: background-color 150ms ease, box-shadow 150ms ease');
+    expect(login).toContain('background: transparent');
+    expect(login).toContain('input:-webkit-autofill + label');
+    expect(login).toContain('box-shadow: 0 0 0 1000px var(--n0) inset');
     expect(login).toContain('@media (max-width: 479px)');
     expect(login).not.toMatch(/#0052CC|#0065FF|#0747A6|#172B4D/i);
   });

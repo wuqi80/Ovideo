@@ -236,19 +236,30 @@
             left: 10px;
             top: 15px;
             padding: 0 4px;
-            background: var(--n0);
+            background: transparent;
             color: var(--n200);
             font-size: 15px;
             line-height: 1;
             pointer-events: none;
-            transition: transform 150ms ease, color 150ms ease;
+            transition: transform 150ms ease, color 150ms ease, background-color 150ms ease;
             transform-origin: left center;
         }
 
         .input-group input:focus + label,
-        .input-group input:not(:placeholder-shown) + label {
+        .input-group input:not(:placeholder-shown) + label,
+        .input-group input:-webkit-autofill + label {
             transform: translateY(-22px) scale(0.82);
+            background: var(--n0);
             color: var(--primary);
+        }
+
+        .input-group input:-webkit-autofill,
+        .input-group input:-webkit-autofill:hover,
+        .input-group input:-webkit-autofill:focus {
+            -webkit-text-fill-color: var(--n800);
+            caret-color: var(--n800);
+            box-shadow: 0 0 0 1000px var(--n0) inset;
+            transition: background-color 9999s ease-out 0s;
         }
 
         .form-row {
