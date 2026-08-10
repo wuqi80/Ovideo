@@ -206,7 +206,6 @@ describe('Webflow design-system contract', () => {
   it('does not reintroduce dark neutral utilities into product source', () => {
     const sourceRoots = [
       'admin',
-      'canvas',
       'components',
       'contexts',
       'hooks',
@@ -225,7 +224,14 @@ describe('Webflow design-system contract', () => {
       }
     };
 
-    for (const sourceRoot of sourceRoots) collectFiles(path.join(projectRoot, sourceRoot));
+    for (const sourceRoot of sourceRoots) {
+      const absoluteRoot = path.join(projectRoot, sourceRoot);
+      expect(
+        fs.existsSync(absoluteRoot),
+        `design-system source root does not exist: ${sourceRoot}`,
+      ).toBe(true);
+      collectFiles(absoluteRoot);
+    }
 
     const forbiddenNeutral = /\b(?:bg|text|border|ring|from|via|to)-(?:gray|slate|zinc|neutral|stone|indigo)-\d+(?:\/\d+)?\b/;
     const forbiddenDarkStatus = /\b(?:bg|border|text)-(?:red|amber|yellow|orange|green|emerald|teal|cyan|sky|blue|purple|pink)-(?:800|900|950)(?:\/\d+)?\b/;
