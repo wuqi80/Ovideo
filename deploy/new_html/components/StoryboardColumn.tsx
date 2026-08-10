@@ -921,8 +921,9 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                                </button>
                           </div>
                           <textarea
-                              className="w-full text-xs text-n700 bg-n30 p-2 rounded border border-n40 resize-none focus:outline-none focus:border-primary focus:bg-n0"
-                              rows={2}
+                              data-testid={`storyboard-video-prompt-${item.id}`}
+                              className="w-full min-h-[112px] max-h-[240px] text-xs text-n700 bg-n30 p-2 rounded border border-n40 resize-y focus:outline-none focus:border-primary focus:bg-n0"
+                              rows={5}
                               value={item.videoPrompt}
                               onChange={(e) => onUpdateItem(item.id, { videoPrompt: e.target.value })}
                               disabled={item.isLocked}

@@ -128,6 +128,15 @@ describe('StoryboardScriptColumn', () => {
     expect(designColumnSource).not.toContain("target.tagName === 'INPUT'");
   });
 
+  it('gives long video prompts a taller, user-resizable editor', () => {
+    expect(designColumnSource).toContain('data-testid={`storyboard-video-prompt-${item.id}`}');
+    expect(designColumnSource).toContain('min-h-[112px] max-h-[240px]');
+    expect(designColumnSource).toContain('border border-n40 resize-y');
+    expect(designColumnSource).toMatch(
+      /data-testid=\{`storyboard-video-prompt-\$\{item\.id\}`\}[\s\S]{0,300}rows=\{5\}/,
+    );
+  });
+
   it('uses a visible waiting pill while quick mode is generating design shots', () => {
     expect(designColumnSource).toContain('正在生成镜头设计');
     expect(designColumnSource).toContain('等待镜头设计生成…');
