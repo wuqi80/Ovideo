@@ -25,6 +25,7 @@ from services.api_provider_registry import (
     normalize_seedance_model_for_endpoint,
 )
 from services.api_provider_runtime import resolve_provider
+from services.ai_proxy_types import AIProxyUpstreamError
 
 
 def test_doubao_access_modes_use_distinct_seedream_lite_model_names() -> None:
@@ -283,6 +284,80 @@ async def test_doubao_payg_generation_expands_small_explicit_size(monkeypatch) -
     )
 
     assert captured["size"] == "2560x1440"
+
+
+@pytest.mark.asyncio
+async def test_doubao_sensitive_geography_prompt_retries_once_with_abstract_wording(monkeypatch) -> None:
+    config = SimpleNamespace(
+        api_key="test-ark-key",
+        endpoint=DOUBAO_IMAGE_STANDARD_ENDPOINT,
+        model_name=DOUBAO_IMAGE_PAYG_MODEL,
+    )
+    payloads = []
+
+    async def fake_post(*, config, payload):
+        payloads.append(payload)
+        if len(payloads) == 1:
+            raise AIProxyUpstreamError(
+                "豆包生成失败",
+                upstream='{"error":{"code":"InputTextSensitiveContentDetected","message":"The input text may contain sensitive information."}}',
+            )
+        return ["data:image/png;base64,dGVzdA=="]
+
+    monkeypatch.setattr(doubao_service, "resolve_provider", lambda provider, model=None: config)
+    monkeypatch.setattr(doubao_service, "_post_doubao_image_generation", fake_post)
+
+    images = await doubao_service.generate_doubao_images(
+        prompt="全国高校地图前，屏幕以中国地图为底，各省份坐标以发光圆点标注。",
+        reference_inputs=[],
+        size="2560x1440",
+        sequential="disabled",
+        count=1,
+        model=DOUBAO_IMAGE_PAYG_MODEL,
+    )
+
+    assert images == ["data:image/png;base64,dGVzdA=="]
+    assert len(payloads) == 2
+    assert "中国地图" in payloads[0]["prompt"]
+    assert "中国地图" not in payloads[1]["prompt"]
+    assert "抽象地区轮廓" in payloads[1]["prompt"]
+    assert "虚构的抽象几何轮廓" in payloads[1]["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_doubao_sensitive_prompt_without_safe_rewrite_returns_actionable_422(monkeypatch) -> None:
+    config = SimpleNamespace(
+        api_key="test-ark-key",
+        endpoint=DOUBAO_IMAGE_STANDARD_ENDPOINT,
+        model_name=DOUBAO_IMAGE_PAYG_MODEL,
+    )
+    calls = 0
+
+    async def fake_post(*, config, payload):
+        nonlocal calls
+        calls += 1
+        raise AIProxyUpstreamError(
+            "豆包生成失败",
+            upstream='{"error":{"code":"InputTextSensitiveContentDetected"}}',
+        )
+
+    monkeypatch.setattr(doubao_service, "resolve_provider", lambda provider, model=None: config)
+    monkeypatch.setattr(doubao_service, "_post_doubao_image_generation", fake_post)
+
+    with pytest.raises(AIProxyUpstreamError) as exc_info:
+        await doubao_service.generate_doubao_images(
+            prompt="provider rejected wording",
+            reference_inputs=[],
+            size="2560x1440",
+            sequential="disabled",
+            count=1,
+            model=DOUBAO_IMAGE_PAYG_MODEL,
+        )
+
+    assert calls == 1
+    assert exc_info.value.status_code == 422
+    assert "内容安全审核" in exc_info.value.detail
+    assert "本次不扣积分" in exc_info.value.detail
 
 
 @pytest.mark.asyncio
