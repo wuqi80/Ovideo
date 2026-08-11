@@ -177,7 +177,7 @@ def test_minimax_text_real_generation_normalizes_legacy_json_string_bindings() -
     assert output_type == "text"
 
 
-def test_doubao_real_generation_uses_minimum_cost_image_payload() -> None:
+def test_doubao_real_generation_uses_minimum_valid_image_payload() -> None:
     _, body, output_type = _real_generation_request(
         "doubao",
         {
@@ -186,7 +186,7 @@ def test_doubao_real_generation_uses_minimum_cost_image_payload() -> None:
         },
     )
 
-    assert body["size"] == "1024x1024"
+    assert body["size"] == "1920x1920"
     assert body["response_format"] == "url"
     assert body["watermark"] is False
     assert output_type == "image"
