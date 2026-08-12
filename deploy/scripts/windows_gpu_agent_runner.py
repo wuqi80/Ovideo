@@ -76,6 +76,24 @@ GPU2_H3_SAGE_NODE_TYPES = {
 }
 GPU2_H3_KJNODES_COMMIT = "6ab7e8130e449ed2c0037589bcf84146ceb7fc9c"
 GPU2_H3_SAGE_READY_MARKER = ROOT / "config" / "h3-sageattention-ready.json"
+GPU2_H3_DIRECTOR_COMMIT = "85863be2411eb1b5877c23414d88396c47838467"
+GPU2_H3_LONG_READY_MARKER = ROOT / "config" / "h3-long-video-ready.json"
+GPU2_H3_LONG_MAX_SEGMENTS = 8
+GPU2_H3_LONG_MAX_DURATION_SECONDS = 120.0
+GPU2_H3_LONG_CONTEXT_FRAMES = 22
+GPU2_H3_DIRECTOR_NODE_TYPES = {
+    "MiniMaxH3Director",
+    "MiniMaxH3DirectorGroupImageToVideo",
+    "MiniMaxH3DirectorGroupsCombine",
+    "CreateVideo",
+    "SaveVideo",
+}
+GPU2_H3_STANDALONE_MOTION_NODE_TYPES = {
+    "MiniMaxH3MotionContext",
+    "MiniMaxH3MotionContextTrim",
+    "MiniMaxH3MotionContextSaveLatent",
+    "MiniMaxH3MotionContextLoadLatent",
+}
 
 COMFYUI_RECOVERY_FAILURE_THRESHOLD = 10
 COMFYUI_RECOVERY_COOLDOWN_SECONDS = 5 * 60
@@ -141,6 +159,57 @@ def gpu2_h3_sage_attention_requested(task: Dict[str, Any]) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def gpu2_h3_long_video_allowed() -> bool:
+    return str(os.environ.get("MECHA_GPU_H3_LONG_VIDEO", "0")).strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def gpu2_h3_long_video_requested(task: Dict[str, Any]) -> bool:
+    value = _gpu2_task_params(task).get("h3_long_video", False)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def gpu2_h3_long_video_ready(
+    *,
+    marker_path: Path = GPU2_H3_LONG_READY_MARKER,
+    object_info_reader: Callable[[], Dict[str, Any]] | None = None,
+) -> tuple[bool, str]:
+    """Fail closed unless the reviewed Director-only runtime is live."""
+    if not gpu2_h3_long_video_allowed():
+        return False, "disabled"
+    try:
+        marker = json.loads(Path(marker_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        return False, f"verification marker unavailable: {exc}"
+    if marker.get("verified") is not True:
+        return False, "verification marker is not approved"
+    if str(marker.get("director_commit") or "") != GPU2_H3_DIRECTOR_COMMIT:
+        return False, "verified Director commit does not match the reviewed release"
+    if marker.get("inference_executed") is not False:
+        return False, "verification marker must be non-inference only"
+    try:
+        if object_info_reader is None:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{GPU2_H3_PORT}/object_info", timeout=5
+            ) as response:
+                object_info = json.loads(response.read().decode("utf-8"))
+        else:
+            object_info = object_info_reader()
+    except Exception as exc:
+        return False, f"ComfyUI node discovery failed: {exc}"
+    live_nodes = set(object_info or {})
+    conflicting = sorted(GPU2_H3_STANDALONE_MOTION_NODE_TYPES & live_nodes)
+    if conflicting:
+        return False, f"standalone Motion Context conflicts with Director: {', '.join(conflicting)}"
+    missing = sorted(GPU2_H3_DIRECTOR_NODE_TYPES - live_nodes)
+    if missing:
+        return False, f"required Director nodes are missing: {', '.join(missing)}"
+    return True, "verified"
 
 
 def gpu2_h3_sage_attention_ready(
@@ -1313,6 +1382,228 @@ def build_gpu2_minimax_h3_fl2va_workflow(
     return workflow
 
 
+def _gpu2_h3_long_video_segments(task: Dict[str, Any]) -> list[Dict[str, Any]]:
+    params = _gpu2_task_params(task)
+    raw_segments = params.get("h3_long_video_segments")
+    if not isinstance(raw_segments, list) or not 2 <= len(raw_segments) <= GPU2_H3_LONG_MAX_SEGMENTS:
+        raise RuntimeError(
+            f"GPU2 H3 long video requires 2-{GPU2_H3_LONG_MAX_SEGMENTS} segments"
+        )
+    segments: list[Dict[str, Any]] = []
+    total_duration = 0.0
+    for index, raw in enumerate(raw_segments):
+        if not isinstance(raw, dict):
+            raise RuntimeError(f"GPU2 H3 long video segment {index + 1} is invalid")
+        first_frame = str(raw.get("image_path") or "").strip()
+        last_frame = str(raw.get("image_path_end") or "").strip()
+        if not first_frame:
+            raise RuntimeError(
+                f"GPU2 H3 long video segment {index + 1} is missing a first frame"
+            )
+        try:
+            duration = float(raw.get("duration") or 0)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"GPU2 H3 long video segment {index + 1} duration is invalid"
+            ) from exc
+        if not GPU2_H3_MIN_DURATION_SECONDS <= duration <= GPU2_H3_MAX_DURATION_SECONDS:
+            raise RuntimeError(
+                f"GPU2 H3 long video segment {index + 1} must be 4-15 seconds"
+            )
+        total_duration += duration
+        segments.append({
+            "prompt": str(raw.get("prompt") or "").strip(),
+            "duration": duration,
+            "image_path": first_frame,
+            "image_path_end": last_frame,
+        })
+    if total_duration > GPU2_H3_LONG_MAX_DURATION_SECONDS:
+        raise RuntimeError(
+            f"GPU2 H3 long video exceeds {GPU2_H3_LONG_MAX_DURATION_SECONDS:g} seconds"
+        )
+    return segments
+
+
+def _gpu2_h3_director_segment_frames(duration: float) -> int:
+    requested = max(5, round(float(duration) * GPU2_H3_FPS))
+    return int(requested + (5 - (requested % 17)) % 17)
+
+
+def build_gpu2_minimax_h3_long_video_workflow(
+    task: Dict[str, Any], *, enable_sage_attention: bool = False
+) -> Dict[str, Any]:
+    """Build one serialized Director prompt from an existing merged H3 card."""
+    segments = _gpu2_h3_long_video_segments(task)
+    seed = _gpu2_seed(task)
+    frame_counts = [_gpu2_h3_director_segment_frames(segment["duration"]) for segment in segments]
+    total_frames = sum(frame_counts)
+    timeline_segments = []
+    cursor = 0
+    for index, (segment, frame_count) in enumerate(zip(segments, frame_counts)):
+        timeline_segments.append({
+            "id": f"shot{index}",
+            "start": cursor,
+            "length": frame_count,
+            "frameCount": frame_count,
+            "durationSec": segment["duration"],
+            "prompt": segment["prompt"],
+            "continuityFromPrev": index > 0,
+        })
+        cursor += frame_count
+    timeline_data = json.dumps({
+        "version": 5,
+        "editMode": "segment",
+        "timelineMode": "fl2v",
+        "totalFrames": total_frames,
+        "frameRate": GPU2_H3_FPS,
+        "width": GPU2_H3_WIDTH,
+        "height": GPU2_H3_HEIGHT,
+        "refMaxSize": GPU2_H3_WIDTH,
+        "output": {
+            "mode": "fixed",
+            "longEdge": GPU2_H3_WIDTH,
+            "width": GPU2_H3_WIDTH,
+            "height": GPU2_H3_HEIGHT,
+            "maxExportFrames": 0,
+            "exportMode": "all",
+            "audioMode": "generate",
+            "continuityEnabled": True,
+            "continuityOverlapFrames": GPU2_H3_LONG_CONTEXT_FRAMES,
+        },
+        "global": {
+            "taskType": "fl2v",
+            "prompt": "",
+            "refs": [],
+            "referenceVideo": {},
+            "continuousReference": False,
+        },
+        "segments": timeline_segments,
+    }, ensure_ascii=False, separators=(",", ":"))
+
+    model_link: list[Any] = ["6", 0]
+    workflow: Dict[str, Any] = {
+        "6": {
+            "class_type": "UNETLoader",
+            "inputs": {
+                "unet_name": GPU2_H3_MODEL_FILES["diffusion"],
+                "weight_dtype": "default",
+            },
+        },
+        "11": {
+            "class_type": "VAELoader",
+            "inputs": {"vae_name": GPU2_H3_MODEL_FILES["video_vae"]},
+        },
+        "13": {
+            "class_type": "CLIPLoader",
+            "inputs": {
+                "clip_name": GPU2_H3_MODEL_FILES["text_encoder"],
+                "type": "minimax",
+                "device": "default",
+            },
+        },
+        "24": {
+            "class_type": "VAELoader",
+            "inputs": {"vae_name": GPU2_H3_MODEL_FILES["audio_vae"]},
+        },
+    }
+    if enable_sage_attention:
+        workflow["7"] = {
+            "class_type": "PathchSageAttentionKJ",
+            "inputs": {
+                "model": ["6", 0],
+                "sage_attention": "auto",
+                "allow_compile": True,
+            },
+        }
+        workflow["8"] = {
+            "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+            "inputs": {"model": ["7", 0]},
+        }
+        model_link = ["8", 0]
+
+    group_links: list[list[Any]] = []
+    for index, segment in enumerate(segments):
+        first_id = f"l{index}f"
+        group_id = f"g{index}"
+        workflow[first_id] = {
+            "class_type": "LoadImage",
+            "inputs": {"image": segment["image_path"]},
+        }
+        group_inputs: Dict[str, Any] = {
+            "prompt": segment["prompt"],
+            "duration_sec": segment["duration"],
+            "first_frame": [first_id, 0],
+        }
+        if segment["image_path_end"]:
+            last_id = f"l{index}l"
+            workflow[last_id] = {
+                "class_type": "LoadImage",
+                "inputs": {"image": segment["image_path_end"]},
+            }
+            group_inputs["last_frame"] = [last_id, 0]
+        workflow[group_id] = {
+            "class_type": "MiniMaxH3DirectorGroupImageToVideo",
+            "inputs": group_inputs,
+        }
+        group_links.append([group_id, 0])
+
+    workflow["80"] = {
+        "class_type": "MiniMaxH3DirectorGroupsCombine",
+        # Current Director uses ComfyUI Autogrow, whose API input names retain
+        # the collection prefix (as shown by the reviewed example workflow).
+        "inputs": {f"groups.group_{index}": link for index, link in enumerate(group_links)},
+    }
+    workflow["81"] = {
+        "class_type": "MiniMaxH3Director",
+        "inputs": {
+            "model": model_link,
+            "video_vae": ["11", 0],
+            "audio_vae": ["24", 0],
+            "clip": ["13", 0],
+            "i2v_groups": ["80", 0],
+            "task_type": "fl2v — 首尾帧生视频(First-Last Frame)",
+            "global_prompt": "",
+            "bd_grp_sample": "采样设置",
+            "cfg": 1.0,
+            "seed": seed,
+            "frame_rate": float(GPU2_H3_FPS),
+            "width": GPU2_H3_WIDTH,
+            "height": GPU2_H3_HEIGHT,
+            "ref_max_size": GPU2_H3_WIDTH,
+            "total_frames": total_frames,
+            "timeline_data": timeline_data,
+            "bd_grp_advanced": "高级采样",
+            "steps": 25,
+            "sampler": "res_multistep",
+            "scheduler": "simple",
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "bd_grp_perf": "性能",
+            "clear_vram_between_segments": True,
+            "export_source_images": False,
+        },
+    }
+    workflow["91"] = {
+        "class_type": "CreateVideo",
+        "inputs": {
+            "images": ["81", 0],
+            "audio": ["81", 1],
+            "fps": ["81", 2],
+            "bit_depth": 8,
+        },
+    }
+    workflow["92"] = {
+        "class_type": "SaveVideo",
+        "inputs": {
+            "video": ["91", 0],
+            "filename_prefix": "MECHA_GPU2_minimax_h3_long",
+            "format": "auto",
+            "codec": "auto",
+        },
+    }
+    return workflow
+
+
 def is_gpu2_wan_i2v_task(task: Dict[str, Any]) -> bool:
     task_type = str(task.get("task_type") or "").strip().lower()
     workflow_name = _gpu2_workflow_name(task)
@@ -1888,6 +2179,10 @@ def main() -> None:
                 is_gpu2_h3_task(task)
                 and gpu2_h3_sage_attention_requested(task)
             )
+            long_video_requested = (
+                is_gpu2_h3_task(task)
+                and gpu2_h3_long_video_requested(task)
+            )
             prepared = prepare_gpu2_task(task)
             params = prepared.get("params") or {}
             profile = params.get("gpu2_runtime_profile") or gpu2_runtime_profile(prepared)
@@ -1907,9 +2202,10 @@ def main() -> None:
             models_released = False
             try:
                 runtime_manager.ensure(profile)
+                acceleration_ready = False
                 if acceleration_requested:
                     acceleration_ready, acceleration_reason = gpu2_h3_sage_attention_ready()
-                    if acceleration_ready:
+                    if acceleration_ready and not long_video_requested:
                         prepared["workflow_json"] = build_gpu2_minimax_h3_fl2va_workflow(
                             prepared, enable_sage_attention=True
                         )
@@ -1921,6 +2217,21 @@ def main() -> None:
                             file=sys.stderr,
                             flush=True,
                         )
+                if long_video_requested:
+                    long_video_ready, long_video_reason = gpu2_h3_long_video_ready()
+                    if not long_video_ready:
+                        raise RuntimeError(
+                            "H3 long video is unavailable: " + long_video_reason
+                        )
+                    prepared["workflow_json"] = build_gpu2_minimax_h3_long_video_workflow(
+                        prepared,
+                        enable_sage_attention=bool(acceleration_ready),
+                    )
+                    prepared["workflow_name"] = (
+                        "gpu2_minimax_h3_long_director_sageattention"
+                        if acceleration_ready
+                        else "gpu2_minimax_h3_long_director"
+                    )
                 runtime_manager.mark_models_loaded()
                 result = super().execute_comfyui_task(prepared)
                 task_status = str(result.get("status") or "completed")

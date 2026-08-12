@@ -616,6 +616,11 @@ class ComfyUIAgent:
                 ("REQUIRED_SAGE_VERSION", "inference_executed"),
             ),
             (
+                "windows_gpu_h3_long_video_verify.py",
+                scripts_dir / "windows_gpu_h3_long_video_verify.py",
+                ("REVIEWED_DIRECTOR_COMMIT", "inference_executed"),
+            ),
+            (
                 "windows_gpu_start_h3_comfyui.cmd",
                 scripts_dir / "windows_gpu_start_h3_comfyui.cmd",
                 ("ComfyUI-H3", "MECHA_COMFYUI_PORT"),

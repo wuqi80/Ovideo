@@ -40,6 +40,7 @@ GPU_AGENT_PUBLIC_TOOL_FILES=(
   "scripts/windows_gpu_h3_smoke.py"
   "scripts/windows_gpu_h3_smoke.cmd"
   "scripts/windows_gpu_h3_sage_verify.py"
+  "scripts/windows_gpu_h3_long_video_verify.py"
   "scripts/windows_gpu_start_h3_comfyui.cmd"
   "scripts/windows_gpu_start_agent.cmd"
 )
@@ -139,6 +140,7 @@ FILES=(
   "scripts/windows_gpu_h3_smoke.py"
   "scripts/windows_gpu_h3_smoke.cmd"
   "scripts/windows_gpu_h3_sage_verify.py"
+  "scripts/windows_gpu_h3_long_video_verify.py"
   "scripts/windows_gpu_qwen_setup.ps1"
   "scripts/windows_gpu_qwen_setup.cmd"
   "scripts/windows_gpu_qwen_schedule.cmd"
@@ -211,6 +213,7 @@ FILES=(
   tests/test_windows_gpu_agent_runner.py
   tests/test_windows_gpu_resource_guard.py
   tests/test_windows_gpu_h3_sage_verify.py
+  tests/test_windows_gpu_h3_long_video_verify.py
   tests/test_generation_workflow_fallback.py
   "new_html/.env.example"
   "new_html/README.md"

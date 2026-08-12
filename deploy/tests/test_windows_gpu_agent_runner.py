@@ -11,6 +11,7 @@ from scripts.windows_gpu_agent_runner import (
     GPU2_H3_FPS,
     GPU2_H3_HEIGHT,
     GPU2_H3_KJNODES_COMMIT,
+    GPU2_H3_DIRECTOR_COMMIT,
     GPU2_H3_MODEL_FILES,
     GPU2_H3_PORT,
     GPU2_COMFYUI_PORT,
@@ -27,6 +28,7 @@ from scripts.windows_gpu_agent_runner import (
     build_gpu2_infinitetalk_workflow,
     build_gpu2_matting_workflow,
     build_gpu2_minimax_h3_fl2va_workflow,
+    build_gpu2_minimax_h3_long_video_workflow,
     build_gpu2_qwen_workflow,
     build_gpu2_upscale_workflow,
     build_gpu2_video_upscale_workflow,
@@ -37,6 +39,8 @@ from scripts.windows_gpu_agent_runner import (
     gpu2_h3_length_frames,
     gpu2_h3_sage_attention_ready,
     gpu2_h3_sage_attention_requested,
+    gpu2_h3_long_video_ready,
+    gpu2_h3_long_video_requested,
     gpu2_agent_maintenance_enabled,
     gpu2_wan_chunk_frame_counts,
     gpu2_wan_duration_seconds,
@@ -293,6 +297,81 @@ def test_gpu2_h3_sageattention_requires_marker_and_live_nodes(tmp_path, monkeypa
         },
     )
     assert (ready, reason) == (True, "verified")
+
+
+def test_gpu2_minimax_h3_long_video_builds_serialized_director_groups():
+    task = {
+        "task_type": "i2v",
+        "params": {
+            "model": "MiniMaxH3",
+            "image_path": "first.png",
+            "h3_long_video": True,
+            "h3_long_video_segments": [
+                {
+                    "prompt": "continue walking",
+                    "duration": 5,
+                    "image_path": "first.png",
+                    "image_path_end": "first_end.png",
+                },
+                {
+                    "prompt": "turn and wave",
+                    "duration": 7,
+                    "image_path": "second.png",
+                },
+            ],
+            "seed": 77,
+        },
+    }
+
+    workflow = build_gpu2_minimax_h3_long_video_workflow(task)
+    timeline = json.loads(workflow["81"]["inputs"]["timeline_data"])
+
+    assert gpu2_h3_long_video_requested(task) is True
+    assert workflow["g0"]["inputs"]["first_frame"] == ["l0f", 0]
+    assert workflow["g0"]["inputs"]["last_frame"] == ["l0l", 0]
+    assert workflow["g1"]["inputs"]["first_frame"] == ["l1f", 0]
+    assert "last_frame" not in workflow["g1"]["inputs"]
+    assert workflow["80"]["inputs"] == {
+        "groups.group_0": ["g0", 0],
+        "groups.group_1": ["g1", 0],
+    }
+    assert workflow["81"]["class_type"] == "MiniMaxH3Director"
+    assert workflow["81"]["inputs"]["clear_vram_between_segments"] is True
+    assert workflow["81"]["inputs"]["steps"] == 25
+    assert workflow["81"]["inputs"]["export_source_images"] is False
+    assert workflow["91"]["inputs"]["fps"] == ["81", 2]
+    assert timeline["output"]["continuityEnabled"] is True
+    assert timeline["output"]["continuityOverlapFrames"] == 22
+    assert timeline["segments"][1]["continuityFromPrev"] is True
+
+
+def test_gpu2_h3_long_video_requires_exact_marker_nodes_and_no_conflicting_pack(
+    tmp_path, monkeypatch
+):
+    marker = tmp_path / "h3-long-video-ready.json"
+    monkeypatch.setenv("MECHA_GPU_H3_LONG_VIDEO", "1")
+    marker.write_text(json.dumps({
+        "verified": True,
+        "director_commit": GPU2_H3_DIRECTOR_COMMIT,
+        "inference_executed": False,
+    }), encoding="utf-8")
+    nodes = {
+        "MiniMaxH3Director": {},
+        "MiniMaxH3DirectorGroupImageToVideo": {},
+        "MiniMaxH3DirectorGroupsCombine": {},
+        "CreateVideo": {},
+        "SaveVideo": {},
+    }
+
+    assert gpu2_h3_long_video_ready(
+        marker_path=marker, object_info_reader=lambda: nodes
+    ) == (True, "verified")
+    nodes["MiniMaxH3MotionContext"] = {}
+    ready, reason = gpu2_h3_long_video_ready(
+        marker_path=marker, object_info_reader=lambda: nodes
+    )
+    assert ready is False
+    assert "conflicts with Director" in reason
 
 
 def test_gpu2_runtime_manager_stops_previous_profile_before_single_port_switch(tmp_path):

@@ -22,6 +22,13 @@ import { confirmProcessingQueue } from './processingQueueService';
 export type { VideoTask } from './videoTaskTypes';
 export { cancelTask, deleteTask } from './taskControlService';
 
+export interface H3LongVideoSegment {
+    prompt: string;
+    duration: number;
+    image_path: string;
+    image_path_end?: string;
+}
+
 export interface VideoGenerationOptions {
     duration?: number;
     resolution?: string;
@@ -33,6 +40,9 @@ export interface VideoGenerationOptions {
     minimax_prompt_optimizer?: boolean;
     /** Per-task opt-in. The GPU Agent still requires its server-side safety gate. */
     h3_sage_attention?: boolean;
+    /** Separate guarded Director mode; it never changes the normal H3 workflow. */
+    h3_long_video?: boolean;
+    h3_long_video_segments?: H3LongVideoSegment[];
 }
 
 export function buildComfyUIVideoTaskPayload(
@@ -58,6 +68,21 @@ export function buildComfyUIVideoTaskPayload(
     }
     if (model === 'MiniMaxH3') {
         payload.h3_sage_attention = generationOptions?.h3_sage_attention === true;
+        if (generationOptions?.h3_long_video === true) {
+            const segments = generationOptions.h3_long_video_segments || [];
+            if (segments.length < 2) {
+                throw new Error('H3 长视频至少需要 2 个已合并镜头');
+            }
+            if (segments.length > 8) {
+                throw new Error('H3 长视频单次最多支持 8 个镜头');
+            }
+            const totalDuration = segments.reduce((sum, segment) => sum + Number(segment.duration || 0), 0);
+            if (totalDuration > 120) {
+                throw new Error('H3 长视频单次总时长不能超过 120 秒');
+            }
+            payload.h3_long_video = true;
+            payload.h3_long_video_segments = segments.map(segment => ({ ...segment }));
+        }
     }
     return payload;
 }

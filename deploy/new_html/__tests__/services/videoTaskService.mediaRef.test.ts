@@ -226,6 +226,32 @@ describe('MiniMax H3 local routing', () => {
             { h3_sage_attention: true },
         )).not.toHaveProperty('h3_sage_attention');
     });
+    it('keeps Director long video as a separate structured H3 option', () => {
+        const segments = [
+            { prompt: 'walk', duration: 5, image_path: 'first.png' },
+            { prompt: 'wave', duration: 7, image_path: 'second.png', image_path_end: 'second-end.png' },
+        ];
+        expect(buildComfyUIVideoTaskPayload(
+            'i2v',
+            'first.png',
+            null,
+            'combined prompt',
+            'MiniMaxH3',
+            { h3_long_video: true, h3_long_video_segments: segments },
+        )).toMatchObject({
+            h3_long_video: true,
+            h3_long_video_segments: segments,
+        });
+
+        expect(() => buildComfyUIVideoTaskPayload(
+            'i2v',
+            'first.png',
+            null,
+            'single prompt',
+            'MiniMaxH3',
+            { h3_long_video: true, h3_long_video_segments: segments.slice(0, 1) },
+        )).toThrow('至少需要 2 个');
+    });
     it('preserves the capability-selected GPU2 agent when submitting local H3 tasks', async () => {
         localStorage.setItem('auth_token', 'test-token');
         const fetchSpy = vi.spyOn(globalThis, 'fetch')

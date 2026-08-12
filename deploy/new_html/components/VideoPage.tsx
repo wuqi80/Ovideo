@@ -1975,6 +1975,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 duration: plan.totalDuration,
                 durationUserOverride: true,
                 mergedFrom,
+                h3LongVideo: mergedFrom.length <= 8 ? current.h3LongVideo : false,
             });
             return next;
         });
@@ -2682,6 +2683,32 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const capabilityParams = group.videoParams || {};
             const capabilityDuration = Number(capabilityParams.duration);
             const capabilitySeed = Number(capabilityParams.seed);
+            const h3LongVideoSegments = group.model === 'MiniMaxH3' && group.h3LongVideo === true
+                ? (group.mergedFrom || []).map((snapshot, segmentIndex) => {
+                    const segmentImages = (snapshot.ids || [])
+                        .map(id => uploadedImages.find(candidate => candidate.id === id))
+                        .filter((candidate): candidate is UploadedImage => Boolean(candidate));
+                    const firstFrame = segmentImages[0]
+                        ? getImageIdentifier(segmentImages[0], false)
+                        : '';
+                    const lastFrame = segmentImages[1]
+                        ? getImageIdentifier(segmentImages[1], false)
+                        : '';
+                    const duration = Number(snapshot.duration || 5);
+                    if (!firstFrame) {
+                        throw new Error(`H3 长视频第 ${segmentIndex + 1} 个镜头缺少首帧图片`);
+                    }
+                    if (!Number.isFinite(duration) || duration < 4 || duration > 15) {
+                        throw new Error(`H3 长视频第 ${segmentIndex + 1} 个镜头时长必须在 4–15 秒之间`);
+                    }
+                    return {
+                        prompt: String(snapshot.prompt || '').trim(),
+                        duration,
+                        image_path: firstFrame,
+                        ...(lastFrame ? { image_path_end: lastFrame } : {}),
+                    };
+                })
+                : undefined;
             
             console.log('📤 提交任务:', { filename1, filename2, prompt: prompt.substring(0, 50), model: group.model });
             
@@ -2719,6 +2746,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     minimax_resolution: minimaxParams?.resolution,
                     minimax_prompt_optimizer: minimaxParams?.promptOptimizer,
                     h3_sage_attention: group.model === 'MiniMaxH3' && group.h3SageAttention === true,
+                    h3_long_video: group.model === 'MiniMaxH3' && group.h3LongVideo === true,
+                    h3_long_video_segments: h3LongVideoSegments,
                 }
             );
             
@@ -3741,6 +3770,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         ))}
                     </select>
                     {group.model === 'MiniMaxH3' && (
+                        <>
                         <label
                             className="flex items-center gap-1 text-[9px] text-n500 cursor-pointer"
                             title="实验功能：可能令相同 Seed 的结果产生细微差异；服务端校验未通过时自动使用标准模式"
@@ -3755,6 +3785,22 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             />
                             加速（实验）
                         </label>
+                        <label
+                            className={`flex items-center gap-1 text-[9px] ${group.mergedFrom && group.mergedFrom.length >= 2 && group.mergedFrom.length <= 8 ? 'text-n500 cursor-pointer' : 'text-n100 cursor-not-allowed'}`}
+                            title="先合并 2–8 个镜头；Director 将逐段生成并用 Motion Context 保持动作和音频连续"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={group.h3LongVideo === true}
+                                disabled={!group.mergedFrom || group.mergedFrom.length < 2 || group.mergedFrom.length > 8}
+                                onChange={(event) => patchTaskGroup(group.uuid, {
+                                    h3LongVideo: event.target.checked,
+                                })}
+                                className="h-3 w-3 accent-primary"
+                            />
+                            H3 长视频
+                        </label>
+                        </>
                     )}
                 </div>
                 
@@ -3982,6 +4028,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             ))}
                         </select>
                         {group.model === 'MiniMaxH3' && (
+                            <>
                             <label
                                 className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary-light px-1.5 py-0.5 text-[10px] text-primary cursor-pointer"
                                 title="实验功能：可能令相同 Seed 的结果产生细微差异；服务端校验未通过时自动使用标准模式"
@@ -3996,6 +4043,22 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 />
                                 Sage 加速
                             </label>
+                            <label
+                                className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] ${group.mergedFrom && group.mergedFrom.length >= 2 && group.mergedFrom.length <= 8 ? 'border-p200/40 bg-p50 text-p400 cursor-pointer' : 'border-n40 bg-n20 text-n100 cursor-not-allowed'}`}
+                                title="先合并 2–8 个镜头；Director 将逐段生成并用 Motion Context 保持动作和音频连续"
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={group.h3LongVideo === true}
+                                    disabled={!group.mergedFrom || group.mergedFrom.length < 2 || group.mergedFrom.length > 8}
+                                    onChange={(event) => patchTaskGroup(group.uuid, {
+                                        h3LongVideo: event.target.checked,
+                                    })}
+                                    className="h-3 w-3 accent-primary"
+                                />
+                                H3 长视频
+                            </label>
+                            </>
                         )}
                         {activeVideoVoiceReference && (
                             <span

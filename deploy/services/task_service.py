@@ -214,6 +214,50 @@ class TaskService:
                 task_data[param] = resolved["filename"]
                 agent_files.append(resolved)
 
+            if task_data.get("h3_long_video") is True:
+                segments = task_data.get("h3_long_video_segments")
+                if not isinstance(segments, list) or not 2 <= len(segments) <= 8:
+                    raise ValueError("H3 long video requires 2-8 structured segments")
+                total_duration = 0.0
+                for index, segment in enumerate(segments):
+                    if not isinstance(segment, dict):
+                        raise ValueError(f"H3 long video segment {index + 1} is invalid")
+                    try:
+                        duration = float(segment.get("duration") or 0)
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(
+                            f"H3 long video segment {index + 1} duration is invalid"
+                        ) from exc
+                    if not 4.0 <= duration <= 15.0:
+                        raise ValueError(
+                            f"H3 long video segment {index + 1} must be 4-15 seconds"
+                        )
+                    total_duration += duration
+                    for field, suffix in (("image_path", "first"), ("image_path_end", "last")):
+                        value = segment.get(field)
+                        if field == "image_path" and not value:
+                            raise ValueError(
+                                f"H3 long video segment {index + 1} is missing a first frame"
+                            )
+                        if not value:
+                            continue
+                        param = f"h3_segment_{index}_{suffix}_frame"
+                        resolved = await self._resolve_agent_file(param, value, username)
+                        if not resolved:
+                            raise ValueError(
+                                f"H3 long video segment {index + 1} {suffix} frame is unavailable"
+                            )
+                        segment[field] = resolved["filename"]
+                        if not any(
+                            existing.get("filename") == resolved["filename"]
+                            and existing.get("url") == resolved["url"]
+                            for existing in agent_files
+                        ):
+                            agent_files.append(resolved)
+                if total_duration > 120.0:
+                    raise ValueError("H3 long video total duration exceeds 120 seconds")
+                task_data["duration"] = total_duration
+
             if "image_path" in task_data:
                 task_data["uploaded_image"] = task_data["image_path"]
             if "image_path_end" in task_data:

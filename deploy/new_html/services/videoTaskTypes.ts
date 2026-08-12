@@ -45,6 +45,8 @@ export interface TaskGroup {
   videoParams?: Record<string, string | number | boolean>;
   /** Opt-in request for the verified MiniMax H3 SageAttention workflow. */
   h3SageAttention?: boolean;
+  /** Opt-in request for the guarded MiniMax H3 Director multi-segment workflow. */
+  h3LongVideo?: boolean;
   mergedFrom?: MergedCardSnapshot[];
 }
 
