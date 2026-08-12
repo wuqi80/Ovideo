@@ -182,6 +182,7 @@ set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 set MECHA_GPU_ROOT=E:\MECHA-GPU
 set MECHA_SERVER_URL=__SERVER_URL__
+set MECHA_GPU_TELEMETRY_DIR=D:\MECHA-GPU-Telemetry
 set MECHA_COMFYUI_PORTS=8188
 E:\MECHA-GPU\ComfyUI_windows_portable\python_embeded\python.exe -s E:\MECHA-GPU\agent\windows_gpu_agent_runner.py >> E:\MECHA-GPU\logs\agent.log 2>&1
 endlocal
@@ -191,10 +192,7 @@ Set-Content -Path (Join-Path $InstallRoot "start_agent.cmd") -Value $startAgent 
 
 $setupTasks = @'
 @echo off
-schtasks.exe /Create /TN "MECHA-GPU-ComfyUI" /TR "cmd.exe /c E:\MECHA-GPU\start_comfyui.cmd" /SC ONSTART /RU SYSTEM /RL HIGHEST /F
-schtasks.exe /Create /TN "MECHA-GPU-Agent" /TR "cmd.exe /c E:\MECHA-GPU\start_agent.cmd" /SC ONSTART /RU SYSTEM /RL HIGHEST /F
-schtasks.exe /Run /TN "MECHA-GPU-ComfyUI"
-if exist E:\MECHA-GPU\config\agent-token.txt schtasks.exe /Run /TN "MECHA-GPU-Agent"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "E:\MECHA-GPU\scripts\windows_gpu_task_repair.ps1"
 '@
 Set-Content -Path (Join-Path $InstallRoot "register_startup_tasks.cmd") -Value $setupTasks -Encoding ASCII
 

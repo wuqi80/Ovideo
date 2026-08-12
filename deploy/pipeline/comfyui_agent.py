@@ -3,7 +3,7 @@
 ComfyUI Agent - Deploy on GPU servers.
 Polls backend for tasks, executes them on local ComfyUI instances, reports results.
 
-Usage: python comfyui_agent.py --server URL --token TOKEN --ports 8188,8189
+Usage: python comfyui_agent.py --server URL --token TOKEN --ports 8188
 """
 import argparse
 import json
@@ -493,7 +493,7 @@ class ComfyUIAgent:
                 "status": "completed",
                 "result_payload": result,
                 "output_files": [],
-                "restart_agent": True,
+                "restart_agent": bool(data.get("restart_agent", False)),
             }
 
         return {
@@ -583,7 +583,12 @@ class ComfyUIAgent:
             (
                 "windows_gpu_agent_runner.py",
                 agent_dir / "windows_gpu_agent_runner.py",
-                ("GPU2_H3_PORT = 8189", "build_gpu2_minimax_h3_fl2va_workflow"),
+                ("GPU2_H3_PORT = GPU2_COMFYUI_PORT", "Gpu2ResourceController"),
+            ),
+            (
+                "windows_gpu_resource_guard.py",
+                agent_dir / "windows_gpu_resource_guard.py",
+                ("class Gpu2ResourceController", "class BoundedJsonlTelemetry"),
             ),
             (
                 "windows_gpu_h3_setup.ps1",
@@ -608,12 +613,12 @@ class ComfyUIAgent:
             (
                 "windows_gpu_start_h3_comfyui.cmd",
                 scripts_dir / "windows_gpu_start_h3_comfyui.cmd",
-                ("ComfyUI-H3", "8189"),
+                ("ComfyUI-H3", "MECHA_COMFYUI_PORT"),
             ),
             (
                 "windows_gpu_start_agent.cmd",
                 scripts_dir / "windows_gpu_start_agent.cmd",
-                ("windows_gpu_agent_runner.py", "MECHA_COMFYUI_PORTS=8188,8189"),
+                ("windows_gpu_agent_runner.py", "MECHA_COMFYUI_PORTS=8188"),
             ),
         ]
 
@@ -631,7 +636,6 @@ class ComfyUIAgent:
             "Bypass",
             "-File",
             str(setup_path),
-            "-NoAgentRestart",
         ]
         if data.get("skip_model_downloads"):
             command.append("-SkipModelDownloads")
@@ -651,7 +655,7 @@ class ComfyUIAgent:
             tail = (stdout + "\n" + stderr)[-4000:]
             raise RuntimeError(f"MiniMax H3 setup failed with exit code {completed.returncode}: {tail}")
 
-        os.environ["MECHA_COMFYUI_PORTS"] = "8188,8189"
+        os.environ["MECHA_COMFYUI_PORTS"] = "8188"
 
         return {
             "action": "install_h3_sidecar",
@@ -662,8 +666,8 @@ class ComfyUIAgent:
             "setup_returncode": completed.returncode,
             "setup_stdout_tail": stdout[-3000:],
             "setup_stderr_tail": stderr[-3000:],
-            "ports_after_restart": [8188, 8189],
-            "restart": True,
+            "ports_after_restart": [8188],
+            "restart": bool(data.get("restart_agent", False)),
         }
 
     def _restart_process(self):

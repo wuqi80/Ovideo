@@ -52,8 +52,8 @@ def test_gpu2_port_recovery_waits_for_sustained_outage_and_respects_cooldown(tmp
     launched = []
     now = [1000.0]
     recovery = ComfyUIPortRecovery(
-        [8189],
-        command_map={8189: command},
+        [8288],
+        command_map={8288: command},
         port_is_listening=lambda _port: False,
         launcher=lambda path: launched.append(path) or True,
         clock=lambda: now[0],
@@ -331,6 +331,25 @@ def test_gpu2_runtime_manager_blocks_next_task_until_release_gate_opens(tmp_path
     assert manager.release_models() is False
     assert manager.ready_for_next_task() is False
     assert attempts == [True, True]
+
+
+def test_gpu2_runtime_manager_emergency_stop_targets_only_active_owned_profile(tmp_path):
+    wan = tmp_path / "wan.cmd"
+    h3 = tmp_path / "h3.cmd"
+    wan.write_text("@echo off\n", encoding="utf-8")
+    h3.write_text("@echo off\n", encoding="utf-8")
+    stopped = []
+    manager = Gpu2RuntimeManager(
+        commands={"wan": wan, "h3": h3},
+        listener=lambda _port: True,
+        stopper=lambda profile: stopped.append(profile) or True,
+    )
+    manager.active_profile = "h3"
+
+    assert manager.emergency_stop() is True
+    assert stopped == ["h3"]
+    assert manager.active_profile is None
+    assert manager.model_gate.released is True
 
 
 def test_gpu2_minimax_h3_preserves_first_and_last_frame_inputs():

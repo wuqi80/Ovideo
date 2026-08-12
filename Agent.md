@@ -1,5 +1,14 @@
 # Agent.md - 本地部署记录
 
+## 2026-08-12 GPU2 production resource guard (code only)
+
+- Kept local GPU work in maintenance mode while DFS production recovery is in progress; external API generation remains available.
+- Enforced one local service entry, one claimed task, and one resident heavy-model runtime at a time. Legacy independent H3 startup paths are disabled or converted to on-demand switching.
+- Added a fail-closed 256 GiB host resource policy: 96 GiB free RAM required before model load, 112 GiB aggregate AI private-memory warning, 128 GiB hard ceiling, and a 32 GiB emergency host reserve.
+- Added low-overhead Windows telemetry with 2-second active / 10-second idle sampling, bounded daily JSONL storage on D, per-task peak/average/P95 summaries, and no prompt or media-content logging.
+- Resource emergencies stop only the Agent-owned local runtime. The guard does not control DFS, VMware, Windows restart, pagefile configuration, or unrelated processes.
+- This change is source-only. It was not synchronized to GPU2 and did not start, stop, restart, or deploy any production service.
+
 ## 2026-07-10 Doubao SeedDream Agent Plan
 
 - Added pay-as-you-go and Agent Plan access modes to the Doubao image provider card.

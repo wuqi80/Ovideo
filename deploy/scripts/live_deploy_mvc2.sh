@@ -31,6 +31,7 @@ PROCESSING_AGENT_PUBLIC_NAME="processing_agent.py"
 PROCESSING_AGENT_REMOTE_REL="persistent_storage/tools/$PROCESSING_AGENT_PUBLIC_NAME"
 GPU_AGENT_PUBLIC_TOOL_FILES=(
   "scripts/windows_gpu_agent_runner.py"
+  "scripts/windows_gpu_resource_guard.py"
   "scripts/windows_gpu_cleanup_port.ps1"
   "scripts/windows_gpu_wait_for_dfs.ps1"
   "scripts/windows_gpu_wait_for_dfs.cmd"
@@ -109,6 +110,7 @@ FILES=(
   "scripts/register_gpu_agent.py"
   "scripts/test_gpu2_end_to_end.py"
   "scripts/windows_gpu_agent_runner.py"
+  "scripts/windows_gpu_resource_guard.py"
   "scripts/windows_gpu_cleanup_port.ps1"
   "scripts/windows_gpu_wait_for_dfs.ps1"
   "scripts/windows_gpu_wait_for_dfs.cmd"
@@ -205,6 +207,7 @@ FILES=(
   tests/test_video_interpolation_service.py
   tests/test_video_capability_service.py
   tests/test_windows_gpu_agent_runner.py
+  tests/test_windows_gpu_resource_guard.py
   tests/test_generation_workflow_fallback.py
   "new_html/.env.example"
   "new_html/README.md"

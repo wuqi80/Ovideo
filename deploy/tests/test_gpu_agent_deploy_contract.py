@@ -18,6 +18,7 @@ def test_live_deploy_publishes_gpu_agent_for_self_update():
     assert '"$STAGING_DIR/$PROCESSING_AGENT_REMOTE_REL"' in script
     assert 'GPU_AGENT_PUBLIC_TOOL_FILES=(' in script
     assert '"scripts/windows_gpu_agent_runner.py"' in script
+    assert '"scripts/windows_gpu_resource_guard.py"' in script
     assert '"scripts/windows_gpu_cleanup_port.ps1"' in script
     assert '"scripts/windows_gpu_wait_for_dfs.ps1"' in script
     assert '"scripts/windows_gpu_wait_for_dfs.cmd"' in script
@@ -55,7 +56,7 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert "$LegacyAgentStartCmd" in source
     assert 'foreach ($candidate in @($AgentStartCmd, $LegacyAgentStartCmd))' in source
     assert "MECHA GPU ComfyUI H3 LAN" in source
-    assert "NoAgentRestart" in source
+    assert "RestartAgent" in source
     assert "-c $pythonScript" not in source
     assert "HuggingFaceEndpoint" in source
     assert "https://hf-mirror.com" in source
@@ -79,3 +80,17 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert 'part' in source
     assert 'ModelExpectedSizes' in source
     assert '20970379616' in source
+
+
+def test_h3_install_does_not_restart_or_start_a_runtime_by_default():
+    setup = (
+        DEPLOY_DIR / "scripts" / "windows_gpu_h3_setup.ps1"
+    ).read_text(encoding="utf-8")
+    agent = (
+        DEPLOY_DIR / "pipeline" / "comfyui_agent.py"
+    ).read_text(encoding="utf-8")
+
+    assert "if ($RestartAgent)" in setup
+    invocation_tail = setup.rsplit("Ensure-H3Python", 1)[-1]
+    assert "Test-H3Readiness" not in invocation_tail
+    assert '"restart_agent": bool(data.get("restart_agent", False))' in agent

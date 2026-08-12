@@ -78,7 +78,7 @@ task_queue - INFO - 任务 a3fedf69-... 已加入队列 (优先级: 2)
 
 `AGENT_ONLY_MODE=false` 时 `cluster_main.py:328-358` 会:
 
-1. 起 `image_cluster_manager` + `video_cluster_manager` 两个 `ClusterManager`，持续对 `127.0.0.1:8188/8189` 做健康检查 — autodl tunnel 后面那台机器很可能根本没那些端口，健康检查反复超时挤占 event loop
+1. 起 `image_cluster_manager` + `video_cluster_manager` 两个 `ClusterManager`，持续对多个遗留本地入口做健康检查 — autodl tunnel 后面那台机器很可能根本没有对应服务，健康检查反复超时挤占 event loop
 2. 起 4 个本地 Worker 全部 `zpopmin comfyui:task_queue` — 和外部 agent 抢同一个 Redis 队列，agent 拉不到 ComfyUI workflow 任务
 3. 加上 ClusterManager 的卡顿，FastAPI handler 拿不到 Redis 连接 / event loop 时间片，`/api/agent/heartbeat` 和 `/api/agent/poll` 全部 10s 读超时
 

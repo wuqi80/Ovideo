@@ -242,7 +242,7 @@ async def test_get_by_token_not_found(test_db):
 async def test_update_heartbeat(test_db):
     from dao_agent import AgentDAO
     agent = await AgentDAO.create(name="GPU-B", token="sk-hb-token")
-    instances = [{"port": 8188, "status": "healthy"}, {"port": 8189, "status": "healthy"}]
+    instances = [{"port": 8188, "status": "healthy"}]
     system_info = {"gpu": "A100", "vram": "80GB"}
     updated = await AgentDAO.update_heartbeat(
         agent["agent_id"], status="online",
@@ -1702,7 +1702,7 @@ git commit -m "feat: add smart API router (direct vs agent proxy)"
 # comfyui_agent.py
 """
 ComfyUI Agent — 部署在 GPU 服务器上
-用法: python comfyui_agent.py --server URL --token TOKEN --ports 8188,8189
+用法: python comfyui_agent.py --server URL --token TOKEN --ports 8188
 """
 import argparse
 import json
@@ -1952,7 +1952,7 @@ def main():
     parser = argparse.ArgumentParser(description="ComfyUI Agent")
     parser.add_argument("--server", required=True, help="Backend URL (e.g. https://your-backend.com:6006)")
     parser.add_argument("--token", required=True, help="Agent registration token")
-    parser.add_argument("--ports", required=True, help="ComfyUI ports (e.g. 8188,8189)")
+    parser.add_argument("--ports", required=True, help="ComfyUI port (8188)")
     args = parser.parse_args()
     ports = [int(p.strip()) for p in args.ports.split(",")]
     agent = ComfyUIAgent(args.server, args.token, ports)

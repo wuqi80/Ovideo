@@ -48,6 +48,24 @@ def _runtime_profile(request: GenerateRequest) -> str:
     return "h3" if _is_minimax_h3_request(request) else "wan"
 
 
+def _local_gpu_maintenance() -> dict[str, Any]:
+    enabled = str(os.environ.get("MECHA_LOCAL_GPU_MAINTENANCE", "0")).strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    message = str(
+        os.environ.get(
+            "MECHA_LOCAL_GPU_MAINTENANCE_MESSAGE",
+            "本地 GPU 正在维护，当前不会接收新任务；外部 API 模型不受影响。",
+        )
+    ).strip()
+    resume_at = str(os.environ.get("MECHA_LOCAL_GPU_MAINTENANCE_RESUME_AT", "")).strip()
+    return {
+        "enabled": enabled,
+        "message": message,
+        "estimated_resume_at": resume_at or None,
+    }
+
+
 async def _gpu_queue_snapshot(task_queue: Any, request: GenerateRequest) -> dict[str, Any]:
     """Return anonymous queue counts only; never disclose another user's task data."""
     if is_external_api_task(request.task_type):
@@ -58,6 +76,22 @@ async def _gpu_queue_snapshot(task_queue: Any, request: GenerateRequest) -> dict
             "estimated_wait_seconds": 0,
             "requires_confirmation": False,
             "can_cancel_before_submit": True,
+            "accepting_submissions": True,
+        }
+    maintenance = _local_gpu_maintenance()
+    if maintenance["enabled"]:
+        return {
+            "queue_mode": "maintenance",
+            "runtime_profile": _runtime_profile(request),
+            "public_comfyui_port": 8188,
+            "tasks_ahead": 0,
+            "estimated_wait_seconds": 0,
+            "estimated_wait_time": 0,
+            "requires_confirmation": False,
+            "can_cancel_before_submit": True,
+            "accepting_submissions": False,
+            "maintenance_message": maintenance["message"],
+            "estimated_resume_at": maintenance["estimated_resume_at"],
         }
     queued = int(await task_queue.get_queue_length())
     processing = 0
@@ -79,6 +113,7 @@ async def _gpu_queue_snapshot(task_queue: Any, request: GenerateRequest) -> dict
         "estimated_wait_time": estimated_wait,
         "requires_confirmation": tasks_ahead > 0,
         "can_cancel_before_submit": True,
+        "accepting_submissions": True,
     }
 
 
@@ -111,6 +146,16 @@ def create_task_router(
     async def create_generate_task(request: GenerateRequest, username: str = Depends(require_auth_dependency)):
         """创建生成任务"""
         try:
+            maintenance = _local_gpu_maintenance()
+            if not is_external_api_task(request.task_type) and maintenance["enabled"]:
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "code": "local_gpu_maintenance",
+                        "message": maintenance["message"],
+                        "estimated_resume_at": maintenance["estimated_resume_at"],
+                    },
+                )
             if str(request.file_role or "").startswith("studio_"):
                 references = [
                     str(value)

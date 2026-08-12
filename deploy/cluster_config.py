@@ -55,7 +55,7 @@ class ClusterConfig:
             port=8188,
             node_type="image",
             priority=3,
-            max_concurrent=2,
+            max_concurrent=1,
             enabled=True
         ),
         ComfyUINode(
@@ -64,25 +64,7 @@ class ClusterConfig:
             port=8188,
             node_type="video",
             priority=2,
-            max_concurrent=2,
-            enabled=True
-        ),
-        ComfyUINode(
-            id="local-gpu1-gpu1-image",
-            host="127.0.0.1",
-            port=8189,
-            node_type="image",
-            priority=2,
-            max_concurrent=2,
-            enabled=True
-        ),
-        ComfyUINode(
-            id="local-gpu1-video-gpu1-video",
-            host="127.0.0.1",
-            port=8189,
-            node_type="video",
-            priority=3,
-            max_concurrent=2,
+            max_concurrent=1,
             enabled=True
         ),
     ]

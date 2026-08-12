@@ -8,7 +8,7 @@ from pipeline.comfyui_agent import ComfyUIAgent
 
 def _agent(monkeypatch):
     monkeypatch.setattr(signal, "signal", lambda *_args, **_kwargs: None)
-    agent = ComfyUIAgent("https://example.test", "token", [8188, 8189])
+    agent = ComfyUIAgent("https://example.test", "token", [8188, 8288])
     agent.agent_id = "agent_test"
     return agent
 
@@ -21,8 +21,8 @@ def test_pick_healthy_port_honors_strict_preferred_port(monkeypatch):
         lambda port: "healthy" if port == 8188 else "offline",
     )
 
-    assert agent._pick_healthy_port(preferred_port=8189, strict_preferred=True) is None
-    assert agent._pick_healthy_port(preferred_port=8189, strict_preferred=False) == 8188
+    assert agent._pick_healthy_port(preferred_port=8288, strict_preferred=True) is None
+    assert agent._pick_healthy_port(preferred_port=8288, strict_preferred=False) == 8188
     assert agent._truthy("false") is False
     assert agent._truthy("true") is True
 
@@ -32,10 +32,10 @@ def test_pick_healthy_port_uses_preferred_port_when_available(monkeypatch):
     monkeypatch.setattr(
         agent,
         "_check_comfyui",
-        lambda port: "healthy" if port == 8189 else "healthy",
+        lambda port: "healthy" if port == 8288 else "healthy",
     )
 
-    assert agent._pick_healthy_port(preferred_port=8189, strict_preferred=True) == 8189
+    assert agent._pick_healthy_port(preferred_port=8288, strict_preferred=True) == 8288
 
 
 def test_capability_probe_reports_minimax_h3_only_when_all_nodes_exist(monkeypatch):
@@ -64,7 +64,7 @@ def test_capability_probe_reports_minimax_h3_only_when_all_nodes_exist(monkeypat
 
     monkeypatch.setattr(requests, "get", lambda *_args, **_kwargs: Response())
 
-    capabilities = agent._probe_comfyui_capabilities(8189, "healthy")
+    capabilities = agent._probe_comfyui_capabilities(8288, "healthy")
 
     assert capabilities["minimax_h3_fl2va"] is True
     assert capabilities["minimax_h3_required_nodes"]["MiniMaxH3ImageToVideo"] is True

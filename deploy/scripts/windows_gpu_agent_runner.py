@@ -15,6 +15,11 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable, Dict
 
+try:
+    from scripts.windows_gpu_resource_guard import Gpu2ResourceController
+except ImportError:  # Direct execution on the Windows GPU host.
+    from windows_gpu_resource_guard import Gpu2ResourceController
+
 
 ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
 AGENT_DIR = ROOT / "agent"
@@ -102,7 +107,7 @@ GPU2_LONG_TASK_TIMEOUT_SECONDS = 6 * 60 * 60
 GPU2_MODEL_RELEASE_TIMEOUT_SECONDS = 120
 GPU2_MODEL_RELEASE_POLL_SECONDS = 5
 GPU2_MODEL_RELEASE_STABLE_SAMPLES = 3
-GPU2_MODEL_RELEASE_MIN_FREE_RAM_GIB = 8
+GPU2_MODEL_RELEASE_MIN_FREE_RAM_GIB = 96
 GPU2_MODEL_RELEASE_MIN_FREE_VRAM_GIB = 8
 GPU2_MODEL_RELEASE_RAM_TOLERANCE_GIB = 4
 GPU2_MODEL_RELEASE_VRAM_TOLERANCE_GIB = 1
@@ -462,6 +467,21 @@ class Gpu2RuntimeManager:
                 self.model_gate.mark_process_stopped()
                 return True
             return self.model_gate.ensure_released()
+
+    def emergency_stop(self) -> bool:
+        """Stop only the runtime profile already owned by this Agent."""
+        with self._lock:
+            if not self.listener(GPU2_COMFYUI_PORT):
+                self.model_gate.mark_process_stopped()
+                return True
+            profile = self.active_profile
+            if not profile or profile not in self.commands:
+                return False
+            stopped = self.stopper(profile)
+            if stopped:
+                self.active_profile = None
+                self.model_gate.mark_process_stopped()
+            return stopped
 
 
 def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -1089,7 +1109,7 @@ def gpu2_h3_length_frames(task: Dict[str, Any]) -> int:
 
 
 def build_gpu2_minimax_h3_fl2va_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
-    """Build the official MiniMax H3 FL2VA graph for the isolated GPU2:8189 ComfyUI."""
+    """Build the MiniMax H3 FL2VA graph for the Agent-switched local runtime."""
     params = _gpu2_task_params(task)
     image_names = _gpu2_input_image_names(task)
     if not image_names:
@@ -1741,12 +1761,30 @@ def main() -> None:
         if value.strip()
     ]
     runtime_manager = Gpu2RuntimeManager()
+    resource_controller = Gpu2ResourceController(
+        ROOT,
+        comfy_reader=_read_gpu2_memory_snapshot,
+        emergency_stop=runtime_manager.emergency_stop,
+    )
 
     class Gpu2ComfyUIAgent(ComfyUIAgent):
+        def _get_system_info(self):
+            info = super()._get_system_info()
+            info["resource_guard"] = resource_controller.status()
+            return info
+
         def heartbeat(self):
             return super().heartbeat()
 
         def poll(self):
+            if not resource_controller.ready_for_new_task():
+                print(
+                    "[MECHA] New task claim blocked by host resource guard: "
+                    f"{resource_controller.last_error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return None
             if not runtime_manager.ready_for_next_task():
                 print(
                     "[MECHA] New task claim blocked until the previous model is released: "
@@ -1761,18 +1799,36 @@ def main() -> None:
             prepared = prepare_gpu2_task(task)
             params = prepared.get("params") or {}
             profile = params.get("gpu2_runtime_profile") or gpu2_runtime_profile(prepared)
-            runtime_manager.ensure(profile)
-            runtime_manager.mark_models_loaded()
+            width = params.get("width") or params.get("output_width") or 0
+            height = params.get("height") or params.get("output_height") or 0
+            duration = params.get("duration") or params.get("duration_seconds") or 0
+            resource_controller.begin_task({
+                "task_id": prepared.get("task_id"),
+                "task_type": prepared.get("task_type"),
+                "runtime_profile": profile,
+                "model": params.get("model") or prepared.get("workflow_name"),
+                "width": width,
+                "height": height,
+                "duration_seconds": duration,
+            })
+            task_status = "failed"
+            models_released = False
             try:
-                return super().execute_comfyui_task(prepared)
+                runtime_manager.ensure(profile)
+                runtime_manager.mark_models_loaded()
+                result = super().execute_comfyui_task(prepared)
+                task_status = str(result.get("status") or "completed")
+                return result
             finally:
-                if not runtime_manager.release_models():
+                models_released = runtime_manager.release_models()
+                if not models_released:
                     print(
                         "[MECHA] Model release gate is closed; queued tasks will remain unclaimed: "
                         f"{runtime_manager.model_gate.last_error}",
                         file=sys.stderr,
                         flush=True,
                     )
+                resource_controller.finish_task(task_status, models_released=models_released)
 
         def _wait_for_completion(self, port, prompt_id, timeout=GPU2_LONG_TASK_TIMEOUT_SECONDS):
             return super()._wait_for_completion(
@@ -1786,7 +1842,11 @@ def main() -> None:
         raise RuntimeError(f"Agent token is empty: {TOKEN_FILE}")
 
     server_url = os.environ.get("MECHA_SERVER_URL", "https://spti.ai")
-    Gpu2ComfyUIAgent(server_url, token, ports).run()
+    resource_controller.start()
+    try:
+        Gpu2ComfyUIAgent(server_url, token, ports).run()
+    finally:
+        resource_controller.stop()
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ async def test_list_agent_instances_preserves_per_port_capabilities(monkeypatch)
                         {"host": "192.168.31.134", "port": 8188, "status": "healthy"},
                         {
                             "host": "192.168.31.134",
-                            "port": 8189,
+                            "port": 8288,
                             "status": "healthy",
                             "capabilities": {"minimax_h3_fl2va": True},
                         },
@@ -67,11 +67,11 @@ async def test_list_agent_instances_preserves_per_port_capabilities(monkeypatch)
 
     instances = await cluster_node_service.list_agent_instances()
 
-    assert [instance["port"] for instance in instances] == [8188, 8189]
-    h3 = next(instance for instance in instances if instance["port"] == 8189)
+    assert [instance["port"] for instance in instances] == [8188, 8288]
+    h3 = next(instance for instance in instances if instance["port"] == 8288)
     assert h3["agent_id"] == "agent_gpu2"
     assert h3["routing_name"] == "GPU2"
-    assert h3["url"] == "http://GPU2:8189"
+    assert h3["url"] == "http://GPU2:8288"
     assert h3["healthy"] is True
     assert h3["capabilities"] == {"minimax_h3_fl2va": True}
 
@@ -91,7 +91,7 @@ async def test_list_agent_instances_treats_busy_agent_with_stale_row_status_as_h
                         {"host": "192.168.31.134", "port": 8188, "status": "healthy"},
                         {
                             "host": "192.168.31.134",
-                            "port": 8189,
+                            "port": 8288,
                             "status": "healthy",
                             "capabilities": {"minimax_h3_fl2va": True},
                         },
@@ -104,8 +104,8 @@ async def test_list_agent_instances_treats_busy_agent_with_stale_row_status_as_h
 
     instances = await cluster_node_service.list_agent_instances()
 
-    assert [instance["port"] for instance in instances] == [8188, 8189]
-    h3 = next(instance for instance in instances if instance["port"] == 8189)
+    assert [instance["port"] for instance in instances] == [8188, 8288]
+    h3 = next(instance for instance in instances if instance["port"] == 8288)
     assert h3["status"] == "busy"
     assert h3["healthy"] is True
     assert h3["capabilities"] == {"minimax_h3_fl2va": True}

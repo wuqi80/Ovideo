@@ -240,7 +240,7 @@ CUDA_VISIBLE_DEVICES={gpu_id} python main.py --port {port} --listen 0.0.0.0 {ext
             if use_tunnel:
                 print(f"  🔐 检测到SSH隧道配置")
                 remote_port = ssh_tunnel_config.get('remote_port', 8188)
-                local_port = ssh_tunnel_config.get('local_port', 8189)
+                local_port = ssh_tunnel_config.get('local_port', 8288)
                 
                 # 设置SSH隧道
                 if self.setup_ssh_tunnel(server, remote_port, local_port):

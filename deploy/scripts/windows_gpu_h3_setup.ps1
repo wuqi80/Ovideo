@@ -1,9 +1,9 @@
 param(
     [string]$InstallRoot = "E:\MECHA-GPU",
-    [int]$Port = 8189,
+    [int]$Port = 8188,
     [switch]$SkipModelDownloads,
     [switch]$ForceRefreshComfyUI,
-    [switch]$NoAgentRestart,
+    [switch]$RestartAgent,
     [string]$HuggingFaceToken = $env:HF_TOKEN,
     [string]$HuggingFaceEndpoint = $env:HF_ENDPOINT
 )
@@ -401,39 +401,27 @@ endlocal
 }
 
 function Update-AgentPortList {
-    [Environment]::SetEnvironmentVariable("MECHA_COMFYUI_PORTS", "8188,$Port", "Machine")
+    [Environment]::SetEnvironmentVariable("MECHA_COMFYUI_PORTS", "8188", "Machine")
     foreach ($candidate in @($AgentStartCmd, $LegacyAgentStartCmd)) {
         if (-not (Test-Path -LiteralPath $candidate)) {
             continue
         }
         $source = Get-Content -LiteralPath $candidate -Raw -Encoding UTF8
-        $updated = $source -replace "set MECHA_COMFYUI_PORTS=.*", "set MECHA_COMFYUI_PORTS=8188,$Port"
+        $updated = $source -replace "set MECHA_COMFYUI_PORTS=.*", "set MECHA_COMFYUI_PORTS=8188"
         if ($updated -ne $source) {
-            Write-Step "Updating Agent startup command ports to 8188,${Port}: $candidate"
+            Write-Step "Updating Agent startup command to the single managed port: $candidate"
             Set-Content -LiteralPath $candidate -Value $updated -Encoding UTF8
         }
     }
 }
 
-function Ensure-H3FirewallRule {
-    Write-Step "Allowing H3 ComfyUI from the local subnet only on port $Port"
+function Disable-LegacyH3Startup {
+    Write-Step "Disabling the legacy independently-started H3 task and firewall rule"
     Get-NetFirewallRule -DisplayName "MECHA GPU ComfyUI H3 LAN" -ErrorAction SilentlyContinue |
         Remove-NetFirewallRule -ErrorAction SilentlyContinue
-    New-NetFirewallRule `
-        -DisplayName "MECHA GPU ComfyUI H3 LAN" `
-        -Direction Inbound `
-        -Action Allow `
-        -Protocol TCP `
-        -LocalPort $Port `
-        -RemoteAddress "192.168.31.0/24" `
-        -Profile Any | Out-Null
-}
-
-function Register-H3ScheduledTask {
-    Write-Step "Registering startup task MECHA-GPU-ComfyUI-H3"
-    schtasks.exe /Create /F /TN "MECHA-GPU-ComfyUI-H3" /SC ONSTART /RL HIGHEST /RU SYSTEM /TR "`"$StartCmd`""
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to register MECHA-GPU-ComfyUI-H3 scheduled task"
+    $legacyTask = Get-ScheduledTask -TaskName "MECHA-GPU-ComfyUI-H3" -ErrorAction SilentlyContinue
+    if ($legacyTask) {
+        Disable-ScheduledTask -TaskName "MECHA-GPU-ComfyUI-H3" | Out-Null
     }
 }
 
@@ -490,16 +478,15 @@ Install-PythonRequirements
 Download-H3Models
 Install-H3StartCommand
 Update-AgentPortList
-Ensure-H3FirewallRule
-Register-H3ScheduledTask
-Test-H3Readiness
+Disable-LegacyH3Startup
+Write-Step "H3 installed for Agent-managed on-demand switching; no runtime smoke was started"
 
-if (-not $NoAgentRestart) {
-    Write-Step "Restarting Agent so it reports 8188,$Port"
+if ($RestartAgent) {
+    Write-Step "Restarting Agent with the single managed port"
     schtasks.exe /End /TN "MECHA-GPU-Agent" 2>$null | Out-Null
     Start-Sleep -Seconds 3
     schtasks.exe /Run /TN "MECHA-GPU-Agent" | Out-Null
 } else {
-    Write-Step "Skipping Agent scheduled-task restart by request; caller will restart Agent"
+    Write-Step "Agent restart was not requested; installed files remain inactive"
 }
 Write-Step "MiniMax H3 GPU2 setup completed"
