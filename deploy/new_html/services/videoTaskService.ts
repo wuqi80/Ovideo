@@ -31,6 +31,8 @@ export interface VideoGenerationOptions {
     minimax_model?: string;
     minimax_resolution?: '768P' | '1080P';
     minimax_prompt_optimizer?: boolean;
+    /** Per-task opt-in. The GPU Agent still requires its server-side safety gate. */
+    h3_sage_attention?: boolean;
 }
 
 export function buildComfyUIVideoTaskPayload(
@@ -53,6 +55,9 @@ export function buildComfyUIVideoTaskPayload(
     };
     if (imageFilenameEnd) {
         payload.image_path_end = imageFilenameEnd;
+    }
+    if (model === 'MiniMaxH3') {
+        payload.h3_sage_attention = generationOptions?.h3_sage_attention === true;
     }
     return payload;
 }

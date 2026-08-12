@@ -1,3 +1,5 @@
+import json
+
 from scripts.windows_gpu_agent_runner import (
     COMFYUI_RECOVERY_COOLDOWN_SECONDS,
     COMFYUI_RECOVERY_FAILURE_THRESHOLD,
@@ -8,6 +10,7 @@ from scripts.windows_gpu_agent_runner import (
     GPU2_HUMAN_ANGLE_PROMPTS,
     GPU2_H3_FPS,
     GPU2_H3_HEIGHT,
+    GPU2_H3_KJNODES_COMMIT,
     GPU2_H3_MODEL_FILES,
     GPU2_H3_PORT,
     GPU2_COMFYUI_PORT,
@@ -32,6 +35,8 @@ from scripts.windows_gpu_agent_runner import (
     gpu2_infinitetalk_total_frames,
     gpu2_h3_duration_seconds,
     gpu2_h3_length_frames,
+    gpu2_h3_sage_attention_ready,
+    gpu2_h3_sage_attention_requested,
     gpu2_agent_maintenance_enabled,
     gpu2_wan_chunk_frame_counts,
     gpu2_wan_duration_seconds,
@@ -194,6 +199,100 @@ def test_gpu2_minimax_h3_routes_to_single_8188_port_and_audio_video_nodes():
     assert GPU2_H3_PORT == GPU2_COMFYUI_PORT == 8188
     assert prepared["params"]["strict_preferred_comfyui_port"] is True
     assert prepared["params"]["gpu2_runtime_profile"] == "h3"
+
+
+def test_gpu2_minimax_h3_sageattention_only_rewires_model_attention():
+    task = {
+        "task_type": "i2v",
+        "params": {
+            "model": "MiniMaxH3",
+            "image_path": "first.png",
+            "prompt": "same prompt",
+            "duration": 15,
+            "seed": 77,
+        },
+        "files": [{"param": "image_path", "filename": "first.png"}],
+    }
+
+    baseline = build_gpu2_minimax_h3_fl2va_workflow(task)
+    accelerated = build_gpu2_minimax_h3_fl2va_workflow(
+        task, enable_sage_attention=True
+    )
+
+    assert accelerated["7"] == {
+        "class_type": "PathchSageAttentionKJ",
+        "inputs": {
+            "model": ["6", 0],
+            "sage_attention": "auto",
+            "allow_compile": True,
+        },
+    }
+    assert accelerated["8"] == {
+        "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+        "inputs": {"model": ["7", 0]},
+    }
+    assert accelerated["9"]["inputs"]["model"] == ["8", 0]
+    assert accelerated["16"]["inputs"]["model"] == ["8", 0]
+    for node_id in ("3", "9", "17", "104"):
+        baseline_inputs = dict(baseline[node_id]["inputs"])
+        accelerated_inputs = dict(accelerated[node_id]["inputs"])
+        baseline_inputs.pop("model", None)
+        accelerated_inputs.pop("model", None)
+        assert accelerated_inputs == baseline_inputs
+
+
+def test_gpu2_minimax_h3_sageattention_preserves_data_payload_on_prepare():
+    task = {
+        "task_type": "i2v",
+        "data": {
+            "model": "MiniMaxH3",
+            "image_path": "first.png",
+            "prompt": "preserve this prompt",
+            "duration": 15,
+            "seed": 77,
+            "h3_sage_attention": True,
+        },
+        "files": [{"param": "image_path", "filename": "first.png"}],
+    }
+
+    prepared = prepare_gpu2_task(task)
+    accelerated = build_gpu2_minimax_h3_fl2va_workflow(
+        prepared, enable_sage_attention=True
+    )
+
+    assert gpu2_h3_sage_attention_requested(task) is True
+    assert prepared["params"]["prompt"] == "preserve this prompt"
+    assert prepared["params"]["duration"] == 15
+    assert prepared["params"]["seed"] == 77
+    assert accelerated["104"]["inputs"]["prompt"] == "preserve this prompt"
+    assert accelerated["15"]["inputs"]["noise_seed"] == 77
+    assert accelerated["104"]["inputs"]["length"] == gpu2_h3_length_frames(task)
+
+
+def test_gpu2_h3_sageattention_requires_marker_and_live_nodes(tmp_path, monkeypatch):
+    marker = tmp_path / "h3-sageattention-ready.json"
+    monkeypatch.setenv("MECHA_GPU_H3_SAGE_ATTENTION", "1")
+
+    ready, reason = gpu2_h3_sage_attention_ready(
+        marker_path=marker, object_info_reader=lambda: {}
+    )
+    assert ready is False
+    assert "marker unavailable" in reason
+
+    marker.write_text(json.dumps({
+        "verified": True,
+        "sageattention_version": "2.2.0",
+        "cuda_arch": "sm86",
+        "kjnodes_commit": GPU2_H3_KJNODES_COMMIT,
+    }), encoding="utf-8")
+    ready, reason = gpu2_h3_sage_attention_ready(
+        marker_path=marker,
+        object_info_reader=lambda: {
+            "PathchSageAttentionKJ": {},
+            "MiniMaxH3MemoryEfficientSageAttentionPatch": {},
+        },
+    )
+    assert (ready, reason) == (True, "verified")
 
 
 def test_gpu2_runtime_manager_stops_previous_profile_before_single_port_switch(tmp_path):

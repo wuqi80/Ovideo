@@ -204,6 +204,28 @@ describe('ComfyUI video duration contract', () => {
 });
 
 describe('MiniMax H3 local routing', () => {
+    it('forwards the experimental acceleration request only for MiniMax H3', () => {
+        expect(buildComfyUIVideoTaskPayload(
+            'i2v',
+            'first.png',
+            null,
+            'slow camera push',
+            'MiniMaxH3',
+            { h3_sage_attention: true },
+        )).toMatchObject({
+            model: 'MiniMaxH3',
+            h3_sage_attention: true,
+        });
+
+        expect(buildComfyUIVideoTaskPayload(
+            'i2v',
+            'first.png',
+            null,
+            'slow camera push',
+            'Wan2',
+            { h3_sage_attention: true },
+        )).not.toHaveProperty('h3_sage_attention');
+    });
     it('preserves the capability-selected GPU2 agent when submitting local H3 tasks', async () => {
         localStorage.setItem('auth_token', 'test-token');
         const fetchSpy = vi.spyOn(globalThis, 'fetch')

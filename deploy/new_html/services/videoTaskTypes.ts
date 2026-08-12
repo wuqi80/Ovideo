@@ -43,6 +43,8 @@ export interface TaskGroup {
   minimaxParams?: MiniMaxVideoParams;
   /** Parameters declared by /api/video/capabilities for the selected model. */
   videoParams?: Record<string, string | number | boolean>;
+  /** Opt-in request for the verified MiniMax H3 SageAttention workflow. */
+  h3SageAttention?: boolean;
   mergedFrom?: MergedCardSnapshot[];
 }
 
@@ -54,6 +56,7 @@ export interface MergedCardSnapshot {
   shotType?: ShotType;
   duration?: number;
   durationUserOverride?: boolean;
+  h3SageAttention?: boolean;
   mediaInputs?: SeedanceMediaInput[];
   seedanceParams?: SeedanceParams;
   dashScopeParams?: DashScopeVideoParams;

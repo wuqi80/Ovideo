@@ -70,6 +70,12 @@ GPU2_H3_FPS = 24
 GPU2_H3_DEFAULT_DURATION_SECONDS = 5.0
 GPU2_H3_MIN_DURATION_SECONDS = 4.0
 GPU2_H3_MAX_DURATION_SECONDS = 15.0
+GPU2_H3_SAGE_NODE_TYPES = {
+    "PathchSageAttentionKJ",
+    "MiniMaxH3MemoryEfficientSageAttentionPatch",
+}
+GPU2_H3_KJNODES_COMMIT = "6ab7e8130e449ed2c0037589bcf84146ceb7fc9c"
+GPU2_H3_SAGE_READY_MARKER = ROOT / "config" / "h3-sageattention-ready.json"
 
 COMFYUI_RECOVERY_FAILURE_THRESHOLD = 10
 COMFYUI_RECOVERY_COOLDOWN_SECONDS = 5 * 60
@@ -122,6 +128,55 @@ def gpu2_agent_maintenance_enabled() -> bool:
     return str(os.environ.get("MECHA_GPU_AGENT_MAINTENANCE", "1")).strip().lower() not in {
         "0", "false", "no", "off",
     }
+
+
+def gpu2_h3_sage_attention_allowed() -> bool:
+    return str(os.environ.get("MECHA_GPU_H3_SAGE_ATTENTION", "0")).strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def gpu2_h3_sage_attention_requested(task: Dict[str, Any]) -> bool:
+    value = _gpu2_task_params(task).get("h3_sage_attention", False)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def gpu2_h3_sage_attention_ready(
+    *,
+    marker_path: Path = GPU2_H3_SAGE_READY_MARKER,
+    object_info_reader: Callable[[], Dict[str, Any]] | None = None,
+) -> tuple[bool, str]:
+    """Require an offline verification marker plus live ComfyUI node discovery."""
+    if not gpu2_h3_sage_attention_allowed():
+        return False, "disabled"
+    try:
+        marker = json.loads(Path(marker_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        return False, f"verification marker unavailable: {exc}"
+    if marker.get("verified") is not True:
+        return False, "verification marker is not approved"
+    if str(marker.get("sageattention_version") or "") != "2.2.0":
+        return False, "verified SageAttention version is not 2.2.0"
+    if str(marker.get("cuda_arch") or "") != "sm86":
+        return False, "verified CUDA architecture is not RTX 3060 sm86"
+    if str(marker.get("kjnodes_commit") or "") != GPU2_H3_KJNODES_COMMIT:
+        return False, "verified KJNodes commit does not match the reviewed release"
+    try:
+        if object_info_reader is None:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{GPU2_H3_PORT}/object_info", timeout=5
+            ) as response:
+                object_info = json.loads(response.read().decode("utf-8"))
+        else:
+            object_info = object_info_reader()
+    except Exception as exc:
+        return False, f"ComfyUI node discovery failed: {exc}"
+    missing = sorted(GPU2_H3_SAGE_NODE_TYPES - set(object_info or {}))
+    if missing:
+        return False, f"required acceleration nodes are missing: {', '.join(missing)}"
+    return True, "verified"
 
 
 def _tcp_port_is_listening(port: int) -> bool:
@@ -1115,7 +1170,9 @@ def gpu2_h3_length_frames(task: Dict[str, Any]) -> int:
     return int(requested + (5 - (requested % 17)) % 17)
 
 
-def build_gpu2_minimax_h3_fl2va_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
+def build_gpu2_minimax_h3_fl2va_workflow(
+    task: Dict[str, Any], *, enable_sage_attention: bool = False
+) -> Dict[str, Any]:
     """Build the MiniMax H3 FL2VA graph for the Agent-switched local runtime."""
     params = _gpu2_task_params(task)
     image_names = _gpu2_input_image_names(task)
@@ -1238,6 +1295,21 @@ def build_gpu2_minimax_h3_fl2va_workflow(task: Dict[str, Any]) -> Dict[str, Any]
         }
         workflow["104"]["inputs"]["last_frame"] = ["4", 0]
         workflow["92"]["inputs"]["filename_prefix"] = "MECHA_GPU2_minimax_h3_fl2va"
+    if enable_sage_attention:
+        workflow["7"] = {
+            "class_type": "PathchSageAttentionKJ",
+            "inputs": {
+                "model": ["6", 0],
+                "sage_attention": "auto",
+                "allow_compile": True,
+            },
+        }
+        workflow["8"] = {
+            "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+            "inputs": {"model": ["7", 0]},
+        }
+        workflow["9"]["inputs"]["model"] = ["8", 0]
+        workflow["16"]["inputs"]["model"] = ["8", 0]
     return workflow
 
 
@@ -1713,7 +1785,8 @@ def prepare_gpu2_task(task: Dict[str, Any]) -> Dict[str, Any]:
         prepared["workflow_name"] = "gpu2_minimax_h3_fl2va"
         params = prepared.get("params")
         if not isinstance(params, dict):
-            params = {}
+            source_data = prepared.get("data")
+            params = dict(source_data) if isinstance(source_data, dict) else {}
             prepared["params"] = params
         params["preferred_comfyui_port"] = GPU2_H3_PORT
         params["strict_preferred_comfyui_port"] = True
@@ -1811,6 +1884,10 @@ def main() -> None:
             return super().poll()
 
         def execute_comfyui_task(self, task):
+            acceleration_requested = (
+                is_gpu2_h3_task(task)
+                and gpu2_h3_sage_attention_requested(task)
+            )
             prepared = prepare_gpu2_task(task)
             params = prepared.get("params") or {}
             profile = params.get("gpu2_runtime_profile") or gpu2_runtime_profile(prepared)
@@ -1830,6 +1907,20 @@ def main() -> None:
             models_released = False
             try:
                 runtime_manager.ensure(profile)
+                if acceleration_requested:
+                    acceleration_ready, acceleration_reason = gpu2_h3_sage_attention_ready()
+                    if acceleration_ready:
+                        prepared["workflow_json"] = build_gpu2_minimax_h3_fl2va_workflow(
+                            prepared, enable_sage_attention=True
+                        )
+                        prepared["workflow_name"] = "gpu2_minimax_h3_fl2va_sageattention"
+                    else:
+                        print(
+                            "[MECHA] H3 SageAttention requested but not verified; using baseline: "
+                            f"{acceleration_reason}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
                 runtime_manager.mark_models_loaded()
                 result = super().execute_comfyui_task(prepared)
                 task_status = str(result.get("status") or "completed")

@@ -1682,6 +1682,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             duration: groupA.duration,
             durationUserOverride: groupA.durationUserOverride,
             shotType: groupA.shotType,
+            h3SageAttention: groupA.h3SageAttention,
         };
         
         setTaskGroups(prev => {
@@ -1703,8 +1704,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const group = taskGroups[index];
         if (group.ids.length !== 2) return;
         
-        const newA: TaskGroup = { uuid: generateUUID(), ids: [group.ids[0]], model: group.model };
-        const newB: TaskGroup = { uuid: generateUUID(), ids: [group.ids[1]], model: group.model };
+        const newA: TaskGroup = { uuid: generateUUID(), ids: [group.ids[0]], model: group.model, h3SageAttention: group.h3SageAttention };
+        const newB: TaskGroup = { uuid: generateUUID(), ids: [group.ids[1]], model: group.model, h3SageAttention: group.h3SageAttention };
         
         setTaskGroups(prev => {
             const next = [...prev];
@@ -1889,6 +1890,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 shotType: g.shotType,
                 duration: getGroupMergeDuration(g),
                 durationUserOverride: g.durationUserOverride,
+                h3SageAttention: g.h3SageAttention,
                 prompt: dash?.prompt || seed?.prompt || getEffectiveGroupPrompt(g),
                 mediaInputs,
                 seedanceParams: seed,
@@ -2024,6 +2026,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             shotType: c.shotType,
             duration: c.duration,
             durationUserOverride: c.durationUserOverride,
+            h3SageAttention: c.h3SageAttention,
         }));
 
         setSeedanceParamsByUuid(prev => {
@@ -2099,6 +2102,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 shotType: first.shotType,
                 duration,
                 durationUserOverride: range.length > 1 ? true : first.durationUserOverride,
+                h3SageAttention: first.h3SageAttention,
                 mergedFrom: range.length > 1 ? range.map(snapshot => ({ ...snapshot })) : undefined,
             };
             return {
@@ -2714,6 +2718,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     minimax_model: minimaxParams?.model,
                     minimax_resolution: minimaxParams?.resolution,
                     minimax_prompt_optimizer: minimaxParams?.promptOptimizer,
+                    h3_sage_attention: group.model === 'MiniMaxH3' && group.h3SageAttention === true,
                 }
             );
             
@@ -3735,6 +3740,22 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             </option>
                         ))}
                     </select>
+                    {group.model === 'MiniMaxH3' && (
+                        <label
+                            className="flex items-center gap-1 text-[9px] text-n500 cursor-pointer"
+                            title="实验功能：可能令相同 Seed 的结果产生细微差异；服务端校验未通过时自动使用标准模式"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={group.h3SageAttention === true}
+                                onChange={(event) => patchTaskGroup(group.uuid, {
+                                    h3SageAttention: event.target.checked,
+                                })}
+                                className="h-3 w-3 accent-primary"
+                            />
+                            加速（实验）
+                        </label>
+                    )}
                 </div>
                 
                 {/* 提示词 + (Seedance only) 媒体徽章 + 详情按钮 */}
@@ -3960,6 +3981,22 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 </option>
                             ))}
                         </select>
+                        {group.model === 'MiniMaxH3' && (
+                            <label
+                                className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary-light px-1.5 py-0.5 text-[10px] text-primary cursor-pointer"
+                                title="实验功能：可能令相同 Seed 的结果产生细微差异；服务端校验未通过时自动使用标准模式"
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={group.h3SageAttention === true}
+                                    onChange={(event) => patchTaskGroup(group.uuid, {
+                                        h3SageAttention: event.target.checked,
+                                    })}
+                                    className="h-3 w-3 accent-primary"
+                                />
+                                Sage 加速
+                            </label>
+                        )}
                         {activeVideoVoiceReference && (
                             <span
                                 className="text-[10px] px-1.5 py-0.5 rounded border border-success/40 bg-success/10 text-success whitespace-nowrap"

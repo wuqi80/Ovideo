@@ -611,6 +611,11 @@ class ComfyUIAgent:
                 ("windows_gpu_h3_smoke.py",),
             ),
             (
+                "windows_gpu_h3_sage_verify.py",
+                scripts_dir / "windows_gpu_h3_sage_verify.py",
+                ("REQUIRED_SAGE_VERSION", "inference_executed"),
+            ),
+            (
                 "windows_gpu_start_h3_comfyui.cmd",
                 scripts_dir / "windows_gpu_start_h3_comfyui.cmd",
                 ("ComfyUI-H3", "MECHA_COMFYUI_PORT"),
