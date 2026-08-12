@@ -32,6 +32,7 @@ from scripts.windows_gpu_agent_runner import (
     gpu2_infinitetalk_total_frames,
     gpu2_h3_duration_seconds,
     gpu2_h3_length_frames,
+    gpu2_agent_maintenance_enabled,
     gpu2_wan_chunk_frame_counts,
     gpu2_wan_duration_seconds,
     gpu2_wan_total_frames,
@@ -44,6 +45,14 @@ from scripts.windows_gpu_agent_runner import (
     prepare_gpu2_task,
     tune_gpu2_qwen_workflow,
 )
+
+
+def test_gpu2_agent_maintenance_gate_defaults_closed(monkeypatch):
+    monkeypatch.delenv("MECHA_GPU_AGENT_MAINTENANCE", raising=False)
+    assert gpu2_agent_maintenance_enabled() is True
+
+    monkeypatch.setenv("MECHA_GPU_AGENT_MAINTENANCE", "0")
+    assert gpu2_agent_maintenance_enabled() is False
 
 
 def test_gpu2_port_recovery_waits_for_sustained_outage_and_respects_cooldown(tmp_path):

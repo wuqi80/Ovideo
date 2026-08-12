@@ -6,9 +6,12 @@ throughput.
 
 ## Activation boundary
 
-- Keep `MECHA_LOCAL_GPU_MAINTENANCE=1` while DFS is replaying, rebuilding its
+- `MECHA_LOCAL_GPU_MAINTENANCE` defaults to `1`.  Keep it enabled while DFS is replaying, rebuilding its
   index, degraded, or awaiting acceptance.  Local ComfyUI submissions fail with
   a maintenance response; external API providers remain available.
+- Keep the host-side `MECHA_GPU_AGENT_MAINTENANCE=1` at the same time.  This
+  second gate also defaults closed and prevents the Agent from claiming old queued
+  work even if the backend queue already contains tasks.
 - Deploying these files does not authorize starting ComfyUI, Agent, Windows,
   VMware, or DFS.  Production synchronization and activation require separate
   explicit approvals.
@@ -62,6 +65,7 @@ Environment overrides exist for controlled future tuning:
 
 ```text
 MECHA_GPU_TELEMETRY_DIR
+MECHA_GPU_AGENT_MAINTENANCE
 MECHA_GPU_MIN_FREE_FOR_LOAD_GIB
 MECHA_GPU_PAUSE_FREE_GIB
 MECHA_GPU_UNLOAD_FREE_GIB
@@ -82,3 +86,28 @@ Do not loosen these values from production observations alone.  Review at least
 several weeks of task summaries, confirm no sustained paging and no DFS health
 impact, then obtain explicit approval before enabling concurrency or lowering
 reserves.
+
+## Production activation and rollback
+
+Activation requires a separate approval after DFS acceptance.  Use this order:
+
+1. Keep both maintenance gates enabled and stage the release files without
+   restarting Agent or ComfyUI.
+2. Verify deployed file hashes against the release commit.
+3. Confirm the fixed 64 GiB DFS VM, current-boot readiness marker, strict DFS
+   health acceptance, host memory reserve, and absence of new disk/system
+   errors.  A listening port alone is not acceptance evidence.
+4. Start Agent only with its maintenance gate still closed.  Verify its
+   heartbeat reports maintenance, healthy telemetry persistence, and no task
+   claim or model load.
+5. Explicitly disable the backend maintenance gate and host Agent maintenance
+   gate as one controlled change.  Permit one ordinary production task, then
+   verify queue state, task result, model release, RAM/commit/VRAM telemetry,
+   and DFS health before allowing the next task.
+6. Keep concurrency at one until several weeks of bounded telemetry have been
+   reviewed and a separate change is approved.
+
+Rollback is fail closed: re-enable both maintenance gates first, stop only the
+Agent-owned local runtime if it is active, and restore the previous release
+files.  Never stop or reconfigure DFS, VMware, Windows, pagefiles, disks, or
+unrelated processes as part of GPU rollback.

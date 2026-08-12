@@ -49,7 +49,7 @@ def _runtime_profile(request: GenerateRequest) -> str:
 
 
 def _local_gpu_maintenance() -> dict[str, Any]:
-    enabled = str(os.environ.get("MECHA_LOCAL_GPU_MAINTENANCE", "0")).strip().lower() in {
+    enabled = str(os.environ.get("MECHA_LOCAL_GPU_MAINTENANCE", "1")).strip().lower() in {
         "1", "true", "yes", "on",
     }
     message = str(

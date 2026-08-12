@@ -117,6 +117,13 @@ GIB = 1024 ** 3
 sys.path.insert(0, str(AGENT_DIR))
 
 
+def gpu2_agent_maintenance_enabled() -> bool:
+    """Fail closed unless production activation explicitly enables task claims."""
+    return str(os.environ.get("MECHA_GPU_AGENT_MAINTENANCE", "1")).strip().lower() not in {
+        "0", "false", "no", "off",
+    }
+
+
 def _tcp_port_is_listening(port: int) -> bool:
     try:
         with socket.create_connection(("127.0.0.1", int(port)), timeout=1):
@@ -1771,12 +1778,20 @@ def main() -> None:
         def _get_system_info(self):
             info = super()._get_system_info()
             info["resource_guard"] = resource_controller.status()
+            info["local_gpu_maintenance"] = gpu2_agent_maintenance_enabled()
             return info
 
         def heartbeat(self):
             return super().heartbeat()
 
         def poll(self):
+            if gpu2_agent_maintenance_enabled():
+                print(
+                    "[MECHA] Local GPU maintenance gate is closed; no queued task will be claimed",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return None
             if not resource_controller.ready_for_new_task():
                 print(
                     "[MECHA] New task claim blocked by host resource guard: "

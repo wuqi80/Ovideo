@@ -94,3 +94,11 @@ def test_h3_install_does_not_restart_or_start_a_runtime_by_default():
     invocation_tail = setup.rsplit("Ensure-H3Python", 1)[-1]
     assert "Test-H3Readiness" not in invocation_tail
     assert '"restart_agent": bool(data.get("restart_agent", False))' in agent
+
+
+def test_windows_gpu_install_defaults_agent_task_claims_to_maintenance():
+    installer = (
+        DEPLOY_DIR / "scripts" / "windows_gpu_node_install.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert "set MECHA_GPU_AGENT_MAINTENANCE=1" in installer

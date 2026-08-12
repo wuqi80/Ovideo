@@ -47,6 +47,7 @@ def test_windows_gpu_agent_start_defaults_to_public_backend_and_both_gpu2_ports(
     assert 'MECHA_SERVER_URL=https://spti.ai' in launcher
     assert 'MECHA_COMFYUI_PORTS=8188' in launcher
     assert 'set MECHA_COMFYUI_PORTS=8188' in launcher
+    assert 'MECHA_GPU_AGENT_MAINTENANCE=1' in launcher
 
 
 def test_windows_gpu_dfs_gate_uses_only_the_fixed_http_readiness_contract():

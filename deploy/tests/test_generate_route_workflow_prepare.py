@@ -5,9 +5,19 @@ import pytest
 from fastapi import HTTPException
 
 import routers.tasks as tasks_router_module
-from routers.tasks import _gpu_queue_snapshot, _should_prepare_workflow, create_task_router
+from routers.tasks import _gpu_queue_snapshot, _local_gpu_maintenance, _should_prepare_workflow, create_task_router
 from schemas.generation import GenerateRequest
 from services.generation_access_service import GenerationAccessDenied
+
+
+@pytest.fixture(autouse=True)
+def _explicitly_enable_local_gpu_for_normal_route_tests(monkeypatch):
+    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE", "0")
+
+
+def test_local_gpu_maintenance_defaults_closed(monkeypatch):
+    monkeypatch.delenv("MECHA_LOCAL_GPU_MAINTENANCE", raising=False)
+    assert _local_gpu_maintenance()["enabled"] is True
 
 
 @pytest.mark.parametrize("task_type", ["i2v", "morph", "upscale", "upscale_hd"])
