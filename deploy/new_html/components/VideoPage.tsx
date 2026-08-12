@@ -1976,6 +1976,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 durationUserOverride: true,
                 mergedFrom,
                 h3LongVideo: mergedFrom.length <= 8 ? current.h3LongVideo : false,
+                h3Upscale720p: current.h3Upscale720p,
             });
             return next;
         });
@@ -2748,6 +2749,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     h3_sage_attention: group.model === 'MiniMaxH3' && group.h3SageAttention === true,
                     h3_long_video: group.model === 'MiniMaxH3' && group.h3LongVideo === true,
                     h3_long_video_segments: h3LongVideoSegments,
+                    h3_upscale_720p: group.model === 'MiniMaxH3' && group.h3Upscale720p === true,
                 }
             );
             
@@ -3800,6 +3802,20 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             />
                             H3 长视频
                         </label>
+                        <label
+                            className="flex items-center gap-1 text-[9px] text-n500 cursor-pointer"
+                            title="H3 生成完成并释放模型后，串行加载 SeedVR2，输出 1280×720"
+                        >
+                            <input
+                                type="checkbox"
+                                checked={group.h3Upscale720p === true}
+                                onChange={(event) => patchTaskGroup(group.uuid, {
+                                    h3Upscale720p: event.target.checked,
+                                })}
+                                className="h-3 w-3 accent-primary"
+                            />
+                            720P 放大
+                        </label>
                         </>
                     )}
                 </div>
@@ -4057,6 +4073,20 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                     className="h-3 w-3 accent-primary"
                                 />
                                 H3 长视频
+                            </label>
+                            <label
+                                className="inline-flex items-center gap-1 rounded border border-success/30 bg-success/10 px-1.5 py-0.5 text-[10px] text-success cursor-pointer"
+                                title="H3 生成完成并释放模型后，串行加载 SeedVR2，输出 1280×720"
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={group.h3Upscale720p === true}
+                                    onChange={(event) => patchTaskGroup(group.uuid, {
+                                        h3Upscale720p: event.target.checked,
+                                    })}
+                                    className="h-3 w-3 accent-primary"
+                                />
+                                720P 放大
                             </label>
                             </>
                         )}

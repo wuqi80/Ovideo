@@ -174,6 +174,13 @@ def gpu2_h3_long_video_requested(task: Dict[str, Any]) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def gpu2_h3_upscale_720p_requested(task: Dict[str, Any]) -> bool:
+    value = _gpu2_task_params(task).get("h3_upscale_720p", False)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def gpu2_h3_long_video_ready(
     *,
     marker_path: Path = GPU2_H3_LONG_READY_MARKER,
@@ -1604,6 +1611,78 @@ def build_gpu2_minimax_h3_long_video_workflow(
     return workflow
 
 
+def _gpu2_output_video_path(result: Dict[str, Any]) -> str:
+    for value in result.get("output_files") or []:
+        path = Path(str(value or ""))
+        if path.suffix.lower() in {".mp4", ".mov", ".mkv", ".webm", ".avi"} and path.is_file():
+            return str(path)
+    raise RuntimeError("H3 completed without a local video output for 720P upscaling")
+
+
+def _gpu2_upload_local_video(agent: Any, port: int, local_path: str) -> str:
+    """Stage a local generated video in ComfyUI input without reloading any model."""
+    path = Path(local_path)
+    if not path.is_file():
+        raise RuntimeError(f"H3 720P source video is unavailable: {path}")
+    response = agent._upload_to_comfyui(port, str(path))
+    if not response:
+        raise RuntimeError("Failed to upload the H3 result for 720P upscaling")
+    return str(response)
+
+
+def execute_gpu2_h3_post_upscale_720p(
+    *,
+    agent: Any,
+    runtime_manager: Any,
+    resource_controller: Any,
+    execute_workflow: Callable[[Dict[str, Any]], Dict[str, Any]],
+    generation_result: Dict[str, Any],
+    params: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Run SeedVR2 only after H3 unload and the host guard both pass."""
+    source_video = _gpu2_output_video_path(generation_result)
+    if not runtime_manager.release_models():
+        raise RuntimeError(
+            "H3 model did not fully unload: " + runtime_manager.model_gate.last_error
+        )
+    if not resource_controller.ready_for_new_task():
+        raise RuntimeError(
+            "host resource guard rejected the upscale: " + resource_controller.last_error
+        )
+    runtime_manager.ensure("wan")
+    uploaded_video = _gpu2_upload_local_video(agent, GPU2_COMFYUI_PORT, source_video)
+    seed = params.get("seed") or params.get("seed_0") or 42
+    upscale_params = {
+        "video_filename": uploaded_video,
+        "resolution": "720P",
+        "seed": seed,
+        "preferred_comfyui_port": GPU2_COMFYUI_PORT,
+        "strict_preferred_comfyui_port": True,
+        "gpu2_runtime_profile": "wan",
+    }
+    upscale_task = {
+        "task_type": "upscale",
+        "params": upscale_params,
+        "workflow_json": build_gpu2_video_upscale_workflow({
+            "task_type": "upscale",
+            "params": upscale_params,
+        }),
+        "workflow_name": "gpu2_h3_post_upscale_720p",
+    }
+    runtime_manager.mark_models_loaded()
+    upscale_result = execute_workflow(upscale_task)
+    if str(upscale_result.get("status") or "completed") != "completed":
+        raise RuntimeError(str(upscale_result.get("error") or "unknown upscale error"))
+    payload = dict(upscale_result.get("result_payload") or {})
+    payload.update({
+        "h3_generation_completed": True,
+        "h3_upscale_720p_completed": True,
+        "upscale_resolution": "1280x720",
+    })
+    upscale_result["result_payload"] = payload
+    return upscale_result
+
+
 def is_gpu2_wan_i2v_task(task: Dict[str, Any]) -> bool:
     task_type = str(task.get("task_type") or "").strip().lower()
     workflow_name = _gpu2_workflow_name(task)
@@ -2183,6 +2262,10 @@ def main() -> None:
                 is_gpu2_h3_task(task)
                 and gpu2_h3_long_video_requested(task)
             )
+            upscale_720p_requested = (
+                is_gpu2_h3_task(task)
+                and gpu2_h3_upscale_720p_requested(task)
+            )
             prepared = prepare_gpu2_task(task)
             params = prepared.get("params") or {}
             profile = params.get("gpu2_runtime_profile") or gpu2_runtime_profile(prepared)
@@ -2235,6 +2318,30 @@ def main() -> None:
                 runtime_manager.mark_models_loaded()
                 result = super().execute_comfyui_task(prepared)
                 task_status = str(result.get("status") or "completed")
+                if upscale_720p_requested and task_status == "completed":
+                    generation_result = result
+                    try:
+                        base_execute = super().execute_comfyui_task
+                        result = execute_gpu2_h3_post_upscale_720p(
+                            agent=self,
+                            runtime_manager=runtime_manager,
+                            resource_controller=resource_controller,
+                            execute_workflow=base_execute,
+                            generation_result=generation_result,
+                            params=params,
+                        )
+                        task_status = "completed"
+                    except Exception as exc:
+                        task_status = "failed"
+                        result = {
+                            "status": "failed",
+                            "error": "H3 video completed but 720P upscale failed: " + str(exc),
+                            "output_files": generation_result.get("output_files") or [],
+                            "result_payload": {
+                                "h3_generation_completed": True,
+                                "h3_upscale_720p_completed": False,
+                            },
+                        }
                 return result
             finally:
                 models_released = runtime_manager.release_models()

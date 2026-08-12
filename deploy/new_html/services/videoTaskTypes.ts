@@ -47,6 +47,8 @@ export interface TaskGroup {
   h3SageAttention?: boolean;
   /** Opt-in request for the guarded MiniMax H3 Director multi-segment workflow. */
   h3LongVideo?: boolean;
+  /** After H3 unloads, serially upscale its result to a 720P delivery file. */
+  h3Upscale720p?: boolean;
   mergedFrom?: MergedCardSnapshot[];
 }
 

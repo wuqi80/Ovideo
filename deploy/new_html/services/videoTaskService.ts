@@ -43,6 +43,8 @@ export interface VideoGenerationOptions {
     /** Separate guarded Director mode; it never changes the normal H3 workflow. */
     h3_long_video?: boolean;
     h3_long_video_segments?: H3LongVideoSegment[];
+    /** Serial post-process: unload H3 before loading SeedVR2 and exporting 720P. */
+    h3_upscale_720p?: boolean;
 }
 
 export function buildComfyUIVideoTaskPayload(
@@ -68,6 +70,7 @@ export function buildComfyUIVideoTaskPayload(
     }
     if (model === 'MiniMaxH3') {
         payload.h3_sage_attention = generationOptions?.h3_sage_attention === true;
+        payload.h3_upscale_720p = generationOptions?.h3_upscale_720p === true;
         if (generationOptions?.h3_long_video === true) {
             const segments = generationOptions.h3_long_video_segments || [];
             if (segments.length < 2) {

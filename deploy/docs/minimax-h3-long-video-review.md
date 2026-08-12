@@ -41,7 +41,7 @@ The larger host memory materially improves CPU-offload headroom and reduces the 
 - 1024×576 is a possible intermediate acceptance tier, about 1.85 times the baseline;
 - an H3 canvas near 720p must use dimensions divisible by 32, so 1280×704 is the aligned candidate rather than 1280×720; it is about 2.82 times the baseline pixel count.
 
-Native 1280×704 is not enabled by this change. The production-safe 720p delivery route is a serialized two-stage job: generate at an accepted H3 resolution, fully unload H3, then load the upscaler and export 1280×720. Upscaling can improve edge presentation and delivery resolution but cannot recreate detail absent from the source and can introduce artifacts. A native high-resolution tier remains experimental until an isolated, bounded A/B run records peak VRAM, host private bytes, commit headroom, duration, and visual quality without involving DFS.
+Native 1280×704 is not enabled by this change. The optional **720P 放大** switch uses a serialized two-stage job: generate at the accepted H3 resolution, fully unload H3, pass the host resource gate again, then load the low-VRAM SeedVR2 workflow and export 1280×720. The backend task does not complete until the second stage finishes, so it remains durable if the browser closes. Upscaling can improve edge presentation and delivery resolution but cannot recreate detail absent from the source and can introduce artifacts. A native high-resolution tier remains experimental until an isolated, bounded A/B run records peak VRAM, host private bytes, commit headroom, duration, and visual quality without involving DFS.
 
 ## Activation boundary
 

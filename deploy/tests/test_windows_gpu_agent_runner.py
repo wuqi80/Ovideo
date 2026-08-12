@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from scripts.windows_gpu_agent_runner import (
     COMFYUI_RECOVERY_COOLDOWN_SECONDS,
     COMFYUI_RECOVERY_FAILURE_THRESHOLD,
@@ -41,6 +43,7 @@ from scripts.windows_gpu_agent_runner import (
     gpu2_h3_sage_attention_requested,
     gpu2_h3_long_video_ready,
     gpu2_h3_long_video_requested,
+    gpu2_h3_upscale_720p_requested,
     gpu2_agent_maintenance_enabled,
     gpu2_wan_chunk_frame_counts,
     gpu2_wan_duration_seconds,
@@ -51,6 +54,7 @@ from scripts.windows_gpu_agent_runner import (
     is_gpu2_wan_i2v_task,
     normalize_gpu2_image_dimensions,
     normalize_gpu2_video_resolution,
+    execute_gpu2_h3_post_upscale_720p,
     prepare_gpu2_task,
     tune_gpu2_qwen_workflow,
 )
@@ -782,6 +786,93 @@ def test_gpu2_video_resolution_accepts_frontend_labels_and_caps_large_targets():
     assert normalize_gpu2_video_resolution("2K") == 1080
     assert normalize_gpu2_video_resolution("4K") == 1080
     assert normalize_gpu2_video_resolution("unexpected") == 720
+
+
+def test_gpu2_h3_720p_request_is_explicit_only():
+    assert gpu2_h3_upscale_720p_requested({"params": {"h3_upscale_720p": True}}) is True
+    assert gpu2_h3_upscale_720p_requested({"params": {}}) is False
+
+
+def test_gpu2_h3_720p_postprocess_unloads_before_upscaler(tmp_path):
+    source = tmp_path / "h3.mp4"
+    source.write_bytes(b"video")
+    events = []
+
+    class _Gate:
+        last_error = ""
+
+    class _Runtime:
+        model_gate = _Gate()
+
+        def release_models(self):
+            events.append("release_h3")
+            return True
+
+        def ensure(self, profile):
+            events.append(f"ensure_{profile}")
+
+        def mark_models_loaded(self):
+            events.append("mark_seedvr_loaded")
+
+    class _Resources:
+        last_error = ""
+
+        def ready_for_new_task(self):
+            events.append("resource_gate")
+            return True
+
+    class _Agent:
+        def _upload_to_comfyui(self, port, path):
+            events.append(f"upload_{port}")
+            assert path == str(source)
+            return "h3.mp4"
+
+    def _execute(task):
+        events.append("execute_upscale")
+        assert task["workflow_name"] == "gpu2_h3_post_upscale_720p"
+        assert task["workflow_json"]["4"]["inputs"]["resolution"] == 720
+        return {"status": "completed", "output_files": ["upscaled.mp4"]}
+
+    result = execute_gpu2_h3_post_upscale_720p(
+        agent=_Agent(),
+        runtime_manager=_Runtime(),
+        resource_controller=_Resources(),
+        execute_workflow=_execute,
+        generation_result={"status": "completed", "output_files": [str(source)]},
+        params={"seed": 123},
+    )
+
+    assert events == [
+        "release_h3",
+        "resource_gate",
+        "ensure_wan",
+        f"upload_{GPU2_COMFYUI_PORT}",
+        "mark_seedvr_loaded",
+        "execute_upscale",
+    ]
+    assert result["result_payload"]["h3_upscale_720p_completed"] is True
+    assert result["result_payload"]["upscale_resolution"] == "1280x720"
+
+
+def test_gpu2_h3_720p_postprocess_fails_closed_when_h3_does_not_unload(tmp_path):
+    source = tmp_path / "h3.mp4"
+    source.write_bytes(b"video")
+
+    class _Runtime:
+        model_gate = type("Gate", (), {"last_error": "still loaded"})()
+
+        def release_models(self):
+            return False
+
+    with pytest.raises(RuntimeError, match="did not fully unload"):
+        execute_gpu2_h3_post_upscale_720p(
+            agent=object(),
+            runtime_manager=_Runtime(),
+            resource_controller=object(),
+            execute_workflow=lambda _task: {},
+            generation_result={"status": "completed", "output_files": [str(source)]},
+            params={},
+        )
 
 
 def test_gpu2_qwen_compatibility_covers_frontend_image_workflows():

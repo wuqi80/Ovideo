@@ -226,6 +226,28 @@ describe('MiniMax H3 local routing', () => {
             { h3_sage_attention: true },
         )).not.toHaveProperty('h3_sage_attention');
     });
+    it('forwards the serial 720P post-upscale switch only for MiniMax H3', () => {
+        expect(buildComfyUIVideoTaskPayload(
+            'i2v',
+            'first.png',
+            null,
+            'slow camera push',
+            'MiniMaxH3',
+            { h3_upscale_720p: true },
+        )).toMatchObject({
+            model: 'MiniMaxH3',
+            h3_upscale_720p: true,
+        });
+
+        expect(buildComfyUIVideoTaskPayload(
+            'i2v',
+            'first.png',
+            null,
+            'slow camera push',
+            'Wan2',
+            { h3_upscale_720p: true },
+        )).not.toHaveProperty('h3_upscale_720p');
+    });
     it('keeps Director long video as a separate structured H3 option', () => {
         const segments = [
             { prompt: 'walk', duration: 5, image_path: 'first.png' },
