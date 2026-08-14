@@ -150,7 +150,7 @@ interface GenerationPageProps {
   episodeId?: string;
   materialLibrary: MaterialLibrary;
   onUpdateStoryboardItem: (shotId: string, updates: Partial<StoryboardItem> | ((item: StoryboardItem) => Partial<StoryboardItem>)) => void;
-  onSaveVersion: (name: string) => void;
+  onSaveVersion: (name: string) => Promise<void> | void;
   onRestoreVersion: (version: FileVersion) => void;
   onDeleteVersion: (versionId: string) => void;
   onForceSave: () => void;
@@ -471,6 +471,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const [showHistory, setShowHistory] = useState(false);
   const [isNamingVersion, setIsNamingVersion] = useState(false);
   const [versionName, setVersionName] = useState('');
+  const [isSavingVersion, setIsSavingVersion] = useState(false);
+  const [versionSaveError, setVersionSaveError] = useState<string | null>(null);
 
   // Image Preview State
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -2401,15 +2403,24 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
   // --- Version Control ---
   const handleSaveClick = () => {
+    setVersionSaveError(null);
     setIsNamingVersion(true);
     const count = selectedFile?.versions?.length || 0;
     setVersionName(`画面分镜存档 v${count + 1} - ${new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}`);
   };
 
-  const submitVersionSave = () => {
-    if(versionName.trim()) {
-        onSaveVersion(versionName);
-        setIsNamingVersion(false);
+  const submitVersionSave = async () => {
+    if (!versionName.trim() || isSavingVersion) return;
+    setIsSavingVersion(true);
+    setVersionSaveError(null);
+    try {
+      await onSaveVersion(versionName.trim());
+      setIsNamingVersion(false);
+      setShowHistory(true);
+    } catch (error) {
+      setVersionSaveError(error instanceof Error ? error.message : '存档保存失败，请稍后重试');
+    } finally {
+      setIsSavingVersion(false);
     }
   };
 
@@ -3460,13 +3471,21 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                     className="w-full bg-n0 border border-n40 rounded px-2 py-1.5 text-xs text-n800 mb-2 focus:outline-none focus:border-primary"
                     autoFocus
                     onKeyDown={(e) => {
-                        if (e.key === 'Enter') submitVersionSave();
+                        if (e.key === 'Enter') void submitVersionSave();
                         if (e.key === 'Escape') setIsNamingVersion(false);
                     }}
+                    disabled={isSavingVersion}
                 />
+                {versionSaveError && (
+                    <div className="mb-2 text-[11px] leading-4 text-danger" role="alert">
+                        {versionSaveError}
+                    </div>
+                )}
                 <div className="flex gap-2">
-                    <button onClick={() => setIsNamingVersion(false)} className="flex-1 py-1 bg-n0 text-n700 text-xs rounded hover:bg-n20">取消</button>
-                    <button onClick={submitVersionSave} className="flex-1 py-1 bg-primary text-white text-xs rounded hover:bg-primary-hover">确认保存</button>
+                    <button onClick={() => setIsNamingVersion(false)} disabled={isSavingVersion} className="flex-1 py-1 bg-n0 text-n700 text-xs rounded hover:bg-n20 disabled:opacity-50">取消</button>
+                    <button onClick={() => void submitVersionSave()} disabled={isSavingVersion || !versionName.trim()} className="flex-1 py-1 bg-primary text-white text-xs rounded hover:bg-primary-hover disabled:opacity-50">
+                        {isSavingVersion ? '保存中...' : '确认保存'}
+                    </button>
                 </div>
             </div>
         )}

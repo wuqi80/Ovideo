@@ -48,6 +48,7 @@ import {
   createStoryboardSnapshot,
   getVersionStoryboardSnapshots,
   mergeStoryboardSnapshots,
+  resolvePersistableStoryboardVersion,
 } from './utils/storyboardSnapshots';
 import {
   readScriptWorkspaceMode,
@@ -679,7 +680,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         setFiles(prev => {
           const next = prev.map(file => (
             file.id === selectedFileId
-              ? { ...file, versions: persistedSnapshots }
+              ? {
+                  ...file,
+                  versions: mergeStoryboardSnapshots(file.versions || [], persistedSnapshots),
+                }
               : file
           ));
           filesRef.current = next;
@@ -1310,10 +1314,41 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       throw new Error('当前没有可保存的镜头设计');
     }
 
-    const conversation = scriptConversations[fileId];
-    const targetVersion = options.version
-      || conversation?.versions.find(version => version.id === conversation.currentVersionId)
-      || conversation?.versions[conversation.versions.length - 1];
+    let conversation = scriptConversations[fileId];
+    let targetVersion = resolvePersistableStoryboardVersion(conversation, options.version);
+    if (!targetVersion && !fileId.startsWith('local_')) {
+      const cacheKey = `${propEpisodeId}:${fileId}`;
+      let request = conversationRequestsRef.current.get(cacheKey);
+      if (!request) {
+        request = getScriptConversation(propEpisodeId, fileId);
+        conversationRequestsRef.current.set(cacheKey, request);
+      }
+      try {
+        const remoteConversation = await request;
+        const latestFile = filesRef.current.find(item => item.id === fileId);
+        conversation = mergeScriptConversationWithLocalFile(latestFile, remoteConversation)
+          || remoteConversation;
+        loadedConversationKeysRef.current.add(cacheKey);
+        setScriptConversations(prev => ({ ...prev, [fileId]: conversation! }));
+        const persistedSnapshots = collectConversationStoryboardSnapshots(conversation);
+        setFiles(prev => {
+          const next = prev.map(item => item.id === fileId ? {
+            ...item,
+            versions: mergeStoryboardSnapshots(item.versions || [], persistedSnapshots),
+          } : item);
+          filesRef.current = next;
+          return next;
+        });
+        targetVersion = resolvePersistableStoryboardVersion(conversation, options.version);
+      } finally {
+        if (conversationRequestsRef.current.get(cacheKey) === request) {
+          conversationRequestsRef.current.delete(cacheKey);
+        }
+      }
+    }
+    if (!targetVersion || fileId.startsWith('local_')) {
+      throw new Error('剧本版本尚未完成服务器同步，暂时无法创建持久存档，请稍后重试');
+    }
     const timestamp = Date.now();
     const snapshot = createStoryboardSnapshot(file, {
       id: uuidv4(),
@@ -1323,18 +1358,19 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       scriptVersionId: targetVersion?.id,
     });
 
-    setFiles(prev => {
-      const next = prev.map(item => (
-        item.id === fileId
-          ? { ...item, versions: mergeStoryboardSnapshots(item.versions || [], [snapshot]) }
-          : item
-      ));
-      filesRef.current = next;
-      return next;
-    });
+    const applyLocalSnapshot = () => {
+      setFiles(prev => {
+        const next = prev.map(item => (
+          item.id === fileId
+            ? { ...item, versions: mergeStoryboardSnapshots(item.versions || [], [snapshot]) }
+            : item
+        ));
+        filesRef.current = next;
+        return next;
+      });
+    };
 
     const persistRemoteSnapshot = async () => {
-      if (!targetVersion || targetVersion.id.startsWith('legacy_') || fileId.startsWith('local_')) return;
       const snapshots = mergeStoryboardSnapshots(
         getVersionStoryboardSnapshots(targetVersion),
         [snapshot],
@@ -1357,6 +1393,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     };
 
     if (options.waitForRemote === false) {
+      applyLocalSnapshot();
       void persistRemoteSnapshot().catch(error => {
         console.warn('后台同步镜头设计存档失败:', error);
       });
@@ -1364,6 +1401,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     }
 
     await persistRemoteSnapshot();
+    applyLocalSnapshot();
     return snapshot;
   }, [propEpisodeId, scriptConversations]);
 
@@ -1371,7 +1409,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     await persistStoryboardSnapshot(id, {
       name: customName,
       source: 'manual',
-      waitForRemote: false,
     });
   }, [persistStoryboardSnapshot]);
 
