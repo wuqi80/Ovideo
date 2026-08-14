@@ -73,6 +73,10 @@ import {
   designOperationCreditParams,
   newDesignCreditUsageId,
 } from '../utils/designCredits';
+import {
+  getStoryboardGenerationModelOption,
+  STORYBOARD_GENERATION_MODEL_OPTIONS,
+} from '../utils/storyboardGenerationModels';
 
 const MattingModal = React.lazy(() => import('./MattingModal'));
 const ImageFusionModal = React.lazy(() => import('./ImageFusionModal'));
@@ -539,7 +543,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     defaultValue: 'nanobanana',
   });
   // ComfyUI 档位固定使用用户选择的 GPU 节点，默认 GPU1。
-  const COMFYUI_MODELS = React.useMemo(() => new Set<string>(['qwen', 'qwen_lora', 'qwenN', 'qwenN_lora', 'kontext']), []);
+  const COMFYUI_MODELS = React.useMemo(() => new Set<string>(
+    STORYBOARD_GENERATION_MODEL_OPTIONS
+      .filter(option => option.requiresCluster)
+      .map(option => option.value),
+  ), []);
   const [clusterNodes, setClusterNodes] = useState<ClusterNodeOption[]>([]);
   const [clusterNodesLoading, setClusterNodesLoading] = useState(false);
   const [clusterNodeMessage, setClusterNodeMessage] = useState('');
@@ -809,6 +817,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const selectedGenerationModel = selectedShot
       ? (shotModels[selectedShot.id] || globalModel)
       : globalModel;
+  const globalModelOption = getStoryboardGenerationModelOption(globalModel);
   const [selectedReferenceDimensions, setSelectedReferenceDimensions] = useState<SourceImageDimensions[]>([]);
   const [isLoadingReferenceDimensions, setIsLoadingReferenceDimensions] = useState(false);
   useEffect(() => {
@@ -2686,45 +2695,26 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                    </span>
                                  </div>
                                  <div className="flex shrink-0 items-center gap-1">
-                                   {/* Model Indicator */}
-                                   <button
-                                       type="button"
-                                       className="relative"
-                                       onClick={(e) => {
+                                   {/* Per-shot model selector */}
+                                   <select
+                                       value={shotModels[item.id] || globalModel}
+                                       onClick={(e) => e.stopPropagation()}
+                                       onChange={(e) => {
                                            e.stopPropagation();
-                                           const currentModel = shotModels[item.id] || globalModel;
-                                           const models: GenerationModel[] = ['nanobanana', 'qwen', 'qwen_lora', 'kontext', 'qwenN', 'qwenN_lora', 'gpt_image_vip', 'gpt_image_official'];
-                                           const currentIndex = models.indexOf(currentModel);
-                                           const nextModel = models[(currentIndex + 1) % models.length];
-                                           setShotModels(prev => ({ ...prev, [item.id]: nextModel }));
+                                           setShotModels(prev => ({
+                                             ...prev,
+                                             [item.id]: e.target.value as GenerationModel,
+                                           }));
                                        }}
-                                       title="点击切换模型"
+                                       disabled={isGenerating}
+                                       aria-label={`${shotLabel}生成模型`}
+                                       title={getStoryboardGenerationModelOption(shotModels[item.id] || globalModel).hint}
+                                       className="h-7 max-w-[132px] rounded border border-n40 bg-n0 px-1.5 text-[9px] font-medium text-n700 outline-none transition-colors hover:border-primary focus:border-primary disabled:bg-n20 disabled:text-n100"
                                    >
-                                     <span className={`inline-flex h-5 min-w-[36px] items-center justify-center rounded px-1.5 text-[8px] font-medium transition-colors ${
-                                         (shotModels[item.id] || globalModel) === 'nanobanana'
-                                             ? 'bg-y50 text-warning'
-                                             : (shotModels[item.id] || globalModel) === 'qwen'
-                                             ? 'bg-primary-light text-primary'
-                                             : (shotModels[item.id] || globalModel) === 'qwen_lora'
-                                             ? 'bg-g50 text-success'
-                                             : (shotModels[item.id] || globalModel) === 'qwenN'
-                                             ? 'bg-r50 text-danger'
-                                             : (shotModels[item.id] || globalModel) === 'gpt_image_vip'
-                                             ? 'bg-purple-50 text-purple-600'
-                                             : (shotModels[item.id] || globalModel) === 'gpt_image_official'
-                                             ? 'bg-rose-50 text-rose-600'
-                                             : 'bg-primary-light text-primary'
-                                     }`}>
-                                       {(shotModels[item.id] || globalModel) === 'nanobanana' ? '化神' :
-                                        (shotModels[item.id] || globalModel) === 'qwen' ? '练气一阶' :
-                                        (shotModels[item.id] || globalModel) === 'qwen_lora' ? '筑基一阶' :
-                                        (shotModels[item.id] || globalModel) === 'qwenN' ? 'K神' :
-                                        (shotModels[item.id] || globalModel) === 'qwenN_lora' ? '筑基二阶' :
-                                        (shotModels[item.id] || globalModel) === 'kontext' ? '练气二阶' :
-                                        (shotModels[item.id] || globalModel) === 'gpt_image_vip' ? '天劫一' :
-                                        (shotModels[item.id] || globalModel) === 'gpt_image_official' ? '天劫二' : '未知'}
-                                     </span>
-                                   </button>
+                                     {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
+                                       <option key={option.value} value={option.value}>{option.shortLabel}</option>
+                                     ))}
+                                   </select>
                                    {item.isConfigConfirmed && <CheckCircle2 className="h-3.5 w-3.5 text-success" />}
                                    {onDeleteStoryboardItem && (
                                      <button
@@ -2854,95 +2844,20 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         <Zap className="w-3.5 h-3.5 text-yellow-400" />
                         <span className="text-xs font-bold text-n700">默认生成模型</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                        <button
-                            onClick={() => setGlobalModel('qwen')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'qwen'
-                                    ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            练气一阶
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('qwen_lora')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'qwen_lora'
-                                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            筑基一阶
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('nanobanana')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'nanobanana'
-                                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            化神
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('kontext')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'kontext'
-                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            练气二阶
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('qwenN_lora')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'qwenN_lora'
-                                    ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            筑基二阶
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('qwenN')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'qwenN'
-                                    ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            K神
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('gpt_image_vip')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'gpt_image_vip'
-                                    ? 'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            天劫一阶
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('gpt_image_official')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'gpt_image_official'
-                                    ? 'bg-gradient-to-r from-rose-500 to-orange-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            天劫二阶
-                        </button>
+                    <select
+                        value={globalModel}
+                        onChange={(event) => setGlobalModel(event.target.value as GenerationModel)}
+                        disabled={isGenerating}
+                        aria-label="默认生成模型"
+                        className="h-10 w-full rounded border border-n40 bg-n0 px-3 text-xs font-medium text-n700 outline-none transition-colors hover:border-primary focus:border-primary disabled:bg-n20 disabled:text-n100"
+                    >
+                        {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                    </select>
+                    <div className="mt-2 rounded bg-n0 px-3 py-2 text-[10px] leading-4 text-n300">
+                        <strong className="mr-1 text-n700">{globalModelOption.shortLabel}</strong>
+                        {globalModelOption.hint}
                     </div>
                     {/* ComfyUI 档位走用户固定选择的 GPU Agent，默认 GPU1。 */}
                     {COMFYUI_MODELS.has(globalModel) && (
@@ -2996,16 +2911,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             </div>
                         </div>
                     )}
-                    <p className="text-[9px] text-n100 mt-2">
-                        {globalModel === 'nanobanana' && '化神境界 · 点击分镜列表中的模型标识可单独设置'}
-                        {globalModel === 'qwen' && '练气一阶 · 点击分镜列表中的模型标识可单独设置'}
-                        {globalModel === 'qwen_lora' && '筑基一阶境界 · 点击分镜列表中的模型标识可单独设置'}
-                        {globalModel === 'kontext' && '练气二阶 · 点击分镜列表中的模型标识可单独设置'}
-                        {globalModel === 'qwenN' && 'K神境界 · 点击分镜列表中的模型标识可单独设置'}
-                        {globalModel === 'qwenN_lora' && '筑基二阶境界 · 点击分镜列表中的模型标识可单独设置'}
-                        {selectedGenerationModel === 'gpt_image_vip' && '天劫一阶 · GPT Image VIP 系列，可调整比例 / 分辨率档位'}
-                        {selectedGenerationModel === 'gpt_image_official' && '天劫二阶 · GPT Image 官方混合，可调整比例 / 分辨率 / 质量'}
-                    </p>
+                    <p className="mt-2 text-[9px] text-n100">每个分镜可在左侧列表中使用下拉菜单单独覆盖默认模型。</p>
 
                     <div className="mt-3 pt-3 border-t border-n40">
                         <div className="text-[9px] text-n100 mb-2 flex items-center gap-1">
