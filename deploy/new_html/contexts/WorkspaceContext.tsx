@@ -59,7 +59,10 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const refreshOrganizations = useCallback(async () => {
     // 2026-05-26：admin shell 不需要 workspace（独立登录），skip
     try {
-      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+      if (
+        typeof window !== 'undefined'
+        && (window.location.pathname.startsWith('/admin') || window.location.pathname.startsWith('/share/final/'))
+      ) {
         return;
       }
     } catch {}

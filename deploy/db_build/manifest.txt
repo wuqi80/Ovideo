@@ -59,6 +59,7 @@ sql/db_migration_organizations.sql          # REF users（建 organizations/reso
 # ---- 5. 素材库（需 files/projects/users）----
 sql/db_migration_media_library.sql          # REF files, projects, users
 sql/db_migration_media_library_folders.sql  # REF projects; ALTER media_library_items
+sql/db_migration_final_product_shares.sql    # REF media_library_items/users/projects/episodes
 
 # ---- 6. 管理后台表 ----
 sql/db_migration_admin.sql                  # 建 comfyui_agents/workflow_templates/api_configurations/system_settings

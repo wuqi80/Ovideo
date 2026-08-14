@@ -60,10 +60,11 @@ from worker import Worker
 
 # 🆕 导入数据库模块
 from db_manager import init_db_manager, get_db_manager
-from api_routes import router as api_router
+from api_routes import router as api_router, get_current_user
 from media_library_routes import router as media_library_router
 from credit_routes import router as credit_router
 from video_reverse_routes import router as video_reverse_router
+from final_product_share_routes import create_final_product_share_router
 from dao.admin.admin_stats import AdminStatsDAO
 from dao_task import TaskDAO
 from dao_content import FileDAO, ProjectDAO, VersionDAO, WorkspaceSessionDAO, ProjectMemberDAO
@@ -1024,6 +1025,10 @@ logger.info("✅ 数据库API路由已注册")
 # 详见 docs/superpowers/plans/2026-05-26-feature-rollout/01-media-library.md
 app.include_router(media_library_router)
 logger.info("✅ Media Library API 路由已注册 (/api/media-library)")
+
+# 成品多版本公开分享与访客意见
+app.include_router(create_final_product_share_router(get_current_user_dependency=get_current_user))
+logger.info("✅ Final Product Share API 路由已注册 (/api/final-products, /api/public/final-products)")
 
 # 2026-05-26 组织管理 MVP Slice 4: 资源共享路由
 # 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5.3
