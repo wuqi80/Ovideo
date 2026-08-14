@@ -11,3 +11,13 @@ describe('VideoPage queued task state', () => {
     expect(source).toContain('排队中...');
   });
 });
+
+describe('VideoPage source media layout', () => {
+  it('uses the same stable four-column media row as generated video results', () => {
+    expect(source).toContain('data-testid="video-source-grid"');
+    expect(source).toContain('grid w-full grid-cols-4 gap-2 overflow-y-auto');
+    expect(source).toContain('data-testid="video-source-placeholder"');
+    expect(source).toContain('const sourcePlaceholderCount = getVideoResultPlaceholderCount(sourceImages.length);');
+    expect(source).toContain('Array.from({ length: sourcePlaceholderCount }');
+  });
+});

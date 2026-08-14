@@ -4,7 +4,7 @@ import {
     GripVertical, CheckSquare, Square, Clock, Film, AlertCircle,
     Image as ImageIcon, ChevronDown, Download, Maximize, Mic, Scissors,
     LayoutGrid, List, X, Loader2, Check, Music, Eye, Volume2, Plus,
-    History, ArrowRight, Database, ImageOff, RotateCw, Settings,
+    History, Database, ImageOff, RotateCw, Settings,
     Combine, Split, SkipBack, SkipForward
 } from 'lucide-react';
 import {
@@ -64,7 +64,6 @@ import { AppView, TaskNotification } from '../types';
 import type { VideoVoiceReference } from '../types';
 import {
     getCardHeightClass,
-    getPreviewImageHeightClass,
     CARD_MEDIA_HEIGHT_CLASS,
     CARD_BODY_SCROLL_CLASS,
     PLACEHOLDER_PROMPT_TEXTAREA_CLASS,
@@ -3984,14 +3983,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (!group.ids) return null;
         const isPair = group.ids.length === 2 && !group.mergedFrom?.length;
         const img1 = uploadedImages.find(i => i.id === group.ids[0]);
-        const img2 = isPair ? uploadedImages.find(i => i.id === group.ids[1]) : null;
         
         if (!img1) return null;
+
+        const sourceImages = group.ids
+            .map(id => uploadedImages.find(image => image.id === id))
+            .filter((image): image is UploadedImage => Boolean(image));
+        const sourcePlaceholderCount = getVideoResultPlaceholderCount(sourceImages.length);
         
         // 2026-05-25：固定高度 + 左右同一函数 → 像素级对齐（见 videoCardLayout.ts）
         const isPlaceholderCard = !!img1.isPlaceholder;
         const cardHeight = getCardHeightClass(group.model, isPlaceholderCard);
-        const previewHeight = isPlaceholderCard ? 'h-24 shrink-0' : getPreviewImageHeightClass(group.model, isPair);
         const seedanceCard = isSeedanceModel(group.model);
         const activeVideoVoiceReference = getVideoVoiceReferenceForGroup(group);
         const shotRange = getGroupShotRange(group, index);
@@ -4128,75 +4130,81 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     </div>
                 </div>
                 
-                {/* 图片预览 */}
-                <div className="w-full flex items-center justify-center gap-2 shrink-0 mb-1">
-                    {isPair && img2 ? (
-                        <>
-                            <div 
-                                className="flex-1 relative bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in"
-                                onClick={() => { setLightboxUrl(img1.url); setLightboxType('image'); }}
-                            >
-                                <img src={img1.url} loading="lazy" decoding="async" alt="" className={`w-full ${previewHeight} object-contain bg-n900/50`} />
-                                <div className="absolute bottom-0 left-0 bg-n900/60 text-white text-[10px] px-1">Start</div>
-                            </div>
-                            <ArrowRight className="w-4 h-4 text-n100" />
-                            <div 
-                                className="flex-1 relative bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in"
-                                onClick={() => { setLightboxUrl(img2.url); setLightboxType('image'); }}
-                            >
-                                <img src={img2.url} loading="lazy" decoding="async" alt="" className={`w-full ${previewHeight} object-contain bg-n900/50`} />
-                                <div className="absolute bottom-0 left-0 bg-n900/60 text-white text-[10px] px-1">End</div>
-                            </div>
-                        </>
-                    ) : img1.isPlaceholder || !img1.url ? (
-                        // 2026-05-25：空分镜占位卡改为可点击上传本地图片
-                        <label className={`relative w-full bg-n0 border border-dashed border-n40 hover:border-primary hover:bg-primary-light rounded-lg overflow-hidden flex flex-col items-center justify-center text-n100 cursor-pointer transition-colors ${previewHeight}`}>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                hidden
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) handlePlaceholderUpload(img1.id, file);
-                                    e.target.value = '';
-                                }}
-                            />
-                            <ImageIcon size={20} />
-                            <div className="text-[10px] mt-1">点击上传图片</div>
-                            <div className="text-[9px] mt-0.5 text-n100">或 @ 选首帧</div>
-                        </label>
-                    ) : (
-                        <div 
-                            className="relative w-full bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in group/img"
-                            onClick={() => { setLightboxUrl(img1.url); setLightboxType('image'); }}
-                        >
-                            <img src={img1.url} loading="lazy" decoding="async" alt="" className={`w-full ${previewHeight} object-contain bg-n900/50`} />
-                            {/* 2026-05-25 #5：右上角"清空图"按钮——hover 时显示，点击后整卡退回空镜 */}
-                            {!img1.isUploading && (
-                                <button
-                                    type="button"
-                                    title="清空图（恢复为空卡）"
-                                    onClick={(e) => { e.stopPropagation(); clearTaskImage(group.uuid); }}
-                                    className="absolute top-1 right-1 p-1 bg-n900/70 hover:bg-danger rounded text-white opacity-0 group-hover/img:opacity-100 transition-opacity"
+                {/* 输入图片与右侧生成结果使用同样的四列稳定布局。 */}
+                <div className={`mb-1 grid w-full grid-cols-4 gap-2 overflow-y-auto ${CARD_MEDIA_HEIGHT_CLASS}`} data-testid="video-source-grid">
+                    {sourceImages.map((image, sourceIndex) => {
+                        const isEmptySource = image.isPlaceholder || !image.url;
+                        const sourceLabel = isPair
+                            ? (sourceIndex === 0 ? 'Start' : 'End')
+                            : (sourceImages.length > 1 ? `#${sourceIndex + 1}` : '');
+
+                        if (isEmptySource) {
+                            return (
+                                <label
+                                    key={image.id}
+                                    className="relative flex h-full min-h-[72px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded border border-dashed border-n40 bg-n20/60 text-n100 transition-colors hover:border-primary hover:bg-primary-light hover:text-primary"
                                 >
-                                    <X className="w-3 h-3" />
-                                </button>
-                            )}
-                            {img1.isUploading && (
-                                <div className="absolute inset-0 bg-n900/60 flex flex-col items-center justify-center">
-                                    <div className="text-xs text-white mb-1">上传中 {img1.uploadProgress ?? 0}%</div>
-                                    <div className="w-2/3 h-1.5 bg-n0 rounded-full overflow-hidden">
-                                        <div className="h-full bg-primary transition-all duration-200 rounded-full" style={{ width: `${img1.uploadProgress ?? 0}%` }} />
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        hidden
+                                        onChange={(event) => {
+                                            const file = event.target.files?.[0];
+                                            if (file) handlePlaceholderUpload(image.id, file);
+                                            event.target.value = '';
+                                        }}
+                                    />
+                                    <ImageIcon className="h-4 w-4 opacity-50" />
+                                    <span className="mt-1 text-[9px]">上传图片</span>
+                                </label>
+                            );
+                        }
+
+                        return (
+                            <div
+                                key={image.id}
+                                className="group/img relative h-full min-h-[72px] cursor-zoom-in overflow-hidden rounded border border-n40 bg-n800"
+                                onClick={() => { setLightboxUrl(image.url); setLightboxType('image'); }}
+                            >
+                                <img src={image.url} loading="lazy" decoding="async" alt="" className="h-full w-full bg-n900/50 object-contain" />
+                                {sourceLabel && (
+                                    <div className="absolute bottom-0 left-0 rounded-tr bg-n900/60 px-1 text-[9px] text-white">{sourceLabel}</div>
+                                )}
+                                {sourceIndex === 0 && !isPair && !group.mergedFrom?.length && !image.isUploading && (
+                                    <button
+                                        type="button"
+                                        title="清空图（恢复为空卡）"
+                                        onClick={(event) => { event.stopPropagation(); clearTaskImage(group.uuid); }}
+                                        className="absolute right-1 top-1 rounded bg-n900/70 p-1 text-white opacity-0 transition-opacity hover:bg-danger group-hover/img:opacity-100"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                )}
+                                {image.isUploading && (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-n900/60">
+                                        <div className="mb-1 text-[9px] text-white">上传中 {image.uploadProgress ?? 0}%</div>
+                                        <div className="h-1.5 w-2/3 overflow-hidden rounded-full bg-n0">
+                                            <div className="h-full rounded-full bg-primary transition-all duration-200" style={{ width: `${image.uploadProgress ?? 0}%` }} />
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-                            {img1.uploadFailed && (
-                                <div className="absolute inset-0 bg-r50 flex items-center justify-center">
-                                    <span className="text-xs text-danger">上传失败，点击重试</span>
-                                </div>
-                            )}
+                                )}
+                                {image.uploadFailed && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-r50">
+                                        <span className="text-[9px] text-danger">上传失败</span>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                    {Array.from({ length: sourcePlaceholderCount }, (_, slotIndex) => (
+                        <div
+                            key={`empty-source-${slotIndex}`}
+                            data-testid="video-source-placeholder"
+                            className="flex h-full min-h-[72px] items-center justify-center rounded border border-dashed border-n40 bg-n20/60 text-n100"
+                        >
+                            <ImageIcon className="h-4 w-4 opacity-40" />
                         </div>
-                    )}
+                    ))}
                 </div>
 
                 {/* Task 6：分镜元信息（音频徽章 + 响应式时长字段） */}
