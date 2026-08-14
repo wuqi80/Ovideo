@@ -63,6 +63,16 @@ import {
   serializeStoryboardImageDrag,
   STORYBOARD_IMAGE_DRAG_MIME,
 } from '../utils/storyboardImageDrag';
+import { GpuNodeSelector, type GpuNodeSelection } from './GpuNodeSelector';
+import { InlineCreditEstimate } from './InlineCreditEstimate';
+import { crmMessage } from '../admin/crmUI';
+import { assertEnoughCredits, consumeCredits } from '../services/creditService';
+import {
+  DESIGN_CREDIT_DEFAULTS,
+  DESIGN_CREDIT_FEATURES,
+  designOperationCreditParams,
+  newDesignCreditUsageId,
+} from '../utils/designCredits';
 
 const MattingModal = React.lazy(() => import('./MattingModal'));
 const ImageFusionModal = React.lazy(() => import('./ImageFusionModal'));
@@ -1936,11 +1946,17 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   };
 
   // 🆕 多角度人物生成处理函数
-  const handleHumanMultiAngle = async (imageUrl: string, seed: number) => {
+  const handleHumanMultiAngle = async (imageUrl: string, seed: number, gpu: GpuNodeSelection) => {
     if (!selectedShot) return;
-    
+
+    const creditParams = designOperationCreditParams('human_multi_angle');
+    const registryMeta = buildRegistryMeta(selectedShot, 'human-multi-angle', '多角度人物');
+    let generatedCount = 0;
+    let backendTaskId = '';
     setIsHumanMultiAngleGenerating(true);
     try {
+        await assertEnoughCredits(DESIGN_CREDIT_FEATURES.multiAngleGeneration, creditParams);
+
         // 将图片转换为 dataUrl（如果需要）
         const baseImage = await ensureDataUrl(imageUrl);
         
@@ -1950,8 +1966,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           entityType: 'storyboard_item',
           entityId: selectedShot?.id,
           fileRole: 'generated_image',
+          projectId: registryMeta.targetProjectId,
           episodeId,
-        }, buildRegistryMeta(selectedShot, 'human-multi-angle', '多角度人物'));
+          preferredAgentId: gpu.preferredAgentId,
+          preferredNodeId: gpu.preferredNodeId,
+        }, registryMeta, taskId => { backendTaskId = taskId; });
         console.log(`✅ 多角度生成完成，共 ${resultUrls.length} 张图片:`, resultUrls);
         
         const newImages: GeneratedImage[] = (resultUrls as GeneratedImageResult[])
@@ -1967,6 +1986,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         if (newImages.length === 0) {
             throw new Error('没有成功生成任何图片');
         }
+        generatedCount = newImages.length;
         
         onUpdateStoryboardItem(selectedShot.id, {
             generatedImages: newImages,
@@ -1978,11 +1998,33 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         onForceSave();
         queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
         notifyStoryboardImageChanged(episodeId, selectedShot?.id);
-        
         setHumanMultiAngleModalImage(null);
+
+        try {
+            const settlement = await consumeCredits({
+                featureKey: DESIGN_CREDIT_FEATURES.multiAngleGeneration,
+                taskId: backendTaskId
+                    ? `storyboard-human-multi-angle:${backendTaskId}`
+                    : newDesignCreditUsageId('storyboard-human-multi-angle'),
+                params: creditParams,
+                projectId: registryMeta.targetProjectId,
+                metadata: {
+                    episode_id: episodeId || null,
+                    storyboard_item_id: selectedShot.id,
+                    workflow: 'human_multi_angle',
+                    output_count: generatedCount,
+                    processing_node: gpu.name,
+                },
+            });
+            crmMessage.success(`多角度人物生成完成，已扣除 ${settlement.charged_credits} 积分`);
+        } catch (settlementError: any) {
+            crmMessage.warning(`多角度图片已生成，但积分结算失败：${settlementError?.message || String(settlementError)}`);
+        }
     } catch (error: any) {
         console.error('Human multi-angle generation failed', error);
-        alert(error?.message || '多角度人物生成失败，请稍后再试。');
+        if (generatedCount === 0) {
+            crmMessage.error(error?.message || '多角度人物生成失败，请稍后再试。');
+        }
     } finally {
         setIsHumanMultiAngleGenerating(false);
     }
@@ -3336,10 +3378,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                                       // 🔧 修改：打开多角度生成弹窗
                                                       setHumanMultiAngleModalImage(img.url || img.thumbnail);
                                                   }}
-                                                  className="p-1.5 bg-blue-500/80 hover:bg-blue-600 text-white rounded-md transition-colors"
-                                                  title="多角度人物生成"
+                                                  className="inline-flex items-center gap-1 rounded-md bg-blue-500/80 px-2 py-1.5 text-white transition-colors hover:bg-blue-600"
+                                                  title="多角度人物生成：一次生成 14 个身份一致视角"
+                                                  aria-label="多角度人物生成，一次生成 14 个身份一致视角"
                                               >
                                                   <Users className="w-3.5 h-3.5" />
+                                                  <span className="text-[9px] font-semibold">14 视角</span>
                                               </button>
                                               <button 
                                                   onClick={(e) => { 
@@ -3354,10 +3398,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                               </button>
                                               <button 
                                                   onClick={(e) => { e.stopPropagation(); setCameraModalImage(img.url || img.thumbnail); }}
-                                                  className="p-1.5 bg-primary hover:bg-primary-hover text-white rounded-md transition-colors"
-                                                  title="角度调整"
+                                                  className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1.5 text-white transition-colors hover:bg-primary-hover"
+                                                  title="角度调整：生成 1 个指定镜头角度"
+                                                  aria-label="角度调整，生成 1 个指定镜头角度"
                                               >
                                                   <Camera className="w-3.5 h-3.5" />
+                                                  <span className="text-[9px] font-semibold">单角度</span>
                                               </button>
                                               <button 
                                                   onClick={(e) => { e.stopPropagation(); setMattingModalImage(img.url || img.thumbnail); }}
@@ -3999,6 +4045,10 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
                     </div>
 
                     <div className="space-y-5">
+                        <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs leading-5 text-n700">
+                            <strong className="block text-primary">单视角精确调整</strong>
+                            仅生成 1 张指定镜头角度；需要一次获得 14 个身份一致视角时，请使用“多角度人物生成”。
+                        </div>
                         <div className="space-y-3 bg-n20 border border-n40 rounded-md p-4">
                             <h4 className="text-xs font-bold text-n300 uppercase">镜头控制</h4>
                             <DiscreteSlider 
@@ -4087,20 +4137,23 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
 interface HumanMultiAngleModalProps {
     imageUrl: string;
     onClose: () => void;
-    onSubmit: (imageUrl: string, seed: number) => void;
+    onSubmit: (imageUrl: string, seed: number, gpu: GpuNodeSelection) => void;
     isProcessing: boolean;
 }
 
 const HumanMultiAngleModal: React.FC<HumanMultiAngleModalProps> = ({ imageUrl, onClose, onSubmit, isProcessing }) => {
     const [seed, setSeed] = useState(() => Math.floor(Math.random() * 900000000000000) + 100000000000000);
+    const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
+    const creditParams = useMemo(() => designOperationCreditParams('human_multi_angle'), []);
 
     const handleSubmit = () => {
-        onSubmit(imageUrl, seed);
+        if (!gpuSelection?.usable) return;
+        onSubmit(imageUrl, seed, gpuSelection);
     };
 
     return (
         <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={isProcessing ? undefined : onClose}>
-            <div className="w-full max-w-2xl bg-n0 border border-n40 rounded-2xl shadow-2xl p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
+            <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-4xl space-y-6 overflow-y-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 
                 {/* Loading覆盖层 - 处理中时显示 */}
                 {isProcessing && (
@@ -4120,50 +4173,92 @@ const HumanMultiAngleModal: React.FC<HumanMultiAngleModalProps> = ({ imageUrl, o
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="text-lg font-bold text-n800">多角度人物生成</h3>
-                        <p className="text-xs text-n300 mt-1">基于选中的图片生成多角度人物视图</p>
+                        <p className="text-xs text-n300 mt-1">一次固定生成 14 个身份一致视角，适合建立完整人物视图库。</p>
                     </div>
                     <button onClick={onClose} className="text-n300 hover:text-n800" disabled={isProcessing}>
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 gap-6">
-                    {/* 预览图 */}
-                    <div className="relative rounded-2xl overflow-hidden border border-n40 h-64 bg-n30 flex items-center justify-center">
-                        <img src={imageUrl} loading="lazy" decoding="async" className="w-full h-full object-contain" alt="选中的图片" />
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <div className="space-y-4">
+                        {/* 预览图 */}
+                        <div className="relative flex h-72 items-center justify-center overflow-hidden rounded-2xl border border-n40 bg-n30">
+                            <img src={imageUrl} loading="lazy" decoding="async" className="h-full w-full object-contain" alt="选中的图片" />
+                        </div>
+                        <GpuNodeSelector
+                            onSelectionChange={setGpuSelection}
+                            disabled={isProcessing}
+                        />
                     </div>
 
-                    {/* Seed 控制 */}
-                    <div className="bg-n20 border border-n40 rounded-md p-4">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                                <span className="text-[11px] font-bold text-n300 uppercase">随机种子</span>
-                                <input
-                                    type="number"
-                                    value={seed}
-                                    onChange={(e) => setSeed(Number(e.target.value))}
-                                    className="w-48 bg-n0 border border-n40 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary text-n800"
-                                />
+                    <div className="space-y-4">
+                        <section className="rounded-md border border-n40 bg-n20 p-4">
+                            <h4 className="text-xs font-bold text-n700">生成规格</h4>
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                                <div className="rounded-md border border-n40 bg-n0 p-3">
+                                    <span className="block text-[10px] text-n300">输出数量</span>
+                                    <strong className="mt-1 block text-n800">固定 14 个视角</strong>
+                                </div>
+                                <div className="rounded-md border border-n40 bg-n0 p-3">
+                                    <span className="block text-[10px] text-n300">生成策略</span>
+                                    <strong className="mt-1 block text-n800">保持人物身份一致</strong>
+                                </div>
+                                <div className="col-span-2 rounded-md border border-primary/20 bg-primary/5 p-3">
+                                    <span className="block text-[10px] text-primary">与角度调整的区别</span>
+                                    <strong className="mt-1 block text-n800">多角度生成 14 张；角度调整仅生成 1 张指定角度</strong>
+                                </div>
                             </div>
-                            <button 
-                                onClick={() => setSeed(Math.floor(Math.random() * 900000000000000) + 100000000000000)} 
-                                className="px-3 py-1.5 rounded border border-n40 hover:border-primary hover:text-n800 transition-colors text-sm text-n300"
-                            >
-                                随机
-                            </button>
-                        </div>
+                            <p className="mt-3 text-[11px] leading-5 text-n300">
+                                系统使用固定多视角工作流生成正面、侧面、背面等人物视图，无需额外选择模型或角度。
+                            </p>
+                        </section>
+
+                        {/* Seed 控制 */}
+                        <section className="rounded-md border border-n40 bg-n20 p-4">
+                            <div className="flex items-end justify-between gap-3">
+                                <label className="space-y-1">
+                                    <span className="block text-[11px] font-bold uppercase text-n300">随机种子</span>
+                                    <input
+                                        type="number"
+                                        value={seed}
+                                        onChange={(e) => setSeed(Number(e.target.value))}
+                                        className="w-48 rounded border border-n40 bg-n0 px-2 py-1.5 text-sm text-n800 focus:border-primary focus:outline-none"
+                                    />
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setSeed(Math.floor(Math.random() * 900000000000000) + 100000000000000)}
+                                    disabled={isProcessing}
+                                    className="rounded border border-n40 px-3 py-1.5 text-sm text-n300 transition-colors hover:border-primary hover:text-n800 disabled:opacity-50"
+                                >
+                                    随机
+                                </button>
+                            </div>
+                            <p className="mt-2 text-[10px] leading-4 text-n300">
+                                相同原图配合相同种子更容易复现相近结果；随机种子用于探索新的视角组合。
+                            </p>
+                        </section>
                     </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
-                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20" disabled={isProcessing}>取消</button>
-                    <button 
-                        onClick={handleSubmit} 
-                        disabled={isProcessing}
-                        className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {isProcessing ? '生成中...' : '开始生成'}
-                    </button>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-n40 pt-4">
+                    <InlineCreditEstimate
+                        featureKey={DESIGN_CREDIT_FEATURES.multiAngleGeneration}
+                        params={creditParams}
+                        fallbackCost={DESIGN_CREDIT_DEFAULTS.multiAngleGeneration}
+                    />
+                    <div className="flex items-center gap-3">
+                        <button onClick={onClose} className="rounded-lg border border-n40 px-4 py-2 text-xs text-n700 hover:bg-n20" disabled={isProcessing}>取消</button>
+                        <button
+                            onClick={handleSubmit}
+                            disabled={isProcessing || !gpuSelection?.usable}
+                            title={!gpuSelection?.usable ? '请先选择一个可用处理节点' : undefined}
+                            className="rounded-lg bg-primary px-5 py-2 text-xs font-bold text-white shadow-lg hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {isProcessing ? '生成中...' : '开始生成'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

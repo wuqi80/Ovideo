@@ -108,3 +108,29 @@ def test_design_prompt_refinement_credit_rule_mirror_manifest_and_costs():
     assert credit_service.compute_cost(rule, {"model": "script_tier_2"}) == 2
     assert credit_service.compute_cost(rule, {"model": "script_tier_3"}) == 3
     assert credit_service.compute_cost(rule, {"model": "script_tier_4"}) == 4
+
+
+def test_design_multi_angle_credit_rule_mirror_manifest_and_fixed_cost():
+    root = DEPLOY_DIR / "db_migration_design_multi_angle_credit_rule.sql"
+    mirror = DEPLOY_DIR / "sql" / "db_migration_design_multi_angle_credit_rule.sql"
+    manifest = (DEPLOY_DIR / "db_build" / "manifest.txt").read_text(encoding="utf-8")
+
+    assert root.read_bytes() == mirror.read_bytes()
+    assert "sql/db_migration_design_multi_angle_credit_rule.sql" in manifest
+
+    sql = root.read_text(encoding="utf-8")
+    assert "design_multi_angle_generation" in sql
+    assert "固定生成14个" in sql
+    assert "失败不扣积分" in sql
+
+    rule = {
+        "feature_key": "design_multi_angle_generation",
+        "base_cost": 60,
+        "min_cost": 60,
+        "max_cost": 500,
+        "factors": [],
+    }
+    assert credit_service.compute_cost(
+        rule,
+        {"operation_count": 1, "workflow": "human_multi_angle", "output_count": 14},
+    ) == 60
