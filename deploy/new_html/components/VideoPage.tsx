@@ -107,6 +107,7 @@ import type { SyncMode } from './video/StoryboardSyncModal';
 import { applySyncStrategy } from '../utils/storyboardSync';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { LazyVideo } from './LazyVideo';
+import { GpuNodeSelector, type GpuNodeSelection } from './GpuNodeSelector';
 import { extractSpokenDialogue } from '../utils/scriptPipelineParsers';
 import { clampSec, DURATION_MAX_SEC, SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC } from '../utils/durationMapping';
 import {
@@ -404,6 +405,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     
     // 功能弹窗状态
     const [upscaleModalUuid, setUpscaleModalUuid] = useState<string | null>(null);
+    const [upscaleNodeSelection, setUpscaleNodeSelection] = useState<GpuNodeSelection | null>(null);
     const [voiceModalUuid, setVoiceModalUuid] = useState<string | null>(null);
     const [voiceReferenceModalUuid, setVoiceReferenceModalUuid] = useState<string | null>(null);
     const [voiceReferenceVideoIndex, setVoiceReferenceVideoIndex] = useState(0);
@@ -3078,6 +3080,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             showToast('没有可放大的视频');
             return;
         }
+        setUpscaleNodeSelection(null);
         setUpscaleModalUuid(uuid);
         setSelectedVideoIndex(status.videos.length - 1);
     }, [tasksStatus, showToast]);
@@ -3103,7 +3106,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         try {
             console.log('🔍 开始放大视频:', filename);
             // 🔧 使用队列执行视频放大
-            const result = await submitUpscaleTaskQueued(filename);
+            const result = await submitUpscaleTaskQueued(filename, {
+                preferred_agent_id: upscaleNodeSelection?.preferredAgentId,
+                preferred_node_id: upscaleNodeSelection?.preferredNodeId,
+            });
             console.log('✅ 放大任务提交成功:', result.task_id);
             
             setTasksStatus(prev => ({
@@ -3119,7 +3125,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         } finally {
             setIsSubmitting(false);
         }
-    }, [upscaleModalUuid, tasksStatus, selectedVideoIndex, showToast]);
+    }, [upscaleModalUuid, upscaleNodeSelection, tasksStatus, selectedVideoIndex, showToast]);
     
     // ==================== 配音功能 ====================
     
@@ -4837,6 +4843,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             controls
                         />
                     </div>
+
+                    <GpuNodeSelector
+                        onSelectionChange={setUpscaleNodeSelection}
+                        disabled={isSubmitting}
+                        className="mb-4"
+                    />
                     
                     <div className="text-sm text-n300 mb-4 p-3 bg-n20/50 rounded">
                         <p>放大后的视频将提升至2倍分辨率，处理时间约5-10分钟。</p>
@@ -4851,7 +4863,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         </button>
                         <button
                             onClick={submitUpscale}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !upscaleNodeSelection?.usable}
                             className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded flex items-center gap-2 disabled:opacity-50"
                         >
                             {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}

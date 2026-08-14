@@ -21,3 +21,14 @@ describe('VideoPage source media layout', () => {
     expect(source).toContain('Array.from({ length: sourcePlaceholderCount }');
   });
 });
+
+describe('VideoPage upscale processing node routing', () => {
+  it('shows the shared processing-node selector and forwards the selected route', () => {
+    expect(source).toContain("import { GpuNodeSelector, type GpuNodeSelection } from './GpuNodeSelector';");
+    expect(source).toContain('setUpscaleNodeSelection(null);');
+    expect(source).toContain('onSelectionChange={setUpscaleNodeSelection}');
+    expect(source).toContain('preferred_agent_id: upscaleNodeSelection?.preferredAgentId');
+    expect(source).toContain('preferred_node_id: upscaleNodeSelection?.preferredNodeId');
+    expect(source).toContain('disabled={isSubmitting || !upscaleNodeSelection?.usable}');
+  });
+});
