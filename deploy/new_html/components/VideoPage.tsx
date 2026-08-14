@@ -2397,12 +2397,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 savedReference,
             ]);
             setVoiceReferenceModalUuid(null);
-            showToast(`已设为 ${characterName} 的视频音色基准`);
+            showToast(`已抽离声音并设为 ${characterName} 的人物参考`);
         } catch (error: any) {
             const message = String(error?.message || error || '未知错误');
             showToast(message.includes('no audio track')
-                ? '该视频没有音轨，不能设为角色视频音色基准'
-                : `设置视频音色基准失败: ${message}`);
+                ? '该视频没有音轨，无法抽离人物声音'
+                : `人物声音抽离失败: ${message}`);
         } finally {
             setVoiceReferenceSaving(false);
         }
@@ -3595,7 +3595,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             <button
                                 onClick={() => openVideoVoiceReferenceModal(group.uuid)}
                                 className="p-1.5 bg-success hover:bg-success text-white rounded transition-colors"
-                                title="设为角色视频音色基准"
+                                title="抽离人物声音并供后续分镜参考"
                             >
                                 <Volume2 className="w-3 h-3" />
                             </button>
@@ -3945,7 +3945,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             <button
                                 onClick={() => openVideoVoiceReferenceModal(group.uuid)}
                                 className="p-1.5 bg-success hover:bg-success text-white rounded transition-colors"
-                                title="设为角色视频音色基准"
+                                title="抽离人物声音并供后续分镜参考"
                             >
                                 <Volume2 className="w-3 h-3" />
                             </button>
@@ -4101,9 +4101,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         {activeVideoVoiceReference && (
                             <span
                                 className="text-[10px] px-1.5 py-0.5 rounded border border-success/40 bg-success/10 text-success whitespace-nowrap"
-                                title="生成时优先使用角色视频音色基准"
+                                title="生成时优先使用已抽离的人物声音参考"
                             >
-                                {activeVideoVoiceReference.characterName} · 视频音色
+                                {activeVideoVoiceReference.characterName} · 声音参考
                             </span>
                         )}
                         
@@ -4587,9 +4587,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         {activeVideoVoiceReference && (
                             <span
                                 className="text-[10px] px-1.5 py-0.5 rounded border border-success/40 bg-success/10 text-success whitespace-nowrap"
-                                title="生成时优先使用角色视频音色基准"
+                                title="生成时优先使用已抽离的人物声音参考"
                             >
-                                {activeVideoVoiceReference.characterName} · 视频音色
+                                {activeVideoVoiceReference.characterName} · 声音参考
                             </span>
                         )}
                     </div>
@@ -4643,10 +4643,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 <button
                                     onClick={() => openVideoVoiceReferenceModal(group.uuid)}
                                     className="flex items-center gap-1 px-2 py-1 bg-success hover:bg-success text-white text-[10px] rounded transition-colors"
-                                    title="设为角色视频音色基准"
+                                    title="抽离人物声音并供后续分镜参考"
                                 >
                                     <Volume2 className="w-3 h-3" />
-                                    音色基准
+                                    声音抽离
                                 </button>
                             </>
                         )}
@@ -4680,6 +4680,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const videos = tasksStatus[voiceReferenceModalUuid]?.videos || [];
         if (!group || videos.length === 0) return null;
         const selectedVideo = videos[Math.min(voiceReferenceVideoIndex, videos.length - 1)];
+        const characterOptions = Array.from(new Set([
+            ...taskGroups.map(candidate => getCharacterNameForGroup(candidate)),
+            ...videoVoiceReferences.map(reference => reference.characterName),
+            getCharacterNameForGroup(group),
+        ].map(character => character.trim()).filter(Boolean)));
         const currentReference = videoVoiceReferences.find(
             reference => reference.characterName === voiceReferenceCharacter.trim(),
         );
@@ -4697,9 +4702,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <div>
                             <h3 className="text-base font-bold text-n800 flex items-center gap-2">
                                 <Volume2 className="w-5 h-5 text-success" />
-                                角色视频音色基准
+                                人物声音抽离
                             </h3>
-                            <p className="text-[11px] text-n100 mt-1">从满意的视频原声提取音频，后续同角色镜头会优先作为音色参考。</p>
+                            <p className="text-[11px] text-n100 mt-1">从已生成视频抽离声音并绑定人物，后续同人物分镜会自动优先复用。</p>
                         </div>
                         <button
                             type="button"
@@ -4740,27 +4745,27 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         )}
 
                         <label className="block">
-                            <span className="block text-xs text-n300 mb-1.5">绑定角色</span>
+                            <span className="block text-xs text-n300 mb-1.5">声音对应人物</span>
                             <input
                                 value={voiceReferenceCharacter}
                                 onChange={event => setVoiceReferenceCharacter(event.target.value)}
                                 list="video-voice-reference-characters"
-                                placeholder="例如：男1、女1"
+                                placeholder="选择或输入人物名称"
                                 className="w-full px-3 py-2 rounded border border-n40 bg-n0 text-sm text-n700 focus:border-primary focus:outline-none"
                             />
                             <datalist id="video-voice-reference-characters">
-                                {Array.from(new Set([
-                                    ...videoVoiceReferences.map(reference => reference.characterName),
-                                    getCharacterNameForGroup(group),
-                                ].filter(Boolean))).map(character => (
+                                {characterOptions.map(character => (
                                     <option key={character} value={character} />
                                 ))}
                             </datalist>
+                            <span className="block text-[11px] text-n100 mt-1.5">
+                                后续分镜的对白人物名与这里一致时，系统会自动附加这段声音作为人物参考。
+                            </span>
                         </label>
 
                         {currentReference && (
                             <div className="rounded border border-success/40 bg-success/5 p-3">
-                                <div className="text-xs font-medium text-success">当前已绑定，将替换现有基准</div>
+                                <div className="text-xs font-medium text-success">该人物已有声音参考，本次保存后将更新</div>
                                 <div className="text-[11px] text-n300 mt-1">
                                     {currentReference.videoModel || '未知模型'} · {currentReference.updatedAt ? new Date(currentReference.updatedAt).toLocaleString() : '时间未知'}
                                 </div>
@@ -4773,8 +4778,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             </div>
                         )}
 
-                        <div className="rounded border border-n40 bg-n20 px-3 py-2 text-[11px] text-n300 leading-relaxed">
-                            生成优先级：角色视频音色基准 → 当前分镜参考配音 → 模型自由生成。当前模型不支持音频参考时，系统会忽略音频并继续生成视频。
+                        <div className="rounded border border-warning/30 bg-warning/5 px-3 py-2 text-[11px] text-n300 leading-relaxed">
+                            若视频包含多人或重叠对白，请选择目标人物单独说话的生成结果，避免把其他人物声音一起绑定。生成优先级：人物声音参考 → 当前分镜参考配音 → 模型自由生成；模型不支持音频参考时会忽略声音并继续生成。
                         </div>
                     </div>
 
@@ -4794,7 +4799,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             className="px-4 py-2 text-sm rounded bg-success text-white hover:bg-success disabled:opacity-50 flex items-center gap-2"
                         >
                             {voiceReferenceSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Volume2 className="w-4 h-4" />}
-                            {voiceReferenceSaving ? '正在提取音频...' : '设为角色视频音色基准'}
+                            {voiceReferenceSaving ? '正在抽离声音...' : '抽离并设为人物参考'}
                         </button>
                     </div>
                 </div>
