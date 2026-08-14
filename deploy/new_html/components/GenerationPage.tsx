@@ -602,6 +602,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     version: 1,
     defaultValue: {},
   });
+  const [configLockDrafts, setConfigLockDrafts] = useState<Record<string, boolean>>({});
+  const isStoryboardConfigLocked = useCallback((item: StoryboardItem) => (
+    configLockDrafts[item.id] ?? Boolean(item.isConfigConfirmed)
+  ), [configLockDrafts]);
 
   // 所有分镜图像模型共享比例 / 分辨率偏好。默认 16:9 + 1K；
   // 用户主动选择 auto 时，提交前按最大参考图解析为确定值。
@@ -809,15 +813,30 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const hasUnloadedStoryboardItems = storyboardTotalCount > loadedStoryboardCount;
   const allStoryboardItemsSelected = storyboardTotalCount > 0 && selectedShotIds.size === storyboardTotalCount;
   const selectedShot = hasStoryboard && selectedFile ? selectedFile.storyboard!.items.find(i => i.id === selectedShotId) : null;
+  useEffect(() => {
+      const items = selectedFile?.storyboard?.items || [];
+      setConfigLockDrafts(previous => {
+          const next = { ...previous };
+          let changed = false;
+          items.forEach(item => {
+              if (next[item.id] === Boolean(item.isConfigConfirmed)) {
+                  delete next[item.id];
+                  changed = true;
+              }
+          });
+          return changed ? next : previous;
+      });
+  }, [selectedFile?.storyboard?.items]);
   const referencePlan = useMemo(() => (
       selectedShot
           ? resolveShotReferencePlan(selectedShot, materialLibrary, references)
           : { references: [], excluded: [], criticalExcluded: [], maxReferences: 6 }
   ), [materialLibrary, references, selectedShot]);
-  const selectedGenerationModel = selectedShot
-      ? (shotModels[selectedShot.id] || globalModel)
-      : globalModel;
+  const selectedShotModelOverride = selectedShot ? shotModels[selectedShot.id] : undefined;
+  const selectedGenerationModel = selectedShotModelOverride || globalModel;
   const globalModelOption = getStoryboardGenerationModelOption(globalModel);
+  const selectedGenerationModelOption = getStoryboardGenerationModelOption(selectedGenerationModel);
+  const selectedConfigLocked = selectedShot ? isStoryboardConfigLocked(selectedShot) : false;
   const [selectedReferenceDimensions, setSelectedReferenceDimensions] = useState<SourceImageDimensions[]>([]);
   const [isLoadingReferenceDimensions, setIsLoadingReferenceDimensions] = useState(false);
   useEffect(() => {
@@ -1083,9 +1102,13 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const handleConfirmConfig = () => {
       if (!selectedShot) return;
       
-      // 🔧 确认/取消配置 - 只切换锁定状态，不修改任何页面数据
-      const newState = !selectedShot.isConfigConfirmed;
+      // 先更新本地锁定草稿，再写入原有持久化字段，避免等待重新拉取时按钮看起来“没生效”。
+      const newState = !isStoryboardConfigLocked(selectedShot);
       console.log(newState ? '🔒 锁定配置' : '🔓 解锁配置');
+      setConfigLockDrafts(previous => ({
+        ...previous,
+        [selectedShot.id]: newState,
+      }));
       onUpdateStoryboardItem(selectedShot.id, { 
         isConfigConfirmed: newState
       });
@@ -2695,27 +2718,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                    </span>
                                  </div>
                                  <div className="flex shrink-0 items-center gap-1">
-                                   {/* Per-shot model selector */}
-                                   <select
-                                       value={shotModels[item.id] || globalModel}
-                                       onClick={(e) => e.stopPropagation()}
-                                       onChange={(e) => {
-                                           e.stopPropagation();
-                                           setShotModels(prev => ({
-                                             ...prev,
-                                             [item.id]: e.target.value as GenerationModel,
-                                           }));
-                                       }}
-                                       disabled={isGenerating}
-                                       aria-label={`${shotLabel}生成模型`}
-                                       title={getStoryboardGenerationModelOption(shotModels[item.id] || globalModel).hint}
-                                       className="h-7 max-w-[132px] rounded border border-n40 bg-n0 px-1.5 text-[9px] font-medium text-n700 outline-none transition-colors hover:border-primary focus:border-primary disabled:bg-n20 disabled:text-n100"
-                                   >
-                                     {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
-                                       <option key={option.value} value={option.value}>{option.shortLabel}</option>
-                                     ))}
-                                   </select>
-                                   {item.isConfigConfirmed && <CheckCircle2 className="h-3.5 w-3.5 text-success" />}
+                                   {isStoryboardConfigLocked(item) && <CheckCircle2 className="h-3.5 w-3.5 text-success" />}
                                    {onDeleteStoryboardItem && (
                                      <button
                                          type="button"
@@ -2820,21 +2823,38 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               
             {/* Configuration Column */}
             <div className="storyboard-config-pane min-h-0 flex flex-col border-r border-n40 bg-n0 px-6 pt-6 pb-24 overflow-y-auto custom-scrollbar">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="mb-4 flex flex-wrap items-center gap-3">
                       <h3 className="text-sm font-bold text-n700 flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-primary" />
                       画面分镜配置
                       </h3>
+                      <label className="ml-auto flex min-w-0 items-center gap-2 text-[10px] text-n300">
+                        <span className="shrink-0">默认模型</span>
+                        <select
+                          value={globalModel}
+                          onChange={(event) => setGlobalModel(event.target.value as GenerationModel)}
+                          disabled={isGenerating}
+                          aria-label="默认生成模型"
+                          className="h-8 min-w-0 max-w-[220px] rounded border border-n40 bg-n0 px-2 text-[10px] font-medium text-n700 outline-none transition-colors hover:border-primary focus:border-primary disabled:bg-n20 disabled:text-n100"
+                          title={globalModelOption.hint}
+                        >
+                          {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
                       <button 
                         onClick={handleConfirmConfig}
+                        disabled={!selectedShot || isGenerating}
+                        aria-pressed={selectedConfigLocked}
                         className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${
-                          selectedShot?.isConfigConfirmed 
+                          selectedConfigLocked
                             ? 'bg-g50 text-success border-g75'
                             : 'bg-n0 text-n300 border-n40 hover:text-n800'
-                        }`}
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
                       >
                           <CheckCircle2 className="w-3 h-3" />
-                        {selectedShot?.isConfigConfirmed ? '解除配置锁定' : '确认并锁定配置'}
+                        {selectedConfigLocked ? '解除配置锁定' : '确认并锁定配置'}
                       </button>
                   </div>
 
@@ -2842,25 +2862,41 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                 <div className="mb-6 p-4 bg-n20 border border-n40 rounded-md">
                     <div className="flex items-center gap-2 mb-3">
                         <Zap className="w-3.5 h-3.5 text-yellow-400" />
-                        <span className="text-xs font-bold text-n700">默认生成模型</span>
+                        <span className="text-xs font-bold text-n700">当前镜头生成模型</span>
                     </div>
                     <select
-                        value={globalModel}
-                        onChange={(event) => setGlobalModel(event.target.value as GenerationModel)}
-                        disabled={isGenerating}
-                        aria-label="默认生成模型"
+                        value={selectedShotModelOverride || ''}
+                        onChange={(event) => {
+                          if (!selectedShot || selectedConfigLocked) return;
+                          const nextModel = event.target.value;
+                          setShotModels(previous => {
+                            if (!nextModel) {
+                              const next = { ...previous };
+                              delete next[selectedShot.id];
+                              return next;
+                            }
+                            return {
+                              ...previous,
+                              [selectedShot.id]: nextModel as GenerationModel,
+                            };
+                          });
+                        }}
+                        disabled={!selectedShot || selectedConfigLocked || isGenerating}
+                        aria-label="当前镜头生成模型"
                         className="h-10 w-full rounded border border-n40 bg-n0 px-3 text-xs font-medium text-n700 outline-none transition-colors hover:border-primary focus:border-primary disabled:bg-n20 disabled:text-n100"
                     >
+                        <option value="">跟随默认 · {globalModelOption.shortLabel}</option>
                         {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
                     </select>
                     <div className="mt-2 rounded bg-n0 px-3 py-2 text-[10px] leading-4 text-n300">
-                        <strong className="mr-1 text-n700">{globalModelOption.shortLabel}</strong>
-                        {globalModelOption.hint}
+                        <strong className="mr-1 text-n700">{selectedGenerationModelOption.shortLabel}</strong>
+                        {selectedGenerationModelOption.hint}
+                        {!selectedShotModelOverride && <span className="ml-1 text-primary">· 跟随默认</span>}
                     </div>
                     {/* ComfyUI 档位走用户固定选择的 GPU Agent，默认 GPU1。 */}
-                    {COMFYUI_MODELS.has(globalModel) && (
+                    {COMFYUI_MODELS.has(selectedGenerationModel) && (
                         <div className={`mt-2 rounded border px-2 py-2 text-[10px] leading-relaxed ${
                             usableClusterNodes.length > 0
                                 ? 'bg-g50 text-g400 border-g200'
@@ -2911,7 +2947,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             </div>
                         </div>
                     )}
-                    <p className="mt-2 text-[9px] text-n100">每个分镜可在左侧列表中使用下拉菜单单独覆盖默认模型。</p>
+                    <p className="mt-2 text-[9px] text-n100">顶部设置全局默认模型；当前镜头可以跟随默认，也可在此单独覆盖。</p>
 
                     <div className="mt-3 pt-3 border-t border-n40">
                         <div className="text-[9px] text-n100 mb-2 flex items-center gap-1">
@@ -2925,7 +2961,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             <select
                               value={imageRatio}
                               onChange={(e) => setImageRatio(e.target.value as GptImageRatio)}
-                              disabled={isGenerating}
+                              disabled={selectedConfigLocked || isGenerating}
                               className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-primary focus:outline-none"
                             >
                               {GPT_IMAGE_RATIO_OPTIONS.map(o => (
@@ -2938,7 +2974,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             <select
                               value={imageK}
                               onChange={(e) => setImageK(e.target.value as GptImageK)}
-                              disabled={isGenerating}
+                              disabled={selectedConfigLocked || isGenerating}
                               className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-primary focus:outline-none"
                             >
                               {GPT_IMAGE_K_OPTIONS.map(o => (
@@ -2952,7 +2988,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                               <select
                                 value={imageQuality}
                                 onChange={(e) => setImageQuality(e.target.value as GptImageQuality)}
-                                disabled={isGenerating}
+                                disabled={selectedConfigLocked || isGenerating}
                                 className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-rose-500 focus:outline-none"
                               >
                                 {GPT_IMAGE_QUALITY_OPTIONS.map(o => (
@@ -2992,8 +3028,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                               });
                             }
                           }}
-                        disabled={selectedShot?.isConfigConfirmed}
-                        className={`w-full h-32 bg-n0 border border-n40 rounded-lg p-3 text-xs text-n700 focus:border-primary focus:outline-none resize-none leading-relaxed ${selectedShot?.isConfigConfirmed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={selectedConfigLocked}
+                        className={`w-full h-32 bg-n0 border border-n40 rounded-lg p-3 text-xs text-n700 focus:border-primary focus:outline-none resize-none leading-relaxed ${selectedConfigLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                       />
                   </div>
 

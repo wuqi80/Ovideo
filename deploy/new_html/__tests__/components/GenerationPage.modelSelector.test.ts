@@ -8,9 +8,11 @@ const source = readFileSync(
 ).replace(/\r\n/g, '\n');
 
 describe('generation page model selectors', () => {
-  it('uses the shared capability catalog for default and per-shot dropdowns', () => {
+  it('places the shared default selector in the header and the current-shot override in the config card', () => {
     expect(source).toContain('aria-label="默认生成模型"');
-    expect(source).toContain('aria-label={`${shotLabel}生成模型`}');
+    expect(source).toContain('aria-label="当前镜头生成模型"');
+    expect(source).toContain('<option value="">跟随默认 · {globalModelOption.shortLabel}</option>');
+    expect(source).not.toContain('aria-label={`${shotLabel}生成模型`}');
     expect(source.match(/STORYBOARD_GENERATION_MODEL_OPTIONS\.map/g)).toHaveLength(2);
     expect(source).not.toContain('const models: GenerationModel[]');
     expect(source).not.toContain('点击切换模型');
@@ -18,7 +20,17 @@ describe('generation page model selectors', () => {
 
   it('derives the processing-cluster set from model capabilities', () => {
     expect(source).toContain('.filter(option => option.requiresCluster)');
-    expect(source).toContain('globalModelOption.hint');
-    expect(source).toContain('每个分镜可在左侧列表中使用下拉菜单单独覆盖默认模型。');
+    expect(source).toContain('selectedGenerationModelOption.hint');
+    expect(source).toContain('COMFYUI_MODELS.has(selectedGenerationModel)');
+    expect(source).toContain('顶部设置全局默认模型；当前镜头可以跟随默认，也可在此单独覆盖。');
+  });
+
+  it('applies config locking immediately and disables current-shot configuration controls', () => {
+    expect(source).toContain('const [configLockDrafts, setConfigLockDrafts]');
+    expect(source).toContain('const newState = !isStoryboardConfigLocked(selectedShot);');
+    expect(source).toContain('aria-pressed={selectedConfigLocked}');
+    expect(source).toContain('disabled={!selectedShot || selectedConfigLocked || isGenerating}');
+    expect(source).toContain('disabled={selectedConfigLocked || isGenerating}');
+    expect(source).toContain('disabled={selectedConfigLocked}');
   });
 });
