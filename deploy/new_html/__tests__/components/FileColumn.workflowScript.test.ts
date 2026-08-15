@@ -61,6 +61,12 @@ describe('FileColumn workflow script control', () => {
     expect(source.match(new RegExp(arrowHoverClass, 'g'))).toHaveLength(2);
   });
 
+  it('explains why the final script file cannot be deleted', () => {
+    expect(source).toContain('if (files.length <= 1)');
+    expect(source).toContain('每个分集至少需要保留一个剧本文件，最后一个剧本不能删除。请先新建或上传另一个剧本。');
+    expect(source).toContain('window.alert(');
+  });
+
   it('renders the file settings panel through a portal to the right of the sidebar', () => {
     expect(source).toContain("import { createPortal } from 'react-dom'");
     expect(source).toContain('left: Math.min(rect.right + 8');

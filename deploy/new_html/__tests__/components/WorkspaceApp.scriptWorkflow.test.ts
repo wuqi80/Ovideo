@@ -8,6 +8,12 @@ const generationPageSource = readFileSync(resolve(__dirname, '../../components/G
   .replace(/\r\n/g, '\n');
 
 describe('WorkspaceApp script workflow persistence', () => {
+  it('protects the final script file without silently clearing its content', () => {
+    expect(source).toContain('if (files.length <= 1)');
+    expect(source).toContain('每个分集至少需要保留一个剧本文件，最后一个剧本不能删除。请先新建或上传另一个剧本。');
+    expect(source).not.toMatch(/if \(files\.length <= 1\) \{[\s\S]{0,500}originalContent: ''/);
+  });
+
   it('persists only the script record whose content changed', () => {
     expect(source).toContain('savedScriptSignaturesRef.current[file.id] === signature');
     expect(source).toContain('updateEpisodeScriptById(propEpisodeId, file.id');

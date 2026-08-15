@@ -2398,16 +2398,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     e.preventDefault();
     e.stopPropagation();
     if (files.length <= 1) {
-      updateFileWithHistory(id, (f) => ({
-        ...f,
-        originalContent: '',
-        scriptContent: null,
-        storyboard: null,
-        extractedCharacters: [],
-        extractedScenes: [],
-        extractedProps: [],
-        lastUpdated: Date.now(),
-      }));
+      window.alert('每个分集至少需要保留一个剧本文件，最后一个剧本不能删除。请先新建或上传另一个剧本。');
       return;
     }
     try {
