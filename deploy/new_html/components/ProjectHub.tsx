@@ -298,12 +298,16 @@ const ProjectHub: React.FC = () => {
         void loadEditMembers(project.projectId);
     }, [loadEditMembers]);
 
-    const closeEditProject = useCallback(() => {
-        if (editSaving || memberBusyId) return;
+    const resetEditProject = useCallback(() => {
         setEditTarget(null);
         setEditMembers([]);
         setNewMemberIdentity('');
-    }, [editSaving, memberBusyId]);
+    }, []);
+
+    const closeEditProject = useCallback(() => {
+        if (editSaving || memberBusyId) return;
+        resetEditProject();
+    }, [editSaving, memberBusyId, resetEditProject]);
 
     const refreshProjectMemberCount = useCallback((projectId: string, nextCount: number) => {
         setProjects(prev => prev.map(project =>
@@ -330,7 +334,7 @@ const ProjectHub: React.FC = () => {
                     ? { ...project, projectName: nextName, description: editProjectDesc, updatedAt: Date.now() }
                     : project
             ));
-            setEditTarget(prev => prev ? { ...prev, projectName: nextName, description: editProjectDesc } : prev);
+            resetEditProject();
             crmMessage.success('项目信息已保存');
         } catch (error) {
             console.error('保存项目信息失败:', error);
@@ -338,7 +342,7 @@ const ProjectHub: React.FC = () => {
         } finally {
             setEditSaving(false);
         }
-    }, [editProjectDesc, editProjectName, editTarget]);
+    }, [editProjectDesc, editProjectName, editTarget, resetEditProject]);
 
     const handleAddEditMember = useCallback(async () => {
         if (!editTarget) return;
