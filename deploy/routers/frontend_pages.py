@@ -130,6 +130,11 @@ def create_frontend_pages_router() -> APIRouter:
     async def projects_spa(path: str):
         return _serve_spa()
 
+    @router.get("/share/final/{share_token}")
+    async def final_product_share_spa(share_token: str):
+        """Serve the public final-review SPA on direct link visits and refreshes."""
+        return _serve_spa()
+
     @router.get("/profile")
     async def profile_page():
         return _serve_spa()

@@ -3,11 +3,13 @@ export interface TimelineAudioClip {
   startTime: number;
   duration: number;
   sourceOffset?: number;
+  volume?: number;
 }
 
 export interface TimelineAudioElement {
   currentTime: number;
   paused: boolean;
+  volume?: number;
   play: () => Promise<void> | void;
   pause: () => void;
 }
@@ -40,6 +42,9 @@ export async function syncTimelineAudioPlayback({
     }
 
     const target = Math.max(0, currentTime - clip.startTime + (clip.sourceOffset || 0));
+    if (typeof el.volume === 'number') {
+      el.volume = Math.min(1, Math.max(0, clip.volume ?? 1));
+    }
     if (el.paused || Math.abs(el.currentTime - target) > 0.35) {
       el.currentTime = target;
     }

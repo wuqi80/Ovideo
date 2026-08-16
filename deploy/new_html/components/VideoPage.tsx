@@ -4,7 +4,7 @@ import {
     GripVertical, CheckSquare, Square, Clock, Film, AlertCircle,
     Image as ImageIcon, ChevronDown, Download, Maximize, Mic, Scissors,
     LayoutGrid, List, X, Loader2, Check, Music, Eye, Volume2, Plus,
-    History, ArrowRight, Database, ImageOff, RotateCw, Settings,
+    History, Database, ImageOff, RotateCw, Settings,
     Combine, Split, SkipBack, SkipForward
 } from 'lucide-react';
 import {
@@ -65,7 +65,6 @@ import { AppView, TaskNotification } from '../types';
 import type { VideoVoiceReference } from '../types';
 import {
     getCardHeightClass,
-    getPreviewImageHeightClass,
     CARD_MEDIA_HEIGHT_CLASS,
     CARD_BODY_SCROLL_CLASS,
     PLACEHOLDER_PROMPT_TEXTAREA_CLASS,
@@ -109,6 +108,7 @@ import type { SyncMode } from './video/StoryboardSyncModal';
 import { applySyncStrategy } from '../utils/storyboardSync';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { LazyVideo } from './LazyVideo';
+import { GpuNodeSelector, type GpuNodeSelection } from './GpuNodeSelector';
 import { extractSpokenDialogue } from '../utils/scriptPipelineParsers';
 import { clampSec, DURATION_MAX_SEC, SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC } from '../utils/durationMapping';
 import {
@@ -406,6 +406,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     
     // 功能弹窗状态
     const [upscaleModalUuid, setUpscaleModalUuid] = useState<string | null>(null);
+    const [upscaleNodeSelection, setUpscaleNodeSelection] = useState<GpuNodeSelection | null>(null);
     const [voiceModalUuid, setVoiceModalUuid] = useState<string | null>(null);
     const [voiceReferenceModalUuid, setVoiceReferenceModalUuid] = useState<string | null>(null);
     const [voiceReferenceVideoIndex, setVoiceReferenceVideoIndex] = useState(0);
@@ -2397,12 +2398,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 savedReference,
             ]);
             setVoiceReferenceModalUuid(null);
-            showToast(`已设为 ${characterName} 的视频音色基准`);
+            showToast(`已抽离声音并设为 ${characterName} 的人物参考`);
         } catch (error: any) {
             const message = String(error?.message || error || '未知错误');
             showToast(message.includes('no audio track')
-                ? '该视频没有音轨，不能设为角色视频音色基准'
-                : `设置视频音色基准失败: ${message}`);
+                ? '该视频没有音轨，无法抽离人物声音'
+                : `人物声音抽离失败: ${message}`);
         } finally {
             setVoiceReferenceSaving(false);
         }
@@ -3079,6 +3080,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             showToast('没有可放大的视频');
             return;
         }
+        setUpscaleNodeSelection(null);
         setUpscaleModalUuid(uuid);
         setSelectedVideoIndex(status.videos.length - 1);
     }, [tasksStatus, showToast]);
@@ -3104,7 +3106,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         try {
             console.log('🔍 开始放大视频:', filename);
             // 🔧 使用队列执行视频放大
-            const result = await submitUpscaleTaskQueued(filename);
+            const result = await submitUpscaleTaskQueued(filename, {
+                preferred_agent_id: upscaleNodeSelection?.preferredAgentId,
+                preferred_node_id: upscaleNodeSelection?.preferredNodeId,
+            });
             console.log('✅ 放大任务提交成功:', result.task_id);
             
             setTasksStatus(prev => ({
@@ -3120,7 +3125,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         } finally {
             setIsSubmitting(false);
         }
-    }, [upscaleModalUuid, tasksStatus, selectedVideoIndex, showToast]);
+    }, [upscaleModalUuid, upscaleNodeSelection, tasksStatus, selectedVideoIndex, showToast]);
     
     // ==================== 配音功能 ====================
     
@@ -3590,7 +3595,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             <button
                                 onClick={() => openVideoVoiceReferenceModal(group.uuid)}
                                 className="p-1.5 bg-success hover:bg-success text-white rounded transition-colors"
-                                title="设为角色视频音色基准"
+                                title="抽离人物声音并供后续分镜参考"
                             >
                                 <Volume2 className="w-3 h-3" />
                             </button>
@@ -3926,7 +3931,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             <button
                                 onClick={() => openVideoVoiceReferenceModal(group.uuid)}
                                 className="p-1.5 bg-success hover:bg-success text-white rounded transition-colors"
-                                title="设为角色视频音色基准"
+                                title="抽离人物声音并供后续分镜参考"
                             >
                                 <Volume2 className="w-3 h-3" />
                             </button>
@@ -3970,14 +3975,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (!group.ids) return null;
         const isPair = group.ids.length === 2 && !group.mergedFrom?.length;
         const img1 = uploadedImages.find(i => i.id === group.ids[0]);
-        const img2 = isPair ? uploadedImages.find(i => i.id === group.ids[1]) : null;
         
         if (!img1) return null;
+
+        const sourceImages = group.ids
+            .map(id => uploadedImages.find(image => image.id === id))
+            .filter((image): image is UploadedImage => Boolean(image));
+        const sourcePlaceholderCount = getVideoResultPlaceholderCount(sourceImages.length);
         
         // 2026-05-25：固定高度 + 左右同一函数 → 像素级对齐（见 videoCardLayout.ts）
         const isPlaceholderCard = !!img1.isPlaceholder;
         const cardHeight = getCardHeightClass(group.model, isPlaceholderCard);
-        const previewHeight = isPlaceholderCard ? 'h-24 shrink-0' : getPreviewImageHeightClass(group.model, isPair);
         const seedanceCard = isSeedanceModel(group.model);
         const activeVideoVoiceReference = getVideoVoiceReferenceForGroup(group);
         const shotRange = getGroupShotRange(group, index);
@@ -4065,9 +4073,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         {activeVideoVoiceReference && (
                             <span
                                 className="text-[10px] px-1.5 py-0.5 rounded border border-success/40 bg-success/10 text-success whitespace-nowrap"
-                                title="生成时优先使用角色视频音色基准"
+                                title="生成时优先使用已抽离的人物声音参考"
                             >
-                                {activeVideoVoiceReference.characterName} · 视频音色
+                                {activeVideoVoiceReference.characterName} · 声音参考
                             </span>
                         )}
                         
@@ -4100,75 +4108,81 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     </div>
                 </div>
                 
-                {/* 图片预览 */}
-                <div className="w-full flex items-center justify-center gap-2 shrink-0 mb-1">
-                    {isPair && img2 ? (
-                        <>
-                            <div 
-                                className="flex-1 relative bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in"
-                                onClick={() => { setLightboxUrl(img1.url); setLightboxType('image'); }}
-                            >
-                                <img src={img1.url} loading="lazy" decoding="async" alt="" className={`w-full ${previewHeight} object-contain bg-n900/50`} />
-                                <div className="absolute bottom-0 left-0 bg-n900/60 text-white text-[10px] px-1">Start</div>
-                            </div>
-                            <ArrowRight className="w-4 h-4 text-n100" />
-                            <div 
-                                className="flex-1 relative bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in"
-                                onClick={() => { setLightboxUrl(img2.url); setLightboxType('image'); }}
-                            >
-                                <img src={img2.url} loading="lazy" decoding="async" alt="" className={`w-full ${previewHeight} object-contain bg-n900/50`} />
-                                <div className="absolute bottom-0 left-0 bg-n900/60 text-white text-[10px] px-1">End</div>
-                            </div>
-                        </>
-                    ) : img1.isPlaceholder || !img1.url ? (
-                        // 2026-05-25：空分镜占位卡改为可点击上传本地图片
-                        <label className={`relative w-full bg-n0 border border-dashed border-n40 hover:border-primary hover:bg-primary-light rounded-lg overflow-hidden flex flex-col items-center justify-center text-n100 cursor-pointer transition-colors ${previewHeight}`}>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                hidden
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) handlePlaceholderUpload(img1.id, file);
-                                    e.target.value = '';
-                                }}
-                            />
-                            <ImageIcon size={20} />
-                            <div className="text-[10px] mt-1">点击上传图片</div>
-                            <div className="text-[9px] mt-0.5 text-n100">或 @ 选首帧</div>
-                        </label>
-                    ) : (
-                        <div 
-                            className="relative w-full bg-n800 rounded-lg overflow-hidden border border-n40 cursor-zoom-in group/img"
-                            onClick={() => { setLightboxUrl(img1.url); setLightboxType('image'); }}
-                        >
-                            <img src={img1.url} loading="lazy" decoding="async" alt="" className={`w-full ${previewHeight} object-contain bg-n900/50`} />
-                            {/* 2026-05-25 #5：右上角"清空图"按钮——hover 时显示，点击后整卡退回空镜 */}
-                            {!img1.isUploading && (
-                                <button
-                                    type="button"
-                                    title="清空图（恢复为空卡）"
-                                    onClick={(e) => { e.stopPropagation(); clearTaskImage(group.uuid); }}
-                                    className="absolute top-1 right-1 p-1 bg-n900/70 hover:bg-danger rounded text-white opacity-0 group-hover/img:opacity-100 transition-opacity"
+                {/* 输入图片与右侧生成结果使用同样的四列稳定布局。 */}
+                <div className={`mb-1 grid w-full grid-cols-4 gap-2 overflow-y-auto ${CARD_MEDIA_HEIGHT_CLASS}`} data-testid="video-source-grid">
+                    {sourceImages.map((image, sourceIndex) => {
+                        const isEmptySource = image.isPlaceholder || !image.url;
+                        const sourceLabel = isPair
+                            ? (sourceIndex === 0 ? 'Start' : 'End')
+                            : (sourceImages.length > 1 ? `#${sourceIndex + 1}` : '');
+
+                        if (isEmptySource) {
+                            return (
+                                <label
+                                    key={image.id}
+                                    className="relative flex h-full min-h-[72px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded border border-dashed border-n40 bg-n20/60 text-n100 transition-colors hover:border-primary hover:bg-primary-light hover:text-primary"
                                 >
-                                    <X className="w-3 h-3" />
-                                </button>
-                            )}
-                            {img1.isUploading && (
-                                <div className="absolute inset-0 bg-n900/60 flex flex-col items-center justify-center">
-                                    <div className="text-xs text-white mb-1">上传中 {img1.uploadProgress ?? 0}%</div>
-                                    <div className="w-2/3 h-1.5 bg-n0 rounded-full overflow-hidden">
-                                        <div className="h-full bg-primary transition-all duration-200 rounded-full" style={{ width: `${img1.uploadProgress ?? 0}%` }} />
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        hidden
+                                        onChange={(event) => {
+                                            const file = event.target.files?.[0];
+                                            if (file) handlePlaceholderUpload(image.id, file);
+                                            event.target.value = '';
+                                        }}
+                                    />
+                                    <ImageIcon className="h-4 w-4 opacity-50" />
+                                    <span className="mt-1 text-[9px]">上传图片</span>
+                                </label>
+                            );
+                        }
+
+                        return (
+                            <div
+                                key={image.id}
+                                className="group/img relative h-full min-h-[72px] cursor-zoom-in overflow-hidden rounded border border-n40 bg-n800"
+                                onClick={() => { setLightboxUrl(image.url); setLightboxType('image'); }}
+                            >
+                                <img src={image.url} loading="lazy" decoding="async" alt="" className="h-full w-full bg-n900/50 object-contain" />
+                                {sourceLabel && (
+                                    <div className="absolute bottom-0 left-0 rounded-tr bg-n900/60 px-1 text-[9px] text-white">{sourceLabel}</div>
+                                )}
+                                {sourceIndex === 0 && !isPair && !group.mergedFrom?.length && !image.isUploading && (
+                                    <button
+                                        type="button"
+                                        title="清空图（恢复为空卡）"
+                                        onClick={(event) => { event.stopPropagation(); clearTaskImage(group.uuid); }}
+                                        className="absolute right-1 top-1 rounded bg-n900/70 p-1 text-white opacity-0 transition-opacity hover:bg-danger group-hover/img:opacity-100"
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                )}
+                                {image.isUploading && (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-n900/60">
+                                        <div className="mb-1 text-[9px] text-white">上传中 {image.uploadProgress ?? 0}%</div>
+                                        <div className="h-1.5 w-2/3 overflow-hidden rounded-full bg-n0">
+                                            <div className="h-full rounded-full bg-primary transition-all duration-200" style={{ width: `${image.uploadProgress ?? 0}%` }} />
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-                            {img1.uploadFailed && (
-                                <div className="absolute inset-0 bg-r50 flex items-center justify-center">
-                                    <span className="text-xs text-danger">上传失败，点击重试</span>
-                                </div>
-                            )}
+                                )}
+                                {image.uploadFailed && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-r50">
+                                        <span className="text-[9px] text-danger">上传失败</span>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                    {Array.from({ length: sourcePlaceholderCount }, (_, slotIndex) => (
+                        <div
+                            key={`empty-source-${slotIndex}`}
+                            data-testid="video-source-placeholder"
+                            className="flex h-full min-h-[72px] items-center justify-center rounded border border-dashed border-n40 bg-n20/60 text-n100"
+                        >
+                            <ImageIcon className="h-4 w-4 opacity-40" />
                         </div>
-                    )}
+                    ))}
                 </div>
 
                 {/* Task 6：分镜元信息（音频徽章 + 响应式时长字段） */}
@@ -4545,9 +4559,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         {activeVideoVoiceReference && (
                             <span
                                 className="text-[10px] px-1.5 py-0.5 rounded border border-success/40 bg-success/10 text-success whitespace-nowrap"
-                                title="生成时优先使用角色视频音色基准"
+                                title="生成时优先使用已抽离的人物声音参考"
                             >
-                                {activeVideoVoiceReference.characterName} · 视频音色
+                                {activeVideoVoiceReference.characterName} · 声音参考
                             </span>
                         )}
                     </div>
@@ -4601,10 +4615,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 <button
                                     onClick={() => openVideoVoiceReferenceModal(group.uuid)}
                                     className="flex items-center gap-1 px-2 py-1 bg-success hover:bg-success text-white text-[10px] rounded transition-colors"
-                                    title="设为角色视频音色基准"
+                                    title="抽离人物声音并供后续分镜参考"
                                 >
                                     <Volume2 className="w-3 h-3" />
-                                    音色基准
+                                    声音抽离
                                 </button>
                             </>
                         )}
@@ -4638,6 +4652,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         const videos = tasksStatus[voiceReferenceModalUuid]?.videos || [];
         if (!group || videos.length === 0) return null;
         const selectedVideo = videos[Math.min(voiceReferenceVideoIndex, videos.length - 1)];
+        const characterOptions = Array.from(new Set([
+            ...taskGroups.map(candidate => getCharacterNameForGroup(candidate)),
+            ...videoVoiceReferences.map(reference => reference.characterName),
+            getCharacterNameForGroup(group),
+        ].map(character => character.trim()).filter(Boolean)));
         const currentReference = videoVoiceReferences.find(
             reference => reference.characterName === voiceReferenceCharacter.trim(),
         );
@@ -4655,9 +4674,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <div>
                             <h3 className="text-base font-bold text-n800 flex items-center gap-2">
                                 <Volume2 className="w-5 h-5 text-success" />
-                                角色视频音色基准
+                                人物声音抽离
                             </h3>
-                            <p className="text-[11px] text-n100 mt-1">从满意的视频原声提取音频，后续同角色镜头会优先作为音色参考。</p>
+                            <p className="text-[11px] text-n100 mt-1">从已生成视频抽离声音并绑定人物，后续同人物分镜会自动优先复用。</p>
                         </div>
                         <button
                             type="button"
@@ -4698,27 +4717,27 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         )}
 
                         <label className="block">
-                            <span className="block text-xs text-n300 mb-1.5">绑定角色</span>
+                            <span className="block text-xs text-n300 mb-1.5">声音对应人物</span>
                             <input
                                 value={voiceReferenceCharacter}
                                 onChange={event => setVoiceReferenceCharacter(event.target.value)}
                                 list="video-voice-reference-characters"
-                                placeholder="例如：男1、女1"
+                                placeholder="选择或输入人物名称"
                                 className="w-full px-3 py-2 rounded border border-n40 bg-n0 text-sm text-n700 focus:border-primary focus:outline-none"
                             />
                             <datalist id="video-voice-reference-characters">
-                                {Array.from(new Set([
-                                    ...videoVoiceReferences.map(reference => reference.characterName),
-                                    getCharacterNameForGroup(group),
-                                ].filter(Boolean))).map(character => (
+                                {characterOptions.map(character => (
                                     <option key={character} value={character} />
                                 ))}
                             </datalist>
+                            <span className="block text-[11px] text-n100 mt-1.5">
+                                后续分镜的对白人物名与这里一致时，系统会自动附加这段声音作为人物参考。
+                            </span>
                         </label>
 
                         {currentReference && (
                             <div className="rounded border border-success/40 bg-success/5 p-3">
-                                <div className="text-xs font-medium text-success">当前已绑定，将替换现有基准</div>
+                                <div className="text-xs font-medium text-success">该人物已有声音参考，本次保存后将更新</div>
                                 <div className="text-[11px] text-n300 mt-1">
                                     {currentReference.videoModel || '未知模型'} · {currentReference.updatedAt ? new Date(currentReference.updatedAt).toLocaleString() : '时间未知'}
                                 </div>
@@ -4731,8 +4750,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             </div>
                         )}
 
-                        <div className="rounded border border-n40 bg-n20 px-3 py-2 text-[11px] text-n300 leading-relaxed">
-                            生成优先级：角色视频音色基准 → 当前分镜参考配音 → 模型自由生成。当前模型不支持音频参考时，系统会忽略音频并继续生成视频。
+                        <div className="rounded border border-warning/30 bg-warning/5 px-3 py-2 text-[11px] text-n300 leading-relaxed">
+                            若视频包含多人或重叠对白，请选择目标人物单独说话的生成结果，避免把其他人物声音一起绑定。生成优先级：人物声音参考 → 当前分镜参考配音 → 模型自由生成；模型不支持音频参考时会忽略声音并继续生成。
                         </div>
                     </div>
 
@@ -4752,7 +4771,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             className="px-4 py-2 text-sm rounded bg-success text-white hover:bg-success disabled:opacity-50 flex items-center gap-2"
                         >
                             {voiceReferenceSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Volume2 className="w-4 h-4" />}
-                            {voiceReferenceSaving ? '正在提取音频...' : '设为角色视频音色基准'}
+                            {voiceReferenceSaving ? '正在抽离声音...' : '抽离并设为人物参考'}
                         </button>
                     </div>
                 </div>
@@ -4801,6 +4820,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             controls
                         />
                     </div>
+
+                    <GpuNodeSelector
+                        onSelectionChange={setUpscaleNodeSelection}
+                        disabled={isSubmitting}
+                        className="mb-4"
+                    />
                     
                     <div className="text-sm text-n300 mb-4 p-3 bg-n20/50 rounded">
                         <p>放大后的视频将提升至2倍分辨率，处理时间约5-10分钟。</p>
@@ -4815,7 +4840,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         </button>
                         <button
                             onClick={submitUpscale}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !upscaleNodeSelection?.usable}
                             className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded flex items-center gap-2 disabled:opacity-50"
                         >
                             {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}

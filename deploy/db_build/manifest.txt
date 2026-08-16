@@ -51,6 +51,7 @@ sql/db_migration_script_model_tier_credit_rules.sql # UPDATE script/storyboard m
 sql/db_migration_design_credit_rules.sql    # INSERT design image/angle/upscale usage rules
 sql/db_migration_design_image_credit_tiers.sql # UPDATE public image tiers and 40-100 credits/image
 sql/db_migration_design_prompt_refinement_credit_rule.sql # INSERT 1-4 credit prompt refinement rule
+sql/db_migration_design_multi_angle_credit_rule.sql # INSERT fixed 60-credit human multi-angle rule
 sql/db_migration_credit_onboarding.sql      # REF users, credit_accounts, credit_transactions
 sql/db_migration_notifications.sql          # REF users
 sql/db_migration_organizations.sql          # REF users（建 organizations/resource_shares）
@@ -58,6 +59,7 @@ sql/db_migration_organizations.sql          # REF users（建 organizations/reso
 # ---- 5. 素材库（需 files/projects/users）----
 sql/db_migration_media_library.sql          # REF files, projects, users
 sql/db_migration_media_library_folders.sql  # REF projects; ALTER media_library_items
+sql/db_migration_final_product_shares.sql    # REF media_library_items/users/projects/episodes
 
 # ---- 6. 管理后台表 ----
 sql/db_migration_admin.sql                  # 建 comfyui_agents/workflow_templates/api_configurations/system_settings

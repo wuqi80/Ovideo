@@ -1,4 +1,5 @@
 import type { AudioTrack, StoryboardItemDB, VideoSegment } from '../types';
+import { resolveAudioTrackTimeline } from './audioTrackTimeline';
 
 export interface EnhanceMediaClip {
   id: string;
@@ -8,6 +9,12 @@ export interface EnhanceMediaClip {
   model?: string;
   comfyFilename?: string;
   sourceLabel?: string;
+  audioKind?: 'voice' | 'bgm' | 'sfx';
+  audioTrackId?: string;
+  sourceDuration?: number;
+  volume?: number;
+  fadeIn?: number;
+  fadeOut?: number;
   startTime: number;
   duration: number;
   sourceOffset: number;
@@ -56,12 +63,19 @@ export function buildEnhanceSourceClips(
   const storyboardById = new Map(
     storyboardAudioItems.map(item => [itemId(item as StoryboardItemDB & Record<string, any>), item]),
   );
+  const videoTimelineByStoryboardId = new Map<string, { startMs: number; durationMs: number }>();
   for (let i = 0; i < sortedSegs.length; i++) {
     const seg = sortedSegs[i];
     const storyboard = seg.storyboardItemId ? storyboardById.get(seg.storyboardItemId) : undefined;
     const dur = (seg.durationMs || 5000) / 1000;
     const videoUrl = seg.videoUrl ? secureMediaUrl(seg.videoUrl) : '';
     if (videoUrl) {
+      if (seg.storyboardItemId) {
+        videoTimelineByStoryboardId.set(seg.storyboardItemId, {
+          startMs: Math.round(videoTime * 1000),
+          durationMs: Math.round(dur * 1000),
+        });
+      }
       allClips.push({
         id: seg.segmentId || `vid_${i}`,
         url: videoUrl,
@@ -83,20 +97,13 @@ export function buildEnhanceSourceClips(
   const sortedItems = [...storyboardAudioItems].sort((a, b) =>
     itemSort(a as StoryboardItemDB & Record<string, any>) - itemSort(b as StoryboardItemDB & Record<string, any>)
   );
-  const itemStartMs = new Map<string, number>();
-  let audioTimelineMs = 0;
-  for (const raw of sortedItems) {
-    const item = raw as StoryboardItemDB & Record<string, any>;
-    const id = itemId(item);
-    if (id) itemStartMs.set(id, audioTimelineMs);
-    audioTimelineMs += itemDurationMs(item);
-  }
-
   for (const raw of sortedItems) {
     const item = raw as StoryboardItemDB & Record<string, any>;
     const id = itemId(item);
     if (!id) continue;
-    const startTime = (itemStartMs.get(id) || 0) / 1000;
+    const videoAnchor = videoTimelineByStoryboardId.get(id);
+    if (!videoAnchor) continue;
+    const startTime = videoAnchor.startMs / 1000;
     const duration = itemDurationMs(item) / 1000;
     const mixedUrl = item.mixedAudioUrl ?? item.mixed_audio_url;
     if (mixedUrl) {
@@ -108,6 +115,7 @@ export function buildEnhanceSourceClips(
         sourceOffset: 0,
         type: 'audio',
         sourceLabel: '参考配音',
+        audioKind: 'voice',
       });
       continue;
     }
@@ -127,22 +135,35 @@ export function buildEnhanceSourceClips(
         sourceOffset: 0,
         type: 'audio',
         sourceLabel: kind === 'dialogue' ? '参考对白' : kind === 'narration' ? '参考旁白' : '参考音效',
+        audioKind: kind === 'sfx' ? 'sfx' : 'voice',
       });
     }
   }
 
   for (const track of audioTracks) {
     if (!track.audioUrl) continue;
-    const startMs = track.startItemId ? itemStartMs.get(track.startItemId) ?? 0 : 0;
-    const durationMs = track.durationMs || Math.max(audioTimelineMs, 3000);
+    const episodeDurationMs = Math.max(100, Math.round(videoTime * 1000));
+    const timeline = resolveAudioTrackTimeline(track, episodeDurationMs);
+    const hasPersistedTimeline = Boolean(track.generationParams?.timeline && typeof track.generationParams.timeline === 'object');
+    const anchoredStartMs = track.startItemId
+      ? videoTimelineByStoryboardId.get(track.startItemId)?.startMs
+      : undefined;
+    const startMs = hasPersistedTimeline ? timeline.startMs : anchoredStartMs ?? timeline.startMs;
+    const kind = track.trackType === 'bgm' ? 'bgm' : track.trackType === 'sfx_global' ? 'sfx' : 'voice';
     allClips.push({
       id: `aud_track_${track.trackId}`,
       url: secureMediaUrl(track.audioUrl),
       startTime: startMs / 1000,
-      duration: durationMs / 1000,
-      sourceOffset: 0,
+      duration: timeline.durationMs / 1000,
+      sourceOffset: timeline.sourceOffsetMs / 1000,
       type: 'audio',
       sourceLabel: track.name || '音频轨道',
+      audioKind: kind,
+      audioTrackId: track.trackId,
+      sourceDuration: Math.max(0.1, (track.durationMs || timeline.durationMs) / 1000),
+      volume: timeline.volume,
+      fadeIn: timeline.fadeInMs / 1000,
+      fadeOut: timeline.fadeOutMs / 1000,
     });
   }
 

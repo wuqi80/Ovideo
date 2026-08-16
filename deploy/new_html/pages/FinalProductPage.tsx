@@ -2,20 +2,32 @@
  * FinalProductPage.tsx — 成品页（2026-06-14）
  *
  * 工作流「美化」之后的一站：把本项目合成好的整片汇总在这里查看/下载。
- * 数据复用项目级素材库（listMediaItems, item_type=video）；标题含「成片/完整/全片」的
- * 视为「完整成片」，置顶大播放器；其余视频作为片段列在下方。
+ * 数据复用项目级素材库（listMediaItems, source=composed_final），每次合成都作为独立版本
+ * 按创建时间倒序展示；指定版本可生成公开审阅链接并接收带时间点的访客意见。
  */
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Clapperboard, Download, Film, AlertCircle, Loader2, Wand2, Check, X, RefreshCw, Layers } from 'lucide-react';
+import { Clapperboard, Download, Film, AlertCircle, Loader2, Wand2, Check, X, Layers, Share2, MessageSquare, Copy, ExternalLink, Ban, Clock3 } from 'lucide-react';
 import { listMediaItems } from '../services/mediaLibraryService';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { getVideoTakes, startCompose, getComposeStatus, type VideoShot, type ComposeStatus } from '../services/videoWorkflowService';
 import { LazyVideo } from '../components/LazyVideo';
 import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
+import {
+  createFinalShare,
+  deactivateFinalShare,
+  finalShareUrl,
+  getFinalShare,
+  listFinalFeedback,
+  type FinalFeedback,
+  type FinalShare,
+} from '../services/finalProductShareService';
 
-const isFinalFilm = (title: string | null | undefined) =>
-  !!title && /成片|完整|全片|整片|final\s*cut|finalcut/i.test(title);
+const formatDate = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12: false });
+const formatTime = (value: number | null | undefined) => {
+  const total = Math.max(0, Math.floor(Number(value || 0)));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+};
 
 export const FinalProductPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -24,6 +36,13 @@ export const FinalProductPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [reviewItem, setReviewItem] = useState<any | null>(null);
+  const [reviewTab, setReviewTab] = useState<'share' | 'feedback'>('share');
+  const [share, setShare] = useState<FinalShare | null>(null);
+  const [feedback, setFeedback] = useState<FinalFeedback[]>([]);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState('');
+  const [copied, setCopied] = useState(false);
 
   // 合成挑选面板
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -39,7 +58,7 @@ export const FinalProductPage: React.FC = () => {
     (async () => {
       setLoading(true); setErr(null);
       try {
-        const params: any = { project_id: projectId, item_type: 'video', limit: 200 };
+        const params: any = { project_id: projectId, item_type: 'video', source: 'composed_final', limit: 200 };
         if (episodeId && assetScopeMode === 'episode') {
           params.episode_id = episodeId;
           params.include_shared = true;
@@ -108,7 +127,62 @@ export const FinalProductPage: React.FC = () => {
     }).catch(() => {});
   }, [episodeId]);
 
-  const finals = videos.filter(v => isFinalFilm(v.title));
+  const openReview = useCallback(async (item: any, tab: 'share' | 'feedback') => {
+    setReviewItem(item);
+    setReviewTab(tab);
+    setReviewLoading(true);
+    setReviewError('');
+    setCopied(false);
+    try {
+      const [shareResult, feedbackResult] = await Promise.all([
+        getFinalShare(item.library_item_id),
+        listFinalFeedback(item.library_item_id),
+      ]);
+      setShare(shareResult.share || null);
+      setFeedback(feedbackResult.feedback || []);
+    } catch (e: any) {
+      setReviewError(e?.message || '加载审阅信息失败');
+    } finally {
+      setReviewLoading(false);
+    }
+  }, []);
+
+  const enableShare = useCallback(async () => {
+    if (!reviewItem) return;
+    setReviewLoading(true);
+    setReviewError('');
+    try {
+      const result = await createFinalShare(reviewItem.library_item_id);
+      setShare(result.share);
+    } catch (e: any) {
+      setReviewError(e?.message || '创建分享失败');
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [reviewItem]);
+
+  const disableShare = useCallback(async () => {
+    if (!reviewItem || !share) return;
+    if (!window.confirm('停止分享后，原链接将立即失效。确定停止吗？')) return;
+    setReviewLoading(true);
+    try {
+      await deactivateFinalShare(reviewItem.library_item_id, share.share_id);
+      setShare(null);
+    } catch (e: any) {
+      setReviewError(e?.message || '停止分享失败');
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [reviewItem, share]);
+
+  const copyShare = useCallback(async () => {
+    if (!share) return;
+    await navigator.clipboard.writeText(finalShareUrl(share.share_token));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  }, [share]);
+
+  const finals = videos;
   const featured = finals[0] || null;
   const additionalFinals = finals.slice(1);
 
@@ -117,7 +191,7 @@ export const FinalProductPage: React.FC = () => {
       <header className="responsive-toolbar mb-5 flex items-center gap-2">
         <Clapperboard className="w-5 h-5 text-primary" />
         <h1 className="text-lg font-semibold text-n800">成品</h1>
-        <span className="text-xs text-n100">合成好的整片在这里查看与下载</span>
+        <span className="text-xs text-n100">每次合成都保留为独立版本，可分享审阅并汇总修改意见</span>
         <div className="flex-1 min-w-[16px]" />
         {episodeId && (
           <div className="flex items-center gap-1 p-0.5 rounded-md border border-n40 bg-n0" title="成品可见范围">
@@ -182,18 +256,27 @@ export const FinalProductPage: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-6 max-w-6xl min-w-0">
-          {/* 主成片 */}
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-n800">合成历史</h2>
+              <p className="text-xs text-n100 mt-1">共 {finals.length} 个成品，最新版本置顶，历史版本不会覆盖。</p>
+            </div>
+          </div>
+
+          {/* 最新成片 */}
           {featured && (
             <div className="bg-n0 border border-n40 rounded-md shadow-card overflow-hidden">
               <div className="responsive-toolbar flex items-center justify-between px-4 py-3 border-b border-n40">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-success-light text-success font-medium shrink-0">完整成片</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-success-light text-success font-medium shrink-0">最新成品</span>
                   <span className="text-sm font-semibold text-n800 truncate">{featured.title}</span>
+                  <span className="text-[11px] text-n100 shrink-0">{formatDate(featured.created_at)}</span>
                 </div>
-                <a href={featured.file_url} download
-                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs text-primary hover:bg-primary-light border border-n40 shrink-0">
-                  <Download className="w-3.5 h-3.5" /> 下载
-                </a>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button type="button" onClick={() => openReview(featured, 'feedback')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs text-n500 hover:bg-n20 border border-n40"><MessageSquare size={14} />意见</button>
+                  <button type="button" onClick={() => openReview(featured, 'share')} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs text-primary hover:bg-primary-light border border-n40"><Share2 size={14} />分享</button>
+                  <a href={featured.file_url} download className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs text-primary hover:bg-primary-light border border-n40"><Download className="w-3.5 h-3.5" />下载</a>
+                </div>
               </div>
               <LazyVideo
                 src={featured.file_url}
@@ -206,12 +289,12 @@ export const FinalProductPage: React.FC = () => {
             </div>
           )}
 
-          {/* 其它完整成片 */}
+          {/* 历史成片 */}
           {additionalFinals.length > 0 && (
             <div>
-              <div className="text-xs font-semibold text-n300 mb-2">其它完整成片（{additionalFinals.length}）</div>
+              <div className="text-xs font-semibold text-n300 mb-2">历史版本（{additionalFinals.length}）</div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {additionalFinals.map(v => (
+                {additionalFinals.map((v, index) => (
                   <div key={v.library_item_id} className="bg-n0 border border-n40 rounded-md overflow-hidden shadow-card">
                     <LazyVideo
                       src={v.file_url}
@@ -222,17 +305,80 @@ export const FinalProductPage: React.FC = () => {
                       hoverPreview={false}
                       className="w-full aspect-video bg-black block"
                     />
-                    <div className="px-2.5 py-2 flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-n700 truncate" title={v.title || ''}>{v.title || '未命名'}</span>
-                      <a href={v.file_url} download className="text-n100 hover:text-primary shrink-0" title="下载">
-                        <Download className="w-3.5 h-3.5" />
-                      </a>
+                    <div className="px-3 py-2.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] rounded bg-n20 text-n300 px-1.5 py-0.5 shrink-0">版本 {String(finals.length - index - 1).padStart(2, '0')}</span>
+                        <span className="text-[11px] text-n700 truncate" title={v.title || ''}>{v.title || '未命名'}</span>
+                      </div>
+                      <div className="text-[10px] text-n100 mt-1">{formatDate(v.created_at)}{v.duration_seconds != null ? ` · ${formatTime(v.duration_seconds)}` : ''}</div>
+                      <div className="flex items-center gap-1 mt-2 pt-2 border-t border-n30">
+                        <button type="button" onClick={() => openReview(v, 'feedback')} className="flex-1 inline-flex justify-center items-center gap-1 rounded px-2 py-1 text-[11px] text-n300 hover:bg-n20"><MessageSquare size={12} />意见</button>
+                        <button type="button" onClick={() => openReview(v, 'share')} className="flex-1 inline-flex justify-center items-center gap-1 rounded px-2 py-1 text-[11px] text-primary hover:bg-primary-light"><Share2 size={12} />分享</button>
+                        <a href={v.file_url} download className="p-1 text-n100 hover:text-primary" title="下载"><Download className="w-3.5 h-3.5" /></a>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {reviewItem && (
+        <div className="fixed inset-0 z-[60] bg-black/45 flex items-center justify-center p-4" onClick={() => setReviewItem(null)}>
+          <div className="modal-surface bg-n0 rounded-xl shadow-bottom w-[680px] max-w-full max-h-[82vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-n40 flex items-center gap-3">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-n800 truncate">{reviewItem.title || '成品审阅'}</h2>
+                <p className="text-[11px] text-n100 mt-0.5">{formatDate(reviewItem.created_at)}</p>
+              </div>
+              <button type="button" onClick={() => setReviewItem(null)} className="ml-auto text-n100 hover:text-n700"><X size={17} /></button>
+            </div>
+            <div className="px-5 pt-3 flex items-center gap-1 border-b border-n40">
+              <button type="button" onClick={() => setReviewTab('share')} className={`px-3 py-2 text-xs border-b-2 ${reviewTab === 'share' ? 'border-primary text-primary' : 'border-transparent text-n300'}`}>分享链接</button>
+              <button type="button" onClick={() => setReviewTab('feedback')} className={`px-3 py-2 text-xs border-b-2 ${reviewTab === 'feedback' ? 'border-primary text-primary' : 'border-transparent text-n300'}`}>审阅意见 {feedback.length ? `(${feedback.length})` : ''}</button>
+            </div>
+            <div className="p-5 overflow-y-auto min-h-[230px]">
+              {reviewLoading ? (
+                <div className="h-40 flex items-center justify-center text-sm text-n100"><Loader2 size={16} className="animate-spin mr-2" />加载中…</div>
+              ) : reviewError ? (
+                <div className="text-sm text-danger">{reviewError}</div>
+              ) : reviewTab === 'share' ? (
+                <div>
+                  <div className="rounded-lg bg-primary-light/50 border border-primary/20 p-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-n800"><Share2 size={16} className="text-primary" />分享指定成品</div>
+                    <p className="text-xs text-n300 mt-2 leading-5">访问者只能查看当前这个成品并提交意见，无法进入项目、其它分集或创作工作区。</p>
+                  </div>
+                  {!share ? (
+                    <button type="button" onClick={enableShare} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary text-white px-4 py-2 text-sm"><Share2 size={15} />生成分享链接</button>
+                  ) : (
+                    <div className="mt-4 space-y-3">
+                      <label className="block text-xs text-n300">公开审阅链接</label>
+                      <div className="flex gap-2">
+                        <input readOnly value={finalShareUrl(share.share_token)} className="flex-1 min-w-0 border border-n40 rounded-lg px-3 py-2 text-xs bg-n10" />
+                        <button type="button" onClick={copyShare} className="inline-flex items-center gap-1.5 border border-n40 rounded-lg px-3 text-xs text-primary hover:bg-primary-light"><Copy size={14} />{copied ? '已复制' : '复制'}</button>
+                        <a href={finalShareUrl(share.share_token)} target="_blank" rel="noreferrer" className="inline-flex items-center border border-n40 rounded-lg px-3 text-n300 hover:bg-n20" title="打开链接"><ExternalLink size={14} /></a>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-n100"><span>已访问 {share.access_count || 0} 次</span><span>创建于 {formatDate(share.created_at)}</span></div>
+                      <button type="button" onClick={disableShare} className="inline-flex items-center gap-1.5 text-xs text-danger hover:bg-danger-light rounded px-2 py-1.5"><Ban size={14} />停止分享</button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {!feedback.length && <div className="py-12 text-center text-sm text-n100"><MessageSquare size={24} className="mx-auto mb-2 opacity-50" />还没有收到审阅意见</div>}
+                  {feedback.map(item => (
+                    <article key={item.feedback_id} className="rounded-lg border border-n40 p-3">
+                      <div className="flex items-center gap-2 text-xs"><span className="font-medium text-n700">{item.author_name || '访客'}</span><span className="ml-auto text-n100">{formatDate(item.created_at)}</span></div>
+                      {item.timestamp_seconds != null && <span className="mt-2 inline-flex items-center gap-1 rounded bg-primary-light px-2 py-0.5 text-[11px] text-primary"><Clock3 size={11} />视频 {formatTime(item.timestamp_seconds)}</span>}
+                      <p className="mt-2 text-sm text-n500 whitespace-pre-wrap">{item.content}</p>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

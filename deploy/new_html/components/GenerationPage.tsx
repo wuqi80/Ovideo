@@ -63,6 +63,20 @@ import {
   serializeStoryboardImageDrag,
   STORYBOARD_IMAGE_DRAG_MIME,
 } from '../utils/storyboardImageDrag';
+import { GpuNodeSelector, type GpuNodeSelection } from './GpuNodeSelector';
+import { InlineCreditEstimate } from './InlineCreditEstimate';
+import { crmMessage } from '../admin/crmUI';
+import { assertEnoughCredits, consumeCredits } from '../services/creditService';
+import {
+  DESIGN_CREDIT_DEFAULTS,
+  DESIGN_CREDIT_FEATURES,
+  designOperationCreditParams,
+  newDesignCreditUsageId,
+} from '../utils/designCredits';
+import {
+  getStoryboardGenerationModelOption,
+  STORYBOARD_GENERATION_MODEL_OPTIONS,
+} from '../utils/storyboardGenerationModels';
 
 const MattingModal = React.lazy(() => import('./MattingModal'));
 const ImageFusionModal = React.lazy(() => import('./ImageFusionModal'));
@@ -531,7 +545,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     defaultValue: 'nanobanana',
   });
   // ComfyUI 档位固定使用用户选择的 GPU 节点，默认 GPU1。
-  const COMFYUI_MODELS = React.useMemo(() => new Set<string>(['qwen', 'qwen_lora', 'qwenN', 'qwenN_lora', 'kontext']), []);
+  const COMFYUI_MODELS = React.useMemo(() => new Set<string>(
+    STORYBOARD_GENERATION_MODEL_OPTIONS
+      .filter(option => option.requiresCluster)
+      .map(option => option.value),
+  ), []);
   const [clusterNodes, setClusterNodes] = useState<ClusterNodeOption[]>([]);
   const [clusterNodesLoading, setClusterNodesLoading] = useState(false);
   const [clusterNodeMessage, setClusterNodeMessage] = useState('');
@@ -586,6 +604,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     version: 1,
     defaultValue: {},
   });
+  const [configLockDrafts, setConfigLockDrafts] = useState<Record<string, boolean>>({});
+  const isStoryboardConfigLocked = useCallback((item: StoryboardItem) => (
+    configLockDrafts[item.id] ?? Boolean(item.isConfigConfirmed)
+  ), [configLockDrafts]);
 
   // 所有分镜图像模型共享比例 / 分辨率偏好。默认 16:9 + 1K；
   // 用户主动选择 auto 时，提交前按最大参考图解析为确定值。
@@ -793,14 +815,30 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const hasUnloadedStoryboardItems = storyboardTotalCount > loadedStoryboardCount;
   const allStoryboardItemsSelected = storyboardTotalCount > 0 && selectedShotIds.size === storyboardTotalCount;
   const selectedShot = hasStoryboard && selectedFile ? selectedFile.storyboard!.items.find(i => i.id === selectedShotId) : null;
+  useEffect(() => {
+      const items = selectedFile?.storyboard?.items || [];
+      setConfigLockDrafts(previous => {
+          const next = { ...previous };
+          let changed = false;
+          items.forEach(item => {
+              if (next[item.id] === Boolean(item.isConfigConfirmed)) {
+                  delete next[item.id];
+                  changed = true;
+              }
+          });
+          return changed ? next : previous;
+      });
+  }, [selectedFile?.storyboard?.items]);
   const referencePlan = useMemo(() => (
       selectedShot
           ? resolveShotReferencePlan(selectedShot, materialLibrary, references)
           : { references: [], excluded: [], criticalExcluded: [], maxReferences: 6 }
   ), [materialLibrary, references, selectedShot]);
-  const selectedGenerationModel = selectedShot
-      ? (shotModels[selectedShot.id] || globalModel)
-      : globalModel;
+  const selectedShotModelOverride = selectedShot ? shotModels[selectedShot.id] : undefined;
+  const selectedGenerationModel = selectedShotModelOverride || globalModel;
+  const globalModelOption = getStoryboardGenerationModelOption(globalModel);
+  const selectedGenerationModelOption = getStoryboardGenerationModelOption(selectedGenerationModel);
+  const selectedConfigLocked = selectedShot ? isStoryboardConfigLocked(selectedShot) : false;
   const [selectedReferenceDimensions, setSelectedReferenceDimensions] = useState<SourceImageDimensions[]>([]);
   const [isLoadingReferenceDimensions, setIsLoadingReferenceDimensions] = useState(false);
   useEffect(() => {
@@ -1066,9 +1104,13 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   const handleConfirmConfig = () => {
       if (!selectedShot) return;
       
-      // 🔧 确认/取消配置 - 只切换锁定状态，不修改任何页面数据
-      const newState = !selectedShot.isConfigConfirmed;
+      // 先更新本地锁定草稿，再写入原有持久化字段，避免等待重新拉取时按钮看起来“没生效”。
+      const newState = !isStoryboardConfigLocked(selectedShot);
       console.log(newState ? '🔒 锁定配置' : '🔓 解锁配置');
+      setConfigLockDrafts(previous => ({
+        ...previous,
+        [selectedShot.id]: newState,
+      }));
       onUpdateStoryboardItem(selectedShot.id, { 
         isConfigConfirmed: newState
       });
@@ -1938,11 +1980,17 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   };
 
   // 🆕 多角度人物生成处理函数
-  const handleHumanMultiAngle = async (imageUrl: string, seed: number) => {
+  const handleHumanMultiAngle = async (imageUrl: string, seed: number, gpu: GpuNodeSelection) => {
     if (!selectedShot) return;
-    
+
+    const creditParams = designOperationCreditParams('human_multi_angle');
+    const registryMeta = buildRegistryMeta(selectedShot, 'human-multi-angle', '多角度人物');
+    let generatedCount = 0;
+    let backendTaskId = '';
     setIsHumanMultiAngleGenerating(true);
     try {
+        await assertEnoughCredits(DESIGN_CREDIT_FEATURES.multiAngleGeneration, creditParams);
+
         // 将图片转换为 dataUrl（如果需要）
         const baseImage = await ensureDataUrl(imageUrl);
         
@@ -1952,8 +2000,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           entityType: 'storyboard_item',
           entityId: selectedShot?.id,
           fileRole: 'generated_image',
+          projectId: registryMeta.targetProjectId,
           episodeId,
-        }, buildRegistryMeta(selectedShot, 'human-multi-angle', '多角度人物'));
+          preferredAgentId: gpu.preferredAgentId,
+          preferredNodeId: gpu.preferredNodeId,
+        }, registryMeta, taskId => { backendTaskId = taskId; });
         console.log(`✅ 多角度生成完成，共 ${resultUrls.length} 张图片:`, resultUrls);
         
         const newImages: GeneratedImage[] = (resultUrls as GeneratedImageResult[])
@@ -1969,6 +2020,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         if (newImages.length === 0) {
             throw new Error('没有成功生成任何图片');
         }
+        generatedCount = newImages.length;
         
         onUpdateStoryboardItem(selectedShot.id, {
             generatedImages: newImages,
@@ -1980,11 +2032,33 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
         onForceSave();
         queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', selectedShot?.id] });
         notifyStoryboardImageChanged(episodeId, selectedShot?.id);
-        
         setHumanMultiAngleModalImage(null);
+
+        try {
+            const settlement = await consumeCredits({
+                featureKey: DESIGN_CREDIT_FEATURES.multiAngleGeneration,
+                taskId: backendTaskId
+                    ? `storyboard-human-multi-angle:${backendTaskId}`
+                    : newDesignCreditUsageId('storyboard-human-multi-angle'),
+                params: creditParams,
+                projectId: registryMeta.targetProjectId,
+                metadata: {
+                    episode_id: episodeId || null,
+                    storyboard_item_id: selectedShot.id,
+                    workflow: 'human_multi_angle',
+                    output_count: generatedCount,
+                    processing_node: gpu.name,
+                },
+            });
+            crmMessage.success(`多角度人物生成完成，已扣除 ${settlement.charged_credits} 积分`);
+        } catch (settlementError: any) {
+            crmMessage.warning(`多角度图片已生成，但积分结算失败：${settlementError?.message || String(settlementError)}`);
+        }
     } catch (error: any) {
         console.error('Human multi-angle generation failed', error);
-        alert(error?.message || '多角度人物生成失败，请稍后再试。');
+        if (generatedCount === 0) {
+            crmMessage.error(error?.message || '多角度人物生成失败，请稍后再试。');
+        }
     } finally {
         setIsHumanMultiAngleGenerating(false);
     }
@@ -2655,46 +2729,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                    </span>
                                  </div>
                                  <div className="flex shrink-0 items-center gap-1">
-                                   {/* Model Indicator */}
-                                   <button
-                                       type="button"
-                                       className="relative"
-                                       onClick={(e) => {
-                                           e.stopPropagation();
-                                           const currentModel = shotModels[item.id] || globalModel;
-                                           const models: GenerationModel[] = ['nanobanana', 'qwen', 'qwen_lora', 'kontext', 'qwenN', 'qwenN_lora', 'gpt_image_vip', 'gpt_image_official'];
-                                           const currentIndex = models.indexOf(currentModel);
-                                           const nextModel = models[(currentIndex + 1) % models.length];
-                                           setShotModels(prev => ({ ...prev, [item.id]: nextModel }));
-                                       }}
-                                       title="点击切换模型"
-                                   >
-                                     <span className={`inline-flex h-5 min-w-[36px] items-center justify-center rounded px-1.5 text-[8px] font-medium transition-colors ${
-                                         (shotModels[item.id] || globalModel) === 'nanobanana'
-                                             ? 'bg-y50 text-warning'
-                                             : (shotModels[item.id] || globalModel) === 'qwen'
-                                             ? 'bg-primary-light text-primary'
-                                             : (shotModels[item.id] || globalModel) === 'qwen_lora'
-                                             ? 'bg-g50 text-success'
-                                             : (shotModels[item.id] || globalModel) === 'qwenN'
-                                             ? 'bg-r50 text-danger'
-                                             : (shotModels[item.id] || globalModel) === 'gpt_image_vip'
-                                             ? 'bg-purple-50 text-purple-600'
-                                             : (shotModels[item.id] || globalModel) === 'gpt_image_official'
-                                             ? 'bg-rose-50 text-rose-600'
-                                             : 'bg-primary-light text-primary'
-                                     }`}>
-                                       {(shotModels[item.id] || globalModel) === 'nanobanana' ? '化神' :
-                                        (shotModels[item.id] || globalModel) === 'qwen' ? '练气一阶' :
-                                        (shotModels[item.id] || globalModel) === 'qwen_lora' ? '筑基一阶' :
-                                        (shotModels[item.id] || globalModel) === 'qwenN' ? 'K神' :
-                                        (shotModels[item.id] || globalModel) === 'qwenN_lora' ? '筑基二阶' :
-                                        (shotModels[item.id] || globalModel) === 'kontext' ? '练气二阶' :
-                                        (shotModels[item.id] || globalModel) === 'gpt_image_vip' ? '天劫一' :
-                                        (shotModels[item.id] || globalModel) === 'gpt_image_official' ? '天劫二' : '未知'}
-                                     </span>
-                                   </button>
-                                   {item.isConfigConfirmed && <CheckCircle2 className="h-3.5 w-3.5 text-success" />}
+                                   {isStoryboardConfigLocked(item) && <CheckCircle2 className="h-3.5 w-3.5 text-success" />}
                                    {onDeleteStoryboardItem && (
                                      <button
                                          type="button"
@@ -2799,21 +2834,38 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               
             {/* Configuration Column */}
             <div className="storyboard-config-pane min-h-0 flex flex-col border-r border-n40 bg-n0 px-6 pt-6 pb-24 overflow-y-auto custom-scrollbar">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="mb-4 flex flex-wrap items-center gap-3">
                       <h3 className="text-sm font-bold text-n700 flex items-center gap-2">
                         <Sparkles className="w-4 h-4 text-primary" />
                       画面分镜配置
                       </h3>
+                      <label className="ml-auto flex min-w-0 items-center gap-2 text-[10px] text-n300">
+                        <span className="shrink-0">默认模型</span>
+                        <select
+                          value={globalModel}
+                          onChange={(event) => setGlobalModel(event.target.value as GenerationModel)}
+                          disabled={isGenerating}
+                          aria-label="默认生成模型"
+                          className="h-8 min-w-0 max-w-[220px] rounded border border-n40 bg-n0 px-2 text-[10px] font-medium text-n700 outline-none transition-colors hover:border-primary focus:border-primary disabled:bg-n20 disabled:text-n100"
+                          title={globalModelOption.hint}
+                        >
+                          {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                          ))}
+                        </select>
+                      </label>
                       <button 
                         onClick={handleConfirmConfig}
+                        disabled={!selectedShot || isGenerating}
+                        aria-pressed={selectedConfigLocked}
                         className={`text-[10px] flex items-center gap-1 px-2 py-1 rounded border transition-colors ${
-                          selectedShot?.isConfigConfirmed 
+                          selectedConfigLocked
                             ? 'bg-g50 text-success border-g75'
                             : 'bg-n0 text-n300 border-n40 hover:text-n800'
-                        }`}
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
                       >
                           <CheckCircle2 className="w-3 h-3" />
-                        {selectedShot?.isConfigConfirmed ? '解除配置锁定' : '确认并锁定配置'}
+                        {selectedConfigLocked ? '解除配置锁定' : '确认并锁定配置'}
                       </button>
                   </div>
 
@@ -2821,100 +2873,41 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                 <div className="mb-6 p-4 bg-n20 border border-n40 rounded-md">
                     <div className="flex items-center gap-2 mb-3">
                         <Zap className="w-3.5 h-3.5 text-yellow-400" />
-                        <span className="text-xs font-bold text-n700">默认生成模型</span>
+                        <span className="text-xs font-bold text-n700">当前镜头生成模型</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                        <button
-                            onClick={() => setGlobalModel('qwen')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'qwen'
-                                    ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            练气一阶
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('qwen_lora')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'qwen_lora'
-                                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            筑基一阶
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('nanobanana')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'nanobanana'
-                                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            化神
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('kontext')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'kontext'
-                                    ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            练气二阶
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('qwenN_lora')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'qwenN_lora'
-                                    ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            筑基二阶
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('qwenN')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'qwenN'
-                                    ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            K神
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('gpt_image_vip')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'gpt_image_vip'
-                                    ? 'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            天劫一阶
-                        </button>
-                        <button
-                            onClick={() => setGlobalModel('gpt_image_official')}
-                            className={`px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                                globalModel === 'gpt_image_official'
-                                    ? 'bg-gradient-to-r from-rose-500 to-orange-500 text-white shadow-lg'
-                                    : 'bg-n0 text-n300 border border-n40 hover:bg-n20'
-                            }`}
-                            disabled={isGenerating}
-                        >
-                            天劫二阶
-                        </button>
+                    <select
+                        value={selectedShotModelOverride || ''}
+                        onChange={(event) => {
+                          if (!selectedShot || selectedConfigLocked) return;
+                          const nextModel = event.target.value;
+                          setShotModels(previous => {
+                            if (!nextModel) {
+                              const next = { ...previous };
+                              delete next[selectedShot.id];
+                              return next;
+                            }
+                            return {
+                              ...previous,
+                              [selectedShot.id]: nextModel as GenerationModel,
+                            };
+                          });
+                        }}
+                        disabled={!selectedShot || selectedConfigLocked || isGenerating}
+                        aria-label="当前镜头生成模型"
+                        className="h-10 w-full rounded border border-n40 bg-n0 px-3 text-xs font-medium text-n700 outline-none transition-colors hover:border-primary focus:border-primary disabled:bg-n20 disabled:text-n100"
+                    >
+                        <option value="">跟随默认 · {globalModelOption.shortLabel}</option>
+                        {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                    </select>
+                    <div className="mt-2 rounded bg-n0 px-3 py-2 text-[10px] leading-4 text-n300">
+                        <strong className="mr-1 text-n700">{selectedGenerationModelOption.shortLabel}</strong>
+                        {selectedGenerationModelOption.hint}
+                        {!selectedShotModelOverride && <span className="ml-1 text-primary">· 跟随默认</span>}
                     </div>
                     {/* ComfyUI 档位走用户固定选择的 GPU Agent，默认 GPU1。 */}
-                    {COMFYUI_MODELS.has(globalModel) && (
+                    {COMFYUI_MODELS.has(selectedGenerationModel) && (
                         <div className={`mt-2 rounded border px-2 py-2 text-[10px] leading-relaxed ${
                             usableClusterNodes.length > 0
                                 ? 'bg-g50 text-g400 border-g200'
@@ -2965,16 +2958,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             </div>
                         </div>
                     )}
-                    <p className="text-[9px] text-n100 mt-2">
-                        {globalModel === 'nanobanana' && '化神境界 · 点击分镜列表中的模型标识可单独设置'}
-                        {globalModel === 'qwen' && '练气一阶 · 点击分镜列表中的模型标识可单独设置'}
-                        {globalModel === 'qwen_lora' && '筑基一阶境界 · 点击分镜列表中的模型标识可单独设置'}
-                        {globalModel === 'kontext' && '练气二阶 · 点击分镜列表中的模型标识可单独设置'}
-                        {globalModel === 'qwenN' && 'K神境界 · 点击分镜列表中的模型标识可单独设置'}
-                        {globalModel === 'qwenN_lora' && '筑基二阶境界 · 点击分镜列表中的模型标识可单独设置'}
-                        {selectedGenerationModel === 'gpt_image_vip' && '天劫一阶 · GPT Image VIP 系列，可调整比例 / 分辨率档位'}
-                        {selectedGenerationModel === 'gpt_image_official' && '天劫二阶 · GPT Image 官方混合，可调整比例 / 分辨率 / 质量'}
-                    </p>
+                    <p className="mt-2 text-[9px] text-n100">顶部设置全局默认模型；当前镜头可以跟随默认，也可在此单独覆盖。</p>
 
                     <div className="mt-3 pt-3 border-t border-n40">
                         <div className="text-[9px] text-n100 mb-2 flex items-center gap-1">
@@ -2988,7 +2972,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             <select
                               value={imageRatio}
                               onChange={(e) => setImageRatio(e.target.value as GptImageRatio)}
-                              disabled={isGenerating}
+                              disabled={selectedConfigLocked || isGenerating}
                               className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-primary focus:outline-none"
                             >
                               {GPT_IMAGE_RATIO_OPTIONS.map(o => (
@@ -3001,7 +2985,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             <select
                               value={imageK}
                               onChange={(e) => setImageK(e.target.value as GptImageK)}
-                              disabled={isGenerating}
+                              disabled={selectedConfigLocked || isGenerating}
                               className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-primary focus:outline-none"
                             >
                               {GPT_IMAGE_K_OPTIONS.map(o => (
@@ -3015,7 +2999,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                               <select
                                 value={imageQuality}
                                 onChange={(e) => setImageQuality(e.target.value as GptImageQuality)}
-                                disabled={isGenerating}
+                                disabled={selectedConfigLocked || isGenerating}
                                 className="w-full px-2 py-1 text-[10px] bg-n0 border border-n40 rounded text-n700 focus:border-rose-500 focus:outline-none"
                               >
                                 {GPT_IMAGE_QUALITY_OPTIONS.map(o => (
@@ -3055,8 +3039,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                               });
                             }
                           }}
-                        disabled={selectedShot?.isConfigConfirmed}
-                        className={`w-full h-32 bg-n0 border border-n40 rounded-lg p-3 text-xs text-n700 focus:border-primary focus:outline-none resize-none leading-relaxed ${selectedShot?.isConfigConfirmed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        disabled={selectedConfigLocked}
+                        className={`w-full h-32 bg-n0 border border-n40 rounded-lg p-3 text-xs text-n700 focus:border-primary focus:outline-none resize-none leading-relaxed ${selectedConfigLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                       />
                   </div>
 
@@ -3347,10 +3331,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                                       // 🔧 修改：打开多角度生成弹窗
                                                       setHumanMultiAngleModalImage(img.url || img.thumbnail);
                                                   }}
-                                                  className="p-1.5 bg-blue-500/80 hover:bg-blue-600 text-white rounded-md transition-colors"
-                                                  title="多角度人物生成"
+                                                  className="inline-flex items-center gap-1 rounded-md bg-blue-500/80 px-2 py-1.5 text-white transition-colors hover:bg-blue-600"
+                                                  title="多角度人物生成：一次生成 14 个身份一致视角"
+                                                  aria-label="多角度人物生成，一次生成 14 个身份一致视角"
                                               >
                                                   <Users className="w-3.5 h-3.5" />
+                                                  <span className="text-[9px] font-semibold">14 视角</span>
                                               </button>
                                               <button 
                                                   onClick={(e) => { 
@@ -3365,10 +3351,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                               </button>
                                               <button 
                                                   onClick={(e) => { e.stopPropagation(); setCameraModalImage(img.url || img.thumbnail); }}
-                                                  className="p-1.5 bg-primary hover:bg-primary-hover text-white rounded-md transition-colors"
-                                                  title="角度调整"
+                                                  className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1.5 text-white transition-colors hover:bg-primary-hover"
+                                                  title="角度调整：生成 1 个指定镜头角度"
+                                                  aria-label="角度调整，生成 1 个指定镜头角度"
                                               >
                                                   <Camera className="w-3.5 h-3.5" />
+                                                  <span className="text-[9px] font-semibold">单角度</span>
                                               </button>
                                               <button 
                                                   onClick={(e) => { e.stopPropagation(); setMattingModalImage(img.url || img.thumbnail); }}
@@ -4018,6 +4006,10 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
                     </div>
 
                     <div className="space-y-5">
+                        <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs leading-5 text-n700">
+                            <strong className="block text-primary">单视角精确调整</strong>
+                            仅生成 1 张指定镜头角度；需要一次获得 14 个身份一致视角时，请使用“多角度人物生成”。
+                        </div>
                         <div className="space-y-3 bg-n20 border border-n40 rounded-md p-4">
                             <h4 className="text-xs font-bold text-n300 uppercase">镜头控制</h4>
                             <DiscreteSlider 
@@ -4106,20 +4098,23 @@ const CameraAngleModal: React.FC<CameraAngleModalProps> = ({
 interface HumanMultiAngleModalProps {
     imageUrl: string;
     onClose: () => void;
-    onSubmit: (imageUrl: string, seed: number) => void;
+    onSubmit: (imageUrl: string, seed: number, gpu: GpuNodeSelection) => void;
     isProcessing: boolean;
 }
 
 const HumanMultiAngleModal: React.FC<HumanMultiAngleModalProps> = ({ imageUrl, onClose, onSubmit, isProcessing }) => {
     const [seed, setSeed] = useState(() => Math.floor(Math.random() * 900000000000000) + 100000000000000);
+    const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
+    const creditParams = useMemo(() => designOperationCreditParams('human_multi_angle'), []);
 
     const handleSubmit = () => {
-        onSubmit(imageUrl, seed);
+        if (!gpuSelection?.usable) return;
+        onSubmit(imageUrl, seed, gpuSelection);
     };
 
     return (
         <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={isProcessing ? undefined : onClose}>
-            <div className="w-full max-w-2xl bg-n0 border border-n40 rounded-2xl shadow-2xl p-6 space-y-6 relative" onClick={(e) => e.stopPropagation()}>
+            <div className="relative max-h-[calc(100vh-2rem)] w-full max-w-4xl space-y-6 overflow-y-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
                 
                 {/* Loading覆盖层 - 处理中时显示 */}
                 {isProcessing && (
@@ -4139,50 +4134,92 @@ const HumanMultiAngleModal: React.FC<HumanMultiAngleModalProps> = ({ imageUrl, o
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="text-lg font-bold text-n800">多角度人物生成</h3>
-                        <p className="text-xs text-n300 mt-1">基于选中的图片生成多角度人物视图</p>
+                        <p className="text-xs text-n300 mt-1">一次固定生成 14 个身份一致视角，适合建立完整人物视图库。</p>
                     </div>
                     <button onClick={onClose} className="text-n300 hover:text-n800" disabled={isProcessing}>
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 gap-6">
-                    {/* 预览图 */}
-                    <div className="relative rounded-2xl overflow-hidden border border-n40 h-64 bg-n30 flex items-center justify-center">
-                        <img src={imageUrl} loading="lazy" decoding="async" className="w-full h-full object-contain" alt="选中的图片" />
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <div className="space-y-4">
+                        {/* 预览图 */}
+                        <div className="relative flex h-72 items-center justify-center overflow-hidden rounded-2xl border border-n40 bg-n30">
+                            <img src={imageUrl} loading="lazy" decoding="async" className="h-full w-full object-contain" alt="选中的图片" />
+                        </div>
+                        <GpuNodeSelector
+                            onSelectionChange={setGpuSelection}
+                            disabled={isProcessing}
+                        />
                     </div>
 
-                    {/* Seed 控制 */}
-                    <div className="bg-n20 border border-n40 rounded-md p-4">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                                <span className="text-[11px] font-bold text-n300 uppercase">随机种子</span>
-                                <input
-                                    type="number"
-                                    value={seed}
-                                    onChange={(e) => setSeed(Number(e.target.value))}
-                                    className="w-48 bg-n0 border border-n40 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary text-n800"
-                                />
+                    <div className="space-y-4">
+                        <section className="rounded-md border border-n40 bg-n20 p-4">
+                            <h4 className="text-xs font-bold text-n700">生成规格</h4>
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                                <div className="rounded-md border border-n40 bg-n0 p-3">
+                                    <span className="block text-[10px] text-n300">输出数量</span>
+                                    <strong className="mt-1 block text-n800">固定 14 个视角</strong>
+                                </div>
+                                <div className="rounded-md border border-n40 bg-n0 p-3">
+                                    <span className="block text-[10px] text-n300">生成策略</span>
+                                    <strong className="mt-1 block text-n800">保持人物身份一致</strong>
+                                </div>
+                                <div className="col-span-2 rounded-md border border-primary/20 bg-primary/5 p-3">
+                                    <span className="block text-[10px] text-primary">与角度调整的区别</span>
+                                    <strong className="mt-1 block text-n800">多角度生成 14 张；角度调整仅生成 1 张指定角度</strong>
+                                </div>
                             </div>
-                            <button 
-                                onClick={() => setSeed(Math.floor(Math.random() * 900000000000000) + 100000000000000)} 
-                                className="px-3 py-1.5 rounded border border-n40 hover:border-primary hover:text-n800 transition-colors text-sm text-n300"
-                            >
-                                随机
-                            </button>
-                        </div>
+                            <p className="mt-3 text-[11px] leading-5 text-n300">
+                                系统使用固定多视角工作流生成正面、侧面、背面等人物视图，无需额外选择模型或角度。
+                            </p>
+                        </section>
+
+                        {/* Seed 控制 */}
+                        <section className="rounded-md border border-n40 bg-n20 p-4">
+                            <div className="flex items-end justify-between gap-3">
+                                <label className="space-y-1">
+                                    <span className="block text-[11px] font-bold uppercase text-n300">随机种子</span>
+                                    <input
+                                        type="number"
+                                        value={seed}
+                                        onChange={(e) => setSeed(Number(e.target.value))}
+                                        className="w-48 rounded border border-n40 bg-n0 px-2 py-1.5 text-sm text-n800 focus:border-primary focus:outline-none"
+                                    />
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setSeed(Math.floor(Math.random() * 900000000000000) + 100000000000000)}
+                                    disabled={isProcessing}
+                                    className="rounded border border-n40 px-3 py-1.5 text-sm text-n300 transition-colors hover:border-primary hover:text-n800 disabled:opacity-50"
+                                >
+                                    随机
+                                </button>
+                            </div>
+                            <p className="mt-2 text-[10px] leading-4 text-n300">
+                                相同原图配合相同种子更容易复现相近结果；随机种子用于探索新的视角组合。
+                            </p>
+                        </section>
                     </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
-                    <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20" disabled={isProcessing}>取消</button>
-                    <button 
-                        onClick={handleSubmit} 
-                        disabled={isProcessing}
-                        className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {isProcessing ? '生成中...' : '开始生成'}
-                    </button>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-n40 pt-4">
+                    <InlineCreditEstimate
+                        featureKey={DESIGN_CREDIT_FEATURES.multiAngleGeneration}
+                        params={creditParams}
+                        fallbackCost={DESIGN_CREDIT_DEFAULTS.multiAngleGeneration}
+                    />
+                    <div className="flex items-center gap-3">
+                        <button onClick={onClose} className="rounded-lg border border-n40 px-4 py-2 text-xs text-n700 hover:bg-n20" disabled={isProcessing}>取消</button>
+                        <button
+                            onClick={handleSubmit}
+                            disabled={isProcessing || !gpuSelection?.usable}
+                            title={!gpuSelection?.usable ? '请先选择一个可用处理节点' : undefined}
+                            className="rounded-lg bg-primary px-5 py-2 text-xs font-bold text-white shadow-lg hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            {isProcessing ? '生成中...' : '开始生成'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

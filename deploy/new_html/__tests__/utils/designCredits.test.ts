@@ -15,12 +15,14 @@ describe('designCredits', () => {
       imageGeneration: 'design_image_generation',
       promptRefinement: 'design_prompt_refinement',
       angleAdjustment: 'design_angle_adjustment',
+      multiAngleGeneration: 'design_multi_angle_generation',
       upscaleHd: 'design_upscale_hd',
     });
     expect(DESIGN_CREDIT_DEFAULTS).toEqual({
       imageGenerationPerImage: 40,
       promptRefinement: 1,
       angleAdjustment: 5,
+      multiAngleGeneration: 60,
       upscaleHd: 5,
     });
   });
@@ -54,6 +56,11 @@ describe('designCredits', () => {
     expect(designOperationCreditParams('angle_adjustment')).toEqual({
       operation_count: 1,
       workflow: 'angle_adjustment',
+    });
+    expect(designOperationCreditParams('human_multi_angle')).toEqual({
+      operation_count: 1,
+      workflow: 'human_multi_angle',
+      output_count: 14,
     });
     vi.stubGlobal('crypto', { randomUUID: () => 'usage-1' });
     expect(newDesignCreditUsageId('design-image')).toBe('design-image:usage-1');

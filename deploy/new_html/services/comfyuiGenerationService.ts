@@ -110,7 +110,7 @@ export const adjustImageAngle = async (
 export const generateHumanMultiAngle = async (
     imageDataUrl: string,
     seed: number = -1,
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string }
+    entityOptions?: ComfyUIEntityOptions,
 ): Promise<{ taskId: string; status: string }> => {
     try {
         // 1. 先上传图片到ComfyUI
@@ -124,7 +124,9 @@ export const generateHumanMultiAngle = async (
             entity_type: entityOptions?.entityType,
             entity_id: entityOptions?.entityId,
             file_role: entityOptions?.fileRole,
+            project_id: entityOptions?.projectId,
             episode_id: entityOptions?.episodeId,
+            ...comfyuiRoutingPayload(entityOptions),
         }, '多角度人物生成');
     } catch (error) {
         console.error('Human Multi-Angle Generation Error:', error);
@@ -320,11 +322,13 @@ export const generateWithComfyUIWorkflowQueued = async (
 export const generateHumanMultiAngleQueued = async (
     imageDataUrl: string,
     seed: number = -1,
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; episodeId?: string },
+    entityOptions?: ComfyUIEntityOptions,
     registryMeta?: ComfyUITaskRegistryMeta,
+    onTaskId?: (taskId: string) => void,
 ): Promise<GeneratedImageResult[]> => {
     return enqueueComfyUITask(async (frontendKey) => {
         const { taskId } = await generateHumanMultiAngle(imageDataUrl, seed, entityOptions);
+        onTaskId?.(taskId);
         const urls = await waitForComfyUITaskAllImages(taskId, undefined,
             registryMeta ? { ...registryMeta, frontendKey } : undefined);
         return urls;
