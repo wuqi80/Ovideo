@@ -348,12 +348,6 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   <h3 className={`min-w-0 flex-1 truncate text-sm font-semibold ${selectedFileId === file.id ? 'text-n800' : 'text-n700 group-hover:text-n800'}`}>
                     {file.name}
                   </h3>
-                  {activeFileId === file.id && (
-                    <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded bg-g50 px-1.5 py-0.5 text-[10px] font-semibold text-success">
-                      <CheckCircle2 className="h-3 w-3" />
-                      当前主剧本
-                    </span>
-                  )}
                   <div data-testid="file-card-actions" className="flex shrink-0 items-center gap-0.5">
                     <button
                       onClick={(e) => { e.stopPropagation(); onMoveFile(e, file.id, 'up'); }}
@@ -387,6 +381,14 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                 </div>
 
                 <div data-testid="file-card-content" className="mt-3 w-full min-w-0 select-none pl-[26px] pr-1">
+                  {activeFileId === file.id && (
+                    <div data-testid="file-primary-status" className="mb-2 flex min-w-0 items-center">
+                      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-g50 px-1.5 py-0.5 text-[10px] font-semibold text-success">
+                        <CheckCircle2 className="h-3 w-3" />
+                        当前主剧本
+                      </span>
+                    </div>
+                  )}
                   <p className="line-clamp-2 text-xs leading-5 text-n100">
                     {file.originalContent.slice(0, 100).replace(/\n/g, ' ')}...
                   </p>

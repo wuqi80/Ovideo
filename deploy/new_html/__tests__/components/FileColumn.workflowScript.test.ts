@@ -24,6 +24,16 @@ describe('FileColumn workflow script control', () => {
     expect(source).not.toContain('1. 文件列表');
   });
 
+  it('places the primary-script badge below the title row so the file name keeps its width', () => {
+    const controlRow = source.match(
+      /data-testid="file-card-control-row"[\s\S]*?data-testid="file-card-content"/,
+    )?.[0] || '';
+    expect(controlRow).not.toContain('当前主剧本');
+    expect(source).toContain('data-testid="file-primary-status"');
+    expect(source.indexOf('data-testid="file-primary-status"'))
+      .toBeGreaterThan(source.indexOf('data-testid="file-card-content"'));
+  });
+
   it('uses compact row items with a blue selected rail and tinted background', () => {
     expect(source).toContain('className="flex shrink-0 items-center justify-end gap-1"');
     expect(source).toContain('className="flex flex-col"');
