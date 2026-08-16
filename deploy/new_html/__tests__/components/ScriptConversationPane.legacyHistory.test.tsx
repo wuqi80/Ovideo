@@ -3,7 +3,11 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ScriptConversationPane, StoryboardVersionBody } from '../../components/ScriptConversationPane';
+import {
+  buildConversationTurns,
+  ScriptConversationPane,
+  StoryboardVersionBody,
+} from '../../components/ScriptConversationPane';
 import { AiModel, FileStatus, type ProjectFile, type ScriptConversation, type ScriptStoryboardVersion } from '../../types';
 import {
   STABILITY_CONSTRAINT_REFERENCE,
@@ -13,6 +17,36 @@ import {
 afterEach(cleanup);
 
 describe('ScriptConversationPane legacy history', () => {
+  it('builds one navigation turn per persisted version in version order', () => {
+    const messages: ScriptConversation['messages'] = [
+      { id: 'msg-user-1', role: 'user', content: '初始文字剧本', status: 'completed', createdAt: 1, updatedAt: 1 },
+      { id: 'msg-v3', role: 'assistant', content: '第三版', status: 'completed', createdAt: 2, updatedAt: 2 },
+      { id: 'msg-user-2', role: 'user', content: '修改要求', status: 'completed', createdAt: 3, updatedAt: 3 },
+      { id: 'msg-v1', role: 'assistant', content: '第一版', status: 'completed', createdAt: 4, updatedAt: 4 },
+      { id: 'msg-v4', role: 'assistant', content: '第四版', status: 'completed', createdAt: 5, updatedAt: 5 },
+      { id: 'msg-v2', role: 'assistant', content: '第二版', status: 'completed', createdAt: 6, updatedAt: 6 },
+    ];
+    const versions = [3, 1, 4, 2].map((versionNo, index): ScriptStoryboardVersion => ({
+      id: `ver-${versionNo}`,
+      scriptId: 'script-version-order',
+      messageId: `msg-v${versionNo}`,
+      versionNo,
+      content: `第${versionNo}版`,
+      storyboardItems: [],
+      source: 'ai',
+      status: 'ready',
+      createdAt: index + 1,
+      updatedAt: index + 1,
+    }));
+
+    const turns = buildConversationTurns(messages, versions);
+
+    expect(turns).toHaveLength(4);
+    expect(turns.map(turn => turn.versionNo)).toEqual([1, 2, 3, 4]);
+    expect(turns.map(turn => turn.number)).toEqual([1, 2, 3, 4]);
+    expect(turns.map(turn => turn.anchorMessageId)).toEqual(['msg-v1', 'msg-v2', 'msg-v3', 'msg-v4']);
+  });
+
   it('renders the complete immutable legacy reply as formatted segment cards', () => {
     const content = [
       '### **镜头1**',

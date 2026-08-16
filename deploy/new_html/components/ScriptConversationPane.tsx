@@ -83,13 +83,66 @@ const formatTime = (value: number) => new Date(value).toLocaleString('zh-CN', {
   minute: '2-digit',
 });
 
-interface ConversationTurn {
+export interface ConversationTurn {
   id: string;
   anchorMessageId: string;
   number: number;
   preview: string;
   versionNo?: number;
 }
+
+const buildTurnPreview = (content: string, fallback: string) => (
+  content.replace(/\s+/g, ' ').trim().slice(0, 42) || fallback
+);
+
+export const buildConversationTurns = (
+  messages: ScriptConversationMessage[],
+  versions: ScriptStoryboardVersion[],
+): ConversationTurn[] => {
+  const fallbackAnchorMessageId = messages[0]?.id || '';
+  const messagesById = new Map(messages.map(message => [message.id, message]));
+  const orderedVersions = [...versions].sort((left, right) => (
+    left.versionNo - right.versionNo
+      || left.createdAt - right.createdAt
+      || left.id.localeCompare(right.id)
+  ));
+
+  if (orderedVersions.length > 0) {
+    return orderedVersions.map((version, index) => {
+      const versionMessage = version.messageId ? messagesById.get(version.messageId) : undefined;
+      return {
+        id: `version-${version.id}`,
+        anchorMessageId: versionMessage?.id || fallbackAnchorMessageId,
+        number: index + 1,
+        preview: buildTurnPreview(version.content || versionMessage?.content || '', '分镜脚本'),
+        versionNo: version.versionNo,
+      };
+    });
+  }
+
+  const turns = messages
+    .filter(message => message.role === 'user')
+    .map((message, index) => ({
+      id: `turn-${message.id}`,
+      anchorMessageId: message.id,
+      number: index + 1,
+      preview: buildTurnPreview(message.content, '未命名对话'),
+    }));
+
+  if (turns.length === 0) {
+    const firstAssistantMessage = messages.find(message => message.role === 'assistant');
+    if (firstAssistantMessage) {
+      turns.push({
+        id: `turn-${firstAssistantMessage.id}`,
+        anchorMessageId: firstAssistantMessage.id,
+        number: 1,
+        preview: buildTurnPreview(firstAssistantMessage.content, '分镜脚本'),
+      });
+    }
+  }
+
+  return turns;
+};
 
 export const setCollapsedEntry = (
   current: Set<string>,
@@ -241,35 +294,10 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     ));
     return firstUserMessage?.content || selectedFile?.originalContent || '';
   }, [conversation?.messages, selectedFile?.originalContent]);
-  const conversationTurns = useMemo(() => {
-    const turns: ConversationTurn[] = [];
-    for (const message of conversation?.messages || []) {
-      if (message.role === 'user') {
-        const number = turns.length + 1;
-        turns.push({
-          id: `turn-${message.id}`,
-          anchorMessageId: message.id,
-          number,
-          preview: message.content.replace(/\s+/g, ' ').trim().slice(0, 42) || '未命名对话',
-        });
-        continue;
-      }
-      if (message.role !== 'assistant') continue;
-      let turn = turns[turns.length - 1];
-      if (!turn) {
-        turn = {
-          id: `turn-${message.id}`,
-          anchorMessageId: message.id,
-          number: 1,
-          preview: '分镜脚本',
-        };
-        turns.push(turn);
-      }
-      const version = versionByMessageId.get(message.id);
-      if (version) turn.versionNo = version.versionNo;
-    }
-    return turns;
-  }, [conversation?.messages, versionByMessageId]);
+  const conversationTurns = useMemo(() => buildConversationTurns(
+    conversation?.messages || [],
+    conversation?.versions || [],
+  ), [conversation?.messages, conversation?.versions]);
   const creditEstimateParams = useMemo(() => {
     if (!selectedFile) return null;
     const versions = conversation?.versions || [];
