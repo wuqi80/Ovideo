@@ -281,4 +281,23 @@ describe('ProjectHub navigation and filters', () => {
       expect(addProjectMember).toHaveBeenCalledWith('active-1', 'bob', 'member', 'all');
     });
   });
+
+  it('keeps the edit dialog open when interacting outside and closes only explicitly', async () => {
+    render(
+      <MemoryRouter>
+        <ProjectHub />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('树洞里的星辰');
+    fireEvent.click(screen.getByLabelText('树洞里的星辰 更多操作'));
+    fireEvent.click(screen.getByText('编辑项目'));
+
+    const dialog = await screen.findByRole('dialog', { name: '编辑项目' });
+    fireEvent.click(dialog);
+    expect(screen.getByRole('dialog', { name: '编辑项目' })).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '关闭' }));
+    expect(screen.queryByRole('dialog', { name: '编辑项目' })).not.toBeInTheDocument();
+  });
 });

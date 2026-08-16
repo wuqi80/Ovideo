@@ -720,7 +720,6 @@ const ProjectHub: React.FC = () => {
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="edit-project-title"
-                    onClick={closeEditProject}
                 >
                     <div className="app-modal-surface w-full max-w-4xl overflow-hidden" onClick={e => e.stopPropagation()}>
                         <div className="app-modal-header">
