@@ -17,16 +17,14 @@ import {
 afterEach(cleanup);
 
 describe('ScriptConversationPane legacy history', () => {
-  it('builds one navigation turn per persisted version in version order', () => {
+  it('keeps the initial input unversioned and orders real generated versions after it', () => {
     const messages: ScriptConversation['messages'] = [
       { id: 'msg-user-1', role: 'user', content: '初始文字剧本', status: 'completed', createdAt: 1, updatedAt: 1 },
       { id: 'msg-v3', role: 'assistant', content: '第三版', status: 'completed', createdAt: 2, updatedAt: 2 },
-      { id: 'msg-user-2', role: 'user', content: '修改要求', status: 'completed', createdAt: 3, updatedAt: 3 },
       { id: 'msg-v1', role: 'assistant', content: '第一版', status: 'completed', createdAt: 4, updatedAt: 4 },
-      { id: 'msg-v4', role: 'assistant', content: '第四版', status: 'completed', createdAt: 5, updatedAt: 5 },
       { id: 'msg-v2', role: 'assistant', content: '第二版', status: 'completed', createdAt: 6, updatedAt: 6 },
     ];
-    const versions = [3, 1, 4, 2].map((versionNo, index): ScriptStoryboardVersion => ({
+    const versions = [3, 1, 2].map((versionNo, index): ScriptStoryboardVersion => ({
       id: `ver-${versionNo}`,
       scriptId: 'script-version-order',
       messageId: `msg-v${versionNo}`,
@@ -38,13 +36,20 @@ describe('ScriptConversationPane legacy history', () => {
       createdAt: index + 1,
       updatedAt: index + 1,
     }));
+    versions.unshift({
+      ...versions[1],
+      id: 'legacy_script-version-order',
+      messageId: 'legacy_assistant_script-version-order',
+      source: 'legacy',
+    });
 
     const turns = buildConversationTurns(messages, versions);
 
     expect(turns).toHaveLength(4);
-    expect(turns.map(turn => turn.versionNo)).toEqual([1, 2, 3, 4]);
-    expect(turns.map(turn => turn.number)).toEqual([1, 2, 3, 4]);
-    expect(turns.map(turn => turn.anchorMessageId)).toEqual(['msg-v1', 'msg-v2', 'msg-v3', 'msg-v4']);
+    expect(turns.map(turn => turn.versionNo)).toEqual([undefined, 1, 2, 3]);
+    expect(turns.map(turn => turn.number)).toEqual([0, 1, 2, 3]);
+    expect(turns.map(turn => turn.isInitial)).toEqual([true, undefined, undefined, undefined]);
+    expect(turns.map(turn => turn.anchorMessageId)).toEqual(['msg-user-1', 'msg-v1', 'msg-v2', 'msg-v3']);
   });
 
   it('renders the complete immutable legacy reply as formatted segment cards', () => {

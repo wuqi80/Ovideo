@@ -214,6 +214,10 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain("scrollConversationTo('top')");
     expect(source).toContain("scrollConversationTo('bottom')");
     expect(source).toContain("behavior: 'smooth'");
+    expect(source).toContain("turn.isInitial ? '初始剧本' : `第 ${turn.number} 轮`");
+    expect(source).toContain("version => !version.id.startsWith('legacy_')");
+    expect(workspace).toContain('const persistedHasRealVersions = persisted.versions.some');
+    expect(workspace).toContain("persistedHasRealVersions && version.id.startsWith('legacy_')");
   });
 
   it('keeps card-level top and bottom controls on the text right edge and fades them near each boundary', () => {

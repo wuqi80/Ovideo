@@ -367,8 +367,17 @@ function mergePersistedScriptConversation(
 
   const persistedMessageIds = new Set(persisted.messages.map(message => message.id));
   const persistedVersionIds = new Set(persisted.versions.map(version => version.id));
-  const cachedOnlyMessages = cached.messages.filter(message => !persistedMessageIds.has(message.id));
-  const cachedOnlyVersions = cached.versions.filter(version => !persistedVersionIds.has(version.id));
+  const persistedHasRealVersions = persisted.versions.some(version => !version.id.startsWith('legacy_'));
+  const persistedHasUserMessage = persisted.messages.some(message => message.role === 'user');
+  const cachedOnlyMessages = cached.messages.filter(message => (
+    !persistedMessageIds.has(message.id)
+      && !(persistedHasRealVersions && message.id.startsWith('legacy_assistant_'))
+      && !(persistedHasUserMessage && message.id.startsWith('legacy_user_'))
+  ));
+  const cachedOnlyVersions = cached.versions.filter(version => (
+    !persistedVersionIds.has(version.id)
+      && !(persistedHasRealVersions && version.id.startsWith('legacy_'))
+  ));
   const cachedCurrentIsNewer = Boolean(
     cached.currentVersionId && !persistedVersionIds.has(cached.currentVersionId),
   );
