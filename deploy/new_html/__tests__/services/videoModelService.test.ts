@@ -124,8 +124,10 @@ describe('Seedance model mapping', () => {
 
 describe('buildVideoModelOptions', () => {
   it('keeps the local and legacy workflow entries visible at the top of the selector', () => {
-    expect(SELECTABLE_MODELS.slice(0, 9)).toEqual([
+    expect(SELECTABLE_MODELS.slice(0, 11)).toEqual([
       'MiniMaxH3',
+      'MiniMaxH3Fast',
+      'MiniMaxH3Mini',
       'Wan2',
       '一阶',
       '二阶',
@@ -183,9 +185,23 @@ describe('buildVideoModelOptions', () => {
       },
       {
         key: 'MiniMaxH3',
-        label: 'MiniMax H3 本地版',
+        label: '本地 MiniMax H3',
         provider: 'processing_cluster',
         model_name: 'MiniMax-H3 FL2VA',
+        available: true,
+      },
+      {
+        key: 'MiniMaxH3Fast',
+        label: 'MiniMax H3 Fast',
+        provider: 'processing_cluster',
+        model_name: 'MiniMax-H3 FL2VA + SageAttention',
+        available: true,
+      },
+      {
+        key: 'MiniMaxH3Mini',
+        label: '本地 MiniMax H3 Mini',
+        provider: 'processing_cluster',
+        model_name: 'MiniMax-H3 FL2VA + Qwen3-VL-4B ClipProj',
         available: true,
       },
     ]);
@@ -196,6 +212,8 @@ describe('buildVideoModelOptions', () => {
     expect(options.find(option => option.value === 'HappyHorse')?.label).toContain('happyhorse-1.0-r2v');
     expect(options.find(option => option.value === 'Seedance2Mini')?.label).toContain('doubao-seedance-2-0-mini-260615');
     expect(options.find(option => option.value === 'MiniMaxH3')?.label).toContain('MiniMax-H3 FL2VA');
+    expect(options.find(option => option.value === 'MiniMaxH3Fast')?.label).toContain('SageAttention');
+    expect(options.find(option => option.value === 'MiniMaxH3Mini')?.label).toContain('Qwen3-VL-4B ClipProj');
     expect(options.find(option => option.value === 'MINI')?.label).toContain('MiniMax-Hailuo-2.3');
   });
 

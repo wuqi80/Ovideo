@@ -14,6 +14,7 @@ import {
     formatVideoModelOptionLabel,
     getVideoModelRuntimeNames,
     isDashScopeVideoModel,
+    isMiniMaxH3Model,
     isSeedanceAgentPlanModel,
     isSeedanceVideoModel,
     makeDefaultDashScopeParams,
@@ -2684,7 +2685,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const capabilityParams = group.videoParams || {};
             const capabilityDuration = Number(capabilityParams.duration);
             const capabilitySeed = Number(capabilityParams.seed);
-            const h3LongVideoSegments = group.model === 'MiniMaxH3' && group.h3LongVideo === true
+            const h3LongVideoSegments = isMiniMaxH3Model(group.model) && group.h3LongVideo === true
                 ? (group.mergedFrom || []).map((snapshot, segmentIndex) => {
                     const segmentImages = (snapshot.ids || [])
                         .map(id => uploadedImages.find(candidate => candidate.id === id))
@@ -2746,10 +2747,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     minimax_model: minimaxParams?.model,
                     minimax_resolution: minimaxParams?.resolution,
                     minimax_prompt_optimizer: minimaxParams?.promptOptimizer,
-                    h3_sage_attention: group.model === 'MiniMaxH3' && group.h3SageAttention === true,
-                    h3_long_video: group.model === 'MiniMaxH3' && group.h3LongVideo === true,
+                    h3_long_video: isMiniMaxH3Model(group.model) && group.h3LongVideo === true,
                     h3_long_video_segments: h3LongVideoSegments,
-                    h3_upscale_720p: group.model === 'MiniMaxH3' && group.h3Upscale720p === true,
+                    h3_upscale_720p: isMiniMaxH3Model(group.model) && group.h3Upscale720p === true,
                 }
             );
             
@@ -3771,22 +3771,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             </option>
                         ))}
                     </select>
-                    {group.model === 'MiniMaxH3' && (
+                    {isMiniMaxH3Model(group.model) && (
                         <>
-                        <label
-                            className="flex items-center gap-1 text-[9px] text-n500 cursor-pointer"
-                            title="实验功能：可能令相同 Seed 的结果产生细微差异；服务端校验未通过时自动使用标准模式"
-                        >
-                            <input
-                                type="checkbox"
-                                checked={group.h3SageAttention === true}
-                                onChange={(event) => patchTaskGroup(group.uuid, {
-                                    h3SageAttention: event.target.checked,
-                                })}
-                                className="h-3 w-3 accent-primary"
-                            />
-                            加速（实验）
-                        </label>
                         <label
                             className={`flex items-center gap-1 text-[9px] ${group.mergedFrom && group.mergedFrom.length >= 2 && group.mergedFrom.length <= 8 ? 'text-n500 cursor-pointer' : 'text-n100 cursor-not-allowed'}`}
                             title="先合并 2–8 个镜头；Director 将逐段生成并用 Motion Context 保持动作和音频连续"
@@ -4043,22 +4029,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 </option>
                             ))}
                         </select>
-                        {group.model === 'MiniMaxH3' && (
+                        {isMiniMaxH3Model(group.model) && (
                             <>
-                            <label
-                                className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary-light px-1.5 py-0.5 text-[10px] text-primary cursor-pointer"
-                                title="实验功能：可能令相同 Seed 的结果产生细微差异；服务端校验未通过时自动使用标准模式"
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={group.h3SageAttention === true}
-                                    onChange={(event) => patchTaskGroup(group.uuid, {
-                                        h3SageAttention: event.target.checked,
-                                    })}
-                                    className="h-3 w-3 accent-primary"
-                                />
-                                Sage 加速
-                            </label>
                             <label
                                 className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] ${group.mergedFrom && group.mergedFrom.length >= 2 && group.mergedFrom.length <= 8 ? 'border-p200/40 bg-p50 text-p400 cursor-pointer' : 'border-n40 bg-n20 text-n100 cursor-not-allowed'}`}
                                 title="先合并 2–8 个镜头；Director 将逐段生成并用 Motion Context 保持动作和音频连续"

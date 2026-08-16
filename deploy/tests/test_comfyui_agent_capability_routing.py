@@ -60,6 +60,9 @@ def test_capability_probe_reports_minimax_h3_only_when_all_nodes_exist(monkeypat
                 "RandomNoise": {},
                 "CreateVideo": {},
                 "SaveVideo": {},
+                "PathchSageAttentionKJ": {},
+                "MiniMaxH3MemoryEfficientSageAttentionPatch": {},
+                "ClipProjApply": {},
             }
 
     monkeypatch.setattr(requests, "get", lambda *_args, **_kwargs: Response())
@@ -68,6 +71,8 @@ def test_capability_probe_reports_minimax_h3_only_when_all_nodes_exist(monkeypat
 
     assert capabilities["minimax_h3_fl2va"] is True
     assert capabilities["minimax_h3_required_nodes"]["MiniMaxH3ImageToVideo"] is True
+    assert capabilities["minimax_h3_fast"] is True
+    assert capabilities["minimax_h3_mini"] is True
 
 
 def test_background_heartbeat_continues_independently_of_task_loop(monkeypatch):

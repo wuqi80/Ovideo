@@ -15,6 +15,9 @@ from scripts.windows_gpu_agent_runner import (
     GPU2_H3_KJNODES_COMMIT,
     GPU2_H3_DIRECTOR_COMMIT,
     GPU2_H3_MODEL_FILES,
+    GPU2_H3_MINI_MODEL_FILES,
+    GPU2_H3_MINI_MODEL_SIZES,
+    GPU2_H3_CLIPPROJ_COMMIT,
     GPU2_H3_PORT,
     GPU2_COMFYUI_PORT,
     GIB,
@@ -41,6 +44,9 @@ from scripts.windows_gpu_agent_runner import (
     gpu2_h3_length_frames,
     gpu2_h3_sage_attention_ready,
     gpu2_h3_sage_attention_requested,
+    gpu2_h3_fast_model_requested,
+    gpu2_h3_mini_ready,
+    gpu2_h3_mini_requested,
     gpu2_h3_long_video_ready,
     gpu2_h3_long_video_requested,
     gpu2_h3_upscale_720p_requested,
@@ -247,6 +253,88 @@ def test_gpu2_minimax_h3_sageattention_only_rewires_model_attention():
         baseline_inputs.pop("model", None)
         accelerated_inputs.pop("model", None)
         assert accelerated_inputs == baseline_inputs
+
+
+def test_gpu2_minimax_h3_fast_and_mini_are_explicit_model_profiles():
+    fast = {
+        "task_type": "i2v",
+        "params": {"model": "MiniMaxH3Fast", "image_path": "first.png"},
+    }
+    mini = {
+        "task_type": "i2v",
+        "params": {"model": "MiniMaxH3Mini", "image_path": "first.png"},
+    }
+
+    assert is_gpu2_h3_task(fast) is True
+    assert gpu2_h3_sage_attention_requested(fast) is True
+    assert gpu2_h3_fast_model_requested(fast) is True
+    assert gpu2_h3_mini_requested(fast) is False
+    assert is_gpu2_h3_task(mini) is True
+    assert gpu2_h3_sage_attention_requested(mini) is False
+    assert gpu2_h3_mini_requested(mini) is True
+
+
+def test_gpu2_minimax_h3_mini_rewires_only_the_clip_path():
+    task = {
+        "task_type": "i2v",
+        "params": {
+            "model": "MiniMaxH3Mini",
+            "image_path": "first.png",
+            "prompt": "same prompt",
+            "seed": 77,
+        },
+    }
+
+    baseline = build_gpu2_minimax_h3_fl2va_workflow(task)
+    mini = build_gpu2_minimax_h3_fl2va_workflow(task, use_mini_clip=True)
+
+    assert mini["13"]["inputs"] == {
+        "clip_name": GPU2_H3_MINI_MODEL_FILES["text_encoder"],
+        "type": "krea2",
+        "device": "default",
+    }
+    assert mini["12"] == {
+        "class_type": "ClipProjApply",
+        "inputs": {
+            "clip": ["13", 0],
+            "projection": GPU2_H3_MINI_MODEL_FILES["projection"],
+        },
+    }
+    assert mini["104"]["inputs"]["clip"] == ["12", 0]
+    assert mini["6"] == baseline["6"]
+    assert mini["11"] == baseline["11"]
+    assert mini["24"] == baseline["24"]
+
+
+def test_gpu2_h3_mini_requires_pinned_marker_models_and_live_node(tmp_path):
+    models_root = tmp_path / "models"
+    text_encoder = models_root / "text_encoders" / GPU2_H3_MINI_MODEL_FILES["text_encoder"]
+    projection = models_root / "clip_projections" / GPU2_H3_MINI_MODEL_FILES["projection"]
+    text_encoder.parent.mkdir(parents=True)
+    projection.parent.mkdir(parents=True)
+    with text_encoder.open("wb") as handle:
+        handle.truncate(GPU2_H3_MINI_MODEL_SIZES["text_encoder"])
+    with projection.open("wb") as handle:
+        handle.truncate(GPU2_H3_MINI_MODEL_SIZES["projection"])
+    marker = tmp_path / "h3-mini-ready.json"
+    marker.write_text(json.dumps({
+        "verified": True,
+        "clipproj_commit": GPU2_H3_CLIPPROJ_COMMIT,
+        "inference_executed": False,
+    }), encoding="utf-8")
+
+    assert gpu2_h3_mini_ready(
+        marker_path=marker,
+        models_root=models_root,
+        object_info_reader=lambda: {"ClipProjApply": {}},
+    ) == (True, "verified")
+    ready, reason = gpu2_h3_mini_ready(
+        marker_path=marker,
+        models_root=models_root,
+        object_info_reader=lambda: {},
+    )
+    assert ready is False
+    assert "ClipProjApply" in reason
 
 
 def test_gpu2_minimax_h3_sageattention_preserves_data_payload_on_prepare():

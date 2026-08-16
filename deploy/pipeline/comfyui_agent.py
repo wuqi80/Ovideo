@@ -29,7 +29,7 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-08-07-background-heartbeat-v1"
+AGENT_VERSION = "2026-08-16-h3-profiles-v1"
 PLATFORM_DOWNLOAD_RETRIES = 3
 PLATFORM_DOWNLOAD_PATH_PREFIXES = ("/api/agent/tasks/", "/storage/")
 CAPABILITY_CACHE_TTL_SECONDS = 60
@@ -47,6 +47,13 @@ MINIMAX_H3_REQUIRED_NODES = (
     "RandomNoise",
     "CreateVideo",
     "SaveVideo",
+)
+MINIMAX_H3_FAST_REQUIRED_NODES = (
+    "PathchSageAttentionKJ",
+    "MiniMaxH3MemoryEfficientSageAttentionPatch",
+)
+MINIMAX_H3_MINI_REQUIRED_NODES = (
+    "ClipProjApply",
 )
 
 
@@ -182,9 +189,21 @@ class ComfyUIAgent:
                     node: node in object_info
                     for node in MINIMAX_H3_REQUIRED_NODES
                 }
+                fast_required = {
+                    node: node in object_info
+                    for node in MINIMAX_H3_FAST_REQUIRED_NODES
+                }
+                mini_required = {
+                    node: node in object_info
+                    for node in MINIMAX_H3_MINI_REQUIRED_NODES
+                }
                 capabilities = {
                     "minimax_h3_fl2va": all(required.values()),
                     "minimax_h3_required_nodes": required,
+                    "minimax_h3_fast": all(required.values()) and all(fast_required.values()),
+                    "minimax_h3_fast_required_nodes": fast_required,
+                    "minimax_h3_mini": all(required.values()) and all(mini_required.values()),
+                    "minimax_h3_mini_required_nodes": mini_required,
                 }
         except Exception as exc:
             logger.debug("Capability probe failed for ComfyUI:%s: %s", port, exc)

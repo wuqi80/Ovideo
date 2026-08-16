@@ -74,6 +74,16 @@ GPU2_H3_SAGE_NODE_TYPES = {
     "PathchSageAttentionKJ",
     "MiniMaxH3MemoryEfficientSageAttentionPatch",
 }
+GPU2_H3_MINI_MODEL_FILES = {
+    "text_encoder": "qwen3vl_4b_fp8_scaled.safetensors",
+    "projection": "mmh3-4b-ClipProj-v3-mlp.safetensors",
+}
+GPU2_H3_MINI_MODEL_SIZES = {
+    "text_encoder": 5242467968,
+    "projection": 503434368,
+}
+GPU2_H3_CLIPPROJ_COMMIT = "e556987e6bbf9c6448dd5691fe29ce9a7a6970ae"
+GPU2_H3_MINI_READY_MARKER = ROOT / "config" / "h3-mini-ready.json"
 GPU2_H3_KJNODES_COMMIT = "6ab7e8130e449ed2c0037589bcf84146ceb7fc9c"
 GPU2_H3_SAGE_READY_MARKER = ROOT / "config" / "h3-sageattention-ready.json"
 GPU2_H3_DIRECTOR_COMMIT = "85863be2411eb1b5877c23414d88396c47838467"
@@ -155,10 +165,79 @@ def gpu2_h3_sage_attention_allowed() -> bool:
 
 
 def gpu2_h3_sage_attention_requested(task: Dict[str, Any]) -> bool:
+    model = str(
+        _gpu2_task_params(task).get("model")
+        or _gpu2_task_params(task).get("model_name")
+        or ""
+    ).strip().lower()
+    if model in {"minimaxh3fast", "minimax-h3-fast", "minimax_h3_fast"}:
+        return True
     value = _gpu2_task_params(task).get("h3_sage_attention", False)
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def gpu2_h3_mini_requested(task: Dict[str, Any]) -> bool:
+    params = _gpu2_task_params(task)
+    model = str(params.get("model") or params.get("model_name") or "").strip().lower()
+    if model in {"minimaxh3mini", "minimax-h3-mini", "minimax_h3_mini"}:
+        return True
+    value = params.get("h3_low_vram", False)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def gpu2_h3_fast_model_requested(task: Dict[str, Any]) -> bool:
+    params = _gpu2_task_params(task)
+    model = str(params.get("model") or params.get("model_name") or "").strip().lower()
+    return model in {"minimaxh3fast", "minimax-h3-fast", "minimax_h3_fast"}
+
+
+def gpu2_h3_mini_ready(
+    *,
+    marker_path: Path = GPU2_H3_MINI_READY_MARKER,
+    object_info_reader: Callable[[], Dict[str, Any]] | None = None,
+    models_root: Path | None = None,
+) -> tuple[bool, str]:
+    """Fail closed unless the pinned ClipProj node and both Mini assets are ready."""
+    try:
+        marker = json.loads(Path(marker_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        return False, f"verification marker unavailable: {exc}"
+    if marker.get("verified") is not True:
+        return False, "verification marker is not approved"
+    if str(marker.get("clipproj_commit") or "") != GPU2_H3_CLIPPROJ_COMMIT:
+        return False, "verified ClipProj commit does not match the reviewed release"
+    if marker.get("inference_executed") is not False:
+        return False, "verification marker must be non-inference only"
+    root = Path(models_root or (ROOT / "ComfyUI-H3" / "ComfyUI" / "models"))
+    expected_files = {
+        root / "text_encoders" / GPU2_H3_MINI_MODEL_FILES["text_encoder"]:
+            GPU2_H3_MINI_MODEL_SIZES["text_encoder"],
+        root / "clip_projections" / GPU2_H3_MINI_MODEL_FILES["projection"]:
+            GPU2_H3_MINI_MODEL_SIZES["projection"],
+    }
+    for path, expected_size in expected_files.items():
+        try:
+            if path.stat().st_size != expected_size:
+                return False, f"model file size mismatch: {path.name}"
+        except OSError as exc:
+            return False, f"model file unavailable: {path.name}: {exc}"
+    try:
+        if object_info_reader is None:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{GPU2_H3_PORT}/object_info", timeout=5
+            ) as response:
+                object_info = json.loads(response.read().decode("utf-8"))
+        else:
+            object_info = object_info_reader()
+    except Exception as exc:
+        return False, f"ComfyUI node discovery failed: {exc}"
+    if "ClipProjApply" not in set(object_info or {}):
+        return False, "required ClipProjApply node is missing"
+    return True, "verified"
 
 
 def gpu2_h3_long_video_allowed() -> bool:
@@ -1247,7 +1326,7 @@ def gpu2_h3_length_frames(task: Dict[str, Any]) -> int:
 
 
 def build_gpu2_minimax_h3_fl2va_workflow(
-    task: Dict[str, Any], *, enable_sage_attention: bool = False
+    task: Dict[str, Any], *, enable_sage_attention: bool = False, use_mini_clip: bool = False
 ) -> Dict[str, Any]:
     """Build the MiniMax H3 FL2VA graph for the Agent-switched local runtime."""
     params = _gpu2_task_params(task)
@@ -1371,6 +1450,21 @@ def build_gpu2_minimax_h3_fl2va_workflow(
         }
         workflow["104"]["inputs"]["last_frame"] = ["4", 0]
         workflow["92"]["inputs"]["filename_prefix"] = "MECHA_GPU2_minimax_h3_fl2va"
+    if use_mini_clip:
+        workflow["13"]["inputs"] = {
+            "clip_name": GPU2_H3_MINI_MODEL_FILES["text_encoder"],
+            "type": "krea2",
+            "device": "default",
+        }
+        workflow["12"] = {
+            "class_type": "ClipProjApply",
+            "inputs": {
+                "clip": ["13", 0],
+                "projection": GPU2_H3_MINI_MODEL_FILES["projection"],
+            },
+        }
+        workflow["104"]["inputs"]["clip"] = ["12", 0]
+        workflow["92"]["inputs"]["filename_prefix"] += "_mini"
     if enable_sage_attention:
         workflow["7"] = {
             "class_type": "PathchSageAttentionKJ",
@@ -1437,7 +1531,7 @@ def _gpu2_h3_director_segment_frames(duration: float) -> int:
 
 
 def build_gpu2_minimax_h3_long_video_workflow(
-    task: Dict[str, Any], *, enable_sage_attention: bool = False
+    task: Dict[str, Any], *, enable_sage_attention: bool = False, use_mini_clip: bool = False
 ) -> Dict[str, Any]:
     """Build one serialized Director prompt from an existing merged H3 card."""
     segments = _gpu2_h3_long_video_segments(task)
@@ -1513,6 +1607,21 @@ def build_gpu2_minimax_h3_long_video_workflow(
             "inputs": {"vae_name": GPU2_H3_MODEL_FILES["audio_vae"]},
         },
     }
+    clip_link: list[Any] = ["13", 0]
+    if use_mini_clip:
+        workflow["13"]["inputs"] = {
+            "clip_name": GPU2_H3_MINI_MODEL_FILES["text_encoder"],
+            "type": "krea2",
+            "device": "default",
+        }
+        workflow["12"] = {
+            "class_type": "ClipProjApply",
+            "inputs": {
+                "clip": ["13", 0],
+                "projection": GPU2_H3_MINI_MODEL_FILES["projection"],
+            },
+        }
+        clip_link = ["12", 0]
     if enable_sage_attention:
         workflow["7"] = {
             "class_type": "PathchSageAttentionKJ",
@@ -1566,7 +1675,7 @@ def build_gpu2_minimax_h3_long_video_workflow(
             "model": model_link,
             "video_vae": ["11", 0],
             "audio_vae": ["24", 0],
-            "clip": ["13", 0],
+            "clip": clip_link,
             "i2v_groups": ["80", 0],
             "task_type": "fl2v — 首尾帧生视频(First-Last Frame)",
             "global_prompt": "",
@@ -1608,6 +1717,8 @@ def build_gpu2_minimax_h3_long_video_workflow(
             "codec": "auto",
         },
     }
+    if use_mini_clip:
+        workflow["92"]["inputs"]["filename_prefix"] += "_mini"
     return workflow
 
 
@@ -2266,6 +2377,7 @@ def main() -> None:
                 is_gpu2_h3_task(task)
                 and gpu2_h3_upscale_720p_requested(task)
             )
+            mini_requested = is_gpu2_h3_task(task) and gpu2_h3_mini_requested(task)
             prepared = prepare_gpu2_task(task)
             params = prepared.get("params") or {}
             profile = params.get("gpu2_runtime_profile") or gpu2_runtime_profile(prepared)
@@ -2294,12 +2406,25 @@ def main() -> None:
                         )
                         prepared["workflow_name"] = "gpu2_minimax_h3_fl2va_sageattention"
                     else:
+                        if gpu2_h3_fast_model_requested(task):
+                            raise RuntimeError(
+                                "H3 Fast is unavailable: " + acceleration_reason
+                            )
                         print(
                             "[MECHA] H3 SageAttention requested but not verified; using baseline: "
                             f"{acceleration_reason}",
                             file=sys.stderr,
                             flush=True,
                         )
+                if mini_requested:
+                    mini_ready, mini_reason = gpu2_h3_mini_ready()
+                    if not mini_ready:
+                        raise RuntimeError("H3 Mini is unavailable: " + mini_reason)
+                    if not long_video_requested:
+                        prepared["workflow_json"] = build_gpu2_minimax_h3_fl2va_workflow(
+                            prepared, use_mini_clip=True
+                        )
+                        prepared["workflow_name"] = "gpu2_minimax_h3_fl2va_mini"
                 if long_video_requested:
                     long_video_ready, long_video_reason = gpu2_h3_long_video_ready()
                     if not long_video_ready:
@@ -2309,11 +2434,16 @@ def main() -> None:
                     prepared["workflow_json"] = build_gpu2_minimax_h3_long_video_workflow(
                         prepared,
                         enable_sage_attention=bool(acceleration_ready),
+                        use_mini_clip=mini_requested,
                     )
                     prepared["workflow_name"] = (
                         "gpu2_minimax_h3_long_director_sageattention"
                         if acceleration_ready
-                        else "gpu2_minimax_h3_long_director"
+                        else (
+                            "gpu2_minimax_h3_long_director_mini"
+                            if mini_requested
+                            else "gpu2_minimax_h3_long_director"
+                        )
                     )
                 runtime_manager.mark_models_loaded()
                 result = super().execute_comfyui_task(prepared)

@@ -105,6 +105,11 @@ async def resolve_minimax_h3_agent_target() -> Dict[str, Any]:
         except Exception as exc:
             logger.debug("video capability MiniMax H3 GPU2 fallback failed: %s", exc)
             return {}
+    return _minimax_h3_target_from_instance(instance)
+
+
+def _minimax_h3_target_from_instance(instance: Dict[str, Any]) -> Dict[str, Any]:
+    """Build stable routing fields from the same capability snapshot."""
     agent_id = str(instance.get("agent_id") or instance.get("node_id") or "").strip()
     node_id = str(instance.get("node_id") or agent_id).strip()
     target: Dict[str, Any] = {
@@ -246,13 +251,21 @@ def _workflow_video_manifest(
     }
 
 
-def _minimax_h3_video_manifest(*, available: bool, target: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _minimax_h3_video_manifest(
+    *,
+    key: str = "MiniMaxH3",
+    label: str = "本地 MiniMax H3",
+    model_name: str = "MiniMax-H3 FL2VA",
+    profile: str = "standard",
+    available: bool,
+    target: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     target = target or {}
     return {
-        "key": "MiniMaxH3",
-        "label": "MiniMax H3 本地版",
+        "key": key,
+        "label": label,
         "provider": "processing_cluster",
-        "model_name": "MiniMax-H3 FL2VA",
+        "model_name": model_name,
         "task_types": ["i2v", "first_last_frame"],
         "media_inputs": ["first_frame", "last_frame"],
         "supports_original_audio": False,
@@ -271,6 +284,7 @@ def _minimax_h3_video_manifest(*, available: bool, target: Optional[Dict[str, An
             "resolution": ["low_vram_16:9"],
             "seed": {"type": "integer", "default": -1, "minimum": -1},
             "negative_prompt": {"type": "string", "default": ""},
+            "h3_profile": profile,
             "normalization_policy": "workflow_defined",
         },
     }
@@ -312,6 +326,8 @@ def build_video_model_manifest(
     wan_node2_available: bool = False,
     wan_node2_target: Optional[Dict[str, Any]] = None,
     minimax_h3_available: bool = False,
+    minimax_h3_fast_available: bool = False,
+    minimax_h3_mini_available: bool = False,
     minimax_h3_target: Optional[Dict[str, Any]] = None,
     seedance_billing_mode: str = "standard",
     model_scope: str = MODEL_USAGE_SCOPE_WORKFLOW,
@@ -413,10 +429,25 @@ def build_video_model_manifest(
                 model_name="Wan",
                 target=wan_node2_target,
             ),
-            _minimax_h3_video_manifest(
-                available=minimax_h3_available,
-                target=minimax_h3_target,
-            ),
+            *[
+                _minimax_h3_video_manifest(
+                    key=key,
+                    label=label,
+                    model_name=model_name,
+                    profile=profile,
+                    available={
+                        "standard": minimax_h3_available,
+                        "fast": minimax_h3_fast_available,
+                        "mini": minimax_h3_mini_available,
+                    }[profile],
+                    target=minimax_h3_target,
+                )
+                for key, label, model_name, profile in (
+                    ("MiniMaxH3", "本地 MiniMax H3", "MiniMax-H3 FL2VA", "standard"),
+                    ("MiniMaxH3Fast", "MiniMax H3 Fast", "MiniMax-H3 FL2VA + SageAttention", "fast"),
+                    ("MiniMaxH3Mini", "本地 MiniMax H3 Mini", "MiniMax-H3 FL2VA + Qwen3-VL-4B ClipProj", "mini"),
+                )
+            ],
             _fixed_api_video_manifest(
                 "Veo",
                 "筑基",
@@ -576,11 +607,24 @@ async def get_video_capabilities(
     comfyui_available = bool(agent_nodes)
     ltx_node1_target = _find_node_target(agent_nodes, GPU1_ROUTING_NAME)
     wan_node2_target = _find_node_target(agent_nodes, GPU2_ROUTING_NAME)
+    minimax_h3_instance = await find_minimax_h3_agent_instance()
     minimax_h3_target = (
-        await resolve_minimax_h3_agent_target()
-        or _minimax_h3_gpu2_fallback_target(agent_nodes)
+        _minimax_h3_target_from_instance(minimax_h3_instance)
+        if minimax_h3_instance
+        else _minimax_h3_gpu2_fallback_target(agent_nodes)
     )
     minimax_h3_available = bool(minimax_h3_target.get("preferred_agent_id"))
+    minimax_h3_capabilities = (
+        minimax_h3_instance.get("capabilities")
+        if isinstance(minimax_h3_instance, dict)
+        else {}
+    ) or {}
+    minimax_h3_fast_available = bool(
+        minimax_h3_available and minimax_h3_capabilities.get("minimax_h3_fast") is True
+    )
+    minimax_h3_mini_available = bool(
+        minimax_h3_available and minimax_h3_capabilities.get("minimax_h3_mini") is True
+    )
     seedance_billing_mode = "standard"
     try:
         seedance_provider_config = resolve_provider(
@@ -675,6 +719,8 @@ async def get_video_capabilities(
             wan_node2_available=bool(wan_node2_target.get("preferred_node_id")),
             wan_node2_target=wan_node2_target,
             minimax_h3_available=minimax_h3_available,
+            minimax_h3_fast_available=minimax_h3_fast_available,
+            minimax_h3_mini_available=minimax_h3_mini_available,
             minimax_h3_target=minimax_h3_target,
             model_scope=model_scope,
             api_availability={

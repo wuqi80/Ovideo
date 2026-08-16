@@ -5,6 +5,7 @@ import {
     inferDashScopeTaskType,
     inferSeedanceTaskType,
     isComfyUIModel,
+    isMiniMaxH3Model,
     isSeedanceVideoModel,
     normalizeMiniMaxVideoParams,
     normalizeSeedanceMediaForSubmission,
@@ -38,8 +39,10 @@ export interface VideoGenerationOptions {
     minimax_model?: string;
     minimax_resolution?: '768P' | '1080P';
     minimax_prompt_optimizer?: boolean;
-    /** Per-task opt-in. The GPU Agent still requires its server-side safety gate. */
+    /** Legacy import compatibility; new UI submissions use the dedicated Fast model key. */
     h3_sage_attention?: boolean;
+    /** Selected automatically by the dedicated Mini model key. */
+    h3_low_vram?: boolean;
     /** Separate guarded Director mode; it never changes the normal H3 workflow. */
     h3_long_video?: boolean;
     h3_long_video_segments?: H3LongVideoSegment[];
@@ -68,8 +71,9 @@ export function buildComfyUIVideoTaskPayload(
     if (imageFilenameEnd) {
         payload.image_path_end = imageFilenameEnd;
     }
-    if (model === 'MiniMaxH3') {
-        payload.h3_sage_attention = generationOptions?.h3_sage_attention === true;
+    if (isMiniMaxH3Model(model)) {
+        payload.h3_sage_attention = model === 'MiniMaxH3Fast';
+        payload.h3_low_vram = model === 'MiniMaxH3Mini';
         payload.h3_upscale_720p = generationOptions?.h3_upscale_720p === true;
         if (generationOptions?.h3_long_video === true) {
             const segments = generationOptions.h3_long_video_segments || [];
@@ -91,7 +95,7 @@ export function buildComfyUIVideoTaskPayload(
 }
 
 function requiresStrictProcessingNode(model: VideoModel): boolean {
-    return model === 'MiniMaxH3' || model === 'LTXNode1' || model === 'WanNode2';
+    return isMiniMaxH3Model(model) || model === 'LTXNode1' || model === 'WanNode2';
 }
 
 function hasAuthHeader(): boolean {

@@ -34,7 +34,7 @@ def test_gpu_agent_version_keeps_control_capability_marker():
         DEPLOY_DIR / "pipeline" / "comfyui_agent.py"
     ).read_text(encoding="utf-8")
 
-    assert 'AGENT_VERSION = "2026-08-07-background-heartbeat-v1"' in source
+    assert 'AGENT_VERSION = "2026-08-16-h3-profiles-v1"' in source
     assert "install_h3_sidecar" in source
     assert "minimax_h3_fl2va" in source
 
@@ -82,6 +82,11 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert 'part' in source
     assert 'ModelExpectedSizes' in source
     assert '20970379616' in source
+    assert 'ComfyUI-ClipProj' in source
+    assert 'e556987e6bbf9c6448dd5691fe29ce9a7a6970ae' in source
+    assert 'qwen3vl_4b_fp8_scaled.safetensors' in source
+    assert 'mmh3-4b-ClipProj-v3-mlp.safetensors' in source
+    assert 'h3-mini-ready.json' in source
 
 
 def test_h3_install_does_not_restart_or_start_a_runtime_by_default():

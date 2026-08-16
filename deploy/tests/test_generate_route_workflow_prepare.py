@@ -42,14 +42,15 @@ def test_generate_route_skips_prepare_for_external_api_tasks(task_type):
 
 
 @pytest.mark.asyncio
-async def test_gpu_queue_preflight_reports_anonymous_serial_position_and_eta():
+@pytest.mark.parametrize("model", ["MiniMaxH3", "MiniMaxH3Fast", "MiniMaxH3Mini"])
+async def test_gpu_queue_preflight_reports_anonymous_serial_position_and_eta(model):
     queue = Mock()
     queue.get_queue_length = AsyncMock(return_value=2)
     queue.get_processing_count = AsyncMock(return_value=1)
 
     result = await _gpu_queue_snapshot(
         queue,
-        GenerateRequest(task_type="i2v", model="MiniMaxH3", prompt="x"),
+        GenerateRequest(task_type="i2v", model=model, prompt="x"),
     )
 
     assert result["queue_mode"] == "gpu2_serial"

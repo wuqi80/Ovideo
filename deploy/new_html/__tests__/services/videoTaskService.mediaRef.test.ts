@@ -204,7 +204,31 @@ describe('ComfyUI video duration contract', () => {
 });
 
 describe('MiniMax H3 local routing', () => {
-    it('forwards the experimental acceleration request only for MiniMax H3', () => {
+    it('maps the dedicated Fast and Mini model names to their guarded profiles', () => {
+        expect(buildComfyUIVideoTaskPayload(
+            'i2v',
+            'first.png',
+            null,
+            'slow camera push',
+            'MiniMaxH3Fast',
+        )).toMatchObject({
+            model: 'MiniMaxH3Fast',
+            h3_sage_attention: true,
+            h3_low_vram: false,
+        });
+
+        expect(buildComfyUIVideoTaskPayload(
+            'i2v',
+            'first.png',
+            null,
+            'slow camera push',
+            'MiniMaxH3Mini',
+        )).toMatchObject({
+            model: 'MiniMaxH3Mini',
+            h3_sage_attention: false,
+            h3_low_vram: true,
+        });
+
         expect(buildComfyUIVideoTaskPayload(
             'i2v',
             'first.png',
@@ -214,7 +238,8 @@ describe('MiniMax H3 local routing', () => {
             { h3_sage_attention: true },
         )).toMatchObject({
             model: 'MiniMaxH3',
-            h3_sage_attention: true,
+            h3_sage_attention: false,
+            h3_low_vram: false,
         });
 
         expect(buildComfyUIVideoTaskPayload(
@@ -223,7 +248,7 @@ describe('MiniMax H3 local routing', () => {
             null,
             'slow camera push',
             'Wan2',
-            { h3_sage_attention: true },
+            { h3_sage_attention: true, h3_low_vram: true },
         )).not.toHaveProperty('h3_sage_attention');
     });
     it('forwards the serial 720P post-upscale switch only for MiniMax H3', () => {

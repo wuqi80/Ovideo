@@ -4990,7 +4990,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_model_service, "export const ALL_MODELS: VideoModel[]"),
         (video_model_service, "export const SELECTABLE_MODELS: VideoModel[]"),
         (video_model_service, "'LTXNode1', 'WanNode2'"),
-        (video_model_service, "'MiniMaxH3', 'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶'"),
+        (video_model_service, "'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini', 'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶'"),
         (video_model_service, "'LTXNode1', 'WanNode2'"),
         (video_model_service, "'Veo', 'Sora2', 'MINI', '大能'"),
         (video_model_service, "'Seedance2', 'Seedance2Fast', 'Seedance2Mini'"),

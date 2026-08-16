@@ -41,7 +41,17 @@ def _should_prepare_workflow(task_type: str) -> bool:
 def _is_minimax_h3_request(request: GenerateRequest) -> bool:
     model = str(getattr(request, "model", "") or "").strip().lower()
     task_type = str(getattr(request, "task_type", "") or "").strip().lower()
-    return task_type in {"i2v", "morph"} and model in {"minimaxh3", "minimax-h3", "minimax_h3"}
+    return task_type in {"i2v", "morph"} and model in {
+        "minimaxh3",
+        "minimax-h3",
+        "minimax_h3",
+        "minimaxh3fast",
+        "minimax-h3-fast",
+        "minimax_h3_fast",
+        "minimaxh3mini",
+        "minimax-h3-mini",
+        "minimax_h3_mini",
+    }
 
 
 def _runtime_profile(request: GenerateRequest) -> str:

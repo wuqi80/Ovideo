@@ -1,9 +1,11 @@
 // Shared video model names, parameter types, and pure inference helpers.
 
-const COMFYUI_MODELS: string[] = ['Wan2', 'LTXNode1', 'WanNode2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', 'MiniMaxH3'];
+const MINIMAX_H3_MODELS = ['MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini'] as const;
+const COMFYUI_MODELS: string[] = ['Wan2', 'LTXNode1', 'WanNode2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', ...MINIMAX_H3_MODELS];
 
 export type VideoModel =
-  | 'Wan2' | 'LTXNode1' | 'WanNode2' | '一阶' | '二阶' | '三阶' | '四阶' | '五阶' | '六阶' | '七阶' | 'MiniMaxH3'
+  | 'Wan2' | 'LTXNode1' | 'WanNode2' | '一阶' | '二阶' | '三阶' | '四阶' | '五阶' | '六阶' | '七阶'
+  | 'MiniMaxH3' | 'MiniMaxH3Fast' | 'MiniMaxH3Mini'
   | 'Veo' | 'Sora2' | 'MINI' | '大能'
   | 'Seedance15' | 'Seedance2' | 'Seedance2Fast' | 'Seedance2Mini'
   | 'Kling' | 'Vidu' | 'HappyHorse';
@@ -54,6 +56,10 @@ export type DashScopeVideoModel = 'Kling' | 'Vidu' | 'HappyHorse';
 
 export function isComfyUIModel(model: VideoModel): boolean {
   return COMFYUI_MODELS.includes(model);
+}
+
+export function isMiniMaxH3Model(model: VideoModel): boolean {
+  return (MINIMAX_H3_MODELS as readonly string[]).includes(model);
 }
 
 export function isDashScopeVideoModel(model: VideoModel): model is DashScopeVideoModel {
@@ -319,7 +325,9 @@ export function getModelDisplayName(model: VideoModel): string {
     '五阶': '五阶',
     '六阶': '六阶',
     '七阶': '七阶',
-    MiniMaxH3: 'MiniMax H3 本地版',
+    MiniMaxH3: '本地 MiniMax H3',
+    MiniMaxH3Fast: 'MiniMax H3 Fast',
+    MiniMaxH3Mini: '本地 MiniMax H3 Mini',
     Veo: '筑基',
     MINI: '金丹',
     Sora2: '化神',
@@ -336,14 +344,14 @@ export function getModelDisplayName(model: VideoModel): string {
 }
 
 export const ALL_MODELS: VideoModel[] = [
-  'Wan2', 'LTXNode1', 'WanNode2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', 'MiniMaxH3',
+  'Wan2', 'LTXNode1', 'WanNode2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', ...MINIMAX_H3_MODELS,
   'Veo', 'Sora2', 'MINI', '大能',
   'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
   'Kling', 'Vidu', 'HappyHorse',
 ];
 
 export const SELECTABLE_MODELS: VideoModel[] = [
-  'MiniMaxH3', 'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶',
+  'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini', 'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶',
   'LTXNode1', 'WanNode2',
   'Veo', 'Sora2', 'MINI', '大能',
   'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
