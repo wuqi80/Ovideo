@@ -4,44 +4,44 @@
 
 :root {
   color-scheme: light;
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  background: #f5f7fa;
-  --studio-canvas-background: #f5f7fa;
-  --studio-canvas-text: #334155;
-  --studio-grid-dot: rgba(71, 85, 105, 0.34);
+  font-family: "Noto Sans SC", "Sora", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: #F4F4F1;
+  --studio-canvas-background: #F4F4F1;
+  --studio-canvas-text: #3A3A44;
+  --studio-grid-dot: rgba(74, 74, 84, 0.34);
   --studio-grid-opacity: 0.42;
-  --studio-connection: rgba(51, 65, 85, 0.58);
+  --studio-connection: rgba(58, 58, 68, 0.58);
   --studio-header-surface: rgba(255, 255, 255, 0.88);
-  --studio-header-text: #334155;
-  --studio-header-border: rgba(15, 23, 42, 0.12);
-  --studio-header-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
+  --studio-header-text: #3A3A44;
+  --studio-header-border: rgba(20, 20, 25, 0.12);
+  --studio-header-shadow: 0 10px 30px rgba(20, 20, 25, 0.1);
   --studio-welcome-surface: rgba(255, 255, 255, 0.78);
   --studio-welcome-action: rgba(255, 255, 255, 0.94);
   --studio-welcome-action-hover: #ffffff;
   --studio-welcome-text: #475569;
-  --studio-group-border: rgba(71, 85, 105, 0.18);
+  --studio-group-border: rgba(74, 74, 84, 0.18);
   --studio-group-surface: rgba(255, 255, 255, 0.42);
-  --studio-group-label: rgba(51, 65, 85, 0.68);
+  --studio-group-label: rgba(58, 58, 68, 0.68);
   --studio-node-surface: rgba(255, 255, 255, 0.88);
   --studio-node-surface-selected: rgba(255, 255, 255, 0.96);
-  --studio-node-border: rgba(15, 23, 42, 0.12);
-  --studio-node-border-hover: rgba(15, 23, 42, 0.2);
-  --studio-node-shadow: 0 24px 70px rgba(15, 23, 42, 0.13);
-  --studio-node-control-shadow: 0 18px 48px rgba(15, 23, 42, 0.14);
+  --studio-node-border: rgba(20, 20, 25, 0.12);
+  --studio-node-border-hover: rgba(20, 20, 25, 0.2);
+  --studio-node-shadow: 0 24px 70px rgba(20, 20, 25, 0.13);
+  --studio-node-control-shadow: 0 18px 48px rgba(20, 20, 25, 0.14);
   --studio-node-panel: rgba(255, 255, 255, 0.94);
   --studio-node-panel-muted: rgba(248, 250, 252, 0.88);
   --studio-node-panel-hover: #ffffff;
-  --studio-node-media-bg: #eef2f7;
-  --studio-node-text: #1e293b;
-  --studio-node-muted: #64748b;
-  --studio-node-faint: #94a3b8;
-  --studio-node-placeholder: #94a3b8;
+  --studio-node-media-bg: #F0F0EC;
+  --studio-node-text: #26262E;
+  --studio-node-muted: #6A6A74;
+  --studio-node-faint: #9A9AA2;
+  --studio-node-placeholder: #9A9AA2;
   --studio-node-menu-surface: rgba(255, 255, 255, 0.96);
-  --studio-node-menu-hover: rgba(6, 182, 212, 0.1);
+  --studio-node-menu-hover: rgba(91, 73, 240, 0.1);
   --studio-node-port-surface: rgba(255, 255, 255, 0.96);
-  --studio-node-port-border: rgba(15, 23, 42, 0.18);
+  --studio-node-port-border: rgba(20, 20, 25, 0.18);
   --studio-node-overlay: rgba(255, 255, 255, 0.78);
-  --glass-border: rgba(15, 23, 42, 0.12);
+  --glass-border: rgba(20, 20, 25, 0.12);
   --glass-surface: rgba(255, 255, 255, 0.78);
   --glass-highlight: rgba(255, 255, 255, 0.72);
   --apple-spring: cubic-bezier(0.32, 0.72, 0, 1);
@@ -49,7 +49,7 @@
 
 :root[data-studio-theme="dark"] {
   color-scheme: dark;
-  background: #0a0a0c;
+  background: #141419;
 }
 
 html,
@@ -62,13 +62,13 @@ body,
 }
 
 body {
-  background: #f5f7fa;
+  background: #F4F4F1;
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
 
 :root[data-studio-theme="dark"] body {
-  background: #0a0a0c;
+  background: #141419;
 }
 
 button,
@@ -81,7 +81,7 @@ select {
 * {
   box-sizing: border-box;
   scrollbar-width: thin;
-  scrollbar-color: rgba(113, 113, 122, 0.55) transparent;
+  scrollbar-color: rgba(154, 154, 162, 0.55) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -91,7 +91,7 @@ select {
 
 *::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(113, 113, 122, 0.55);
+  background: rgba(154, 154, 162, 0.55);
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -124,39 +124,39 @@ select {
 }
 
 .studio-canvas[data-studio-theme="dark"] {
-  --studio-canvas-background: #0a0a0c;
-  --studio-canvas-text: #e2e8f0;
-  --studio-grid-dot: rgba(203, 213, 225, 0.42);
+  --studio-canvas-background: #141419;
+  --studio-canvas-text: #E5E5EA;
+  --studio-grid-dot: rgba(196, 196, 204, 0.42);
   --studio-grid-opacity: 0.14;
   --studio-connection: rgba(255, 255, 255, 0.6);
-  --studio-header-surface: rgba(0, 0, 0, 0.7);
-  --studio-header-text: #e4e4e7;
+  --studio-header-surface: rgba(20, 20, 25, 0.72);
+  --studio-header-text: #E5E5EA;
   --studio-header-border: rgba(255, 255, 255, 0.1);
   --studio-header-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
-  --studio-welcome-surface: rgba(9, 9, 11, 0.8);
-  --studio-welcome-action: #18181b;
-  --studio-welcome-action-hover: #27272a;
-  --studio-welcome-text: #a1a1aa;
+  --studio-welcome-surface: rgba(20, 20, 25, 0.8);
+  --studio-welcome-action: #1E1E26;
+  --studio-welcome-action-hover: #22222B;
+  --studio-welcome-text: #9A9AA8;
   --studio-group-border: rgba(255, 255, 255, 0.1);
   --studio-group-surface: rgba(255, 255, 255, 0.05);
   --studio-group-label: rgba(255, 255, 255, 0.4);
-  --studio-node-surface: rgba(28, 28, 30, 0.6);
-  --studio-node-surface-selected: rgba(28, 28, 30, 0.85);
+  --studio-node-surface: rgba(30, 30, 38, 0.6);
+  --studio-node-surface-selected: rgba(30, 30, 38, 0.85);
   --studio-node-border: rgba(255, 255, 255, 0.1);
   --studio-node-border-hover: rgba(255, 255, 255, 0.2);
   --studio-node-shadow: 0 24px 70px rgba(0, 0, 0, 0.2);
   --studio-node-control-shadow: 0 25px 50px rgba(0, 0, 0, 0.35);
-  --studio-node-panel: rgba(44, 44, 46, 0.95);
+  --studio-node-panel: rgba(43, 43, 54, 0.95);
   --studio-node-panel-muted: rgba(0, 0, 0, 0.1);
   --studio-node-panel-hover: rgba(0, 0, 0, 0.2);
-  --studio-node-media-bg: #18181b;
-  --studio-node-text: #e2e8f0;
-  --studio-node-muted: #94a3b8;
-  --studio-node-faint: #64748b;
-  --studio-node-placeholder: rgba(100, 116, 139, 0.6);
-  --studio-node-menu-surface: rgba(28, 28, 30, 0.86);
+  --studio-node-media-bg: #1E1E26;
+  --studio-node-text: #E5E5EA;
+  --studio-node-muted: #9A9AA2;
+  --studio-node-faint: #6A6A74;
+  --studio-node-placeholder: rgba(122, 122, 136, 0.6);
+  --studio-node-menu-surface: rgba(30, 30, 38, 0.86);
   --studio-node-menu-hover: rgba(255, 255, 255, 0.1);
-  --studio-node-port-surface: #1c1c1e;
+  --studio-node-port-surface: #1E1E26;
   --studio-node-port-border: rgba(255, 255, 255, 0.2);
   --studio-node-overlay: rgba(0, 0, 0, 0.4);
 }
@@ -178,8 +178,8 @@ select {
 }
 
 .studio-header-button:hover {
-  border-color: rgba(6, 182, 212, 0.48);
-  color: #0891b2;
+  border-color: rgba(91, 73, 240, 0.48);
+  color: #4C3BD6;
 }
 
 .studio-welcome-actions {
@@ -194,7 +194,7 @@ select {
 }
 
 .studio-welcome-action:hover {
-  border-color: rgba(6, 182, 212, 0.28);
+  border-color: rgba(91, 73, 240, 0.28);
   background: var(--studio-welcome-action-hover);
   color: var(--studio-canvas-text);
 }
@@ -216,9 +216,9 @@ select {
 }
 
 .studio-node[data-selected="true"] {
-  border-color: rgba(6, 182, 212, 0.5);
+  border-color: rgba(91, 73, 240, 0.5);
   background: var(--studio-node-surface-selected);
-  box-shadow: 0 0 40px -10px rgba(34, 211, 238, 0.3), var(--studio-node-shadow);
+  box-shadow: 0 0 40px -10px rgba(139, 107, 255, 0.35), var(--studio-node-shadow);
 }
 
 .studio-node:not([data-selected="true"]):hover {
@@ -278,9 +278,9 @@ select {
 
 .studio-node-icon-button:hover,
 .studio-node-control-trigger:hover {
-  border-color: rgba(6, 182, 212, 0.36);
+  border-color: rgba(91, 73, 240, 0.36);
   background: var(--studio-node-panel-hover);
-  color: #0891b2;
+  color: #4C3BD6;
 }
 
 .studio-node-port {
@@ -302,7 +302,7 @@ select {
 .studio-node-menu-item:hover,
 .studio-node-menu-item-active {
   background: var(--studio-node-menu-hover);
-  color: #0891b2;
+  color: #4C3BD6;
 }
 
 .studio-node-thumbnail {
@@ -344,22 +344,22 @@ select {
 
 .studio-node-mode-button:hover,
 .studio-canvas-toolbar-button:hover {
-  border-color: rgba(6, 182, 212, 0.36);
+  border-color: rgba(91, 73, 240, 0.36);
   background: var(--studio-node-panel-hover);
-  color: #0891b2;
+  color: #4C3BD6;
 }
 
 .studio-node-mode-button-active {
-  border-color: rgba(6, 182, 212, 0.48);
+  border-color: rgba(91, 73, 240, 0.48);
   background: #ffffff;
-  color: #0f172a;
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  color: #17171C;
+  box-shadow: 0 10px 28px rgba(20, 20, 25, 0.12);
 }
 
 .studio-canvas[data-studio-theme="dark"] .studio-node-mode-button-active {
   border-color: #ffffff;
   background: #ffffff;
-  color: #0a0a0c;
+  color: #141419;
 }
 
 .studio-node-timeline {
@@ -369,7 +369,7 @@ select {
 }
 
 .studio-canvas[data-studio-theme="dark"] .studio-node-timeline {
-  background: rgba(10, 10, 10, 0.9);
+  background: rgba(20, 20, 25, 0.9);
 }
 
 .studio-canvas-toolbar {
@@ -381,9 +381,9 @@ select {
 }
 
 .studio-canvas-toolbar-button:hover {
-  color: #0891b2;
+  color: #4C3BD6;
 }
 
 .studio-canvas-toolbar-range {
-  accent-color: #0891b2;
+  accent-color: #4C3BD6;
 }

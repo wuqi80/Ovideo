@@ -122,6 +122,11 @@ def create_frontend_pages_router() -> APIRouter:
     async def app_page():
         return RedirectResponse(url="/projects")
 
+    @router.get("/create")
+    async def create_page():
+        """一句话新建创作首页（docs/design-standard 模板 Home）。"""
+        return _serve_spa()
+
     @router.get("/projects")
     async def projects_hub():
         return _serve_spa()

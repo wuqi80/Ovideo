@@ -8,40 +8,42 @@ const projectRoot = process.cwd();
 const readProjectFile = (relativePath: string): string =>
   fs.readFileSync(path.join(projectRoot, relativePath), 'utf8');
 
-describe('Webflow design-system contract', () => {
+describe('SHOTFORGE design-system contract', () => {
   it('keeps the source-of-truth palette aligned across CSS and Tailwind', () => {
     const css = readProjectFile('styles/design-tokens.css');
     const tailwind = readProjectFile('tailwind.config.cjs');
 
     for (const color of [
-      '#080808',
-      '#146EF5',
-      '#3B89FF',
-      '#006ACC',
-      '#0055D4',
-      '#7A3DFF',
-      '#ED52CB',
-      '#00D722',
-      '#FF6B00',
-      '#FFAE13',
-      '#EE1D36',
-      '#D8D8D8',
-      '#898989',
-      '#ABABAB',
-      '#5A5A5A',
+      '#17171C',
+      '#5B49F0',
+      '#8B6BFF',
+      '#4C3BD6',
+      '#4536C9',
+      '#7A5BFF',
+      '#FF6A3D',
+      '#12B76A',
+      '#3B7BE5',
+      '#D9822B',
+      '#E5533C',
+      '#E5E5E0',
+      '#9A9AA2',
+      '#6A6A74',
+      '#F4F4F1',
+      '#141419',
     ]) {
       expect(css.toUpperCase()).toContain(color);
       expect(tailwind.toUpperCase()).toContain(color);
     }
   });
 
-  it('clamps functional radii and uses the five-layer floating shadow', () => {
+  it('uses the SHOTFORGE radius scale and soft floating shadow', () => {
     const css = readProjectFile('styles/design-tokens.css');
 
-    expect(css).toContain('--radius-base: 4px');
-    expect(css).toContain('--radius-lg: 8px');
+    expect(css).toContain('--radius-base: 9px');
+    expect(css).toContain('--radius-lg: 14px');
     expect(css).toMatch(/\.rounded-lg,\s*\n\.rounded-xl,\s*\n\.rounded-2xl,\s*\n\.rounded-3xl\s*\{\s*border-radius: var\(--radius-lg\)/);
-    expect(css).toContain('rgba(0, 0, 0, 0.09) 0 3px 7px');
+    expect(css).toContain('rgba(20, 20, 25, 0.18)');
+    expect(css).toContain('rgba(91, 73, 240, 0.35)');
   });
 
   it('provides one responsive overlay and dialog surface contract', () => {
@@ -95,21 +97,21 @@ describe('Webflow design-system contract', () => {
     expect(html).not.toContain('style="background-color:');
   });
 
-  it('keeps the standalone unauthenticated login page on the same Webflow system', () => {
+  it('keeps the standalone unauthenticated login page on the same SHOTFORGE system', () => {
     const login = readProjectFile('../login.html');
 
-    expect(login).toContain('--primary: #146EF5');
-    expect(login).toContain('--n800: #080808');
-    expect(login).toContain('--n40: #D8D8D8');
-    expect(login).toContain('"WF Visual Sans Variable"');
-    expect(login).toContain('var(--shadow-cascade)');
+    expect(login).toContain('--primary: #5B49F0');
+    expect(login).toContain('--n800: #17171C');
+    expect(login).toContain('--n40: #E5E5E0');
+    expect(login).toContain('"Noto Sans SC"');
+    expect(login).toContain('var(--shadow-glow)');
     expect(login).not.toContain('transform: translateX(6px)');
-    expect(login).toContain('transition: background-color 150ms ease, box-shadow 150ms ease');
+    expect(login).toContain('transition: background-color 150ms ease, box-shadow 150ms ease, filter 150ms ease');
     expect(login).toContain('background: transparent');
     expect(login).toContain('input:-webkit-autofill + label');
     expect(login).toContain('box-shadow: 0 0 0 1000px var(--n0) inset');
     expect(login).toContain('@media (max-width: 479px)');
-    expect(login).not.toMatch(/#0052CC|#0065FF|#0747A6|#172B4D/i);
+    expect(login).not.toMatch(/#0052CC|#0065FF|#0747A6|#172B4D|#146EF5/i);
   });
 
   it('uses one SPTI.AI identity and favicon set across public shells', () => {

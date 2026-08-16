@@ -303,9 +303,9 @@ const MultiAngle3DController: React.FC<MultiAngle3DControllerProps> = ({
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d')!;
-        ctx.fillStyle = '#1a1a2a';
+        ctx.fillStyle = '#1E1E26';
         ctx.fillRect(0, 0, size, size);
-        ctx.strokeStyle = '#2a2a3a';
+        ctx.strokeStyle = '#2B2B36';
         ctx.lineWidth = 1;
         const gridSize = 16;
         for (let i = 0; i <= size; i += gridSize) {

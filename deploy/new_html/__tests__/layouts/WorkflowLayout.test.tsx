@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const source = readFileSync(resolve(__dirname, '../../layouts/WorkflowLayout.tsx'), 'utf-8');
+const sidebarSource = readFileSync(resolve(__dirname, '../../components/AppSidebar.tsx'), 'utf-8');
 const tokenSource = readFileSync(resolve(__dirname, '../../styles/design-tokens.css'), 'utf-8');
 const workspaceSource = readFileSync(resolve(__dirname, '../../WorkspaceApp.tsx'), 'utf-8');
 const designSource = readFileSync(resolve(__dirname, '../../pages/DesignPage.tsx'), 'utf-8');
@@ -14,12 +15,15 @@ const storyboardSource = readFileSync(resolve(__dirname, '../../components/Gener
 const videoSource = readFileSync(resolve(__dirname, '../../components/VideoPage.tsx'), 'utf-8');
 const enhanceSource = readFileSync(resolve(__dirname, '../../pages/EnhancePage.tsx'), 'utf-8');
 const mediaLibrarySource = readFileSync(resolve(__dirname, '../../pages/MediaLibraryPage.tsx'), 'utf-8');
+const createSource = readFileSync(resolve(__dirname, '../../pages/CreatePage.tsx'), 'utf-8');
 
 describe('WorkflowLayout account summary', () => {
-  it('uses the shared account dropdown before the credit balance', () => {
-    expect(source).toContain("import AccountMenu from '../components/AccountMenu'");
-    expect(source).toContain('<AccountMenu compact />');
-    expect(source).not.toContain("localStorage.getItem('username')");
+  it('delegates account actions to the dark sidebar user row', () => {
+    expect(source).not.toContain('AccountMenu');
+    expect(sidebarSource).toContain("apiFetch('/api/logout'");
+    expect(sidebarSource).toContain("window.location.href = '/profile'");
+    expect(sidebarSource).toContain('getStoredUsername');
+    expect(sidebarSource).toContain('clearAccountIdentity');
   });
 
   it('shows the available credit balance and links to the credits page', () => {
@@ -35,34 +39,66 @@ describe('WorkflowLayout account summary', () => {
   });
 });
 
-describe('WorkflowLayout visual workspace shell', () => {
-  it('keeps the workflow navigation and account actions in one fixed header', () => {
-    expect(source).toContain("import BrandLogo from '../components/BrandLogo'");
+describe('WorkflowLayout template pipeline shell', () => {
+  it('keeps the four-stage pipeline stepper in one fixed header beside the dark sidebar', () => {
+    expect(source).toContain("from '../components/AppSidebar'");
+    expect(source).toContain('<AppSidebar');
     expect(source).toContain('className="workflow-shell-header');
     expect(source).toContain('aria-label="流程化制作导航"');
     expect(source).toContain('<NotificationPanel compact />');
-    expect(source).toContain('<AccountMenu compact />');
     expect(source).toContain('className="workflow-shell-workspace');
   });
 
-  it('keeps the top bar continuous without vertical separators', () => {
-    const brandClass = source.match(/className="workflow-shell-brand\s+([^"]+)"/)?.[1] ?? '';
-    const accountClass = source.match(/className="workflow-shell-account\s+([^"]+)"/)?.[1] ?? '';
-
-    expect(brandClass).not.toMatch(/\bborder-r\b/);
-    expect(accountClass).not.toMatch(/\bborder-l\b/);
+  it('maps the production sub-pages into the template four stages', () => {
+    for (const stage of ['剧本创作', '美术设定', '分镜设计', '短片生成']) expect(source).toContain(stage);
+    for (const en of ["en: 'SCRIPT'", "en: 'ART'", "en: 'STORYBOARD'", "en: 'VIDEO'"]) expect(source).toContain(en);
+    for (const sub of ["label: '设计'", "label: '素材'", "label: '配音'", "label: '视频'", "label: '美化'", "label: '成品'"]) {
+      expect(source).toContain(sub);
+    }
+    expect(source).toContain('{STAGES.map');
+    expect(source).toContain("'✓'");
+    expect(source).toContain('ring-primary/15');
+    expect(source).toContain('activeStage.subs.length > 1');
   });
 
-  it('keeps the logo leftmost, the back action before script, and the account menu rightmost', () => {
+  it('keeps the dark sidebar with template nav, tools, credits card and user row', () => {
+    expect(sidebarSource).toContain('bg-n900');
+    expect(sidebarSource).toContain('<BrandLogo');
+    expect(sidebarSource).toContain('新建创作 · New');
+    expect(sidebarSource).toContain('我的作品 · Projects');
+    expect(sidebarSource).toContain('导出分享 · Export');
+    expect(sidebarSource).toContain('最近项目 RECENT');
+    expect(sidebarSource).toContain('ui-dark-panel');
+    expect(source).toContain('exportTo="final"');
+    expect(source).toContain("label: '素材库'");
+    expect(source).toContain("label: '历史'");
+    expect(source).toContain("label: '自由创作'");
+  });
+
+  it('keeps the sidebar first, the stepper centered, and credits/notification/export rightmost', () => {
+    expect(source.indexOf('<AppSidebar')).toBeLessThan(source.indexOf('<header className="workflow-shell-header'));
+
     const headerStart = source.indexOf('<header className="workflow-shell-header');
     const headerEnd = source.indexOf('</header>', headerStart);
     const headerSource = source.slice(headerStart, headerEnd);
 
-    expect(headerSource.indexOf('<BrandLogo')).toBeLessThan(headerSource.indexOf('<nav'));
-    expect(headerSource.indexOf('<nav')).toBeLessThan(headerSource.indexOf('<ArrowLeft'));
-    expect(headerSource.indexOf('<ArrowLeft')).toBeLessThan(headerSource.indexOf('{NAV_ITEMS.map'));
-    expect(headerSource.indexOf('<NotificationPanel compact />')).toBeLessThan(headerSource.indexOf('<Coins'));
-    expect(headerSource.indexOf('<Coins')).toBeLessThan(headerSource.indexOf('<AccountMenu compact />'));
+    expect(headerSource).toContain('{STAGES.map');
+    expect(headerSource.indexOf('{STAGES.map')).toBeLessThan(headerSource.indexOf('<Coins'));
+    expect(headerSource.indexOf('<Coins')).toBeLessThan(headerSource.indexOf('<NotificationPanel compact />'));
+    expect(headerSource.indexOf('<NotificationPanel compact />')).toBeLessThan(headerSource.indexOf('<Download'));
+
+    const accountClass = source.match(/className="workflow-shell-account\s+([^"]+)"/)?.[1] ?? '';
+    expect(accountClass).not.toMatch(/\bborder-l\b/);
+  });
+
+  it('offers the one-sentence create home wired to project + episode creation', () => {
+    expect(createSource).toContain('一句话，');
+    expect(createSource).toContain('从创意到成片。');
+    expect(createSource).toContain("apiJson<any>('/api/projects'");
+    expect(createSource).toContain('/episodes`');
+    expect(createSource).toContain("navigate(`/projects/${newProjectId}/ep/${newEpisodeId}/workflow/script`)");
+    expect(createSource).toContain('生成剧本 Generate');
+    expect(createSource).toContain('<AppSidebar');
   });
 
   it('defines isolated white sidebar and gray canvas scroll regions', () => {

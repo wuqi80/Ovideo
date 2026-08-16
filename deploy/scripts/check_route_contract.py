@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 276
-DEFAULT_EXPECTED_OPERATIONS = 335
+DEFAULT_EXPECTED_PATHS = 277
+DEFAULT_EXPECTED_OPERATIONS = 336
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -82,6 +82,7 @@ EXPECTED_ENDPOINTS = {
     ("/generation", "GET"): ("routers.frontend_pages", "generation_page"),
     ("/workspace", "GET"): ("routers.frontend_pages", "workspace_page"),
     ("/app", "GET"): ("routers.frontend_pages", "app_page"),
+    ("/create", "GET"): ("routers.frontend_pages", "create_page"),
     ("/projects", "GET"): ("routers.frontend_pages", "projects_hub"),
     ("/projects/{path:path}", "GET"): ("routers.frontend_pages", "projects_spa"),
     ("/profile", "GET"): ("routers.frontend_pages", "profile_page"),
@@ -771,8 +772,8 @@ def check_frontend_pages_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 30:
-        fail(f"routers/frontend_pages.py should own 30 frontend route registrations, found {route_count}")
+    if route_count != 31:
+        fail(f"routers/frontend_pages.py should own 31 frontend route registrations, found {route_count}")
     return route_count
 
 
@@ -6295,12 +6296,12 @@ def check_frontend_dependency_contract(root: Path) -> int:
         (postcss_config_path.read_text(encoding="utf-8") if postcss_config_path.exists() else "", "autoprefixer: {}", postcss_config_path),
         (
             design_tokens_css,
-            '--font-sans: "WF Visual Sans Variable", Arial',
+            '--font-sans: "Noto Sans SC", "Sora"',
             new_html / "styles" / "design-tokens.css",
         ),
         (
             design_tokens_css,
-            "--font-mono: Inconsolata, ui-monospace",
+            '--font-mono: "Space Mono", Inconsolata, ui-monospace',
             new_html / "styles" / "design-tokens.css",
         ),
         (login_html, "fetch('/api/login'", root / "login.html"),

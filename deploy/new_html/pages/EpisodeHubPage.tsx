@@ -26,6 +26,7 @@ import {
 import type { Episode } from '../types';
 import { BrandLogo } from '../components/BrandLogo';
 import AccountMenu from '../components/AccountMenu';
+import AppSidebar from '../components/AppSidebar';
 import { crmConfirm, crmMessage } from '../admin/crmUI';
 import { prepareCoverUploadFile } from '../utils/coverImage';
 import { cleanupReplacedCoverFile } from '../utils/coverCleanup';
@@ -503,7 +504,7 @@ export const EpisodeHubPage: React.FC = () => {
     : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5';
 
   return (
-    <div className="layout-safe min-h-screen bg-n20 text-n800" onClick={() => setMenuOpen(null)}>
+    <div className="layout-safe flex min-h-screen bg-n20 text-n800" onClick={() => setMenuOpen(null)}>
       <input
         ref={coverInputRef}
         type="file"
@@ -512,7 +513,9 @@ export const EpisodeHubPage: React.FC = () => {
         aria-label="选择分集封面图片"
         onChange={handleCoverFileChange}
       />
-      <div className={`min-h-screen w-full ${shellWidthClass} mx-auto bg-n0 md:border-x md:border-n40`}>
+      {/* DESIGN.md 应用外壳：全局深色侧边栏（窄屏隐藏，页头仍保留完整入口） */}
+      <AppSidebar className="sticky top-0 hidden h-screen lg:flex" />
+      <div className={`min-h-screen w-full min-w-0 ${shellWidthClass} mx-auto bg-n0 md:border-x md:border-n40`}>
         <header className="animate-slideDown">
           <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
             <div className="flex min-w-0 items-center gap-4">

@@ -1,8 +1,9 @@
 /**
- * Drama 设计令牌（design tokens）—— Webflow visual system
+ * Drama 设计令牌（design tokens）—— 分镜工坊 / SHOTFORGE visual system
  *
- * DESIGN.md 是本文件的视觉契约。创作端、管理端和所有浮层都通过这里
- * 共享颜色、字体、圆角、阴影、交互和响应式行为，业务组件不再各自定义主题。
+ * DESIGN.md（暖白 + 紫罗兰标准）是本文件的视觉契约。创作端、管理端和所有浮层
+ * 都通过这里共享颜色、字体、圆角、阴影、交互和响应式行为，业务组件不再各自定义主题。
+ * 历史 n、b、g、r、y、p、t 系列令牌名保留，值已重映射到新标准。
  */
 
 @tailwind base;
@@ -12,52 +13,62 @@
 :root {
   color-scheme: light;
 
-  /* ---------- Webflow 中性色阶 n0~n900 ---------- */
+  /* ---------- 暖白中性色阶 n0~n900（浅→深） ---------- */
   --n0:   #FFFFFF;
-  --n10:  #FCFCFC;
-  --n20:  #F7F7F7;
-  --n30:  #EEEEEE;
-  --n40:  #D8D8D8;
-  --n50:  #C8C8C8;
-  --n60:  #B8B8B8;
-  --n70:  #ABABAB;
-  --n80:  #9A9A9A;
-  --n90:  #898989;
-  --n100: #ABABAB;
-  --n200: #777777;
-  --n300: #5A5A5A;
-  --n400: #484848;
-  --n500: #363636;
-  --n600: #2B2B2B;
-  --n700: #222222;
-  --n800: #080808;
-  --n900: #000000;
+  --n10:  #FBFBF9;
+  --n20:  #F4F4F1;
+  --n30:  #F0F0EC;
+  --n40:  #E5E5E0;
+  --n50:  #E0E0DA;
+  --n60:  #D2D2CA;
+  --n70:  #B0B0B8;
+  --n80:  #A5A5AD;
+  --n90:  #9A9AA2;
+  --n100: #9A9AA2;
+  --n200: #8A8A94;
+  --n300: #6A6A74;
+  --n400: #4A4A54;
+  --n500: #3A3A44;
+  --n600: #26262E;
+  --n700: #22222B;
+  --n800: #17171C;
+  --n900: #141419;
 
-  /* ---------- Webflow 功能色与次级强调色 ---------- */
-  --r50: #FFF1F3; --r75: #FFD4DA; --r100: #FFA3AF; --r200: #FF7384; --r300: #EE1D36; --r400: #C9152B; --r500: #9D1021;
-  --y50: #FFF8E8; --y75: #FFEBC0; --y100: #FFDB82; --y200: #FFC84A; --y300: #FFAE13; --y400: #DB8D00; --y500: #A96D00;
-  --g50: #ECFFF0; --g75: #C7FFD2; --g100: #86F99C; --g200: #3BE65D; --g300: #00D722; --g400: #00A91B; --g500: #007E14;
-  --b50: #EAF2FF; --b75: #CFE0FF; --b100: #8EB7FF; --b200: #3B89FF; --b300: #146EF5; --b400: #006ACC; --b500: #0055D4;
-  --p50: #F2EBFF; --p75: #DECFFF; --p100: #B996FF; --p200: #9566FF; --p300: #7A3DFF; --p400: #6428DC; --p500: #4B19B3;
-  --t50: #E9FBFF; --t75: #C7F4FF; --t100: #83E8FA; --t200: #35D4EB; --t300: #00B7D3; --t400: #008EA6; --t500: #006B7D;
-  --pink: #ED52CB;
-  --orange: #FF6B00;
+  /* ---------- 功能色与次级强调色（语义：紫=主/角色，绿=成功/场景，橙=道具/时间码，蓝=信息，琥珀=草稿/警示，红=错误） ---------- */
+  --r50: #FFEBE6; --r75: #FFD4CA; --r100: #FFA894; --r200: #F57D63; --r300: #E5533C; --r400: #C43C27; --r500: #9C2E1D;
+  --y50: #FFF6E5; --y75: #FFE9C2; --y100: #FFD58A; --y200: #F0A94F; --y300: #D9822B; --y400: #B4681F; --y500: #8A4E16;
+  --g50: #E4F7EE; --g75: #C9EEDC; --g100: #8FDDB8; --g200: #3FCB8F; --g300: #12B76A; --g400: #0E9455; --g500: #0A7143;
+  --b50: #ECE9FF; --b75: #E3DEFF; --b100: #D9D2FF; --b200: #8B6BFF; --b300: #5B49F0; --b400: #4C3BD6; --b500: #4536C9;
+  --p50: #F0EEFF; --p75: #DED6FF; --p100: #C3B3FF; --p200: #9F83FF; --p300: #7A5BFF; --p400: #6446E0; --p500: #4E35B5;
+  --t50: #E6F0FF; --t75: #CCE0FF; --t100: #99C2FF; --t200: #66A0F5; --t300: #3B7BE5; --t400: #2C60BC; --t500: #204893;
+  --pink: #FF9A6B;
+  --orange: #FF6A3D;
+
+  /* ---------- 深色表面（仅限侧边栏 / 播放器 / 深色表头） ---------- */
+  --dark-bg: #141419;
+  --dark-hover: #22222B;
+  --dark-panel: #1E1E26;
+  --dark-border: #2B2B36;
+  --dark-border-strong: #2F2F3A;
+  --dark-text: #C4C4CC;
+  --dark-muted: #9A9AA8;
+  --dark-faint: #7A7A88;
 
   /* ---------- 语义色 ---------- */
-  --color-primary:        #146EF5;
-  --color-primary-hover:  #0055D4;
-  --color-primary-active: #006ACC;
+  --color-primary:        #5B49F0;
+  --color-primary-hover:  #4C3BD6;
+  --color-primary-active: #4536C9;
   --color-primary-light:  var(--b50);
   --color-success: var(--g300);
   --color-warning: var(--y300);
   --color-danger:  var(--r300);
-  --color-info:    var(--b300);
+  --color-info:    var(--t300);
   --color-purple:  var(--p300);
   --color-teal:    var(--t300);
 
   /* ---------- 文字 ---------- */
   --text-primary:     var(--n800);
-  --text-regular:     var(--n700);
+  --text-regular:     var(--n600);
   --text-secondary:   var(--n300);
   --text-placeholder: var(--n100);
   --text-inverse:     var(--n0);
@@ -66,43 +77,41 @@
   --border-base:  var(--n40);
   --border-hover: var(--n90);
   --border-light: var(--n30);
-  --bg-body:      var(--n0);
+  --bg-body:      var(--n20);
   --bg-surface:   var(--n0);
-  --bg-sunken:    var(--n20);
+  --bg-sunken:    var(--n30);
   --bg-hover:     var(--n20);
 
-  /* ---------- 字体 ---------- */
-  --font-sans: "WF Visual Sans Variable", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-mono: Inconsolata, ui-monospace, "SFMono-Regular", Consolas, monospace;
+  /* ---------- 字体：Sora 标题 / Noto Sans SC 正文 / Space Mono 编号标签 ---------- */
+  --font-sans: "Noto Sans SC", "Sora", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-display: "Sora", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "Space Mono", Inconsolata, ui-monospace, "SFMono-Regular", Consolas, monospace;
 
   /* 字号：工具型界面采用 DESIGN.md 的正文/标题比例 */
-  --fs-display: 80px; --fs-section: 56px; --fs-xxxl: 32px; --fs-xxl: 24px;
-  --fs-xl: 20px; --fs-lg: 16px; --fs-base: 16px; --fs-md: 14px; --fs-sm: 12.8px; --fs-xs: 10px;
+  --fs-display: 44px; --fs-section: 32px; --fs-xxxl: 24px; --fs-xxl: 22px;
+  --fs-xl: 20px; --fs-lg: 16px; --fs-base: 14px; --fs-md: 13px; --fs-sm: 12px; --fs-xs: 10.5px;
   /* 字重 */
-  --fw-light: 300; --fw-normal: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 600;
+  --fw-light: 300; --fw-normal: 400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
   /* 行高 */
   --lh-base: 1.6; --lh-sm: 1.4;
 
-  /* ---------- DESIGN.md 分数间距 ---------- */
-  --space-px: 1px; --space-0-5: 2.4px; --space-1: 4px; --space-1-5: 5.6px;
-  --space-2: 8px; --space-2-5: 9.6px; --space-3: 12px; --space-4: 16px;
+  /* ---------- DESIGN.md 间距节奏 ---------- */
+  --space-px: 1px; --space-0-5: 2px; --space-1: 4px; --space-1-5: 6px;
+  --space-2: 8px; --space-2-5: 10px; --space-3: 12px; --space-4: 16px;
   --space-5: 20px; --space-6: 24px; --space-8: 32px;
   --interval-base: 8px;
-  --main-padding: 24px;
+  --main-padding: 26px;
 
-  /* ---------- 圆角 ---------- */
-  --radius-sm: 2px; --radius-base: 4px; --radius-md: 6px; --radius-lg: 8px; --radius-circle: 50%;
+  /* ---------- 圆角：控件 9 / 卡片 14 / 大容器 20 ---------- */
+  --radius-sm: 6px; --radius-base: 9px; --radius-md: 10px; --radius-lg: 14px; --radius-xl: 20px; --radius-circle: 50%;
 
-  /* ---------- Webflow 5 层级联阴影 ---------- */
-  --shadow-cascade: rgba(0, 0, 0, 0) 0 84px 24px,
-                    rgba(0, 0, 0, 0.01) 0 54px 22px,
-                    rgba(0, 0, 0, 0.04) 0 30px 18px,
-                    rgba(0, 0, 0, 0.08) 0 13px 13px,
-                    rgba(0, 0, 0, 0.09) 0 3px 7px;
-  --shadow-base: var(--shadow-cascade);
+  /* ---------- 阴影：极轻卡片影 + 深浮层影 + 品牌光晕 ---------- */
+  --shadow-cascade: 0 24px 70px rgba(20, 20, 25, 0.18);
+  --shadow-base: 0 14px 30px rgba(20, 20, 25, 0.10);
   --shadow-dark: var(--shadow-cascade);
-  --shadow-card: 0 1px 0 rgba(8, 8, 8, 0.04), 0 4px 12px rgba(8, 8, 8, 0.06);
+  --shadow-card: 0 6px 20px rgba(20, 20, 25, 0.05);
   --shadow-bottom: var(--shadow-cascade);
+  --shadow-glow: 0 4px 14px rgba(91, 73, 240, 0.35);
 
   /* ---------- 布局尺寸 ---------- */
   --topbar-height: 56px;
@@ -138,8 +147,8 @@ body {
 }
 
 ::selection {
-  color: var(--n800);
-  background: var(--b75);
+  color: var(--n0);
+  background: var(--color-primary);
 }
 
 img,
@@ -294,9 +303,10 @@ code,
 .workflow-shell-header {
   height: 60px;
   min-height: 60px;
-  box-shadow: 0 1px 0 rgba(8, 8, 8, 0.02);
+  box-shadow: 0 1px 0 rgba(20, 20, 25, 0.02);
   position: relative;
   z-index: 40;
+  backdrop-filter: blur(10px);
 }
 
 .workflow-shell-brand,
@@ -549,7 +559,8 @@ h5,
 h6 {
   margin-top: 0;
   color: var(--text-primary);
-  font-weight: var(--fw-semibold);
+  font-family: var(--font-display);
+  font-weight: var(--fw-bold);
   text-wrap: balance;
 }
 
@@ -600,11 +611,19 @@ a {
 
 .ui-eyebrow {
   color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: var(--fw-semibold);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: var(--fw-bold);
   line-height: 1.3;
   letter-spacing: 1px;
   text-transform: uppercase;
+}
+
+/* 深色侧边栏内嵌面板（credits 卡等）——深色表面仅限侧栏/播放器/表头场景 */
+.ui-dark-panel {
+  border: 1px solid var(--dark-border);
+  border-radius: 13px;
+  background: var(--dark-panel);
 }
 
 /* 输入、下拉和文本域使用同一尺寸、边界与焦点态。 */
@@ -634,7 +653,7 @@ textarea:focus,
 select:focus {
   border-color: var(--color-primary);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(20, 110, 245, 0.14);
+  box-shadow: 0 0 0 3px rgba(91, 73, 240, 0.16);
 }
 
 input[type="checkbox"],
@@ -676,7 +695,7 @@ button[class~="bg-b300"]:not(:disabled):hover,
 button[class~="bg-b400"]:not(:disabled):hover {
   background-color: var(--color-primary-hover);
   border-color: var(--color-primary-hover);
-  box-shadow: 0 8px 20px rgba(20, 110, 245, 0.18);
+  box-shadow: 0 4px 14px rgba(91, 73, 240, 0.32);
 }
 
 .button-shift:not(:disabled):hover {
@@ -688,8 +707,8 @@ button[class~="bg-b400"]:not(:disabled):hover {
 .fixed.inset-0[role="dialog"],
 .fixed.inset-0[class*="bg-n900/"],
 .fixed.inset-0[class*="bg-black/"] {
-  background-color: rgba(8, 8, 8, 0.52);
-  backdrop-filter: blur(4px);
+  background-color: rgba(20, 20, 25, 0.55);
+  backdrop-filter: blur(6px);
   animation: fadeIn 160ms ease-out both;
 }
 
@@ -732,8 +751,8 @@ button[class~="bg-b400"]:not(:disabled):hover {
 }
 
 .app-drawer-backdrop {
-  background-color: rgba(8, 8, 8, 0.52);
-  backdrop-filter: blur(4px);
+  background-color: rgba(20, 20, 25, 0.55);
+  backdrop-filter: blur(6px);
   animation: fadeIn 160ms ease-out both;
 }
 

@@ -39,6 +39,7 @@ const queryClient = new QueryClient({
 });
 
 const ProjectHub = React.lazy(() => import('./components/ProjectHub'));
+const CreatePage = React.lazy(() => import('./pages/CreatePage'));
 const ProjectWorkspace = React.lazy(() => import('./components/ProjectWorkspace'));
 const WorkflowLayout = React.lazy(() => import('./layouts/WorkflowLayout').then(m => ({ default: m.WorkflowLayout })));
 const EpisodeHubPage = React.lazy(() => import('./pages/EpisodeHubPage').then(m => ({ default: m.EpisodeHubPage })));
@@ -117,6 +118,8 @@ const App: React.FC = () => {
                 <Routes>
                     {/* ========== 项目管理中心 ========== */}
                     <Route path="/projects" element={<ProjectHub />} />
+                    {/* 一句话新建创作（docs/design-standard 模板 Home） */}
+                    <Route path="/create" element={<CreatePage />} />
 
                     {/* ========== 项目工作区 ========== */}
                     <Route path="/projects/:projectId" element={<ProjectWorkspace />}>

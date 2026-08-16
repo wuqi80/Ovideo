@@ -109,10 +109,10 @@ const STATUS_BADGE: Record<SegmentUiStatus, string> = {
 
 function audioTrackColor(tt: string): string {
   switch (tt) {
-    case 'bgm': return '#6366f1';
-    case 'sfx_global': return '#f97316';
-    case 'narration_global': return '#14b8a6';
-    default: return '#a78bfa';
+    case 'bgm': return '#5B49F0';
+    case 'sfx_global': return '#FF6A3D';
+    case 'narration_global': return '#3B7BE5';
+    default: return '#8B6BFF';
   }
 }
 

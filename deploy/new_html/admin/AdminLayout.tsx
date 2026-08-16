@@ -52,14 +52,14 @@ export const AdminLayout: React.FC = () => {
     };
 
     return (
-        <div className="layout-safe h-screen w-full min-w-0 bg-n0 text-n700 font-sans flex overflow-hidden">
+        <div className="layout-safe h-screen w-full min-w-0 bg-n20 text-n700 font-sans flex overflow-hidden">
             {/* ============ 统一层级菜单 ============ */}
             <AdminSidebar />
 
             {/* ============ 主区 ============ */}
             <div className="flex-1 flex flex-col min-w-0 min-h-0">
                 {/* 顶栏：面包屑 + 在线/时钟 + 当前管理员 + 退出 */}
-                <header className="responsive-toolbar shrink-0 bg-n0 border-b border-n40 flex items-center justify-between gap-3 px-5 min-w-0">
+                <header className="responsive-toolbar shrink-0 bg-n20/90 border-b border-n40 flex items-center justify-between gap-3 px-5 min-w-0">
                     <div className="flex items-center gap-2 min-w-0">
                         <button
                             onClick={() => navigate(-1)}
@@ -109,7 +109,7 @@ export const AdminLayout: React.FC = () => {
                 </header>
 
                 {/* 内容区 */}
-                <main className="layout-safe flex-1 min-h-0 min-w-0 overflow-auto bg-n0">
+                <main className="layout-safe flex-1 min-h-0 min-w-0 overflow-auto bg-n20">
                     <Outlet />
                 </main>
             </div>

@@ -31,7 +31,7 @@ export const LoadingOverlay: React.FC = () => {
       {/* Background Effects */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary-light via-n20 to-n20 z-0"></div>
       <div className="absolute inset-0 z-0 opacity-20" 
-           style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)', backgroundSize: '30px 30px' }}>
+           style={{ backgroundImage: 'radial-gradient(circle, #5B49F0 1px, transparent 1px)', backgroundSize: '30px 30px' }}>
       </div>
 
       <div className="relative z-10 flex flex-col items-center">

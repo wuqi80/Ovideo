@@ -182,7 +182,9 @@ describe('ProjectHub navigation and filters', () => {
     );
 
     await screen.findByText('树洞里的星辰');
-    fireEvent.click(screen.getByRole('button', { name: /159\*\*\*\*7184/ }));
+    // 模板化改版后侧栏用户行与页头 AccountMenu 并存（桌面显示侧栏、窄屏显示页头），
+    // jsdom 不裁剪响应式可见性，这里取页头的第一个实例。
+    fireEvent.click(screen.getAllByRole('button', { name: /159\*\*\*\*7184/ })[0]);
 
     expect(screen.getByRole('menuitem', { name: /个人中心/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /退出登录/ })).toBeInTheDocument();

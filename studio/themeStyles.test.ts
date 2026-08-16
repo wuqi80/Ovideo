@@ -14,10 +14,10 @@ describe('Studio light canvas element theme styles', () => {
 
     expect(css).toContain('--studio-node-surface: rgba(255, 255, 255');
     expect(css).toContain('--studio-node-panel: rgba(255, 255, 255');
-    expect(css).toContain('--studio-node-media-bg: #eef2f7');
+    expect(css).toContain('--studio-node-media-bg: #F0F0EC');
     expect(css).toContain('.studio-canvas[data-studio-theme="dark"]');
-    expect(css).toContain('--studio-node-surface: rgba(28, 28, 30');
-    expect(css).toContain('--studio-node-media-bg: #18181b');
+    expect(css).toContain('--studio-node-surface: rgba(30, 30, 38');
+    expect(css).toContain('--studio-node-media-bg: #1E1E26');
   });
 
   it('keeps canvas boxes wired to theme classes instead of inline dark surfaces', () => {

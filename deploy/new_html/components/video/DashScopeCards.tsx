@@ -46,7 +46,7 @@ type Theme = {
 const THEMES: Record<DashScopeVideoModel, Theme> = {
     Kling: {
         name: '合体',
-        accent: '#0ea5e9',
+        accent: '#3B7BE5',
         accentText: 'text-sky-300',
         accentBorder: 'border-sky-500/40',
         accentBg: 'bg-sky-500/10',
@@ -56,7 +56,7 @@ const THEMES: Record<DashScopeVideoModel, Theme> = {
     },
     Vidu: {
         name: '大乘',
-        accent: '#a855f7',
+        accent: '#8B6BFF',
         accentText: 'text-purple-300',
         accentBorder: 'border-purple-500/40',
         accentBg: 'bg-purple-500/10',
@@ -66,7 +66,7 @@ const THEMES: Record<DashScopeVideoModel, Theme> = {
     },
     HappyHorse: {
         name: '炼虚',
-        accent: '#f97316',
+        accent: '#FF6A3D',
         accentText: 'text-orange-300',
         accentBorder: 'border-orange-500/40',
         accentBg: 'bg-orange-500/10',

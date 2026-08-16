@@ -166,7 +166,7 @@ const InteractiveHistogram = ({ data }: { data: { date: string, text: number, im
     );
 };
 
-const CyberSparkline = ({ data, color = '#6366f1' }: { data: number[], color?: string }) => {
+const CyberSparkline = ({ data, color = '#5B49F0' }: { data: number[], color?: string }) => {
     if (data.length === 0) return null;
     const max = Math.max(...data, 1);
     const min = Math.min(...data, 0);
@@ -1253,8 +1253,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                 data={u.perf.dailyTrend}
                                 color={
                                   u.permissions.priority === "high"
-                                    ? "#a855f7"
-                                    : "#6366f1"
+                                    ? "#8B6BFF"
+                                    : "#5B49F0"
                                 }
                               />
                             </div>

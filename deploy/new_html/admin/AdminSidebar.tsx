@@ -6,7 +6,7 @@
  *  - 一级分组：可折叠，带图标 + 右侧箭头
  *  - 二级项：缩进；若含三级则可二次展开，否则直接跳转
  *  - 三级项：圆点前缀的末级链接
- * 视觉使用 Webflow 浅色令牌（n* 中性 + primary 主色），与主站一致。
+ * 视觉按 DESIGN.md 深色侧边栏规范（#141419 底 + 紫罗兰激活态），token 走 n900/n700/n600。
  */
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -62,13 +62,15 @@ export const AdminSidebar: React.FC = () => {
     setOpenItems(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
-    <aside className="w-60 shrink-0 bg-n0 border-r border-n40 flex flex-col min-h-0">
+    <aside className="w-60 shrink-0 bg-n900 flex flex-col min-h-0 text-n90">
       {/* header cell */}
-      <div className="h-14 flex items-center gap-2.5 px-4 border-b border-n40 min-w-0">
-        <BrandLogo variant="mark" className="h-8 w-8" />
+      <div className="h-14 flex items-center gap-2.5 px-4 border-b border-n600 min-w-0">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-n0/95 p-1">
+          <BrandLogo variant="mark" className="h-6 w-6" />
+        </span>
         <div className="leading-tight min-w-0">
-          <div className="text-sm font-bold tracking-tight text-n800">系统管理后台</div>
-          <div className="text-[10px] uppercase tracking-widest text-n100"
+          <div className="text-sm font-bold tracking-tight text-n0 font-display">系统管理后台</div>
+          <div className="text-[10px] uppercase tracking-widest text-n200"
               style={{ fontFamily: 'var(--font-mono)' }}>Admin Console</div>
         </div>
       </div>
@@ -84,7 +86,7 @@ export const AdminSidebar: React.FC = () => {
               <button
                 onClick={() => toggleSection(sec.id)}
                 className={`w-full min-w-0 flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
-                  active.sectionId === sec.id ? 'text-n800' : 'text-n400 hover:text-n800 hover:bg-n20'
+                  active.sectionId === sec.id ? 'text-n0' : 'text-n90 hover:text-n0 hover:bg-n700'
                 }`}
               >
                 <Icon className="w-[18px] h-[18px] shrink-0" />
@@ -94,7 +96,7 @@ export const AdminSidebar: React.FC = () => {
 
               {/* 二级 + 三级 */}
               {open && (
-                <div className="mt-0.5 mb-1 ml-3 pl-3 border-l border-n40 space-y-0.5">
+                <div className="mt-0.5 mb-1 ml-3 pl-3 border-l border-n600 space-y-0.5">
                   {sec.children.map((item: MenuItem) => {
                     const hasLeaves = !!item.children?.length;
                     const itemActive = active.itemId === item.id && !active.leafId;
@@ -105,8 +107,8 @@ export const AdminSidebar: React.FC = () => {
                           onClick={() => hasLeaves ? toggleItem(item.id) : item.to && navigate(item.to)}
                           className={`w-full min-w-0 flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${
                             itemActive
-                              ? 'bg-primary-light text-primary font-medium'
-                              : 'text-n300 hover:text-n800 hover:bg-n20'
+                              ? 'bg-primary text-n0 font-medium'
+                              : 'text-n90 hover:text-n0 hover:bg-n700'
                           }`}
                         >
                           <span className="flex-1 min-w-0 text-left truncate">{item.label}</span>
@@ -117,7 +119,7 @@ export const AdminSidebar: React.FC = () => {
 
                         {/* 三级 */}
                         {hasLeaves && itemOpen && (
-                          <div className="mt-0.5 ml-2 pl-2.5 border-l border-n30 space-y-0.5">
+                          <div className="mt-0.5 ml-2 pl-2.5 border-l border-n600 space-y-0.5">
                             {item.children!.map(leaf => {
                               const leafActive = active.leafId === leaf.id;
                               return (
@@ -126,11 +128,11 @@ export const AdminSidebar: React.FC = () => {
                                   onClick={() => navigate(leaf.to)}
                                   className={`w-full min-w-0 flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors ${
                                     leafActive
-                                      ? 'bg-primary-light text-primary font-medium'
-                                      : 'text-n300 hover:text-n800 hover:bg-n20'
+                                      ? 'bg-primary text-n0 font-medium'
+                                      : 'text-n90 hover:text-n0 hover:bg-n700'
                                   }`}
                                 >
-                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${leafActive ? 'bg-primary' : 'bg-n50'}`} />
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${leafActive ? 'bg-n0' : 'bg-n400'}`} />
                                   <span className="flex-1 min-w-0 text-left truncate">{leaf.label}</span>
                                 </button>
                               );
