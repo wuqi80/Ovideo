@@ -358,6 +358,34 @@ function mergeScriptConversationWithLocalFile(
   };
 }
 
+function mergePersistedScriptConversation(
+  file: ProjectFile | undefined,
+  persisted: ScriptConversation,
+  cached?: ScriptConversation,
+): ScriptConversation {
+  if (!cached) return mergeScriptConversationWithLocalFile(file, persisted) || persisted;
+
+  const persistedMessageIds = new Set(persisted.messages.map(message => message.id));
+  const persistedVersionIds = new Set(persisted.versions.map(version => version.id));
+  const cachedOnlyMessages = cached.messages.filter(message => !persistedMessageIds.has(message.id));
+  const cachedOnlyVersions = cached.versions.filter(version => !persistedVersionIds.has(version.id));
+  const cachedCurrentIsNewer = Boolean(
+    cached.currentVersionId && !persistedVersionIds.has(cached.currentVersionId),
+  );
+  const combined: ScriptConversation = {
+    ...cached,
+    ...persisted,
+    currentVersionId: cachedCurrentIsNewer
+      ? cached.currentVersionId
+      : (persisted.currentVersionId || cached.currentVersionId),
+    defaultModel: persisted.defaultModel || cached.defaultModel,
+    messages: [...persisted.messages, ...cachedOnlyMessages],
+    versions: [...persisted.versions, ...cachedOnlyVersions]
+      .sort((left, right) => left.versionNo - right.versionNo || left.createdAt - right.createdAt),
+  };
+  return mergeScriptConversationWithLocalFile(file, combined) || combined;
+}
+
 function parseStoryboardVersionContent(content: string): StoryboardItem[] {
   if (!content.trim()) return [];
   const separated = ensureStoryboardCutSeparators(content);
@@ -604,11 +632,48 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef<number | null>(null);
 
+  const refreshScriptConversationForWriting = useCallback(async (fileId: string) => {
+    const persistedConversation = await getScriptConversation(propEpisodeId, fileId);
+    const latestFile = filesRef.current.find(item => item.id === fileId);
+    loadedConversationKeysRef.current.add(`${propEpisodeId}:${fileId}`);
+    setScriptConversations(prev => ({
+      ...prev,
+      [fileId]: mergePersistedScriptConversation(latestFile, persistedConversation, prev[fileId]),
+    }));
+
+    const mergedPersistedConversation = mergeScriptConversationWithLocalFile(
+      latestFile,
+      persistedConversation,
+    ) || persistedConversation;
+    const persistedSnapshots = collectConversationStoryboardSnapshots(mergedPersistedConversation);
+    setFiles(prev => {
+      const next = prev.map(file => (
+        file.id === fileId
+          ? { ...file, versions: mergeStoryboardSnapshots(file.versions || [], persistedSnapshots) }
+          : file
+      ));
+      filesRef.current = next;
+      return next;
+    });
+  }, [propEpisodeId]);
+
   const handleScriptWorkspaceModeChange = useCallback((mode: ScriptWorkspaceMode) => {
     writeScriptWorkspaceMode(localStorage, scriptWorkspaceUsername, mode);
     setScriptWorkspaceMode(mode);
     if (mode !== 'writing') setStoryboardDrawerOpen(false);
-  }, [scriptWorkspaceUsername]);
+    if (mode === 'writing' && selectedFileId && !selectedFileId.startsWith('local_')) {
+      setConversationLoadingId(selectedFileId);
+      setConversationError(null);
+      void refreshScriptConversationForWriting(selectedFileId)
+        .catch(error => {
+          console.error('切换写作版同步版本历史失败:', error);
+          setConversationError('版本历史同步失败，已保留当前缓存；请稍后重试。');
+        })
+        .finally(() => {
+          setConversationLoadingId(current => current === selectedFileId ? null : current);
+        });
+    }
+  }, [refreshScriptConversationForWriting, scriptWorkspaceUsername, selectedFileId]);
 
   const selectedFile = files.find(f => f.id === selectedFileId);
   const rawSelectedConversation = selectedFileId ? scriptConversations[selectedFileId] : undefined;
@@ -675,7 +740,10 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         loadedConversationKeysRef.current.add(cacheKey);
         const latestFile = filesRef.current.find(item => item.id === selectedFileId);
         const mergedConversation = mergeScriptConversationWithLocalFile(latestFile, conversation) || conversation;
-        setScriptConversations(prev => ({ ...prev, [selectedFileId]: mergedConversation }));
+        setScriptConversations(prev => ({
+          ...prev,
+          [selectedFileId]: mergePersistedScriptConversation(latestFile, conversation, prev[selectedFileId]),
+        }));
         const persistedSnapshots = collectConversationStoryboardSnapshots(mergedConversation);
         setFiles(prev => {
           const next = prev.map(file => (

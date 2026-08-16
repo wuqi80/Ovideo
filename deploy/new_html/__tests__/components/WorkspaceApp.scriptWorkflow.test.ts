@@ -110,6 +110,17 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('mergeScriptConversationWithLocalFile(file, scriptConversations[fileId])');
   });
 
+  it('refreshes writing mode without dropping quick versions created during a stale history request', () => {
+    expect(source).toContain('function mergePersistedScriptConversation');
+    expect(source).toContain('const cachedOnlyMessages = cached.messages.filter');
+    expect(source).toContain('const cachedOnlyVersions = cached.versions.filter');
+    expect(source).toContain('cached.currentVersionId && !persistedVersionIds.has(cached.currentVersionId)');
+    expect(source).toContain('const refreshScriptConversationForWriting = useCallback');
+    expect(source).toContain("if (mode === 'writing' && selectedFileId && !selectedFileId.startsWith('local_'))");
+    expect(source).toContain('void refreshScriptConversationForWriting(selectedFileId)');
+    expect(source).toContain('mergePersistedScriptConversation(latestFile, conversation, prev[selectedFileId])');
+  });
+
   it('uses one direct streaming prompt for both initial generation and revisions', () => {
     expect(source).toContain('const { aiGenerateStoryboardScript } = await loadAiModelService()');
     expect(source).toContain('result = await aiGenerateStoryboardScript(');
