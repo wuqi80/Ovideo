@@ -86,6 +86,7 @@ function failSplitScriptValidation(message: string): never {
 }
 
 const BRIEF_SOURCE_MAX_CHARACTERS = 80;
+const LOCAL_SPLIT_TARGET_CHARACTERS = 320;
 
 function countContentCharacters(value: string): number {
   return String(value || '').replace(/\s+/g, '').length;
@@ -259,6 +260,42 @@ function buildVideoScriptSegmentsFromGroups(
   });
 }
 
+function splitScriptLocallyPreservingContent(originalContent: string): ScriptSegment[] {
+  const source = String(originalContent || '').replace(/\r\n?/g, '\n').trim();
+  if (!source) return [];
+
+  let units = source.split(/\n\s*\n+/).map(unit => unit.trim()).filter(Boolean);
+  if (units.length <= 1) {
+    units = source.split(/\n+/).map(unit => unit.trim()).filter(Boolean);
+  }
+  if (units.length <= 1) {
+    units = source.match(/[^。！？!?；;]+[。！？!?；;]?/g)?.map(unit => unit.trim()).filter(Boolean)
+      || [source];
+  }
+
+  const groups: string[] = [];
+  let current = '';
+  for (const unit of units) {
+    const candidate = current ? `${current}\n${unit}` : unit;
+    if (current && countContentCharacters(candidate) > LOCAL_SPLIT_TARGET_CHARACTERS) {
+      groups.push(current);
+      current = unit;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) groups.push(current);
+
+  return groups.map((sourceText, index) => ({
+    id: `seg_local_fallback_${Date.now().toString(36)}_${index}`,
+    order: index,
+    sourceText,
+    estimatedDurationSec: estimateBriefSegmentDurationSec(sourceText),
+    status: 'done' as const,
+    errorMessage: '',
+  }));
+}
+
 /**
  * 第一阶段已经决定正式剧本的分段边界。第二阶段即使误返回多个分段，也只把它们
  * 视为当前段内的连续分镜，避免模型输出把 19 段悄悄改成 27 段。
@@ -294,10 +331,17 @@ async function splitWithValidation(
   if (briefSeed) return [briefSeed];
 
   const { aiSplitScriptIntoSegments } = await loadAiModelService();
-  const segments = normalizeSplitSegments(
-    await aiSplitScriptIntoSegments(model, originalContent, undefined, taskContext),
-    originalContent,
-  );
+  let modelSegments: ScriptSegment[];
+  try {
+    modelSegments = await aiSplitScriptIntoSegments(model, originalContent, undefined, {
+      ...taskContext,
+      suppressNotification: true,
+    });
+  } catch (error) {
+    console.warn('[scriptThreeStageService] model split failed; using local structure-preserving fallback', error);
+    modelSegments = splitScriptLocallyPreservingContent(originalContent);
+  }
+  const segments = normalizeSplitSegments(modelSegments, originalContent);
   assertValidSplitSegments(segments);
   return segments;
 }

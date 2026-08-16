@@ -69,6 +69,20 @@ describe('deepseekService retry handling', () => {
     });
   });
 
+  it('does not repeatedly retry an internal split that has a local fallback', async () => {
+    apiFetch.mockResolvedValue(makeSseResponse(
+      'data: {"type":"error","message":"DeepSeek API 调用失败: 502"}\n\ndata: [DONE]\n\n',
+    ));
+
+    await expect(callDeepseekChatWithRetry('prompt', undefined, undefined, {
+      operation: 'storyboard_script_generate',
+      displayName: '剧本拆分',
+      suppressNotification: true,
+    })).rejects.toThrow('502');
+
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('times out a stalled stream once and explains that credits were not charged', async () => {
     apiFetch.mockResolvedValue(new Response(new ReadableStream({ start() {} }), {
       status: 200,

@@ -221,6 +221,39 @@ describe('three-stage script pipeline prefers usable output over blocking valida
     expect(result.content).toContain('时长（秒）：17');
   });
 
+  it('falls back to ordered local source segments when the stage-one model request fails', async () => {
+    const paragraphs = [
+      '第一场：主角进入办公室。'.repeat(12),
+      '第二场：客户拿出合同，双方开始争论。'.repeat(12),
+      '第三场：主角提出补救方案，冲突逐渐缓和。'.repeat(12),
+    ];
+    const longSource = paragraphs.join('\n\n');
+    aiMocks.aiSplitScriptIntoSegments.mockRejectedValue(new Error('upstream stream failed'));
+    aiMocks.aiGenerateVideoScriptFromSegment.mockImplementation(async (_model, segment) => (
+      oneShotGroup(segment.sourceText, 15)
+    ));
+
+    const progress: Array<{ stage: string; completed: number; total: number }> = [];
+    const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, longSource, {
+      onProgress: event => progress.push({
+        stage: event.stage,
+        completed: event.completed,
+        total: event.total,
+      }),
+    });
+
+    expect(aiMocks.aiSplitScriptIntoSegments).toHaveBeenCalledWith(
+      AiModel.DeepseekChat,
+      longSource,
+      undefined,
+      expect.objectContaining({ suppressNotification: true }),
+    );
+    expect(result.segments).toHaveLength(3);
+    expect(result.segments.map(segment => segment.sourceText)).toEqual(paragraphs);
+    expect(progress).toContainEqual({ stage: 'split', completed: 1, total: 1 });
+    expect(result.content.indexOf('第一场')).toBeLessThan(result.content.indexOf('第三场'));
+  });
+
   it('returns a revised storyboard script as-is instead of buffering and replanning it', async () => {
     const invalidButParseable = validGroup
       .replace('时长（秒）：7', '时长（秒）：99')

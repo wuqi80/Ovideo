@@ -9,10 +9,17 @@ type ResponseFormat = 'text' | 'json';
 const MAX_DEEPSEEK_ATTEMPTS = 3;
 const DEEPSEEK_REQUEST_TIMEOUT_MS = 180_000;
 const DEEPSEEK_STREAM_IDLE_TIMEOUT_MS = 90_000;
+const SCRIPT_SPLIT_REQUEST_TIMEOUT_MS = 120_000;
+const SCRIPT_SPLIT_STREAM_IDLE_TIMEOUT_MS = 60_000;
 
 class DeepseekTimeoutError extends Error {}
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+const isInternalScriptSplit = (taskContext?: TextTaskContext): boolean => (
+    taskContext?.operation === 'storyboard_script_generate'
+    && taskContext?.displayName === '剧本拆分'
+);
 
 const isRetryableDeepseekError = (error: unknown): boolean => {
     const message = error instanceof Error ? error.message : String(error || '');
@@ -82,11 +89,16 @@ const callDeepseekOnce = async (
     taskContext?: TextTaskContext,
 ): Promise<string> => {
     const controller = new AbortController();
+    const splitTask = isInternalScriptSplit(taskContext);
+    const requestTimeoutMs = splitTask ? SCRIPT_SPLIT_REQUEST_TIMEOUT_MS : DEEPSEEK_REQUEST_TIMEOUT_MS;
+    const streamIdleTimeoutMs = splitTask
+        ? SCRIPT_SPLIT_STREAM_IDLE_TIMEOUT_MS
+        : DEEPSEEK_STREAM_IDLE_TIMEOUT_MS;
     let requestTimedOut = false;
     const requestTimer = window.setTimeout(() => {
         requestTimedOut = true;
         controller.abort();
-    }, DEEPSEEK_REQUEST_TIMEOUT_MS);
+    }, requestTimeoutMs);
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
     try {
@@ -127,7 +139,7 @@ const callDeepseekOnce = async (
                         requestTimedOut = true;
                         controller.abort();
                         reject(new DeepseekTimeoutError('DeepSeek 响应长时间没有新内容'));
-                    }, DEEPSEEK_STREAM_IDLE_TIMEOUT_MS);
+                    }, streamIdleTimeoutMs);
                 }),
             ]).finally(() => {
                 if (idleTimer !== undefined) window.clearTimeout(idleTimer);
@@ -193,7 +205,9 @@ const callDeepseek = async (
     taskContext?: TextTaskContext,
 ): Promise<string> => {
     // Streaming UI writes chunks directly to the page, so only retry non-streaming calls.
-    const maxAttempts = onStream ? 1 : MAX_DEEPSEEK_ATTEMPTS;
+    // Stage-one splitting has a lossless local fallback, so retrying the same
+    // failed provider call only leaves the whole pipeline sitting at 0/1.
+    const maxAttempts = onStream || isInternalScriptSplit(taskContext) ? 1 : MAX_DEEPSEEK_ATTEMPTS;
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
