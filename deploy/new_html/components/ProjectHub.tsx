@@ -776,14 +776,15 @@ const ProjectHub: React.FC = () => {
                                 <div className="space-y-3 p-4">
                                     <div className="rounded-lg border border-n40 bg-n10 p-3">
                                         <label className="mb-2 block text-xs font-medium text-n300">添加成员（用户名或用户 ID，可多个）</label>
-                                        <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-                                            <input
-                                                type="text"
+                                        <div className="space-y-2">
+                                            <textarea
                                                 value={newMemberIdentity}
                                                 onChange={e => setNewMemberIdentity(e.target.value)}
-                                                placeholder="例如 admin 或 user_xxx"
-                                                className="h-9 flex-1 rounded border border-n40 bg-n0 px-2 text-xs text-n800 outline-none transition-colors placeholder:text-n100 focus:border-primary"
+                                                placeholder="例如 admin 或 user_xxx，可换行输入多个成员"
+                                                rows={3}
+                                                className="min-h-[88px] w-full resize-y rounded border border-n40 bg-n0 px-3 py-2 text-sm leading-5 text-n800 outline-none transition-colors placeholder:text-n100 focus:border-primary focus:ring-2 focus:ring-primary/20"
                                             />
+                                            <p className="text-[11px] leading-4 text-n100">支持使用换行、空格、逗号或分号分隔多个成员。</p>
                                             <div className="flex gap-2">
                                                 <select
                                                     value={newMemberRole}

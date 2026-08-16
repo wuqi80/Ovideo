@@ -272,7 +272,10 @@ describe('ProjectHub navigation and filters', () => {
       });
     });
 
-    fireEvent.change(screen.getByPlaceholderText('例如 admin 或 user_xxx'), {
+    const memberInput = screen.getByPlaceholderText('例如 admin 或 user_xxx，可换行输入多个成员');
+    expect(memberInput.tagName).toBe('TEXTAREA');
+    expect(memberInput).toHaveClass('min-h-[88px]', 'w-full');
+    fireEvent.change(memberInput, {
       target: { value: 'bob' },
     });
     fireEvent.click(screen.getByText('添加'));
