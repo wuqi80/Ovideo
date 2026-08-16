@@ -114,12 +114,14 @@ describe('QuickScriptSourceColumn', () => {
     expect(screen.getByText('· 成功后扣除')).toBeInTheDocument();
   });
 
-  it('shows the actual total credit cost after generation has completed', () => {
+  it('keeps the next-run estimate visible after generation has completed', async () => {
     render(<QuickScriptSourceColumn {...baseProps} actualCreditCost={5} />);
 
     expect(screen.getByText('本次合计消耗：5')).toBeInTheDocument();
     expect(screen.getByText('积分')).toBeInTheDocument();
-    expect(screen.queryByText('· 成功后扣除')).not.toBeInTheDocument();
+    expect(screen.getByText(/再次生成预计消耗积分：/)).toBeInTheDocument();
+    expect(screen.getByText('· 成功后扣除')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('再次生成预计消耗积分：16')).toBeInTheDocument());
   });
 
   it('marks quick stages complete from persisted outputs when stage metadata is stale', () => {

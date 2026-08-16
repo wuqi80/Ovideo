@@ -324,18 +324,23 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
               </div>
             );
           })}
-          <div className="mt-2.5 flex items-center gap-1.5 px-0.5 text-[10px] font-medium text-warning">
+          <div className="mt-2.5 flex items-start gap-1.5 px-0.5 text-[10px] font-medium text-warning">
             <Coins className="h-3.5 w-3.5 flex-shrink-0" />
-            <span title={completedActualCreditCost > 0 ? '当前版本剧本生成与镜头设计生成合计扣除积分' : '按当前输入、所选模型和预计镜头规模估算，实际以成功生成后的用量为准'}>
-              {completedActualCreditCost > 0
-                ? `本次合计消耗：${completedActualCreditCost}`
-                : `预计消耗积分：${isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}`}
-            </span>
-            {completedActualCreditCost > 0 ? (
-              <span className="text-n100">积分</span>
-            ) : (
-              <span className="text-n100">· 成功后扣除</span>
-            )}
+            <div className="min-w-0 space-y-0.5">
+              {completedActualCreditCost > 0 && (
+                <div title="当前版本剧本生成与镜头设计生成合计扣除积分">
+                  <span>{`本次合计消耗：${completedActualCreditCost}`}</span>
+                  <span className="ml-1 text-n100">积分</span>
+                </div>
+              )}
+              <div title="按当前输入、所选模型和预计镜头规模估算，实际以成功生成后的用量为准">
+                <span>
+                  {completedActualCreditCost > 0 ? '再次生成预计消耗积分：' : '预计消耗积分：'}
+                  {isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
+                </span>
+                <span className="ml-1 text-n100">· 成功后扣除</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
