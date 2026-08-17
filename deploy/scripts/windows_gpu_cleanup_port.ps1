@@ -44,12 +44,18 @@ try {
         $proc = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $pid) -ErrorAction SilentlyContinue
         if (-not $proc) { continue }
         $cmd = $proc.CommandLine
-        if ($cmd -and ($cmd -like "*$CommandMatch*" -or $cmd -like "*$PythonExe*")) {
+        $actualExe = [string]$proc.ExecutablePath
+        $samePython = $actualExe -and [string]::Equals(
+            [System.IO.Path]::GetFullPath($actualExe),
+            [System.IO.Path]::GetFullPath($PythonExe),
+            [System.StringComparison]::OrdinalIgnoreCase
+        )
+        if ($samePython -or ($cmd -and $cmd -like "*$CommandMatch*")) {
             Write-Log "Terminating ComfyUI process PID=$pid Cmd=$cmd"
             Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
         } else {
             $foreignPids += $pid
-            Write-Log "Keep-running non-target process on port $Port PID=$pid: $cmd"
+            Write-Log "Keep-running non-target process on port $Port PID=${pid}: $cmd"
         }
     }
 
@@ -69,6 +75,6 @@ try {
     Write-Log "Port $Port cleanup complete."
     exit 0
 } catch {
-    Write-Log "Port cleanup failed on $Port: $($_.Exception.Message)"
+    Write-Log "Port cleanup failed on ${Port}: $($_.Exception.Message)"
     exit 1
 }

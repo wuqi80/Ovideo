@@ -2,7 +2,7 @@ import { apiJson } from './httpClient';
 
 export type ProcessingQueuePreflight = {
     queue_mode: 'gpu2_serial' | 'external' | 'maintenance';
-    runtime_profile?: 'wan' | 'h3' | null;
+    runtime_profile?: 'wan' | 'h3' | 'music' | null;
     public_comfyui_port?: number;
     tasks_ahead: number;
     estimated_wait_seconds: number;

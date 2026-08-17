@@ -54,6 +54,13 @@ GPU2_WAN_MAX_GENERATION_SECONDS = 15.0
 
 GPU2_COMFYUI_PORT = 8188
 GPU2_H3_PORT = GPU2_COMFYUI_PORT
+GPU2_MUSIC3_MODEL_FILES = {
+    "diffusion": "minimax_music3_dit_int8_convrot.safetensors",
+    "text_encoder": "minimax_music3_text_encoder_pruned_int8_convrot.safetensors",
+    "vae": "minimax_music3_dav.safetensors",
+}
+GPU2_MUSIC3_MIN_DURATION_SECONDS = 10.0
+GPU2_MUSIC3_MAX_DURATION_SECONDS = 300.0
 GPU2_H3_MODEL_FILES = {
     "diffusion": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
     "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
@@ -113,6 +120,7 @@ COMFYUI_START_COMMANDS = {
 GPU2_RUNTIME_COMMANDS = {
     "wan": ROOT / "start_comfyui.cmd",
     "h3": ROOT / "scripts" / "windows_gpu_start_h3_comfyui.cmd",
+    "music": ROOT / "scripts" / "windows_gpu_start_music3_comfyui.cmd",
 }
 
 GPU2_QWEN_COMPAT_PREFIXES = (
@@ -432,7 +440,9 @@ class ComfyUIPortRecovery:
 
 
 def gpu2_runtime_profile(task: Dict[str, Any]) -> str:
-    """Map every GPU2 task to one of the two isolated ComfyUI runtimes."""
+    """Map every GPU2 task to one isolated runtime on the shared port."""
+    if is_gpu2_music3_task(task):
+        return "music"
     return "h3" if is_gpu2_h3_task(task) else "wan"
 
 
@@ -444,6 +454,9 @@ def _stop_gpu2_runtime(profile: str) -> bool:
     if profile == "h3":
         python_exe = ROOT / "ComfyUI-H3" / "python_embeded" / "python.exe"
         command_match = ROOT / "ComfyUI-H3" / "ComfyUI" / "main.py"
+    elif profile == "music":
+        python_exe = ROOT / "ComfyUI-Music3" / "python_embeded" / "python.exe"
+        command_match = ROOT / "ComfyUI-Music3" / "ComfyUI" / "main.py"
     else:
         python_exe = ROOT / "ComfyUI_windows_portable" / "python_embeded" / "python.exe"
         command_match = ROOT / "ComfyUI_windows_portable" / "ComfyUI" / "main.py"
@@ -621,7 +634,7 @@ class Gpu2ModelReleaseGate:
 
 
 class Gpu2RuntimeManager:
-    """Serialize Wan/H3 runtime switching on the single public port 8188."""
+    """Serialize Wan/H3/Music runtime switching on the single public port."""
 
     def __init__(
         self,
@@ -1295,6 +1308,119 @@ def _gpu2_seed(task: Dict[str, Any]) -> int:
     except (TypeError, ValueError):
         seed = -1
     return seed if seed >= 0 else random.randint(0, 2**63 - 1)
+
+
+def is_gpu2_music3_task(task: Dict[str, Any]) -> bool:
+    task_type = str(task.get("task_type") or "").strip().lower()
+    workflow_name = _gpu2_workflow_name(task)
+    return task_type == "minimax_music3" or workflow_name == "gpu2_minimax_music3"
+
+
+def gpu2_music3_duration_seconds(task: Dict[str, Any]) -> float:
+    params = _gpu2_task_params(task)
+    try:
+        duration = float(
+            params.get("duration_seconds")
+            or params.get("duration")
+            or 30.0
+        )
+    except (TypeError, ValueError):
+        duration = 30.0
+    return max(
+        GPU2_MUSIC3_MIN_DURATION_SECONDS,
+        min(GPU2_MUSIC3_MAX_DURATION_SECONDS, duration),
+    )
+
+
+def build_gpu2_minimax_music3_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the native low-VRAM MiniMax Music 3 graph.
+
+    The int8 DiT/text encoder and tiled VAE decode are intentionally fixed here
+    so a client cannot select a larger precision variant on the production node.
+    """
+    params = _gpu2_task_params(task)
+    caption = str(
+        params.get("caption")
+        or params.get("prompt")
+        or "Cinematic instrumental background score, coherent structure, no vocals."
+    ).strip()
+    lyrics = str(params.get("lyrics") or "[Instrumental]").strip()
+    seed = _gpu2_seed(task)
+    duration = gpu2_music3_duration_seconds(task)
+    return {
+        "1": {
+            "class_type": "UNETLoader",
+            "inputs": {
+                "unet_name": GPU2_MUSIC3_MODEL_FILES["diffusion"],
+                "weight_dtype": "default",
+            },
+        },
+        "2": {
+            "class_type": "CLIPLoader",
+            "inputs": {
+                "clip_name": GPU2_MUSIC3_MODEL_FILES["text_encoder"],
+                "type": "minimax",
+                "device": "default",
+            },
+        },
+        "3": {
+            "class_type": "VAELoader",
+            "inputs": {"vae_name": GPU2_MUSIC3_MODEL_FILES["vae"]},
+        },
+        "4": {
+            "class_type": "MiniMaxMusic3TextEncode",
+            "inputs": {
+                "clip": ["2", 0],
+                "caption": caption,
+                "lyrics": lyrics,
+                "seed": seed,
+                "max_duration": duration,
+                "cfg_scale": 1.7,
+                "top_k": 50,
+            },
+        },
+        "5": {
+            "class_type": "ConditioningZeroOut",
+            "inputs": {"conditioning": ["4", 0]},
+        },
+        "6": {
+            "class_type": "EmptyMiniMaxMusic3LatentAudio",
+            "inputs": {"seconds": ["4", 1], "batch_size": 1},
+        },
+        "7": {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": ["1", 0],
+                "positive": ["4", 0],
+                "negative": ["5", 0],
+                "latent_image": ["6", 0],
+                "seed": seed + 1,
+                "steps": 30,
+                "cfg": 1.7,
+                "sampler_name": "euler",
+                "scheduler": "simple",
+                "denoise": 1.0,
+            },
+        },
+        "8": {
+            "class_type": "VAEDecodeAudioTiled",
+            "inputs": {
+                "samples": ["7", 0],
+                "vae": ["3", 0],
+                "tile_size": 1536,
+                "overlap": 64,
+            },
+        },
+        "9": {
+            "class_type": "SaveAudioAdvanced",
+            "inputs": {
+                "audio": ["8", 0],
+                "filename_prefix": "audio/MECHA_GPU2_minimax_music3",
+                "format": "mp3",
+                "format.quality": "V0",
+            },
+        },
+    }
 
 
 def is_gpu2_h3_task(task: Dict[str, Any]) -> bool:
@@ -2261,7 +2387,19 @@ def prepare_gpu2_task(task: Dict[str, Any]) -> Dict[str, Any]:
     prepared = deepcopy(task)
     task_type = str(prepared.get("task_type") or "").lower()
     operation = str(_gpu2_task_params(prepared).get("gpu2_operation") or "").lower()
-    if is_gpu2_h3_task(prepared):
+    if is_gpu2_music3_task(prepared):
+        prepared["workflow_json"] = build_gpu2_minimax_music3_workflow(prepared)
+        prepared["workflow_name"] = "gpu2_minimax_music3"
+        params = prepared.get("params")
+        if not isinstance(params, dict):
+            source_data = prepared.get("data")
+            params = dict(source_data) if isinstance(source_data, dict) else {}
+            prepared["params"] = params
+        params["preferred_comfyui_port"] = GPU2_COMFYUI_PORT
+        params["strict_preferred_comfyui_port"] = True
+        params["gpu2_runtime_profile"] = "music"
+        params["comfyui_timeout_seconds"] = 60 * 60
+    elif is_gpu2_h3_task(prepared):
         prepared["workflow_json"] = build_gpu2_minimax_h3_fl2va_workflow(prepared)
         prepared["workflow_name"] = "gpu2_minimax_h3_fl2va"
         params = prepared.get("params")

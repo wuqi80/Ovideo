@@ -25,6 +25,9 @@ MIME_MAP = {
     ".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg", ".gif": "image/gif", ".bmp": "image/bmp",
     ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
+    ".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac",
+    ".ogg": "audio/ogg", ".opus": "audio/opus", ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
 }
 
 
@@ -33,13 +36,16 @@ def save_output_file(content: bytes, task_id: str, filename: str, content_type: 
     ext = Path(filename).suffix.lower()
     IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff"}
     VIDEO_EXTS = {".mp4", ".webm", ".mov", ".avi", ".mkv"}
+    AUDIO_EXTS = {".mp3", ".wav", ".flac", ".ogg", ".opus", ".m4a", ".aac"}
     if ext in IMAGE_EXTS:
         category = "images"
     elif ext in VIDEO_EXTS:
         category = "videos"
+    elif ext in AUDIO_EXTS:
+        category = "audios"
     else:
         major = content_type.split("/")[0] if content_type else "other"
-        category = {"image": "images", "video": "videos"}.get(major, "others")
+        category = {"image": "images", "video": "videos", "audio": "audios"}.get(major, "others")
     year_month = datetime.now().strftime("%Y%m")
     disk_name = f"{task_id}_{filename}"
     rel_path = f"{category}/{year_month}/{disk_name}"
@@ -47,7 +53,12 @@ def save_output_file(content: bytes, task_id: str, filename: str, content_type: 
     full_path.parent.mkdir(parents=True, exist_ok=True)
     full_path.write_bytes(content)
     ext_lower = ext.lower()
-    file_type = "video" if ext_lower in {".mp4", ".webm", ".mov", ".avi", ".mkv"} else "image"
+    if ext_lower in VIDEO_EXTS:
+        file_type = "video"
+    elif ext_lower in AUDIO_EXTS:
+        file_type = "audio"
+    else:
+        file_type = "image"
     return {
         "url": f"/storage/{rel_path}",
         "filename": filename,
@@ -79,7 +90,10 @@ async def _persist_to_db(entries: list, task_id: str, task_data: dict, user_id: 
     for entry in entries:
         try:
             ft = entry.get("file_type", "image")
-            role = file_role or ("generated_image" if ft == "image" else "video")
+            role = file_role or {
+                "image": "generated_image",
+                "audio": "generated_audio",
+            }.get(ft, "video")
             record = await FileDAO.create_file(
                 version_id=None,
                 user_id=user_id,
@@ -123,14 +137,22 @@ async def _persist_to_db(entries: list, task_id: str, task_data: dict, user_id: 
 
 def build_task_result(file_entries: list, duration: float = 0.0) -> dict:
     """Build standardized result dict from file entries."""
-    images, videos = [], []
+    images, videos, audios = [], [], []
     for entry in file_entries:
         fname = entry.get("filename", "").lower()
         if any(fname.endswith(ext) for ext in (".mp4", ".webm", ".mov", ".avi")):
             videos.append(entry)
+        elif any(fname.endswith(ext) for ext in (".mp3", ".wav", ".flac", ".ogg", ".opus", ".m4a", ".aac")):
+            audios.append(entry)
         else:
             images.append(entry)
-    return {"images": images, "videos": videos, "output_files": file_entries, "duration": duration}
+    return {
+        "images": images,
+        "videos": videos,
+        "audios": audios,
+        "output_files": file_entries,
+        "duration": duration,
+    }
 
 
 class RegisterRequest(BaseModel):

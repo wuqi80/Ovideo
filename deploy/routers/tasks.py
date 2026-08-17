@@ -35,7 +35,12 @@ from services.generation_access_service import (
 
 def _should_prepare_workflow(task_type: str) -> bool:
     """Return whether /api/generate should attach a ComfyUI workflow."""
-    return not is_external_api_task(task_type)
+    normalized = str(task_type or "").strip().lower()
+    return normalized != "minimax_music3" and not is_external_api_task(task_type)
+
+
+def _is_minimax_music3_request(request: GenerateRequest) -> bool:
+    return str(getattr(request, "task_type", "") or "").strip().lower() == "minimax_music3"
 
 
 def _is_minimax_h3_request(request: GenerateRequest) -> bool:
@@ -55,6 +60,8 @@ def _is_minimax_h3_request(request: GenerateRequest) -> bool:
 
 
 def _runtime_profile(request: GenerateRequest) -> str:
+    if _is_minimax_music3_request(request):
+        return "music"
     return "h3" if _is_minimax_h3_request(request) else "wan"
 
 
@@ -111,8 +118,8 @@ async def _gpu_queue_snapshot(task_queue: Any, request: GenerateRequest) -> dict
         processing = 0
     tasks_ahead = max(0, queued) + max(0, processing)
     profile = _runtime_profile(request)
-    seconds_per_task = 900 if profile == "h3" else 480
-    switch_seconds = 120 if profile == "h3" else 45
+    seconds_per_task = {"h3": 900, "music": 720}.get(profile, 480)
+    switch_seconds = {"h3": 120, "music": 90}.get(profile, 45)
     estimated_wait = tasks_ahead * seconds_per_task + (switch_seconds if tasks_ahead else 0)
     return {
         "queue_mode": "gpu2_serial",
@@ -202,10 +209,11 @@ def create_task_router(
                 task_data["project_id"] = request.project_id
             if request.episode_id:
                 task_data["episode_id"] = request.episode_id
-            if _is_minimax_h3_request(request):
+            if _is_minimax_h3_request(request) or _is_minimax_music3_request(request):
                 target = await resolve_minimax_h3_agent_target()
                 if not target.get("preferred_agent_id"):
-                    raise HTTPException(status_code=503, detail="MiniMax H3 本地模型仅部署在集群节点2，当前节点不可用")
+                    label = "MiniMax Music 3" if _is_minimax_music3_request(request) else "MiniMax H3"
+                    raise HTTPException(status_code=503, detail=f"{label} 本地模型仅部署在集群节点2，当前节点不可用")
                 task_data.update(target)
             task_service = task_service_module.get()
             prepare_workflow = _should_prepare_workflow(request.task_type)

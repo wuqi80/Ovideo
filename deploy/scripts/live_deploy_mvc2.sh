@@ -42,6 +42,9 @@ GPU_AGENT_PUBLIC_TOOL_FILES=(
   "scripts/windows_gpu_h3_sage_verify.py"
   "scripts/windows_gpu_h3_long_video_verify.py"
   "scripts/windows_gpu_start_h3_comfyui.cmd"
+  "scripts/windows_gpu_start_music3_comfyui.cmd"
+  "scripts/windows_gpu_start_music3_comfyui.ps1"
+  "scripts/windows_gpu_music3_compat_patch.py"
   "scripts/windows_gpu_start_agent.cmd"
 )
 

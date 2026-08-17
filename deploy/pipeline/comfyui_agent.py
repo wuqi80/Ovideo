@@ -29,7 +29,7 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-08-16-h3-profiles-v1"
+AGENT_VERSION = "2026-08-18-music3-v1"
 PLATFORM_DOWNLOAD_RETRIES = 3
 PLATFORM_DOWNLOAD_PATH_PREFIXES = ("/api/agent/tasks/", "/storage/")
 CAPABILITY_CACHE_TTL_SECONDS = 60
@@ -401,7 +401,9 @@ class ComfyUIAgent:
             return {"status": "failed", "error": "No prompt_id returned", "output_files": []}
 
         try:
-            output_files = self._wait_for_completion(port, prompt_id)
+            timeout_seconds = int(params.get("comfyui_timeout_seconds") or 600)
+            timeout_seconds = max(60, min(6 * 60 * 60, timeout_seconds))
+            output_files = self._wait_for_completion(port, prompt_id, timeout=timeout_seconds)
         except Exception as e:
             return {
                 "status": "failed",
@@ -643,6 +645,21 @@ class ComfyUIAgent:
                 "windows_gpu_start_h3_comfyui.cmd",
                 scripts_dir / "windows_gpu_start_h3_comfyui.cmd",
                 ("ComfyUI-H3", "MECHA_COMFYUI_PORT"),
+            ),
+            (
+                "windows_gpu_start_music3_comfyui.cmd",
+                scripts_dir / "windows_gpu_start_music3_comfyui.cmd",
+                ("windows_gpu_start_music3_comfyui.ps1", "MECHA_COMFYUI_PORT"),
+            ),
+            (
+                "windows_gpu_start_music3_comfyui.ps1",
+                scripts_dir / "windows_gpu_start_music3_comfyui.ps1",
+                ("JobMemoryLimitGiB", "MECHA_MUSIC3_DISABLE_FLASH_DECODE"),
+            ),
+            (
+                "windows_gpu_music3_compat_patch.py",
+                scripts_dir / "windows_gpu_music3_compat_patch.py",
+                ("MECHA_MUSIC3_DISABLE_FLASH_DECODE", "already-patched"),
             ),
             (
                 "windows_gpu_start_agent.cmd",
@@ -887,6 +904,19 @@ class ComfyUIAgent:
                                 files.append(self._download_comfyui_output(port, img))
                             for vid in node_output.get("gifs", []) + node_output.get("videos", []):
                                 files.append(self._download_comfyui_output(port, vid))
+                            audio_items = node_output.get("audio", [])
+                            if isinstance(audio_items, dict):
+                                audio_items = [audio_items]
+                            elif not isinstance(audio_items, (list, tuple)):
+                                audio_items = []
+                            extra_audio_items = node_output.get("audios", [])
+                            if isinstance(extra_audio_items, dict):
+                                extra_audio_items = [extra_audio_items]
+                            elif not isinstance(extra_audio_items, (list, tuple)):
+                                extra_audio_items = []
+                            audio_items = list(audio_items) + list(extra_audio_items)
+                            for audio in audio_items:
+                                files.append(self._download_comfyui_output(port, audio))
                         downloaded = [f for f in files if f]
                         if not downloaded:
                             raise RuntimeError(

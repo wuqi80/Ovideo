@@ -19,6 +19,7 @@ from scripts.windows_gpu_agent_runner import (
     GPU2_H3_MINI_MODEL_SIZES,
     GPU2_H3_CLIPPROJ_COMMIT,
     GPU2_H3_PORT,
+    GPU2_MUSIC3_MODEL_FILES,
     GPU2_COMFYUI_PORT,
     GIB,
     Gpu2ModelReleaseGate,
@@ -34,6 +35,7 @@ from scripts.windows_gpu_agent_runner import (
     build_gpu2_matting_workflow,
     build_gpu2_minimax_h3_fl2va_workflow,
     build_gpu2_minimax_h3_long_video_workflow,
+    build_gpu2_minimax_music3_workflow,
     build_gpu2_qwen_workflow,
     build_gpu2_upscale_workflow,
     build_gpu2_video_upscale_workflow,
@@ -55,6 +57,7 @@ from scripts.windows_gpu_agent_runner import (
     gpu2_wan_duration_seconds,
     gpu2_wan_total_frames,
     is_gpu2_h3_task,
+    is_gpu2_music3_task,
     is_gpu2_infinitetalk_task,
     is_gpu2_qwen_compatible_task,
     is_gpu2_wan_i2v_task,
@@ -64,6 +67,37 @@ from scripts.windows_gpu_agent_runner import (
     prepare_gpu2_task,
     tune_gpu2_qwen_workflow,
 )
+
+
+def test_gpu2_minimax_music3_uses_fixed_int8_models_and_shared_runtime():
+    task = {
+        "task_type": "minimax_music3",
+        "params": {
+            "caption": "warm cinematic instrumental",
+            "lyrics": "[Instrumental]",
+            "duration_seconds": 30,
+            "seed": 42,
+        },
+    }
+
+    workflow = build_gpu2_minimax_music3_workflow(task)
+    prepared = prepare_gpu2_task(task)
+
+    assert is_gpu2_music3_task(task)
+    assert workflow["1"]["inputs"]["unet_name"] == GPU2_MUSIC3_MODEL_FILES["diffusion"]
+    assert workflow["2"]["inputs"]["clip_name"] == GPU2_MUSIC3_MODEL_FILES["text_encoder"]
+    assert workflow["2"]["inputs"]["type"] == "minimax"
+    assert workflow["3"]["inputs"]["vae_name"] == GPU2_MUSIC3_MODEL_FILES["vae"]
+    assert workflow["4"]["inputs"]["max_duration"] == 30
+    assert workflow["6"]["inputs"]["seconds"] == ["4", 1]
+    assert workflow["8"]["class_type"] == "VAEDecodeAudioTiled"
+    assert workflow["9"]["class_type"] == "SaveAudioAdvanced"
+    assert workflow["9"]["inputs"]["format"] == "mp3"
+    assert workflow["9"]["inputs"]["format.quality"] == "V0"
+    assert prepared["workflow_name"] == "gpu2_minimax_music3"
+    assert prepared["params"]["preferred_comfyui_port"] == GPU2_COMFYUI_PORT
+    assert prepared["params"]["gpu2_runtime_profile"] == "music"
+    assert prepared["params"]["comfyui_timeout_seconds"] == 3600
 
 
 def test_gpu2_agent_maintenance_gate_defaults_closed(monkeypatch):

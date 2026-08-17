@@ -41,6 +41,27 @@ def test_generate_route_skips_prepare_for_external_api_tasks(task_type):
     assert _should_prepare_workflow(task_type) is False
 
 
+def test_generate_route_skips_generic_prepare_for_agent_built_music3_workflow():
+    assert _should_prepare_workflow("minimax_music3") is False
+    assert _should_prepare_workflow(" MiniMax_Music3 ") is False
+
+
+@pytest.mark.asyncio
+async def test_music3_queue_preflight_uses_serial_music_profile():
+    queue = Mock()
+    queue.get_queue_length = AsyncMock(return_value=1)
+    queue.get_processing_count = AsyncMock(return_value=1)
+
+    result = await _gpu_queue_snapshot(
+        queue,
+        GenerateRequest(task_type="minimax_music3", model="MiniMax-Music3", prompt="score"),
+    )
+
+    assert result["runtime_profile"] == "music"
+    assert result["tasks_ahead"] == 2
+    assert result["estimated_wait_seconds"] == 1530
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model", ["MiniMaxH3", "MiniMaxH3Fast", "MiniMaxH3Mini"])
 async def test_gpu_queue_preflight_reports_anonymous_serial_position_and_eta(model):
