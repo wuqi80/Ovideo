@@ -29,6 +29,12 @@ export const SPLIT_SCRIPT_INTO_SEGMENTS: PromptTemplate = {
 5. **全覆盖**。所有段落拼接后必须完全等于原剧本，无遗漏、无重复。
 6. **不解释、不评论**。只输出拆分结果，不输出任何其他内容。
 
+## 本次段数预算（硬约束）
+
+- 建议分为 **{targetSegmentCount} 段**。
+- 允许根据情绪闭环小幅调整，但最终只能为 **{minimumSegmentCount}-{maximumSegmentCount} 段**。
+- 模型等级只影响边界判断质量，不得突破该范围任意扩大或缩小段数。
+
 ## 拆分逻辑
 
 ### 锚点类型定义

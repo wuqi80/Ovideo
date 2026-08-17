@@ -86,10 +86,31 @@ function failSplitScriptValidation(message: string): never {
 }
 
 const BRIEF_SOURCE_MAX_CHARACTERS = 80;
-const LOCAL_SPLIT_TARGET_CHARACTERS = 320;
+const SPLIT_TARGET_CHARACTERS = 72;
+const SPLIT_COUNT_MAX_VARIANCE = 3;
+
+export interface ScriptSplitCountPlan {
+  target: number;
+  minimum: number;
+  maximum: number;
+}
 
 function countContentCharacters(value: string): number {
   return String(value || '').replace(/\s+/g, '').length;
+}
+
+export function calculateScriptSplitCountPlan(originalContent: string): ScriptSplitCountPlan {
+  const contentCharacters = countContentCharacters(originalContent);
+  const target = Math.max(1, Math.ceil(contentCharacters / SPLIT_TARGET_CHARACTERS));
+  const variance = Math.min(
+    SPLIT_COUNT_MAX_VARIANCE,
+    Math.max(1, Math.round(target * 0.15)),
+  );
+  return {
+    target,
+    minimum: Math.max(1, target - variance),
+    maximum: target + variance,
+  };
 }
 
 function estimateBriefSegmentDurationSec(sourceText: string): number {
@@ -260,37 +281,70 @@ function buildVideoScriptSegmentsFromGroups(
   });
 }
 
-function splitScriptLocallyPreservingContent(originalContent: string): ScriptSegment[] {
+function findNearestSemanticBoundary(
+  source: string,
+  targetContentCount: number,
+  minimumRawIndex: number,
+): number {
+  const candidates: Array<{ rawIndex: number; contentCount: number; priority: number }> = [];
+  let contentCount = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (!/\s/.test(character)) contentCount += 1;
+    const priority = /[\n。！？!?；;]/.test(character)
+      ? 0
+      : /[，,、：:]/.test(character) ? 1 : 2;
+    if (priority < 2 || contentCount === targetContentCount) {
+      candidates.push({ rawIndex: index + 1, contentCount, priority });
+    }
+  }
+  const available = candidates.filter(candidate => (
+    candidate.rawIndex > minimumRawIndex && candidate.rawIndex < source.length
+  ));
+  const strongCandidates = available.filter(candidate => (
+    candidate.priority === 0 && Math.abs(candidate.contentCount - targetContentCount) <= 24
+  ));
+  const softCandidates = available.filter(candidate => (
+    candidate.priority === 1 && Math.abs(candidate.contentCount - targetContentCount) <= 18
+  ));
+  const preferred = strongCandidates.length > 0
+    ? strongCandidates
+    : softCandidates.length > 0 ? softCandidates : available;
+  preferred.sort((left, right) => (
+    Math.abs(left.contentCount - targetContentCount) - Math.abs(right.contentCount - targetContentCount)
+    || left.priority - right.priority
+    || left.rawIndex - right.rawIndex
+  ));
+  return preferred[0]?.rawIndex || source.length;
+}
+
+function splitScriptLocallyPreservingContent(
+  originalContent: string,
+  countPlan = calculateScriptSplitCountPlan(originalContent),
+): ScriptSegment[] {
   const source = String(originalContent || '').replace(/\r\n?/g, '\n').trim();
   if (!source) return [];
 
-  let units = source.split(/\n\s*\n+/).map(unit => unit.trim()).filter(Boolean);
-  if (units.length <= 1) {
-    units = source.split(/\n+/).map(unit => unit.trim()).filter(Boolean);
+  const totalCharacters = countContentCharacters(source);
+  const targetCount = Math.min(countPlan.target, Math.max(1, totalCharacters));
+  const boundaries: number[] = [];
+  let previousBoundary = 0;
+  for (let groupIndex = 1; groupIndex < targetCount; groupIndex += 1) {
+    const targetContentCount = Math.round((totalCharacters * groupIndex) / targetCount);
+    const boundary = findNearestSemanticBoundary(source, targetContentCount, previousBoundary);
+    if (boundary <= previousBoundary || boundary >= source.length) break;
+    boundaries.push(boundary);
+    previousBoundary = boundary;
   }
-  if (units.length <= 1) {
-    units = source.match(/[^。！？!?；;]+[。！？!?；;]?/g)?.map(unit => unit.trim()).filter(Boolean)
-      || [source];
-  }
-
-  const groups: string[] = [];
-  let current = '';
-  for (const unit of units) {
-    const candidate = current ? `${current}\n${unit}` : unit;
-    if (current && countContentCharacters(candidate) > LOCAL_SPLIT_TARGET_CHARACTERS) {
-      groups.push(current);
-      current = unit;
-    } else {
-      current = candidate;
-    }
-  }
-  if (current) groups.push(current);
+  const groups = [...boundaries, source.length]
+    .map((end, index) => source.slice(index === 0 ? 0 : boundaries[index - 1], end).trim())
+    .filter(Boolean);
 
   return groups.map((sourceText, index) => ({
     id: `seg_local_fallback_${Date.now().toString(36)}_${index}`,
     order: index,
     sourceText,
-    estimatedDurationSec: estimateBriefSegmentDurationSec(sourceText),
+    estimatedDurationSec: Math.max(4, Math.min(15, Math.round(countContentCharacters(sourceText) / 6))),
     status: 'done' as const,
     errorMessage: '',
   }));
@@ -330,16 +384,31 @@ async function splitWithValidation(
   const briefSeed = buildBriefCreativeSeedSegment(originalContent);
   if (briefSeed) return [briefSeed];
 
+  const countPlan = calculateScriptSplitCountPlan(originalContent);
   const { aiSplitScriptIntoSegments } = await loadAiModelService();
   let modelSegments: ScriptSegment[];
   try {
     modelSegments = await aiSplitScriptIntoSegments(model, originalContent, undefined, {
       ...taskContext,
       suppressNotification: true,
-    });
+    }, countPlan);
   } catch (error) {
     console.warn('[scriptThreeStageService] model split failed; using local structure-preserving fallback', error);
-    modelSegments = splitScriptLocallyPreservingContent(originalContent);
+    modelSegments = splitScriptLocallyPreservingContent(originalContent, countPlan);
+  }
+  const normalizedModelSegments = normalizeSplitSegments(modelSegments, originalContent);
+  const modelPreservesSource = normalizedModelSegments
+    .map(segment => segment.sourceText)
+    .join('')
+    .replace(/\s+/g, '') === String(originalContent || '').replace(/\s+/g, '');
+  const modelCountIsReasonable = normalizedModelSegments.length >= countPlan.minimum
+    && normalizedModelSegments.length <= countPlan.maximum;
+  if (!modelPreservesSource || !modelCountIsReasonable) {
+    console.warn(
+      `[scriptThreeStageService] model split rejected: ${normalizedModelSegments.length} segments, `
+      + `expected ${countPlan.minimum}-${countPlan.maximum}; using bounded local fallback`,
+    );
+    modelSegments = splitScriptLocallyPreservingContent(originalContent, countPlan);
   }
   const segments = normalizeSplitSegments(modelSegments, originalContent);
   assertValidSplitSegments(segments);

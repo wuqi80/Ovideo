@@ -17,11 +17,13 @@ vi.mock('../../services/aiModelService', () => aiMocks);
 
 import {
   assertValidVideoScript,
+  calculateScriptSplitCountPlan,
   generateEpisodeVideoScript,
   generateStoryboardDesignForVersion,
   generateVideoScriptForSegments,
   iterateEpisodeVideoScript,
   prepareVideoScriptSegments,
+  splitScriptIntoValidatedSegments,
 } from '../../services/scriptThreeStageService';
 import {
   STABILITY_CONSTRAINT_REFERENCE,
@@ -206,11 +208,20 @@ describe('three-stage script pipeline prefers usable output over blocking valida
     expect(result.content).not.toContain('分段2');
   });
 
-  it('keeps long-form split generation but no longer replans bad durations or prompt details', async () => {
-    const longSource = '这是一段超过八十字的正式剧本文本，用来模拟用户输入较长原文时仍然需要模型拆分，但拆分结果不再因为时长或密度校验被自动重跑。主角进入办公室后与客户爆发争执，客户拿出合同质疑交付延期，主角努力解释系统故障和补救方案，双方情绪逐渐升级。';
-    aiMocks.aiSplitScriptIntoSegments.mockResolvedValue([
-      { id: 'bad-duration', order: 0, sourceText: '主角进入办公室。', estimatedDurationSec: 17, status: 'done' },
-    ]);
+  it('keeps a source-complete model split inside the shared count budget', async () => {
+    const modelParts = [
+      '第一场主角进入办公室，与客户核对延期合同并说明系统故障。',
+      '客户拒绝接受解释，拿出交付记录逐条质疑，双方情绪逐渐升级。',
+      '主角提出新的补救计划，客户暂时同意继续谈判并等待验证结果。',
+    ];
+    const longSource = modelParts.join('');
+    aiMocks.aiSplitScriptIntoSegments.mockResolvedValue(modelParts.map((sourceText, index) => ({
+      id: `model-${index}`,
+      order: index,
+      sourceText,
+      estimatedDurationSec: index === 0 ? 17 : 12,
+      status: 'done',
+    })));
     aiMocks.aiGenerateVideoScriptFromSegment.mockResolvedValue(oneShotGroup('主角进入办公室。', 17));
 
     const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, longSource);
@@ -218,7 +229,52 @@ describe('three-stage script pipeline prefers usable output over blocking valida
     expect(aiMocks.aiSplitScriptIntoSegments).toHaveBeenCalledTimes(1);
     expect(aiMocks.aiReplanInvalidScriptSegments).not.toHaveBeenCalled();
     expect(aiMocks.aiReplanInvalidVideoScript).not.toHaveBeenCalled();
+    expect(result.segments).toHaveLength(3);
+    expect(result.segments.map(segment => segment.sourceText)).toEqual(modelParts);
     expect(result.content).toContain('时长（秒）：17');
+  });
+
+  it('bounds extreme model split counts for the same source while preserving model-sized variation', async () => {
+    const sourceParts = Array.from({ length: 9 }, (_, index) => (
+      `第${index + 1}场，角色完成当前动作并推动冲突，随后给出明确反应和新的信息。`
+    ));
+    const longSource = sourceParts.join('');
+    const splitRawText = (count: number) => Array.from({ length: count }, (_, index) => {
+      const start = Math.floor((longSource.length * index) / count);
+      const end = Math.floor((longSource.length * (index + 1)) / count);
+      return {
+        id: `model-${count}-${index}`,
+        order: index,
+        sourceText: longSource.slice(start, end),
+        estimatedDurationSec: 12,
+        status: 'done',
+      };
+    });
+    const plan = calculateScriptSplitCountPlan(longSource);
+    aiMocks.aiSplitScriptIntoSegments
+      .mockResolvedValueOnce(splitRawText(2))
+      .mockResolvedValueOnce(splitRawText(plan.target))
+      .mockResolvedValueOnce(splitRawText(29));
+
+    const results = [
+      await splitScriptIntoValidatedSegments(AiModel.DeepseekChat, longSource),
+      await splitScriptIntoValidatedSegments(AiModel.DeepseekChat, longSource),
+      await splitScriptIntoValidatedSegments(AiModel.DeepseekChat, longSource),
+    ];
+
+    expect(plan.target).toBeGreaterThan(2);
+    expect(plan.target).toBeLessThan(29);
+    expect(results.map(segments => segments.length)).toEqual([
+      plan.target,
+      plan.target,
+      plan.target,
+    ]);
+    results.forEach(segments => {
+      expect(segments.map(segment => segment.sourceText).join('').replace(/\s+/g, ''))
+        .toBe(longSource.replace(/\s+/g, ''));
+      expect(segments.length).toBeGreaterThanOrEqual(plan.minimum);
+      expect(segments.length).toBeLessThanOrEqual(plan.maximum);
+    });
   });
 
   it('falls back to ordered local source segments when the stage-one model request fails', async () => {
@@ -247,9 +303,11 @@ describe('three-stage script pipeline prefers usable output over blocking valida
       longSource,
       undefined,
       expect.objectContaining({ suppressNotification: true }),
+      calculateScriptSplitCountPlan(longSource),
     );
-    expect(result.segments).toHaveLength(3);
-    expect(result.segments.map(segment => segment.sourceText)).toEqual(paragraphs);
+    expect(result.segments).toHaveLength(calculateScriptSplitCountPlan(longSource).target);
+    expect(result.segments.map(segment => segment.sourceText).join('').replace(/\s+/g, ''))
+      .toBe(longSource.replace(/\s+/g, ''));
     expect(progress).toContainEqual({ stage: 'split', completed: 1, total: 1 });
     expect(result.content.indexOf('第一场')).toBeLessThan(result.content.indexOf('第三场'));
   });

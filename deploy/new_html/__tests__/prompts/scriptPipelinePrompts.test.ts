@@ -27,6 +27,8 @@ describe('latest three-step script prompts', () => {
     expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('平均时长应≥10秒');
     expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('情绪闭环');
     expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('任何段落估算超过15秒都是错误');
+    expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('{targetSegmentCount}');
+    expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('{minimumSegmentCount}-{maximumSegmentCount}');
   });
 
   it('uses the latest stage-two rules and hierarchical numbering', () => {

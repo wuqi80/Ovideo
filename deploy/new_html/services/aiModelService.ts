@@ -160,11 +160,17 @@ export const aiSplitScriptIntoSegments = async (
   originalContent: string,
   onStream?: (chunk: string) => void,
   taskContext?: TextTaskContext,
+  countPlan?: { target: number; minimum: number; maximum: number },
 ): Promise<ScriptSegment[]> => {
   const raw = await callAI(
     model,
     PROMPTS.SPLIT_SCRIPT_INTO_SEGMENTS,
-    { originalContent },
+    {
+      originalContent,
+      targetSegmentCount: countPlan?.target || '',
+      minimumSegmentCount: countPlan?.minimum || '',
+      maximumSegmentCount: countPlan?.maximum || '',
+    },
     onStream,
     {
       operation: 'storyboard_script_generate',
