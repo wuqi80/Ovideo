@@ -10,7 +10,8 @@ The external-API conversion is anchored to the product decision that a
 list price is CNY 1.60/second. External API prices use the product-friendly
 conversion of 20 credits/CNY.
 Local workflows have no per-call provider fee and use the product minimum of
-10 credits per completed task.
+10 credits per completed task.  The optional serial 720P post-upscale is a
+separate local workflow and adds 5 credits when requested.
 """
 from __future__ import annotations
 
@@ -18,9 +19,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, Mapping, Tuple
 
 
-VIDEO_PRICING_VERSION = "2026-08-19-video-cost-v1"
+VIDEO_PRICING_VERSION = "2026-08-19-video-cost-v2"
 CREDITS_PER_CNY = Decimal("20")
 LOCAL_VIDEO_CREDITS = 10
+LOCAL_720P_UPSCALE_CREDITS = 5
 
 LOCAL_MODELS = frozenset(
     {
@@ -222,7 +224,15 @@ def quote_video_credits(params: Mapping[str, Any] | None) -> Dict[str, Any]:
     family = _infer_family(data)
 
     if family == "local":
-        return _fixed_quote(LOCAL_VIDEO_CREDITS, "local", duration_seconds=_positive_int(data.get("duration_seconds"), 5))
+        upscale_720p = data.get("h3_upscale_720p") is True
+        credits = LOCAL_VIDEO_CREDITS + (LOCAL_720P_UPSCALE_CREDITS if upscale_720p else 0)
+        return _fixed_quote(
+            credits,
+            "local-720p-upscale" if upscale_720p else "local",
+            duration_seconds=_positive_int(data.get("duration_seconds"), 5),
+            h3_upscale_720p=upscale_720p,
+            upscale_credits=LOCAL_720P_UPSCALE_CREDITS if upscale_720p else 0,
+        )
     if family == "minimax-api":
         return _quote_minimax(data)
     if family == "seedance":

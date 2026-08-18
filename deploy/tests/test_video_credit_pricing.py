@@ -12,6 +12,25 @@ def test_local_video_models_use_product_minimum(model):
     assert quote_video_credits({"model": model, "duration_seconds": 15})["credits"] == 10
 
 
+@pytest.mark.parametrize("model", ["MiniMaxH3", "MiniMaxH3Fast", "MiniMaxH3Mini"])
+def test_local_h3_720p_upscale_adds_five_credits(model):
+    quote = quote_video_credits({
+        "model": model,
+        "duration_seconds": 5,
+        "h3_upscale_720p": True,
+    })
+    assert quote["credits"] == 15
+    assert quote["profile"] == "local-720p-upscale"
+    assert quote["upscale_credits"] == 5
+
+
+def test_local_h3_false_upscale_flag_keeps_product_minimum():
+    assert quote_video_credits({
+        "model": "MiniMaxH3",
+        "h3_upscale_720p": False,
+    })["credits"] == 10
+
+
 def test_external_conversion_is_twenty_credits_per_cny():
     assert CREDITS_PER_CNY == 20
     quote = quote_video_credits({

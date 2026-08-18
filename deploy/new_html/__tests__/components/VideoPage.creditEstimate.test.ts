@@ -10,6 +10,8 @@ describe('VideoPage per-card credit estimates', () => {
     expect(source).toContain('data-testid="video-card-credit-estimate"');
     expect(source).toContain('data-testid="video-list-card-credit-estimate"');
     expect(source.match(/params=\{getGroupVideoCreditEstimateParams\(group\)\}/g)).toHaveLength(2);
+    expect(source).toContain('h3_upscale_720p: isMiniMaxH3Model(group.model) && group.h3Upscale720p === true');
+    expect(source.match(/fallbackCost=\{getGroupVideoCreditFallbackCost\(group\)\}/g)).toHaveLength(2);
   });
 
   it('does not show the hidden new-card default model as a global per-video price', () => {

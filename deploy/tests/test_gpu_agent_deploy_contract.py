@@ -37,12 +37,29 @@ def test_gpu_agent_version_keeps_control_capability_marker():
         DEPLOY_DIR / "pipeline" / "comfyui_agent.py"
     ).read_text(encoding="utf-8")
 
-    assert 'AGENT_VERSION = "2026-08-18-agent-control-progress-runtime-detect-v1"' in source
+    assert 'AGENT_VERSION = "2026-08-19-agent-runtime-stop-wait-v2"' in source
     assert "install_h3_sidecar" in source
+    assert "sync_runtime_tools" in source
     assert "minimax_h3_fl2va" in source
     assert "windows_gpu_start_music3_comfyui.cmd" in source
     assert "windows_gpu_start_music3_comfyui.ps1" in source
     assert "windows_gpu_music3_compat_patch.py" in source
+
+
+def test_runtime_tool_sync_is_bounded_to_reviewed_agent_files():
+    source = (
+        DEPLOY_DIR / "pipeline" / "comfyui_agent.py"
+    ).read_text(encoding="utf-8")
+
+    start = source.index("def _sync_runtime_tools(self):")
+    end = source.index("def _install_h3_sidecar(self, data):", start)
+    block = source[start:end]
+
+    assert '"windows_gpu_agent_runner.py"' in block
+    assert '"windows_gpu_cleanup_port.ps1"' in block
+    assert '"restart": True' in block
+    assert "subprocess.run" not in block
+    assert "windows_gpu_h3_setup.ps1" not in block
 
 
 def test_gpu2_runner_bootstraps_embedded_python_paths_before_guard_import():
@@ -67,6 +84,9 @@ def test_port_cleanup_matches_the_exact_listener_executable_path():
     assert "if ($samePython -or" in source
     assert "foreach ($listenerPid in $pids)" in source
     assert "foreach ($pid in $pids)" not in source
+    assert "[int]$WaitTimeoutSeconds = 15" in source
+    assert "Start-Sleep -Milliseconds $PollMilliseconds" in source
+    assert "while ((Get-Date) -lt $deadline)" in source
 
 
 def test_gpu_agent_heartbeats_on_a_background_thread_during_long_tasks():

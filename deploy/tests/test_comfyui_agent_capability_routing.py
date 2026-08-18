@@ -3,6 +3,7 @@ import threading
 
 import requests
 
+import pipeline.comfyui_agent as comfyui_agent_module
 from pipeline.comfyui_agent import ComfyUIAgent
 
 
@@ -89,3 +90,33 @@ def test_background_heartbeat_continues_independently_of_task_loop(monkeypatch):
         agent._stop_heartbeat_thread()
 
     assert not agent._heartbeat_thread.is_alive()
+
+
+def test_sync_runtime_tools_updates_only_runner_and_cleanup(tmp_path, monkeypatch):
+    monkeypatch.setenv("MECHA_GPU_ROOT", str(tmp_path))
+    monkeypatch.setattr(comfyui_agent_module.platform, "system", lambda: "Windows")
+    agent = _agent(monkeypatch)
+    sources = {
+        "windows_gpu_agent_runner.py": "GPU2_H3_PORT = GPU2_COMFYUI_PORT\nclass Gpu2RuntimeManager: pass\n",
+        "windows_gpu_cleanup_port.ps1": "param($WaitTimeoutSeconds, $CommandMatch)\n",
+    }
+    monkeypatch.setattr(
+        agent,
+        "_download_text_tool",
+        lambda filename, _markers: (f"https://example.test/storage/tools/{filename}", sources[filename]),
+    )
+
+    result = agent._sync_runtime_tools()
+
+    assert result["action"] == "sync_runtime_tools"
+    assert result["restart"] is True
+    assert (tmp_path / "agent" / "windows_gpu_agent_runner.py").read_text(encoding="utf-8") == sources[
+        "windows_gpu_agent_runner.py"
+    ]
+    assert (tmp_path / "scripts" / "windows_gpu_cleanup_port.ps1").read_text(encoding="utf-8") == sources[
+        "windows_gpu_cleanup_port.ps1"
+    ]
+    assert sorted(path.name for path in tmp_path.rglob("*.*")) == [
+        "windows_gpu_agent_runner.py",
+        "windows_gpu_cleanup_port.ps1",
+    ]

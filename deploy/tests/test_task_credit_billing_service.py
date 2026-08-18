@@ -57,6 +57,7 @@ def test_resolve_task_billing_preserves_provider_pricing_fields():
         "minimax_resolution": None,
         "hh_resolution": "1080P",
         "vidu_resolution": None,
+        "h3_upscale_720p": False,
         "audio": False,
         "has_reference_video": False,
     }
@@ -72,6 +73,16 @@ def test_resolve_task_billing_preserves_provider_pricing_fields():
     assert vidu["params"]["sub_model"] == "q3-turbo"
     assert vidu["params"]["audio"] is True
     assert vidu["params"]["has_reference_video"] is True
+
+
+def test_resolve_task_billing_preserves_local_h3_720p_upscale_flag():
+    spec = resolve_task_billing("i2v", {
+        "model": "MiniMaxH3",
+        "duration": 5,
+        "h3_upscale_720p": True,
+    })
+    assert spec["feature_key"] == "video_generation"
+    assert spec["params"]["h3_upscale_720p"] is True
 
 
 @pytest.mark.asyncio

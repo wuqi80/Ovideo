@@ -44,6 +44,13 @@ describe('video credit estimate params', () => {
       model: 'MiniMaxH3',
       duration_seconds: 5,
     });
+    expect(getVideoCreditEstimateParams('MiniMaxH3', {
+      h3_upscale_720p: true,
+    })).toEqual({
+      model: 'MiniMaxH3',
+      duration_seconds: 5,
+      h3_upscale_720p: true,
+    });
   });
 
   it('lets a video card override defaults with its current generation settings', () => {

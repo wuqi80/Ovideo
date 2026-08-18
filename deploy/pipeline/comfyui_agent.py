@@ -31,7 +31,7 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-08-18-agent-control-progress-runtime-detect-v1"
+AGENT_VERSION = "2026-08-19-agent-runtime-stop-wait-v2"
 PLATFORM_DOWNLOAD_RETRIES = 3
 PLATFORM_DOWNLOAD_PATH_PREFIXES = ("/api/agent/tasks/", "/storage/")
 CAPABILITY_CACHE_TTL_SECONDS = 60
@@ -669,6 +669,15 @@ class ComfyUIAgent:
                 "restart_agent": bool(data.get("restart_agent", False)),
             }
 
+        if action == "sync_runtime_tools":
+            result = self._sync_runtime_tools()
+            return {
+                "status": "completed",
+                "result_payload": result,
+                "output_files": [],
+                "restart_agent": True,
+            }
+
         return {
             "status": "failed",
             "error": f"Unsupported agent_control action: {action}",
@@ -743,6 +752,40 @@ class ComfyUIAgent:
         path.write_text(content, encoding="utf-8")
         return {"path": str(path), "changed": True, "backup": str(backup or "")}
 
+    def _sync_runtime_tools(self):
+        """Refresh only the reviewed Agent runtime files, then restart this Agent."""
+        if platform.system().lower() != "windows":
+            raise RuntimeError("GPU runtime tool sync is only supported on Windows agents")
+
+        root = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+        tool_specs = (
+            (
+                "windows_gpu_agent_runner.py",
+                root / "agent" / "windows_gpu_agent_runner.py",
+                ("GPU2_H3_PORT = GPU2_COMFYUI_PORT", "Gpu2RuntimeManager"),
+            ),
+            (
+                "windows_gpu_cleanup_port.ps1",
+                root / "scripts" / "windows_gpu_cleanup_port.ps1",
+                ("WaitTimeoutSeconds", "CommandMatch"),
+            ),
+        )
+        installed = []
+        downloads = []
+        for filename, destination, markers in tool_specs:
+            url, content = self._download_text_tool(filename, markers)
+            downloads.append({"filename": filename, "url": url, "destination": str(destination)})
+            installed.append(self._write_text_with_backup(destination, content))
+
+        return {
+            "action": "sync_runtime_tools",
+            "agent_id": self.agent_id,
+            "root": str(root),
+            "installed": installed,
+            "downloads": downloads,
+            "restart": True,
+        }
+
     def _install_h3_sidecar(self, data):
         if platform.system().lower() != "windows":
             raise RuntimeError("MiniMax H3 sidecar installer is only supported on Windows GPU agents")
@@ -757,6 +800,11 @@ class ComfyUIAgent:
                 "windows_gpu_agent_runner.py",
                 agent_dir / "windows_gpu_agent_runner.py",
                 ("GPU2_H3_PORT = GPU2_COMFYUI_PORT", "Gpu2ResourceController"),
+            ),
+            (
+                "windows_gpu_cleanup_port.ps1",
+                scripts_dir / "windows_gpu_cleanup_port.ps1",
+                ("WaitTimeoutSeconds", "CommandMatch"),
             ),
             (
                 "windows_gpu_resource_guard.py",

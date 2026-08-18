@@ -598,6 +598,20 @@ def test_gpu2_runtime_manager_still_refuses_unknown_listener(tmp_path):
         manager.ensure("h3")
 
 
+def test_gpu2_runtime_manager_reports_managed_listener_stop_timeout(tmp_path):
+    h3 = tmp_path / "h3.cmd"
+    h3.write_text("@echo off\n", encoding="utf-8")
+    manager = Gpu2RuntimeManager(
+        commands={"h3": h3},
+        listener=lambda _port: True,
+        profile_detector=lambda _port: "wan",
+        stopper=lambda _profile: False,
+    )
+
+    with pytest.raises(RuntimeError, match="Managed wan ComfyUI runtime did not release port 8188"):
+        manager.ensure("h3")
+
+
 def test_gpu2_runtime_profile_matches_only_reviewed_executable_and_main_paths(tmp_path):
     root = tmp_path / "MECHA-GPU"
     h3_python = root / "ComfyUI-H3" / "python_embeded" / "python.exe"

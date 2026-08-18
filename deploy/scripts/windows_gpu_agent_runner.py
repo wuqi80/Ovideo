@@ -796,8 +796,12 @@ class Gpu2RuntimeManager:
                 if current == profile:
                     self.active_profile = current
                     return
-                if not current or not self.stopper(current):
+                if not current:
                     raise RuntimeError("Refused to replace an unknown ComfyUI listener on port 8188")
+                if not self.stopper(current):
+                    raise RuntimeError(
+                        f"Managed {current} ComfyUI runtime did not release port 8188 in time"
+                    )
             command = Path(self.commands[profile])
             if not command.is_file():
                 raise RuntimeError(f"GPU2 runtime launcher is missing: {command}")

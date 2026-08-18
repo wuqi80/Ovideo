@@ -1,10 +1,11 @@
 # Video credit pricing
 
-Effective pricing version: `2026-08-19-video-cost-v1`.
+Effective pricing version: `2026-08-19-video-cost-v2`.
 
 ## Rules
 
 - Local processing-cluster video workflows cost 10 credits per successful task.
+- The optional local MiniMax H3 720P post-upscale adds 5 credits, for 15 credits total.
 - External APIs use 20 credits per CNY of provider cost, rounded to the nearest whole credit.
 - Resolution, duration, audio/reference-video options and provider sub-models are taken from the persisted server task payload.
 - Browser-supplied `price` or `credits` fields are ignored.
@@ -15,6 +16,7 @@ Effective pricing version: `2026-08-19-video-cost-v1`.
 | Model/profile | Default specification | Credits |
 | --- | --- | ---: |
 | Local MiniMax H3 / Wan / processing-cluster workflow | one task | 10 |
+| Local MiniMax H3 with 720P post-upscale | one task | 15 |
 | MiniMax Hailuo 2.3 | 768P, 6s | 40 |
 | Seedance 2 Mini | 720P, 5s | 50 |
 | Kling v3 | 720P, 5s, no audio/reference video | 60 |

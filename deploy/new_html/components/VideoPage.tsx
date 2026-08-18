@@ -852,8 +852,15 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             resolution: capabilityParams.resolution,
             minimax_model: minimaxParams?.model,
             minimax_resolution: minimaxParams?.resolution,
+            h3_upscale_720p: isMiniMaxH3Model(group.model) && group.h3Upscale720p === true,
         });
     }, [defaultMiniMaxVideoModel, getDashScopeParams, getSeedanceParams]);
+
+    const getGroupVideoCreditFallbackCost = useCallback((group: TaskGroup): number => {
+        if (group.model === 'HappyHorse') return 160;
+        if (isMiniMaxH3Model(group.model) && group.h3Upscale720p === true) return 15;
+        return 10;
+    }, []);
 
     // 2026-05-24 — picker 打开器：DashScope 卡片调用此函数请求选图
     const openDashScopePicker = useCallback((
@@ -3916,7 +3923,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         <InlineCreditEstimate
                             featureKey="video_generation"
                             params={getGroupVideoCreditEstimateParams(group)}
-                            fallbackCost={group.model === 'HappyHorse' ? 160 : 10}
+                            fallbackCost={getGroupVideoCreditFallbackCost(group)}
                             compact
                             className="justify-center whitespace-nowrap text-[9px]"
                         />
@@ -4100,7 +4107,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                             <InlineCreditEstimate
                                 featureKey="video_generation"
                                 params={getGroupVideoCreditEstimateParams(group)}
-                                fallbackCost={group.model === 'HappyHorse' ? 160 : 10}
+                                fallbackCost={getGroupVideoCreditFallbackCost(group)}
                                 compact
                                 className="whitespace-nowrap text-[10px]"
                             />

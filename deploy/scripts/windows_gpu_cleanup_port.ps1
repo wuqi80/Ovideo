@@ -8,6 +8,12 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$CommandMatch,
 
+    [ValidateRange(1, 60)]
+    [int]$WaitTimeoutSeconds = 15,
+
+    [ValidateRange(100, 5000)]
+    [int]$PollMilliseconds = 500,
+
     [string]$LogFile = "E:\MECHA-GPU\logs\agent-port-cleanup.log"
 )
 
@@ -67,10 +73,18 @@ try {
         exit 2
     }
 
-    Start-Sleep -Seconds 1
-    $left = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+    # Stop-Process can return before Windows has removed the listening socket.
+    # Wait for the exact managed listener to disappear instead of turning a
+    # normal shutdown delay into a failed runtime switch.
+    $deadline = (Get-Date).AddSeconds($WaitTimeoutSeconds)
+    do {
+        $left = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+        if (-not $left) { break }
+        Start-Sleep -Milliseconds $PollMilliseconds
+    } while ((Get-Date) -lt $deadline)
+
     if ($left) {
-        Write-Log "Port $Port still has listeners after cleanup: $($left -join ',')"
+        Write-Log "Port $Port still has listeners after ${WaitTimeoutSeconds}s cleanup wait: $($left -join ',')"
         exit 3
     }
 

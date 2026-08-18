@@ -97,6 +97,7 @@ def resolve_task_billing(task_type: str, task_data: Optional[Dict[str, Any]]) ->
                 "minimax_resolution": data.get("minimax_resolution"),
                 "hh_resolution": data.get("hh_resolution"),
                 "vidu_resolution": data.get("vidu_resolution"),
+                "h3_upscale_720p": data.get("h3_upscale_720p") is True,
                 "audio": bool(data.get("vidu_audio") or data.get("audio")),
                 "has_reference_video": any(
                     isinstance(item, dict) and item.get("kind") == "video"
