@@ -10,7 +10,7 @@ VALUES (
   '[]'::jsonb, 5, 100, '2026-08-18-001',
   '视频放大、补帧、对口型和视频配音统一按成功任务扣除 5 积分；失败或取消不扣积分'
 )
-ON CONFLICT (feature_key) DO UPDATE SET
+ON CONFLICT (rule_id) DO UPDATE SET
   feature_name = EXCLUDED.feature_name,
   enabled = EXCLUDED.enabled,
   base_cost = EXCLUDED.base_cost,

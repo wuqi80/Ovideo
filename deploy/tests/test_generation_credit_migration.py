@@ -18,5 +18,5 @@ def test_video_enhancement_rule_is_fixed_success_only_cost():
 
     assert "video_enhancement" in sql
     assert "TRUE, 5, 'task'" in sql
+    assert "ON CONFLICT (rule_id) DO UPDATE" in sql
     assert "失败或取消不扣积分" in sql
-
