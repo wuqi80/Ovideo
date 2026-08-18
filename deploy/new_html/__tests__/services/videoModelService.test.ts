@@ -270,6 +270,7 @@ describe('buildVideoModelOptions', () => {
 
     expect(options.map(option => option.value)).toEqual(SELECTABLE_MODELS);
     expect(options.find(option => option.value === 'LTXNode1')?.available).toBe(false);
+    expect(options.find(option => option.value === 'LTXNode1')?.label).toContain('当前不可用');
     expect(options.find(option => option.value === 'WanNode2')?.available).toBe(true);
     expect(options.find(option => option.value === 'HappyHorse')?.label).toContain('happyhorse-1.0-r2v');
     expect(options.find(option => option.value === 'Seedance2Mini')?.label).toContain('doubao-seedance-2-0-mini-260615');

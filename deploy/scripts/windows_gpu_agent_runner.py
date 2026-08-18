@@ -955,11 +955,22 @@ def normalize_gpu2_video_resolution(value: Any) -> int:
     return max(360, min(1080, resolution))
 
 
+def normalize_gpu2_video_seed(value: Any) -> int:
+    """Map frontend random-seed sentinels into SeedVR2's unsigned range."""
+    try:
+        seed = int(value)
+    except (TypeError, ValueError):
+        return 42
+    if seed < 0:
+        return 42
+    return min(seed, 4294967295)
+
+
 def build_gpu2_video_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
     """Build a serial, CPU-offloaded SeedVR2 graph for video enhancement."""
     params = _gpu2_task_params(task)
     video_name = _gpu2_input_video_name(task)
-    seed = int(params.get("seed") or params.get("seed_0") or 42)
+    seed = normalize_gpu2_video_seed(params.get("seed", params.get("seed_0", 42)))
     target_resolution = normalize_gpu2_video_resolution(params.get("resolution"))
     return {
         "1": {
@@ -2023,7 +2034,7 @@ def execute_gpu2_h3_post_upscale_720p(
         )
     runtime_manager.ensure("wan")
     uploaded_video = _gpu2_upload_local_video(agent, GPU2_COMFYUI_PORT, source_video)
-    seed = params.get("seed") or params.get("seed_0") or 42
+    seed = normalize_gpu2_video_seed(params.get("seed", params.get("seed_0", 42)))
     upscale_params = {
         "video_filename": uploaded_video,
         "resolution": "720P",

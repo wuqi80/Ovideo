@@ -333,9 +333,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             });
         };
         refresh();
+        const refreshTimer = window.setInterval(refresh, 15_000);
         window.addEventListener('focus', refresh);
         return () => {
             cancelled = true;
+            window.clearInterval(refreshTimer);
             window.removeEventListener('focus', refresh);
         };
     }, []);
@@ -354,7 +356,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         && (videoCapabilities.models?.length || 0) > 0,
     );
     const availableVideoModelSet = useMemo(
-        () => new Set(allVideoModelOptions.map(option => option.value)),
+        () => new Set(
+            allVideoModelOptions
+                .filter(option => option.available)
+                .map(option => option.value),
+        ),
         [allVideoModelOptions],
     );
     const getModelSelectOptions = useCallback(

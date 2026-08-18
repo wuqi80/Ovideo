@@ -18,4 +18,10 @@ describe('VideoPage per-card credit estimates', () => {
     expect(source).not.toContain('params={getVideoCreditEstimateParams(globalModel)}');
     expect(source).not.toContain('<span className="text-[10px] text-n300">每个视频</span>');
   });
+
+  it('refreshes dynamic processing-node capabilities without requiring a page reload', () => {
+    expect(source).toContain('window.setInterval(refresh, 15_000)');
+    expect(source).toContain('window.clearInterval(refreshTimer)');
+    expect(source).toContain('.filter(option => option.available)');
+  });
 });

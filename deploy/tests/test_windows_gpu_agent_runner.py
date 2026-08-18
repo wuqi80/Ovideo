@@ -65,6 +65,7 @@ from scripts.windows_gpu_agent_runner import (
     is_gpu2_wan_i2v_task,
     normalize_gpu2_image_dimensions,
     normalize_gpu2_video_resolution,
+    normalize_gpu2_video_seed,
     execute_gpu2_h3_post_upscale_720p,
     prepare_gpu2_task,
     _runtime_profile_from_process,
@@ -1013,6 +1014,17 @@ def test_gpu2_video_resolution_accepts_frontend_labels_and_caps_large_targets():
     assert normalize_gpu2_video_resolution("unexpected") == 720
 
 
+def test_gpu2_video_seed_maps_random_sentinel_into_seedvr2_range():
+    assert normalize_gpu2_video_seed(-1) == 42
+    assert normalize_gpu2_video_seed("-1") == 42
+    assert normalize_gpu2_video_seed(None) == 42
+    assert normalize_gpu2_video_seed(456) == 456
+    assert normalize_gpu2_video_seed(999999999999) == 4294967295
+    assert build_gpu2_video_upscale_workflow({
+        "params": {"video_filename": "clip.mp4", "seed": -1},
+    })["4"]["inputs"]["seed"] == 42
+
+
 def test_gpu2_h3_720p_request_is_explicit_only():
     assert gpu2_h3_upscale_720p_requested({"params": {"h3_upscale_720p": True}}) is True
     assert gpu2_h3_upscale_720p_requested({"params": {}}) is False
@@ -1056,6 +1068,7 @@ def test_gpu2_h3_720p_postprocess_unloads_before_upscaler(tmp_path):
         events.append("execute_upscale")
         assert task["workflow_name"] == "gpu2_h3_post_upscale_720p"
         assert task["workflow_json"]["4"]["inputs"]["resolution"] == 720
+        assert task["workflow_json"]["4"]["inputs"]["seed"] == 42
         return {"status": "completed", "output_files": ["upscaled.mp4"]}
 
     result = execute_gpu2_h3_post_upscale_720p(
@@ -1064,7 +1077,7 @@ def test_gpu2_h3_720p_postprocess_unloads_before_upscaler(tmp_path):
         resource_controller=_Resources(),
         execute_workflow=_execute,
         generation_result={"status": "completed", "output_files": [str(source)]},
-        params={"seed": 123},
+        params={"seed": -1},
     )
 
     assert events == [

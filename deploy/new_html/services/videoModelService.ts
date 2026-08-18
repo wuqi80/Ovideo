@@ -476,9 +476,10 @@ export function buildVideoModelOptions(
     const capability = capabilityByKey.get(model);
     const available = capability ? capability.available !== false : false;
     const runtimeLabel = formatVideoModelRuntimeLabel(capability);
+    const label = formatVideoModelOptionLabel(model, capability);
     return [{
       value: model,
-      label: formatVideoModelOptionLabel(model, capability),
+      label: available ? label : `${label}（当前不可用）`,
       baseLabel: getModelDisplayName(model),
       runtimeLabel,
       available,
