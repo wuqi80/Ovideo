@@ -117,6 +117,7 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
     assert 'qwen3vl_4b_fp8_scaled.safetensors' in source
     assert 'mmh3-4b-ClipProj-v3-mlp.safetensors' in source
     assert 'h3-mini-ready.json' in source
+    assert '"%PYTHON_EXE%" -s "%COMFYUI_ROOT%\\main.py"' in source
 
 
 def test_h3_install_does_not_restart_or_start_a_runtime_by_default():

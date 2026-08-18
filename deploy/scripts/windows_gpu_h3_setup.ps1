@@ -521,7 +521,7 @@ set "COMFYUI_ROOT=$ComfyRoot"
 set "PYTHON_EXE=$H3Python"
 if not exist "$Logs" mkdir "$Logs"
 cd /d "%COMFYUI_ROOT%"
-"%PYTHON_EXE%" -s main.py --listen 0.0.0.0 --port $Port --lowvram --preview-method none --disable-auto-launch >> "$Logs\comfyui-h3-$Port.log" 2>&1
+"%PYTHON_EXE%" -s "%COMFYUI_ROOT%\main.py" --listen 0.0.0.0 --port $Port --lowvram --preview-method none --disable-auto-launch >> "$Logs\comfyui-h3-$Port.log" 2>&1
 endlocal
 "@ | Set-Content -LiteralPath $StartCmd -Encoding ASCII
 }
