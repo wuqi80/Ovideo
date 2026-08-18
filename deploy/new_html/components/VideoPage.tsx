@@ -14,6 +14,8 @@ import {
     formatVideoModelOptionLabel,
     getVideoCreditEstimateParams,
     getVideoModelRuntimeNames,
+    inferDashScopeTaskType,
+    inferSeedanceTaskType,
     isDashScopeVideoModel,
     isMiniMaxH3Model,
     isSeedanceAgentPlanModel,
@@ -809,6 +811,49 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const setDashScopeParams = useCallback((uuid: string, next: DashScopeVideoParams) => {
         setDashScopeParamsByUuid(prev => ({ ...prev, [uuid]: next }));
     }, []);
+
+    const getGroupVideoCreditEstimateParams = useCallback((group: TaskGroup): Record<string, unknown> => {
+        if (isSeedanceVideoModel(group.model)) {
+            const params = getSeedanceParams(group.uuid, group.model);
+            return getVideoCreditEstimateParams(group.model, {
+                task_type: inferSeedanceTaskType(params.media_inputs || []),
+                duration_seconds: params.duration,
+                resolution: params.resolution,
+                sub_model: params.sub_model,
+                audio: params.generate_audio === true,
+                has_reference_video: (params.media_inputs || []).some(item => item.kind === 'video'),
+            });
+        }
+
+        if (isDashScopeVideoModel(group.model)) {
+            const params = getDashScopeParams(group.uuid, group.model);
+            return getVideoCreditEstimateParams(group.model, {
+                task_type: inferDashScopeTaskType(group.model, params.media_inputs || []),
+                duration_seconds: params.hh_duration ?? params.duration,
+                resolution: params.hh_resolution ?? params.vidu_resolution ?? params.resolution,
+                hh_resolution: params.hh_resolution,
+                vidu_resolution: params.vidu_resolution,
+                sub_model: group.model === 'Vidu'
+                    ? params.sub_model_vidu
+                    : params.sub_model_kling,
+                audio: group.model === 'Vidu' ? params.vidu_audio === true : params.audio === true,
+                has_reference_video: (params.media_inputs || []).some(item => item.kind === 'video'),
+            });
+        }
+
+        const capabilityParams = group.videoParams || {};
+        const capabilityDuration = Number(capabilityParams.duration);
+        const minimaxParams = group.model === 'MINI'
+            ? normalizeMiniMaxVideoParams(group.minimaxParams, defaultMiniMaxVideoModel)
+            : undefined;
+        return getVideoCreditEstimateParams(group.model, {
+            duration_seconds: minimaxParams?.duration
+                ?? (Number.isFinite(capabilityDuration) ? capabilityDuration : group.duration),
+            resolution: capabilityParams.resolution,
+            minimax_model: minimaxParams?.model,
+            minimax_resolution: minimaxParams?.resolution,
+        });
+    }, [defaultMiniMaxVideoModel, getDashScopeParams, getSeedanceParams]);
 
     // 2026-05-24 — picker 打开器：DashScope 卡片调用此函数请求选图
     const openDashScopePicker = useCallback((
@@ -3866,7 +3911,16 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 </div>
                 
                 {/* 状态 */}
-                <div className="w-20 shrink-0 text-center">
+                <div className="flex w-24 shrink-0 flex-col items-center gap-0.5 text-center">
+                    <span data-testid="video-list-card-credit-estimate">
+                        <InlineCreditEstimate
+                            featureKey="video_generation"
+                            params={getGroupVideoCreditEstimateParams(group)}
+                            fallbackCost={group.model === 'HappyHorse' ? 160 : 10}
+                            compact
+                            className="justify-center whitespace-nowrap text-[9px]"
+                        />
+                    </span>
                     {status.state === 'done' ? (
                         <span className="text-xs text-success flex items-center justify-center gap-1">
                             <Check className="w-3 h-3" /> 完成
@@ -4039,6 +4093,18 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                 </option>
                             ))}
                         </select>
+                        <span
+                            data-testid="video-card-credit-estimate"
+                            className="inline-flex rounded border border-warning/25 bg-y50 px-1.5 py-0.5"
+                        >
+                            <InlineCreditEstimate
+                                featureKey="video_generation"
+                                params={getGroupVideoCreditEstimateParams(group)}
+                                fallbackCost={group.model === 'HappyHorse' ? 160 : 10}
+                                compact
+                                className="whitespace-nowrap text-[10px]"
+                            />
+                        </span>
                         {isMiniMaxH3Model(group.model) && (
                             <>
                             <label
@@ -5408,13 +5474,6 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 </div>
                 
                 <div className="toolbar-actions">
-                    <span className="text-[10px] text-n300">每个视频</span>
-                    <InlineCreditEstimate
-                        featureKey="video_generation"
-                        params={getVideoCreditEstimateParams(globalModel)}
-                        fallbackCost={globalModel === 'HappyHorse' ? 160 : 10}
-                        className="whitespace-nowrap text-[10px]"
-                    />
                     {/* 选择和批量操作 */}
                     <button
                         onClick={selectAll}

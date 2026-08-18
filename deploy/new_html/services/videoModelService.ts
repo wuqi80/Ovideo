@@ -358,30 +358,44 @@ export const SELECTABLE_MODELS: VideoModel[] = [
   'Kling', 'Vidu', 'HappyHorse',
 ];
 
-export function getVideoCreditEstimateParams(model: VideoModel): Record<string, unknown> {
+export function getVideoCreditEstimateParams(
+  model: VideoModel,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const applyOverrides = (defaults: Record<string, unknown>): Record<string, unknown> => {
+    const definedOverrides = Object.fromEntries(
+      Object.entries(overrides).filter(([key, value]) => (
+        key !== 'model'
+        && value !== undefined
+        && value !== null
+        && value !== ''
+      )),
+    );
+    return { ...defaults, ...definedOverrides, model };
+  };
   const base: Record<string, unknown> = { model, duration_seconds: 5 };
-  if (model === 'HappyHorse') return { ...base, hh_resolution: '1080P' };
-  if (model === 'Vidu') return { ...base, sub_model: 'q3', vidu_resolution: '720P' };
-  if (model === 'Kling') return { ...base, resolution: '720P', audio: false };
-  if (model === '大能') return { ...base, resolution: '1080P' };
+  if (model === 'HappyHorse') return applyOverrides({ ...base, hh_resolution: '1080P' });
+  if (model === 'Vidu') return applyOverrides({ ...base, sub_model: 'q3', vidu_resolution: '720P' });
+  if (model === 'Kling') return applyOverrides({ ...base, resolution: '720P', audio: false });
+  if (model === '大能') return applyOverrides({ ...base, resolution: '1080P' });
   if (model === 'MINI') {
-    return {
+    return applyOverrides({
       model,
       duration_seconds: 6,
       minimax_model: DEFAULT_MINIMAX_VIDEO_PARAMS.model,
       minimax_resolution: DEFAULT_MINIMAX_VIDEO_PARAMS.resolution,
-    };
+    });
   }
   if (isSeedanceVideoModel(model)) {
-    return {
+    return applyOverrides({
       ...base,
       sub_model: seedanceSubModelForVideoModel(model),
       resolution: '720P',
-    };
+    });
   }
-  if (model === 'Sora2') return { model, duration_seconds: 15, resolution: '720P' };
-  if (model === 'Veo') return { model, duration_seconds: 8, resolution: '720P' };
-  return base;
+  if (model === 'Sora2') return applyOverrides({ model, duration_seconds: 15, resolution: '720P' });
+  if (model === 'Veo') return applyOverrides({ model, duration_seconds: 8, resolution: '720P' });
+  return applyOverrides(base);
 }
 
 const ALL_MODEL_VALUES = new Set<string>(ALL_MODELS);

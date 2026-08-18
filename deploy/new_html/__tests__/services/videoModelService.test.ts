@@ -45,6 +45,37 @@ describe('video credit estimate params', () => {
       duration_seconds: 5,
     });
   });
+
+  it('lets a video card override defaults with its current generation settings', () => {
+    expect(getVideoCreditEstimateParams('HappyHorse', {
+      duration_seconds: 10,
+      hh_resolution: '720P',
+    })).toMatchObject({
+      model: 'HappyHorse',
+      duration_seconds: 10,
+      hh_resolution: '720P',
+    });
+    expect(getVideoCreditEstimateParams('Vidu', {
+      task_type: 'vidu_morph',
+      sub_model: 'q3-turbo',
+      vidu_resolution: '1080P',
+    })).toMatchObject({
+      model: 'Vidu',
+      task_type: 'vidu_morph',
+      sub_model: 'q3-turbo',
+      vidu_resolution: '1080P',
+    });
+    expect(getVideoCreditEstimateParams('MINI', {
+      duration_seconds: 10,
+      minimax_model: 'MiniMax-Hailuo-2.3-Fast',
+      minimax_resolution: '768P',
+    })).toMatchObject({
+      model: 'MINI',
+      duration_seconds: 10,
+      minimax_model: 'MiniMax-Hailuo-2.3-Fast',
+      minimax_resolution: '768P',
+    });
+  });
 });
 
 describe('inferSeedanceTaskType', () => {
