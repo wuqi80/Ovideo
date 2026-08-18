@@ -26,6 +26,7 @@ from dao_credit import (
     CreditTransactionDAO,
     InsufficientCreditBalance,
 )
+from services.video_credit_pricing import quote_video_credits
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,9 @@ def _eval_additive_factor(factor: Dict[str, Any], params: Dict[str, Any]) -> flo
 
 
 def compute_cost(rule: Dict[str, Any], params: Dict[str, Any]) -> int:
+    if str(rule.get('feature_key') or '') == 'video_generation':
+        return int(quote_video_credits(params).get('credits') or 0)
+
     base = int(rule.get('base_cost', 0) or 0)
     factors = rule.get('factors') or []
     total = float(base)
@@ -189,7 +193,13 @@ async def estimate(
             'message': 'Credit rule is not configured; treating feature as free.',
         }
 
-    cost = compute_cost(rule, params or {})
+    normalized_params = params or {}
+    cost = compute_cost(rule, normalized_params)
+    video_pricing = (
+        quote_video_credits(normalized_params)
+        if feature_key == 'video_generation'
+        else None
+    )
     balance: Optional[int] = None
     enough = True
     if owner_id:
@@ -197,7 +207,7 @@ async def estimate(
         balance = int(account.get('available_credits') or 0)
         enough = balance >= cost
 
-    return {
+    result = {
         'feature_key': feature_key,
         'enabled': True,
         'estimated_cost': cost,
@@ -210,6 +220,11 @@ async def estimate(
         'balance': balance,
         'enough': enough,
     }
+    if video_pricing:
+        result['pricing_profile'] = video_pricing.get('profile')
+        result['pricing_version'] = video_pricing.get('pricing_version')
+        result['pricing_details'] = video_pricing
+    return result
 
 
 async def freeze(

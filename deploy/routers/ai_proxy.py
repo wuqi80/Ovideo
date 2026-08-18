@@ -53,6 +53,7 @@ from services.ai_proxy_task_service import (
     create_gemini_text_task,
     create_minimax_text_task,
     fail_ai_proxy_task,
+    format_public_text_task_name,
     start_ai_proxy_task,
 )
 from services.ai_proxy_reference_service import (
@@ -111,14 +112,15 @@ def create_ai_proxy_router(
     def _text_task_context(request, *, provider: str) -> dict[str, Any]:
         operation = (getattr(request, "operation", None) or "").strip()
         requested_name = (getattr(request, "display_name", None) or "").strip()
-        fallback_name = {
-            "deepseek": "DeepSeek 文本生成",
-            "minimax": "MiniMax M3 文本生成",
-            "gemini": "Gemini 文本生成",
-        }.get(provider, "AI 文本生成")
+        model = (getattr(request, "model", None) or "").strip()
+        business_name = requested_name[:80] or text_operation_names.get(operation, "")
         values = {
             "operation": operation,
-            "display_name": requested_name[:80] or text_operation_names.get(operation, fallback_name),
+            "display_name": format_public_text_task_name(
+                business_name,
+                provider=provider,
+                model=model,
+            ),
             "project_id": getattr(request, "project_id", None),
             "episode_id": getattr(request, "episode_id", None),
             "source_page": getattr(request, "source_page", None) or "global",
@@ -480,7 +482,7 @@ def create_ai_proxy_router(
                 aspectRatio=request.aspectRatio,
                 imageSize=request.imageSize,
                 ref_count=len(request.references or []),
-                display_name="Gemini 图像生成",
+                display_name="AI 生图任务",
             ),
             logger=logger,
         )
@@ -592,7 +594,7 @@ def create_ai_proxy_router(
                     n=request.n,
                     ref_count=len(request.references or []),
                     submitted_reference_snapshot=submitted_references,
-                    display_name=f"GPT Image {tier}",
+                    display_name=("四阶 · 高清生图模型" if tier == "vip" else "四阶 · 全能生图模型"),
                 ),
                 images_count=len(images),
                 logger=logger,
@@ -655,7 +657,7 @@ def create_ai_proxy_router(
                 count=request.count,
                 sequential=request.sequential,
                 ref_count=len(request.references or []),
-                display_name="豆包图像生成",
+                display_name="三阶 · 参考图生图模型",
             ),
             logger=logger,
         )

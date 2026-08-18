@@ -3,6 +3,7 @@ import {
   buildVideoModelOptions,
   SELECTABLE_MODELS,
   getModelDisplayName,
+  getVideoCreditEstimateParams,
   getMiniMaxVideoParamsError,
   inferSeedanceTaskType,
   isSeedanceAgentPlanModel,
@@ -20,6 +21,29 @@ describe('processing cluster model label', () => {
     expect(getModelDisplayName('LTXNode1')).toBe('处理节点1 · LTX');
     expect(getModelDisplayName('WanNode2')).toBe('处理节点2 · Wan');
     expect(getModelDisplayName('Wan2')).toBe('集群视频（旧版兼容）');
+  });
+});
+
+describe('video credit estimate params', () => {
+  it('uses the real default generation spec for each priced provider', () => {
+    expect(getVideoCreditEstimateParams('HappyHorse')).toMatchObject({
+      duration_seconds: 5,
+      hh_resolution: '1080P',
+    });
+    expect(getVideoCreditEstimateParams('MINI')).toMatchObject({
+      duration_seconds: 6,
+      minimax_model: 'MiniMax-Hailuo-2.3',
+      minimax_resolution: '768P',
+    });
+    expect(getVideoCreditEstimateParams('Seedance2Fast')).toMatchObject({
+      duration_seconds: 5,
+      sub_model: 'fast',
+      resolution: '720P',
+    });
+    expect(getVideoCreditEstimateParams('MiniMaxH3')).toEqual({
+      model: 'MiniMaxH3',
+      duration_seconds: 5,
+    });
   });
 });
 

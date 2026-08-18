@@ -358,6 +358,32 @@ export const SELECTABLE_MODELS: VideoModel[] = [
   'Kling', 'Vidu', 'HappyHorse',
 ];
 
+export function getVideoCreditEstimateParams(model: VideoModel): Record<string, unknown> {
+  const base: Record<string, unknown> = { model, duration_seconds: 5 };
+  if (model === 'HappyHorse') return { ...base, hh_resolution: '1080P' };
+  if (model === 'Vidu') return { ...base, sub_model: 'q3', vidu_resolution: '720P' };
+  if (model === 'Kling') return { ...base, resolution: '720P', audio: false };
+  if (model === '大能') return { ...base, resolution: '1080P' };
+  if (model === 'MINI') {
+    return {
+      model,
+      duration_seconds: 6,
+      minimax_model: DEFAULT_MINIMAX_VIDEO_PARAMS.model,
+      minimax_resolution: DEFAULT_MINIMAX_VIDEO_PARAMS.resolution,
+    };
+  }
+  if (isSeedanceVideoModel(model)) {
+    return {
+      ...base,
+      sub_model: seedanceSubModelForVideoModel(model),
+      resolution: '720P',
+    };
+  }
+  if (model === 'Sora2') return { model, duration_seconds: 15, resolution: '720P' };
+  if (model === 'Veo') return { model, duration_seconds: 8, resolution: '720P' };
+  return base;
+}
+
 const ALL_MODEL_VALUES = new Set<string>(ALL_MODELS);
 
 export interface VideoCapabilityModelLike {

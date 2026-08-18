@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any, Callable, Dict, Optional
 
@@ -19,6 +20,59 @@ _TEXT_CONTEXT_KEYS = (
     "entity_id",
     "suppress_notification",
 )
+
+
+def format_public_text_task_name(
+    value: Any,
+    *,
+    provider: str = "",
+    model: Optional[str] = None,
+) -> str:
+    """Translate provider/runtime text names to the public selector labels."""
+
+    provider_key = str(provider or "").strip().lower()
+    model_key = str(model or "").strip().lower()
+    if provider_key == "deepseek":
+        public_label = (
+            "三阶 · 推理写作模型"
+            if any(token in model_key for token in ("reasoner", "r1", "v4-pro", "v4_pro"))
+            else "二阶 · 快速写作模型"
+        )
+    elif provider_key == "minimax":
+        public_label = "一阶 · 连续写作模型"
+    elif provider_key == "gemini":
+        public_label = "四阶 · 全能写作模型"
+    else:
+        public_label = "AI 文本生成"
+
+    text = str(value or "").strip()
+    if not text:
+        return public_label
+
+    exact_text_generation = re.fullmatch(
+        r"(?:deepseek(?:[\s_-]*(?:reasoner|r1|chat|v4[\s_-]*(?:pro|flash)))?|minimax[\s_-]*m3|gemini)\s*文本生成",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if exact_text_generation:
+        if re.search(r"deepseek[\s_-]*(?:reasoner|r1|v4[\s_-]*pro)", text, flags=re.IGNORECASE):
+            return "三阶 · 推理写作模型"
+        if re.search(r"minimax[\s_-]*m3", text, flags=re.IGNORECASE):
+            return "一阶 · 连续写作模型"
+        if re.search(r"gemini", text, flags=re.IGNORECASE):
+            return "四阶 · 全能写作模型"
+        return public_label
+
+    replacements = (
+        (r"deepseek[\s_-]*(?:reasoner|r1|v4[\s_-]*pro)", "三阶 · 推理写作模型"),
+        (r"deepseek[\s_-]*(?:chat|v4[\s_-]*flash)", "二阶 · 快速写作模型"),
+        (r"deepseek", public_label if provider_key == "deepseek" else "二阶 · 快速写作模型"),
+        (r"minimax[\s_-]*m3", "一阶 · 连续写作模型"),
+        (r"gemini", "四阶 · 全能写作模型"),
+    )
+    for pattern, replacement in replacements:
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    return re.sub(r"\s{2,}", " ", text).strip()
 
 
 def _default_timestamp_ms() -> int:
@@ -75,15 +129,10 @@ async def _emit_text_task_terminal(
     context = _normalize_text_context(task_context)
     if context.get("suppress_notification") is True:
         return
-    provider_display_names = {
-        "deepseek": "DeepSeek 文本生成",
-        "minimax": "MiniMax M3 文本生成",
-        "gemini": "Gemini 文本生成",
-    }
     task_provider = task_type.split("_", 1)[0]
-    display_name = context.get("display_name") or provider_display_names.get(
-        task_provider,
-        "AI 文本生成",
+    display_name = format_public_text_task_name(
+        context.get("display_name"),
+        provider=task_provider,
     )
     project_id = context.get("project_id", "")
     source_page = context.get("source_page", "global")

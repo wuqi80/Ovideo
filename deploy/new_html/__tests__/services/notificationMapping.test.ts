@@ -48,7 +48,18 @@ describe('notificationMapping', () => {
 
         it('strips "已完成" suffix from title', () => {
             const t = mapNotificationToTask(row({ title: 'Seedance 视频生成 已完成' }));
-            expect(t!.title).toBe('Seedance 视频生成');
+            expect(t!.title).toBe('飞升 视频生成');
+        });
+
+        it('translates legacy provider titles to current public model labels', () => {
+            expect(mapNotificationToTask(row({
+                category: 'text',
+                title: 'DeepSeek 文本生成 已完成',
+            }))!.title).toBe('二阶 · 快速写作模型');
+            expect(mapNotificationToTask(row({
+                category: 'image',
+                title: '豆包图像生成 已完成',
+            }))!.title).toBe('三阶 · 参考图生图模型');
         });
 
         it('strips "失败" suffix and sets status=failed + error', () => {
@@ -154,7 +165,7 @@ describe('notificationMapping', () => {
 
             expect(t).toMatchObject({
                 taskId: 'task_new',
-                title: 'DeepSeek 剧本分镜',
+                title: '二阶 · 快速写作模型 剧本分镜',
                 kind: 'auto-storyboard',
                 status: 'completed',
                 targetPage: 'script',

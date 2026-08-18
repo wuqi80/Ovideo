@@ -12,6 +12,7 @@ import {
     SELECTABLE_MODELS,
     buildVideoModelOptions,
     formatVideoModelOptionLabel,
+    getVideoCreditEstimateParams,
     getVideoModelRuntimeNames,
     isDashScopeVideoModel,
     isMiniMaxH3Model,
@@ -5410,8 +5411,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     <span className="text-[10px] text-n300">每个视频</span>
                     <InlineCreditEstimate
                         featureKey="video_generation"
-                        params={{ duration_seconds: 5, model: globalModel }}
-                        fallbackCost={50}
+                        params={getVideoCreditEstimateParams(globalModel)}
+                        fallbackCost={globalModel === 'HappyHorse' ? 160 : 10}
                         className="whitespace-nowrap text-[10px]"
                     />
                     {/* 选择和批量操作 */}

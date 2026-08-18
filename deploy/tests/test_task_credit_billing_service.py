@@ -40,6 +40,40 @@ def test_resolve_task_billing_tolerates_invalid_duration():
     assert spec["params"]["duration_seconds"] == 0
 
 
+def test_resolve_task_billing_preserves_provider_pricing_fields():
+    happyhorse = resolve_task_billing("happyhorse_r2v", {
+        "model": "HappyHorse",
+        "duration": 4,
+        "hh_duration": 5,
+        "hh_resolution": "1080P",
+    })
+    assert happyhorse["params"] == {
+        "task_type": "happyhorse_r2v",
+        "duration_seconds": 5,
+        "resolution": "1080P",
+        "model": "HappyHorse",
+        "sub_model": None,
+        "minimax_model": None,
+        "minimax_resolution": None,
+        "hh_resolution": "1080P",
+        "vidu_resolution": None,
+        "audio": False,
+        "has_reference_video": False,
+    }
+
+    vidu = resolve_task_billing("vidu_r2v", {
+        "model": "Vidu",
+        "duration": 5,
+        "sub_model_vidu": "q3-turbo",
+        "vidu_resolution": "720P",
+        "vidu_audio": True,
+        "media_inputs": [{"kind": "video", "url": "/reference.mp4"}],
+    })
+    assert vidu["params"]["sub_model"] == "q3-turbo"
+    assert vidu["params"]["audio"] is True
+    assert vidu["params"]["has_reference_video"] is True
+
+
 @pytest.mark.asyncio
 async def test_reserve_settle_and_release_use_task_id_idempotency(monkeypatch):
     calls = []
@@ -106,4 +140,3 @@ async def test_unbilled_task_does_not_touch_ledger(monkeypatch):
         task_data=task_data,
         user_id="user-1",
     ) is None
-

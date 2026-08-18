@@ -77,9 +77,31 @@ def resolve_task_billing(task_type: str, task_data: Optional[Dict[str, Any]]) ->
         return {
             "feature_key": "video_generation",
             "params": {
-                "duration_seconds": _non_negative_int(data.get("duration")),
-                "resolution": data.get("resolution") or data.get("minimax_resolution"),
-                "model": data.get("model") or data.get("sub_model"),
+                "task_type": normalized_type,
+                "duration_seconds": _non_negative_int(
+                    data.get("hh_duration") or data.get("duration")
+                ),
+                "resolution": (
+                    data.get("hh_resolution")
+                    or data.get("vidu_resolution")
+                    or data.get("minimax_resolution")
+                    or data.get("resolution")
+                ),
+                "model": data.get("model"),
+                "sub_model": (
+                    data.get("sub_model_vidu")
+                    or data.get("sub_model_kling")
+                    or data.get("sub_model")
+                ),
+                "minimax_model": data.get("minimax_model"),
+                "minimax_resolution": data.get("minimax_resolution"),
+                "hh_resolution": data.get("hh_resolution"),
+                "vidu_resolution": data.get("vidu_resolution"),
+                "audio": bool(data.get("vidu_audio") or data.get("audio")),
+                "has_reference_video": any(
+                    isinstance(item, dict) and item.get("kind") == "video"
+                    for item in (data.get("media_inputs") or [])
+                ),
             },
             "surface": "video",
         }

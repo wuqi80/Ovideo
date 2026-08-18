@@ -53,6 +53,7 @@ sql/db_migration_design_image_credit_tiers.sql # UPDATE public image tiers and 4
 sql/db_migration_design_prompt_refinement_credit_rule.sql # INSERT 1-4 credit prompt refinement rule
 sql/db_migration_design_multi_angle_credit_rule.sql # INSERT fixed 60-credit human multi-angle rule
 sql/db_migration_generation_credit_rules.sql # INSERT queued video enhancement credit rule
+sql/db_migration_video_credit_pricing.sql # UPDATE model-aware video generation credit rule
 sql/db_migration_credit_onboarding.sql      # REF users, credit_accounts, credit_transactions
 sql/db_migration_notifications.sql          # REF users
 sql/db_migration_organizations.sql          # REF users（建 organizations/resource_shares）
