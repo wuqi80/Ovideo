@@ -358,7 +358,7 @@ def test_gpu2_h3_mini_requires_pinned_marker_models_and_live_node(tmp_path):
         "verified": True,
         "clipproj_commit": GPU2_H3_CLIPPROJ_COMMIT,
         "inference_executed": False,
-    }), encoding="utf-8")
+    }), encoding="utf-8-sig")
 
     assert gpu2_h3_mini_installed(
         marker_path=marker,

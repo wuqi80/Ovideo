@@ -247,7 +247,10 @@ def gpu2_h3_mini_installed(
 ) -> tuple[bool, str]:
     """Verify the installed Mini profile without depending on the active runtime."""
     try:
-        marker = json.loads(Path(marker_path).read_text(encoding="utf-8"))
+        # Windows PowerShell commonly writes UTF-8 JSON with a BOM. Accept it
+        # so a valid locally generated verification marker is not reported as
+        # unavailable by the long-running Agent process.
+        marker = json.loads(Path(marker_path).read_text(encoding="utf-8-sig"))
     except (OSError, ValueError, TypeError) as exc:
         return False, f"verification marker unavailable: {exc}"
     if marker.get("verified") is not True:
@@ -301,7 +304,7 @@ def gpu2_h3_long_video_ready(
     if not gpu2_h3_long_video_allowed():
         return False, "disabled"
     try:
-        marker = json.loads(Path(marker_path).read_text(encoding="utf-8"))
+        marker = json.loads(Path(marker_path).read_text(encoding="utf-8-sig"))
     except (OSError, ValueError, TypeError) as exc:
         return False, f"verification marker unavailable: {exc}"
     if marker.get("verified") is not True:
@@ -363,7 +366,7 @@ def gpu2_h3_sage_attention_installed(
 ) -> tuple[bool, str]:
     """Verify the reviewed Fast profile marker independent of the active runtime."""
     try:
-        marker = json.loads(Path(marker_path).read_text(encoding="utf-8"))
+        marker = json.loads(Path(marker_path).read_text(encoding="utf-8-sig"))
     except (OSError, ValueError, TypeError) as exc:
         return False, f"verification marker unavailable: {exc}"
     if marker.get("verified") is not True:
