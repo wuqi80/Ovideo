@@ -6,6 +6,7 @@ Polls backend for tasks, executes them on local ComfyUI instances, reports resul
 Usage: python comfyui_agent.py --server URL --token TOKEN --ports 8188
 """
 import argparse
+import asyncio
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 import requests
 from datetime import datetime
 from pathlib import Path
@@ -29,7 +31,7 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-08-18-music3-v1"
+AGENT_VERSION = "2026-08-18-progress-v1"
 PLATFORM_DOWNLOAD_RETRIES = 3
 PLATFORM_DOWNLOAD_PATH_PREFIXES = ("/api/agent/tasks/", "/storage/")
 CAPABILITY_CACHE_TTL_SECONDS = 60
@@ -89,6 +91,132 @@ class ComfyUIAgent:
 
     def _headers(self):
         return {"Authorization": f"Bearer {self.token}"}
+
+    def _report_progress(self, task_id, progress, message=""):
+        """Best-effort live progress callback; completion remains authoritative."""
+        if not task_id or not self.agent_id:
+            return False
+        normalized = min(95.0, max(1.0, float(progress)))
+        try:
+            response = requests.post(
+                f"{self.server_url}/api/agent/progress",
+                json={
+                    "task_id": str(task_id),
+                    "agent_id": str(self.agent_id),
+                    "progress": normalized,
+                    "message": str(message or "")[:200],
+                },
+                headers=self._headers(),
+                timeout=(3, 10),
+            )
+            response.raise_for_status()
+            return True
+        except Exception as exc:
+            logger.debug("Progress callback failed for %s: %s", task_id, exc)
+            return False
+
+    @staticmethod
+    def _progress_from_comfyui_event(event_data):
+        try:
+            value = float(event_data.get("value", 0))
+            maximum = float(event_data.get("max", 0))
+        except (TypeError, ValueError):
+            return None
+        if maximum <= 0:
+            return None
+        return min(90.0, max(10.0, 10.0 + (value / maximum) * 80.0))
+
+    async def _monitor_comfyui_progress(
+        self,
+        port,
+        client_id,
+        task_id,
+        prompt_ref,
+        stop_event,
+        ready_event,
+    ):
+        """Listen to ComfyUI progress without making task success depend on WS."""
+        try:
+            import aiohttp
+
+            ws_url = f"ws://127.0.0.1:{port}/ws?clientId={client_id}"
+            async with aiohttp.ClientSession() as session:
+                async with session.ws_connect(ws_url, heartbeat=15) as websocket:
+                    ready_event.set()
+                    last_reported = 10.0
+                    last_reported_at = 0.0
+                    while not stop_event.is_set():
+                        try:
+                            message = await asyncio.wait_for(
+                                websocket.receive(), timeout=2.0
+                            )
+                        except asyncio.TimeoutError:
+                            continue
+                        if message.type != aiohttp.WSMsgType.TEXT:
+                            continue
+                        try:
+                            payload = json.loads(message.data)
+                        except (TypeError, json.JSONDecodeError):
+                            continue
+                        data = payload.get("data") or {}
+                        prompt_id = prompt_ref.get("prompt_id")
+                        event_prompt_id = data.get("prompt_id")
+                        if prompt_id and event_prompt_id and event_prompt_id != prompt_id:
+                            continue
+
+                        event_type = payload.get("type")
+                        if event_type == "progress":
+                            current = self._progress_from_comfyui_event(data)
+                            now = time.monotonic()
+                            if (
+                                current is not None
+                                and current >= last_reported + 1.0
+                                and now - last_reported_at >= 1.0
+                            ):
+                                last_reported = current
+                                last_reported_at = now
+                                self._report_progress(
+                                    task_id,
+                                    current,
+                                    f"ComfyUI 正在生成 {int(data.get('value', 0))}/{int(data.get('max', 0))}",
+                                )
+                        elif event_type == "executing" and data.get("node") is None:
+                            self._report_progress(task_id, 95.0, "正在保存生成结果")
+                        elif event_type == "execution_error":
+                            return
+        except Exception as exc:
+            logger.info(
+                "ComfyUI live progress unavailable for %s; history polling continues: %s",
+                task_id,
+                exc,
+            )
+        finally:
+            ready_event.set()
+
+    def _start_comfyui_progress_monitor(self, port, client_id, task_id, prompt_ref):
+        stop_event = threading.Event()
+        ready_event = threading.Event()
+
+        def runner():
+            asyncio.run(
+                self._monitor_comfyui_progress(
+                    port,
+                    client_id,
+                    task_id,
+                    prompt_ref,
+                    stop_event,
+                    ready_event,
+                )
+            )
+
+        thread = threading.Thread(
+            target=runner,
+            name=f"comfyui-progress-{task_id}",
+            daemon=True,
+        )
+        thread.start()
+        ready_event.wait(timeout=3)
+        return stop_event, thread
 
     def _is_platform_download_url(self, url):
         """Only permit a TLS fallback for authenticated files on this backend."""
@@ -382,12 +510,29 @@ class ComfyUIAgent:
                 logger.info(f"Replaced filename in workflow: {old_name} -> {new_name}")
         final_workflow = json.loads(workflow_str)
 
-        resp = requests.post(
-            f"http://127.0.0.1:{port}/prompt",
-            json={"prompt": final_workflow},
-            timeout=30
+        task_id = str(task.get("task_id") or "")
+        client_id = f"mecha-agent-{self.agent_id or 'unknown'}-{uuid.uuid4().hex}"
+        prompt_ref = {}
+        progress_stop, progress_thread = self._start_comfyui_progress_monitor(
+            port,
+            client_id,
+            task_id,
+            prompt_ref,
         )
+        self._report_progress(task_id, 5.0, "输入素材已准备，正在提交工作流")
+        try:
+            resp = requests.post(
+                f"http://127.0.0.1:{port}/prompt",
+                json={"prompt": final_workflow, "client_id": client_id},
+                timeout=30
+            )
+        except Exception:
+            progress_stop.set()
+            progress_thread.join(timeout=2)
+            raise
         if not resp.ok:
+            progress_stop.set()
+            progress_thread.join(timeout=2)
             return {
                 "status": "failed",
                 "error": (
@@ -398,7 +543,11 @@ class ComfyUIAgent:
             }
         prompt_id = resp.json().get("prompt_id")
         if not prompt_id:
+            progress_stop.set()
+            progress_thread.join(timeout=2)
             return {"status": "failed", "error": "No prompt_id returned", "output_files": []}
+        prompt_ref["prompt_id"] = prompt_id
+        self._report_progress(task_id, 10.0, "工作流已提交，正在加载模型")
 
         try:
             timeout_seconds = int(params.get("comfyui_timeout_seconds") or 600)
@@ -410,6 +559,9 @@ class ComfyUIAgent:
                 "error": f"ComfyUI prompt {prompt_id} failed: {e}",
                 "output_files": [],
             }
+        finally:
+            progress_stop.set()
+            progress_thread.join(timeout=2)
         if not output_files:
             return {
                 "status": "failed",

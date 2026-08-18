@@ -167,6 +167,13 @@ class HeartbeatRequest(BaseModel):
     current_tasks: int = 0
 
 
+class ProgressRequest(BaseModel):
+    task_id: str = Field(min_length=1, max_length=128)
+    agent_id: str = Field(min_length=1, max_length=128)
+    progress: float = Field(ge=0, le=95)
+    message: str = Field(default="", max_length=200)
+
+
 async def _verify_agent_token(authorization: str = Header(...)) -> dict:
     """Verify Agent token from Authorization header"""
     token = authorization.replace("Bearer ", "").strip()
@@ -595,6 +602,76 @@ async def debug_queue(authorization: str = Header(...)):
         "queue_length": queue_len,
         "top_5": [{"task_id": m, "score": s} for m, s in members],
         "redis_info": str(redis_client.connection_pool),
+    }
+
+
+@router.post("/progress")
+async def agent_progress(
+    request: ProgressRequest,
+    authorization: str = Header(...),
+):
+    """Accept authenticated, task-scoped live progress from a GPU Agent."""
+    agent = await _verify_agent_token(authorization)
+    try:
+        from cluster_main import redis_client
+        from cluster_config import RedisConfig
+        import task_service
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="Task storage is unavailable") from exc
+
+    raw_hash = (
+        await redis_client.hgetall(
+            f"{RedisConfig.TASK_STATUS_PREFIX}{request.task_id}"
+        )
+        if redis_client
+        else {}
+    )
+    task_hash = _decode_task_hash(raw_hash)
+    db_row = await TaskDAO.get_task_by_task_id(request.task_id)
+    db_task = dict(db_row) if db_row else None
+    _assert_agent_completion_scope(
+        agent,
+        request.agent_id,
+        request.task_id,
+        task_hash,
+        db_task,
+    )
+
+    terminal_status = _existing_terminal_task_status(task_hash, db_task)
+    if terminal_status:
+        return {
+            "success": True,
+            "task_id": request.task_id,
+            "already_terminal": True,
+            "status": terminal_status,
+        }
+
+    progress = min(95.0, max(1.0, float(request.progress)))
+    updated = await task_service.get_queue().update_progress(
+        request.task_id,
+        progress,
+        request.message,
+    )
+    if not updated:
+        raise HTTPException(status_code=409, detail="Active task state is unavailable")
+
+    try:
+        await TaskDAO.update_task_progress(
+            request.task_id,
+            progress,
+            request.message,
+        )
+    except Exception as exc:
+        logger.warning(
+            "DB progress update failed for %s (non-fatal): %s",
+            request.task_id,
+            exc,
+        )
+
+    return {
+        "success": True,
+        "task_id": request.task_id,
+        "progress": progress,
     }
 
 
