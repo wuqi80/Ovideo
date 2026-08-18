@@ -67,6 +67,7 @@ from scripts.windows_gpu_agent_runner import (
     normalize_gpu2_video_resolution,
     execute_gpu2_h3_post_upscale_720p,
     prepare_gpu2_task,
+    _runtime_profile_from_process,
     tune_gpu2_qwen_workflow,
 )
 
@@ -554,6 +555,7 @@ def test_gpu2_runtime_manager_stops_previous_profile_before_single_port_switch(t
         listener=lambda _port: listening[0],
         stopper=stop,
         launcher=launch,
+        profile_detector=lambda _port: "wan",
         sleeper=lambda _seconds: None,
     )
     manager.ensure("h3")
@@ -561,6 +563,61 @@ def test_gpu2_runtime_manager_stops_previous_profile_before_single_port_switch(t
     assert stopped == ["wan"]
     assert launched == [h3]
     assert manager.active_profile == "h3"
+
+
+def test_gpu2_runtime_manager_recovers_existing_h3_profile_after_agent_restart(tmp_path):
+    h3 = tmp_path / "h3.cmd"
+    h3.write_text("@echo off\n", encoding="utf-8")
+    stopped = []
+    launched = []
+    manager = Gpu2RuntimeManager(
+        commands={"h3": h3},
+        listener=lambda _port: True,
+        stopper=lambda profile: stopped.append(profile) or True,
+        launcher=lambda command: launched.append(command) or True,
+        profile_detector=lambda _port: "h3",
+    )
+
+    manager.ensure("h3")
+
+    assert manager.active_profile == "h3"
+    assert stopped == []
+    assert launched == []
+
+
+def test_gpu2_runtime_manager_still_refuses_unknown_listener(tmp_path):
+    h3 = tmp_path / "h3.cmd"
+    h3.write_text("@echo off\n", encoding="utf-8")
+    manager = Gpu2RuntimeManager(
+        commands={"h3": h3},
+        listener=lambda _port: True,
+        profile_detector=lambda _port: None,
+    )
+
+    with pytest.raises(RuntimeError, match="unknown ComfyUI listener"):
+        manager.ensure("h3")
+
+
+def test_gpu2_runtime_profile_matches_only_reviewed_executable_and_main_paths(tmp_path):
+    root = tmp_path / "MECHA-GPU"
+    h3_python = root / "ComfyUI-H3" / "python_embeded" / "python.exe"
+    h3_main = root / "ComfyUI-H3" / "ComfyUI" / "main.py"
+
+    assert _runtime_profile_from_process(
+        str(h3_python),
+        f'"{h3_python}" -s "{h3_main}" --port 8188',
+        root=root,
+    ) == "h3"
+    assert _runtime_profile_from_process(
+        str(h3_python),
+        'python.exe -s C:\\unknown\\main.py --port 8188',
+        root=root,
+    ) is None
+    assert _runtime_profile_from_process(
+        'C:\\Python\\python.exe',
+        f'python.exe -s "{h3_main}" --port 8188',
+        root=root,
+    ) is None
 
 
 def test_gpu2_model_release_gate_requires_three_consecutive_safe_samples():
@@ -667,6 +724,7 @@ def test_gpu2_runtime_manager_blocks_next_task_until_release_gate_opens(tmp_path
     manager = Gpu2RuntimeManager(
         commands={"wan": wan},
         listener=lambda _port: True,
+        profile_detector=lambda _port: "wan",
         model_gate=gate,
     )
     manager.mark_models_loaded()
@@ -685,6 +743,7 @@ def test_gpu2_runtime_manager_emergency_stop_targets_only_active_owned_profile(t
     manager = Gpu2RuntimeManager(
         commands={"wan": wan, "h3": h3},
         listener=lambda _port: True,
+        profile_detector=lambda _port: "wan",
         stopper=lambda profile: stopped.append(profile) or True,
     )
     manager.active_profile = "h3"

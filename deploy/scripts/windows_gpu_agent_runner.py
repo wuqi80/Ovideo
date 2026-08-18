@@ -525,6 +525,76 @@ def _stop_gpu2_runtime(profile: str) -> bool:
     return result.returncode == 0
 
 
+def _runtime_profile_from_process(
+    executable_path: str,
+    command_line: str,
+    *,
+    root: Path = ROOT,
+) -> str | None:
+    """Identify only reviewed Drama ComfyUI runtimes from exact process paths."""
+    executable = str(executable_path or "").replace("/", "\\").casefold().strip('" ')
+    command = str(command_line or "").replace("/", "\\").casefold()
+    profile_paths = {
+        "wan": (
+            root / "ComfyUI_windows_portable" / "python_embeded" / "python.exe",
+            root / "ComfyUI_windows_portable" / "ComfyUI" / "main.py",
+        ),
+        "h3": (
+            root / "ComfyUI-H3" / "python_embeded" / "python.exe",
+            root / "ComfyUI-H3" / "ComfyUI" / "main.py",
+        ),
+        "music": (
+            root / "ComfyUI-Music3" / "python_embeded" / "python.exe",
+            root / "ComfyUI-Music3" / "ComfyUI" / "main.py",
+        ),
+    }
+    for profile, (expected_executable, expected_main) in profile_paths.items():
+        expected_executable_text = str(expected_executable).replace("/", "\\").casefold()
+        expected_main_text = str(expected_main).replace("/", "\\").casefold()
+        if executable == expected_executable_text and expected_main_text in command:
+            return profile
+    return None
+
+
+def _detect_gpu2_runtime_profile(port: int) -> str | None:
+    """Read the listener PID and fail closed unless it is a reviewed runtime."""
+    if os.name != "nt":
+        return None
+    script = (
+        "$ErrorActionPreference='Stop';"
+        "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false);"
+        f"$c=Get-NetTCPConnection -LocalPort {int(port)} -State Listen "
+        "| Select-Object -First 1;"
+        "if(-not $c){exit 3};"
+        "$p=Get-CimInstance Win32_Process -Filter "
+        "(\"ProcessId=$($c.OwningProcess)\");"
+        "if(-not $p){exit 4};"
+        "[pscustomobject]@{executable=$p.ExecutablePath;command=$p.CommandLine}"
+        "| ConvertTo-Json -Compress"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", script],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            check=False,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        details = json.loads(result.stdout.lstrip("\ufeff").strip())
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError):
+        return None
+    return _runtime_profile_from_process(
+        details.get("executable", ""),
+        details.get("command", ""),
+    )
+
+
 def _free_gpu2_models() -> bool:
     payload = b'{"unload_models":true,"free_memory":true}'
     request = urllib.request.Request(
@@ -692,6 +762,7 @@ class Gpu2RuntimeManager:
         listener: Callable[[int], bool] = _tcp_port_is_listening,
         launcher: Callable[[Path], bool] = _launch_comfyui_command,
         stopper: Callable[[str], bool] = _stop_gpu2_runtime,
+        profile_detector: Callable[[int], str | None] = _detect_gpu2_runtime_profile,
         model_gate: Gpu2ModelReleaseGate | None = None,
         sleeper: Callable[[float], None] = time.sleep,
         startup_timeout: int = 180,
@@ -700,10 +771,15 @@ class Gpu2RuntimeManager:
         self.listener = listener
         self.launcher = launcher
         self.stopper = stopper
+        self.profile_detector = profile_detector
         self.model_gate = model_gate or Gpu2ModelReleaseGate()
         self.sleeper = sleeper
         self.startup_timeout = max(1, int(startup_timeout))
-        self.active_profile: str | None = "wan" if listener(GPU2_COMFYUI_PORT) else None
+        self.active_profile: str | None = (
+            self.profile_detector(GPU2_COMFYUI_PORT)
+            if listener(GPU2_COMFYUI_PORT)
+            else None
+        )
         self._lock = threading.Lock()
 
     def ensure(self, profile: str) -> None:
@@ -713,7 +789,10 @@ class Gpu2RuntimeManager:
             if self.active_profile == profile and self.listener(GPU2_COMFYUI_PORT):
                 return
             if self.listener(GPU2_COMFYUI_PORT):
-                current = self.active_profile
+                current = self.active_profile or self.profile_detector(GPU2_COMFYUI_PORT)
+                if current == profile:
+                    self.active_profile = current
+                    return
                 if not current or not self.stopper(current):
                     raise RuntimeError("Refused to replace an unknown ComfyUI listener on port 8188")
             command = Path(self.commands[profile])
