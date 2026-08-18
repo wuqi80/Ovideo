@@ -62,12 +62,13 @@ export interface MusicModalProps {
   episodeId: string;
   projectId?: string;
   script: any;
-  onClose: () => void;
+  onClose?: () => void;
   onCreated: () => Promise<void>;
+  presentation?: 'modal' | 'embedded';
 }
 
 export const MusicModal: React.FC<MusicModalProps> = ({
-  episodeId, projectId, script, onClose, onCreated,
+  episodeId, projectId, script, onClose = () => {}, onCreated, presentation = 'modal',
 }) => {
   const [lyricsInput, setLyricsInput] = useState('');
   const [generatedLyrics, setGeneratedLyrics] = useState('');
@@ -189,17 +190,29 @@ export const MusicModal: React.FC<MusicModalProps> = ({
     }
   }, [musicTaskId]);
 
-  return (
-    <div className="app-modal-backdrop fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-n900/50" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-label="添加背景音乐" className="app-modal-surface relative max-h-[84vh] w-[640px] overflow-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-xl">
+  const surface = (
+      <div
+        role={presentation === 'modal' ? 'dialog' : 'region'}
+        aria-modal={presentation === 'modal' ? true : undefined}
+        aria-label="音乐生成"
+        className={presentation === 'modal'
+          ? 'app-modal-surface relative max-h-[84vh] w-[640px] overflow-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-xl'
+          : 'mx-auto h-full w-full max-w-5xl overflow-auto rounded-xl border border-n40 bg-n0 p-6 shadow-sm'}
+      >
         <div className="mb-5 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-base font-bold text-n800">
-            <Music size={16} className="text-success" /> 添加背景音乐
-          </h3>
-          <button onClick={onClose} className="text-n100 hover:text-n700">
-            <X size={18} />
-          </button>
+          <div>
+            <h3 className="flex items-center gap-2 text-base font-bold text-n800">
+              <Music size={16} className="text-success" /> 音乐生成
+            </h3>
+            {presentation === 'embedded' && (
+              <p className="mt-1 text-xs text-n100">生成纯音乐或主题曲，完成后自动加入下方 BGM 音轨。</p>
+            )}
+          </div>
+          {presentation === 'modal' && (
+            <button onClick={onClose} className="text-n100 hover:text-n700">
+              <X size={18} />
+            </button>
+          )}
         </div>
 
         <div className="mb-4 rounded-md border border-n40 bg-n30 p-4">
@@ -341,6 +354,14 @@ export const MusicModal: React.FC<MusicModalProps> = ({
           </div>
         </div>
       </div>
+  );
+
+  if (presentation === 'embedded') return surface;
+
+  return (
+    <div className="app-modal-backdrop fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-n900/50" onClick={onClose} />
+      {surface}
     </div>
   );
 };

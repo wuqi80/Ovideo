@@ -14,6 +14,19 @@ describe('AudioStagePage timeline visibility', () => {
     expect(source).toContain('onCollapsedChange={setTimelineCollapsed}');
   });
 
+  it('exposes dubbing and music as parallel top-level workspaces', () => {
+    const source = readFileSync(
+      resolve(__dirname, '../../pages/AudioStagePage.tsx'),
+      'utf-8',
+    );
+
+    expect(source).toContain("useState<'dubbing' | 'music'>('dubbing')");
+    expect(source).toContain('配音制作');
+    expect(source).toContain('音乐生成');
+    expect(source).toContain('BGM / 主题曲');
+    expect(source).toContain('presentation="embedded"');
+  });
+
   it('places the audio timeline toggle before its title', () => {
     const source = readFileSync(
       resolve(__dirname, '../../components/audio/MultiTrackTimeline.tsx'),

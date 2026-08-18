@@ -3,6 +3,7 @@ import {
   Play, Pause, Mic, RefreshCw, Loader, ChevronDown,
 } from 'lucide-react';
 import type { AudioClipInfo, CharacterVoice, ClipOverride, AssetItem } from '../../types';
+import { InlineCreditEstimate } from '../InlineCreditEstimate';
 
 const EMOTIONS = [
   { value: '', label: '默认(继承)' },
@@ -147,6 +148,12 @@ export const DubbingCard: React.FC<DubbingCardProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          <InlineCreditEstimate
+            featureKey="audio_generation_tts"
+            params={{ character_count: displayText.length }}
+            fallbackCost={2}
+            className="text-[10px]"
+          />
           {audioUrl && (
             <button
               onClick={onTogglePlay}

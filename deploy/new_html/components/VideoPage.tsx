@@ -109,6 +109,7 @@ import { applySyncStrategy } from '../utils/storyboardSync';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { LazyVideo } from './LazyVideo';
 import { GpuNodeSelector, type GpuNodeSelection } from './GpuNodeSelector';
+import { InlineCreditEstimate } from './InlineCreditEstimate';
 import { extractSpokenDialogue } from '../utils/scriptPipelineParsers';
 import { clampSec, DURATION_MAX_SEC, SEEDANCE_AGENT_PLAN_MAX_DURATION_SEC } from '../utils/durationMapping';
 import {
@@ -5406,6 +5407,13 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 </div>
                 
                 <div className="toolbar-actions">
+                    <span className="text-[10px] text-n300">每个视频</span>
+                    <InlineCreditEstimate
+                        featureKey="video_generation"
+                        params={{ duration_seconds: 5, model: globalModel }}
+                        fallbackCost={50}
+                        className="whitespace-nowrap text-[10px]"
+                    />
                     {/* 选择和批量操作 */}
                     <button
                         onClick={selectAll}

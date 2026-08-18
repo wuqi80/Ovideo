@@ -1,0 +1,109 @@
+import pytest
+
+from services import credit_service
+from services.task_credit_billing_service import (
+    BILLING_METADATA_KEY,
+    release_task_credits,
+    reserve_task_credits,
+    resolve_task_billing,
+    settle_task_credits,
+)
+
+
+@pytest.mark.parametrize(
+    ("task_type", "task_data", "feature_key"),
+    [
+        ("minimax_tts", {"text": "你好"}, "audio_generation_tts"),
+        ("interpolate", {"duration": "5.8"}, "video_enhancement"),
+        ("i2v", {"duration": 5}, "video_generation"),
+        ("seedance_i2v", {"duration": 10}, "video_generation"),
+        (
+            "qwen_2",
+            {"entity_type": "storyboard_item", "file_role": "generated_image"},
+            "image_generation",
+        ),
+    ],
+)
+def test_resolve_task_billing_covers_requested_surfaces(task_type, task_data, feature_key):
+    assert resolve_task_billing(task_type, task_data)["feature_key"] == feature_key
+
+
+def test_resolve_task_billing_excludes_existing_multi_angle_contract():
+    assert resolve_task_billing(
+        "i2i_human",
+        {"entity_type": "storyboard_item", "file_role": "generated_image"},
+    ) is None
+
+
+def test_resolve_task_billing_tolerates_invalid_duration():
+    spec = resolve_task_billing("upscale", {"duration": "not-a-number"})
+    assert spec["params"]["duration_seconds"] == 0
+
+
+@pytest.mark.asyncio
+async def test_reserve_settle_and_release_use_task_id_idempotency(monkeypatch):
+    calls = []
+
+    async def fake_estimate(feature_key, params, **kwargs):
+        calls.append(("estimate", feature_key, params, kwargs))
+        return {"enabled": True, "estimated_cost": 50, "rule_version": "v1"}
+
+    async def fake_freeze(*args, **kwargs):
+        calls.append(("freeze", args, kwargs))
+        return {"freeze_id": "freeze-1"}
+
+    async def fake_consume(*args, **kwargs):
+        calls.append(("consume", args, kwargs))
+        return {"charged_credits": 50, "idempotent": False}
+
+    async def fake_release(*args, **kwargs):
+        calls.append(("release", args, kwargs))
+        return {"released": 50}
+
+    monkeypatch.setattr(credit_service, "estimate", fake_estimate)
+    monkeypatch.setattr(credit_service, "freeze", fake_freeze)
+    monkeypatch.setattr(credit_service, "consume_usage", fake_consume)
+    monkeypatch.setattr(credit_service, "release", fake_release)
+
+    task_data = {"duration": 5, "project_id": "project-1"}
+    metadata = await reserve_task_credits(
+        task_id="task-1",
+        task_type="i2v",
+        task_data=task_data,
+        user_id="user-1",
+    )
+
+    assert task_data[BILLING_METADATA_KEY] == metadata
+    assert metadata["amount"] == 50
+    freeze_call = next(call for call in calls if call[0] == "freeze")
+    assert freeze_call[2]["task_id"] == "task-1"
+
+    await settle_task_credits(task_id="task-1", task_data=task_data, user_id="user-1")
+    consume_call = next(call for call in calls if call[0] == "consume")
+    assert consume_call[2]["task_id"] == "task-1"
+
+    await release_task_credits(
+        task_id="task-1",
+        task_data=task_data,
+        user_id="user-1",
+        reason="cancelled",
+    )
+    release_call = next(call for call in calls if call[0] == "release")
+    assert release_call[1][0] == "task-1"
+    assert release_call[2]["reason"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_unbilled_task_does_not_touch_ledger(monkeypatch):
+    async def unexpected(*_args, **_kwargs):
+        raise AssertionError("ledger must not be called")
+
+    monkeypatch.setattr(credit_service, "estimate", unexpected)
+    task_data = {"entity_type": "material", "file_role": "reference_image"}
+    assert await reserve_task_credits(
+        task_id="task-free",
+        task_type="qwen_2",
+        task_data=task_data,
+        user_id="user-1",
+    ) is None
+

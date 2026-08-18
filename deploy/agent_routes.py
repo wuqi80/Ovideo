@@ -716,8 +716,43 @@ async def agent_complete(
 
     _assert_agent_completion_scope(agent, agent_id, task_id, task_hash, db_task)
 
+    if not user_id and db_task:
+        user_id = str(db_task.get("user_id") or "")
+    if not task_data and db_task:
+        raw_db_data = db_task.get("task_data") or {}
+        if isinstance(raw_db_data, str):
+            try:
+                raw_db_data = json.loads(raw_db_data)
+            except (json.JSONDecodeError, TypeError):
+                raw_db_data = {}
+        task_data = raw_db_data if isinstance(raw_db_data, dict) else {}
+
     existing_status = _existing_terminal_task_status(task_hash, db_task)
     if existing_status:
+        # Agent callbacks may be retried after a network timeout.  Re-running
+        # the idempotent settlement here repairs the rare case where task
+        # status reached a terminal state before the response was received.
+        try:
+            from services.task_credit_billing_service import (
+                release_task_credits,
+                settle_task_credits,
+            )
+            if existing_status == "completed":
+                await settle_task_credits(
+                    task_id=task_id,
+                    task_data=task_data,
+                    user_id=user_id,
+                )
+            else:
+                await release_task_credits(
+                    task_id=task_id,
+                    task_data=task_data,
+                    user_id=user_id,
+                    reason=f"agent_{existing_status}",
+                )
+        except Exception as billing_error:
+            logger.error("agent_complete retry billing failed for %s: %s", task_id, billing_error)
+            raise HTTPException(status_code=503, detail="Credit settlement is temporarily unavailable")
         logger.info(
             "agent_complete: task=%s already terminal (%s), acknowledging retry",
             task_id,
@@ -730,17 +765,6 @@ async def agent_complete(
             "already_terminal": True,
             "status": existing_status,
         }
-
-    if not user_id and db_task:
-        user_id = str(db_task.get("user_id") or "")
-    if not task_data and db_task:
-        raw_db_data = db_task.get("task_data") or {}
-        if isinstance(raw_db_data, str):
-            try:
-                raw_db_data = json.loads(raw_db_data)
-            except (json.JSONDecodeError, TypeError):
-                raw_db_data = {}
-        task_data = raw_db_data if isinstance(raw_db_data, dict) else {}
 
     # ---- 1. Save files to disk ----
     file_entries = []
@@ -774,6 +798,31 @@ async def agent_complete(
         else:
             result = result_payload
     logger.info(f"agent_complete: task={task_id}, status={status}, files={len(file_entries)}")
+
+    # Credit settlement is part of the Agent acknowledgement contract.  A
+    # transient ledger error returns 503 before the terminal state is written,
+    # allowing the Agent to retry without duplicate charging.
+    try:
+        from services.task_credit_billing_service import (
+            release_task_credits,
+            settle_task_credits,
+        )
+        if status == "completed":
+            await settle_task_credits(
+                task_id=task_id,
+                task_data=task_data,
+                user_id=user_id,
+            )
+        else:
+            await release_task_credits(
+                task_id=task_id,
+                task_data=task_data,
+                user_id=user_id,
+                reason="agent_failed",
+            )
+    except Exception as billing_error:
+        logger.error("agent_complete billing failed for %s: %s", task_id, billing_error, exc_info=True)
+        raise HTTPException(status_code=503, detail="Credit settlement is temporarily unavailable")
 
     # ---- 2. Update Redis (critical path — unblocks frontend) ----
     try:

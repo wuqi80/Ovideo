@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mic, ArrowRight } from 'lucide-react';
+import { Mic, ArrowRight, Music } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
 import {
   getStoryboardItems,
@@ -30,6 +30,7 @@ import {
 import { VoiceSidebar } from '../components/audio/VoiceSidebar';
 import { DubbingPanel, type DubbingPanelHandle } from '../components/audio/DubbingPanel';
 import { MultiTrackTimeline } from '../components/audio/MultiTrackTimeline';
+import { MusicModal } from '../components/audio/MusicModal';
 import type {
   AudioClipInfo,
   ClipOverride,
@@ -88,6 +89,7 @@ export const AudioStagePage: React.FC = () => {
   const [storyboardError, setStoryboardError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [timelineCollapsed, setTimelineCollapsed] = useState(true);
+  const [workspaceMode, setWorkspaceMode] = useState<'dubbing' | 'music'>('dubbing');
   const storyboardItemsRef = useRef<StoryboardItemDB[]>([]);
 
   const reloadAudioTracks = useCallback(async () => {
@@ -676,7 +678,37 @@ export const AudioStagePage: React.FC = () => {
       {/* Header */}
       <header className="workflow-stage-toolbar flex items-center gap-3 px-6 py-3 border-b border-n40 shrink-0">
         <Mic size={20} className="text-primary" />
-        <h1 className="text-lg font-bold tracking-tight">声音与配音</h1>
+        <h1 className="text-lg font-bold tracking-tight">声音工作台</h1>
+        <div role="tablist" aria-label="声音工作台功能" className="ml-4 flex items-center rounded-xl border border-n40 bg-n30 p-1">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={workspaceMode === 'dubbing'}
+            onClick={() => setWorkspaceMode('dubbing')}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+              workspaceMode === 'dubbing'
+                ? 'bg-primary text-white shadow-sm'
+                : 'text-n500 hover:bg-n0 hover:text-n800'
+            }`}
+          >
+            <Mic size={15} /> 配音制作
+            <span className={`rounded px-1.5 py-0.5 text-[10px] ${workspaceMode === 'dubbing' ? 'bg-white/20' : 'bg-n40 text-n100'}`}>台词</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={workspaceMode === 'music'}
+            onClick={() => setWorkspaceMode('music')}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+              workspaceMode === 'music'
+                ? 'bg-success text-white shadow-sm'
+                : 'text-n500 hover:bg-n0 hover:text-n800'
+            }`}
+          >
+            <Music size={15} /> 音乐生成
+            <span className={`rounded px-1.5 py-0.5 text-[10px] ${workspaceMode === 'music' ? 'bg-white/20' : 'bg-success/10 text-success'}`}>BGM / 主题曲</span>
+          </button>
+        </div>
         <span className="flex-1" />
         <button
           onClick={handleExportToStoryboard}
@@ -688,40 +720,52 @@ export const AudioStagePage: React.FC = () => {
         </button>
       </header>
 
-      {/* Main: Sidebar + DubbingPanel */}
-      <div className="workflow-stage-layout flex flex-1 min-h-0">
-        <VoiceSidebar
-          assets={assets}
-          characterVoices={characterVoices}
-          projectId={projectId}
-          reload={reload}
-        />
-        <DubbingPanel
-          ref={dubbingRef}
-          storyboardItems={resolvedItems}
-          clips={clips}
-          voiceMap={voiceMap}
-          charAssetMap={charAssetMap}
-          localOverrides={localOverrides}
-          setLocalOverrides={setLocalOverrides}
-          localAudio={localAudio}
-          generatingIds={generatingIds}
-          errors={errors}
-          playingKey={playingKey}
-          onGenerate={runGenerate}
-          onTogglePlay={togglePlay}
-          onBatchGenerate={handleBatchGenerate}
-          batchRunning={batchRunning}
-          allCharNames={allCharNames}
-          clipKeyFn={clipKey}
-          onClipPersist={handleClipPersist}
-          onAddSpeech={handleAddSpeech}
-          onAddSilence={handleAddSilence}
-          onUpdateSilence={handleUpdateSilence}
-          onRemoveSegment={handleRemoveSegment}
-          onMoveSegment={handleMoveSegment}
-        />
-      </div>
+      {/* Main: parallel dubbing and music workspaces */}
+      {workspaceMode === 'dubbing' ? (
+        <div className="workflow-stage-layout flex flex-1 min-h-0">
+          <VoiceSidebar
+            assets={assets}
+            characterVoices={characterVoices}
+            projectId={projectId}
+            reload={reload}
+          />
+          <DubbingPanel
+            ref={dubbingRef}
+            storyboardItems={resolvedItems}
+            clips={clips}
+            voiceMap={voiceMap}
+            charAssetMap={charAssetMap}
+            localOverrides={localOverrides}
+            setLocalOverrides={setLocalOverrides}
+            localAudio={localAudio}
+            generatingIds={generatingIds}
+            errors={errors}
+            playingKey={playingKey}
+            onGenerate={runGenerate}
+            onTogglePlay={togglePlay}
+            onBatchGenerate={handleBatchGenerate}
+            batchRunning={batchRunning}
+            allCharNames={allCharNames}
+            clipKeyFn={clipKey}
+            onClipPersist={handleClipPersist}
+            onAddSpeech={handleAddSpeech}
+            onAddSilence={handleAddSilence}
+            onUpdateSilence={handleUpdateSilence}
+            onRemoveSegment={handleRemoveSegment}
+            onMoveSegment={handleMoveSegment}
+          />
+        </div>
+      ) : (
+        <div className="flex flex-1 min-h-0 overflow-auto bg-n20 p-5">
+          <MusicModal
+            presentation="embedded"
+            episodeId={episodeId}
+            projectId={projectId}
+            script={script}
+            onCreated={reloadAudioTracks}
+          />
+        </div>
+      )}
 
       {/* Timeline */}
       <MultiTrackTimeline

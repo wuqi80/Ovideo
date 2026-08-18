@@ -174,21 +174,50 @@ class TaskService:
             task_id:   可选的预分配任务 ID；用于在入队前完成积分冻结等关联操作
         """
         task_id = task_id or allocate_task_id()
-
-        if prepare:
-            await self._prepare_for_agent(task_type, task_data, user_id)
-
-        task = Task(
-            task_id=task_id,
-            task_type=task_type,
-            data=task_data,
-            priority=priority,
-            user_id=user_id,
+        from services.task_credit_billing_service import (
+            release_task_credits,
+            reserve_task_credits,
         )
+        from services.credit_service import InsufficientCreditsError
 
-        success = await self.queue.enqueue(task)
-        if not success:
-            raise HTTPException(status_code=500, detail="任务入队失败")
+        reserved = False
+        try:
+            try:
+                reserved = bool(await reserve_task_credits(
+                    task_id=task_id,
+                    task_type=task_type,
+                    task_data=task_data,
+                    user_id=user_id,
+                ))
+            except InsufficientCreditsError as exc:
+                raise HTTPException(status_code=402, detail=f"积分不足：{exc}") from exc
+
+            if prepare:
+                await self._prepare_for_agent(task_type, task_data, user_id)
+
+            task = Task(
+                task_id=task_id,
+                task_type=task_type,
+                data=task_data,
+                priority=priority,
+                user_id=user_id,
+            )
+
+            success = await self.queue.enqueue(task)
+            if not success:
+                raise HTTPException(status_code=500, detail="任务入队失败")
+        except Exception:
+            if reserved:
+                try:
+                    await release_task_credits(
+                        task_id=task_id,
+                        task_data=task_data,
+                        user_id=user_id,
+                        reason="enqueue_failed",
+                    )
+                except Exception as release_error:
+                    logger.error("释放未入队任务积分失败 %s: %s", task_id, release_error)
+            raise
 
         logger.info(f"✅ 任务已提交: {task_id} (type={task_type}, user={user_id})")
         return task_id

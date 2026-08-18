@@ -15,6 +15,11 @@ vi.mock('../../components/audio/MusicModal', () => ({
 vi.mock('../../components/audio/SfxModal', () => ({
   SfxModal: () => null,
 }));
+vi.mock('../../components/audio/AudioClipReferenceModal', () => ({
+  AudioClipReferenceModal: ({ targetTrackType }: { targetTrackType: string }) => (
+    <div>引用目标：{targetTrackType}</div>
+  ),
+}));
 
 import { MultiTrackTimeline } from '../../components/audio/MultiTrackTimeline';
 
@@ -134,5 +139,31 @@ describe('MultiTrackTimeline editor', () => {
       screen.getAllByTitle('分段1 · 镜头1-1')
         .find(element => element.textContent === '1-1'),
     ).toBeTruthy();
+  });
+
+  it('offers generated dubbing references for BGM and sound effects', () => {
+    render(
+      <MultiTrackTimeline
+        storyboardItems={[{
+          itemId: 'shot_1',
+          sortOrder: 1,
+          plannedDurationMs: 4_000,
+        } as any]}
+        clips={[]}
+        localAudio={{}}
+        audioTracks={[]}
+        clipKeyFn={clip => clip.clipId}
+        onClickItem={vi.fn()}
+        episodeId="ep_1"
+        projectId="project_1"
+        script=""
+        reload={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    const referenceButtons = screen.getAllByText('引用配音');
+    expect(referenceButtons).toHaveLength(2);
+    fireEvent.click(referenceButtons[0]);
+    expect(screen.getByText('引用目标：bgm')).toBeInTheDocument();
   });
 });

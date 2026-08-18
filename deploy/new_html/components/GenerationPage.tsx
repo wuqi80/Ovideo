@@ -78,6 +78,9 @@ import {
   STORYBOARD_GENERATION_MODEL_OPTIONS,
 } from '../utils/storyboardGenerationModels';
 
+const STORYBOARD_IMAGE_CREDIT_FEATURE = 'image_generation';
+const STORYBOARD_IMAGE_CREDIT_FALLBACK = 10;
+
 const MattingModal = React.lazy(() => import('./MattingModal'));
 const ImageFusionModal = React.lazy(() => import('./ImageFusionModal'));
 const StoryboardToolModal = React.lazy(() => import('./StoryboardToolModal'));
@@ -1411,6 +1414,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           }
       }
       const modelToUse = model || (useCurrentState ? globalModel : (shotModels[shot.id] || globalModel));
+      const creditParams = { image_count: 1, model: modelToUse };
+      await assertEnoughCredits(STORYBOARD_IMAGE_CREDIT_FEATURE, creditParams);
       beginShotProgress(shot.id, modelToUse);
       if (COMFYUI_MODELS.has(modelToUse) && submittedReferences.length === 0) {
           throw new Error('当前生成模型需要一张参考图；请添加参考图，或先选择当前分镜已有的生成结果。');
@@ -1582,6 +1587,26 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           queryClient.invalidateQueries({ queryKey: ['entityFiles', 'storyboard_item', shot.id, 'generated_image'] });
            notifyStoryboardImageChanged(episodeId, shot.id);
            window.dispatchEvent(new CustomEvent('generation-save-trigger'));
+           if (!COMFYUI_MODELS.has(modelToUse)) {
+             try {
+               const projectId = (() => {
+                 try { return localStorage.getItem('current_project_id') || null; } catch { return null; }
+               })();
+               await consumeCredits({
+                 featureKey: STORYBOARD_IMAGE_CREDIT_FEATURE,
+                 taskId: newDesignCreditUsageId('storyboard-image'),
+                 params: { image_count: generated.length, model: modelToUse },
+                 projectId,
+                 metadata: {
+                   surface: 'storyboard',
+                   episode_id: episodeId || null,
+                   storyboard_item_id: shot.id,
+                 },
+               });
+             } catch (settlementError: any) {
+               crmMessage.warning(`分镜图片已生成，但积分结算失败：${settlementError?.message || String(settlementError)}`);
+             }
+           }
            updateShotProgressStage(shot.id, '生成完成', 100);
       } catch (error) {
           console.error(`Generation failed for shot ${shot.id}`, error);
@@ -3432,7 +3457,12 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                    </div>
                    
                    {/* 🆕 生成按钮 - 固定在结果栏底部居中 */}
-                   <div className="absolute bottom-0 left-0 right-0 flex justify-center py-3 bg-n20 border-t border-n40 backdrop-blur-sm">
+                   <div className="absolute bottom-0 left-0 right-0 flex flex-wrap items-center justify-center gap-3 py-3 bg-n20 border-t border-n40 backdrop-blur-sm">
+                        <InlineCreditEstimate
+                            featureKey={STORYBOARD_IMAGE_CREDIT_FEATURE}
+                            params={{ image_count: 1, model: globalModel }}
+                            fallbackCost={STORYBOARD_IMAGE_CREDIT_FALLBACK}
+                        />
                         <button 
                             onClick={handleGenerateCurrent}
                             disabled={isCurrentShotGenerating || !prompt}

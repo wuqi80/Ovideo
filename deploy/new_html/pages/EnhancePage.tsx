@@ -39,6 +39,7 @@ import {
   type ClusterNodeOption,
 } from '../services/clusterNodeService';
 import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
+import { InlineCreditEstimate } from '../components/InlineCreditEstimate';
 
 interface MediaClip {
   id: string;
@@ -1323,6 +1324,16 @@ export const EnhancePage: React.FC = () => {
                   </div>
                 )}
 
+                <InlineCreditEstimate
+                  featureKey="video_enhancement"
+                  params={{
+                    operation: enhancementKind,
+                    target_fps: targetFps,
+                    resolution: targetResolution,
+                  }}
+                  fallbackCost={5}
+                  className="mb-2 justify-center"
+                />
                 <button
                   onClick={() => void applyEnhancement()}
                   disabled={processing || !selectedClusterNodeUsable || ((enhancementKind === 'lipSync' || enhancementKind === 'dub') && !lipSyncAudioClipId)}
