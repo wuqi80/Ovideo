@@ -140,3 +140,7 @@ def test_windows_gpu_install_defaults_agent_task_claims_to_maintenance():
     ).read_text(encoding="utf-8")
 
     assert "set MECHA_GPU_AGENT_MAINTENANCE=1" in installer
+    assert (
+        '"E:\\MECHA-GPU\\ComfyUI_windows_portable\\python_embeded\\python.exe" '
+        '-s "E:\\MECHA-GPU\\ComfyUI_windows_portable\\ComfyUI\\main.py"'
+    ) in installer

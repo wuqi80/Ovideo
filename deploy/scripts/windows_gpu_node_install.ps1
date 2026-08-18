@@ -157,7 +157,7 @@ set MKL_NUM_THREADS=16
 set OPENBLAS_NUM_THREADS=16
 set NUMEXPR_MAX_THREADS=16
 cd /d E:\MECHA-GPU\ComfyUI_windows_portable
-python_embeded\python.exe -s ComfyUI\main.py --listen 0.0.0.0 --port 8188 --lowvram --preview-method none --disable-auto-launch >> E:\MECHA-GPU\logs\comfyui.log 2>&1
+"E:\MECHA-GPU\ComfyUI_windows_portable\python_embeded\python.exe" -s "E:\MECHA-GPU\ComfyUI_windows_portable\ComfyUI\main.py" --listen 0.0.0.0 --port 8188 --lowvram --preview-method none --disable-auto-launch >> E:\MECHA-GPU\logs\comfyui.log 2>&1
 endlocal
 '@
 Set-Content -Path (Join-Path $InstallRoot "start_comfyui.cmd") -Value $startComfy -Encoding ASCII
