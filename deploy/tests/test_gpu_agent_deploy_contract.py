@@ -37,7 +37,7 @@ def test_gpu_agent_version_keeps_control_capability_marker():
         DEPLOY_DIR / "pipeline" / "comfyui_agent.py"
     ).read_text(encoding="utf-8")
 
-    assert 'AGENT_VERSION = "2026-08-18-progress-v1"' in source
+    assert 'AGENT_VERSION = "2026-08-18-agent-control-progress-v1"' in source
     assert "install_h3_sidecar" in source
     assert "minimax_h3_fl2va" in source
     assert "windows_gpu_start_music3_comfyui.cmd" in source
