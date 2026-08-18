@@ -45,6 +45,18 @@ def test_gpu_agent_version_keeps_control_capability_marker():
     assert "windows_gpu_music3_compat_patch.py" in source
 
 
+def test_gpu2_runner_bootstraps_embedded_python_paths_before_guard_import():
+    source = (
+        DEPLOY_DIR / "scripts" / "windows_gpu_agent_runner.py"
+    ).read_text(encoding="utf-8")
+
+    bootstrap = source.index("_BOOTSTRAP_ROOT = Path")
+    path_insert = source.index("sys.path.insert(0, _module_root_text)")
+    guard_import = source.index("from scripts.windows_gpu_resource_guard import")
+
+    assert bootstrap < path_insert < guard_import
+
+
 def test_port_cleanup_matches_the_exact_listener_executable_path():
     source = (
         DEPLOY_DIR / "scripts" / "windows_gpu_cleanup_port.ps1"

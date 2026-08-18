@@ -15,13 +15,22 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable, Dict
 
+
+# The Windows embeddable Python runtime ignores the script directory in isolated
+# mode. Bootstrap the two reviewed local module roots before importing the guard.
+_BOOTSTRAP_ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+for _module_root in (_BOOTSTRAP_ROOT / "agent", _BOOTSTRAP_ROOT / "scripts"):
+    _module_root_text = str(_module_root)
+    if _module_root_text not in sys.path:
+        sys.path.insert(0, _module_root_text)
+
 try:
     from scripts.windows_gpu_resource_guard import Gpu2ResourceController
 except ImportError:  # Direct execution on the Windows GPU host.
     from windows_gpu_resource_guard import Gpu2ResourceController
 
 
-ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+ROOT = _BOOTSTRAP_ROOT
 AGENT_DIR = ROOT / "agent"
 TOKEN_FILE = ROOT / "config" / "agent-token.txt"
 
