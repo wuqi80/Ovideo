@@ -210,6 +210,33 @@ def gpu2_h3_mini_ready(
     models_root: Path | None = None,
 ) -> tuple[bool, str]:
     """Fail closed unless the pinned ClipProj node and both Mini assets are ready."""
+    installed, reason = gpu2_h3_mini_installed(
+        marker_path=marker_path,
+        models_root=models_root,
+    )
+    if not installed:
+        return False, reason
+    try:
+        if object_info_reader is None:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{GPU2_H3_PORT}/object_info", timeout=5
+            ) as response:
+                object_info = json.loads(response.read().decode("utf-8"))
+        else:
+            object_info = object_info_reader()
+    except Exception as exc:
+        return False, f"ComfyUI node discovery failed: {exc}"
+    if "ClipProjApply" not in set(object_info or {}):
+        return False, "required ClipProjApply node is missing"
+    return True, "verified"
+
+
+def gpu2_h3_mini_installed(
+    *,
+    marker_path: Path = GPU2_H3_MINI_READY_MARKER,
+    models_root: Path | None = None,
+) -> tuple[bool, str]:
+    """Verify the installed Mini profile without depending on the active runtime."""
     try:
         marker = json.loads(Path(marker_path).read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError) as exc:
@@ -233,18 +260,6 @@ def gpu2_h3_mini_ready(
                 return False, f"model file size mismatch: {path.name}"
         except OSError as exc:
             return False, f"model file unavailable: {path.name}: {exc}"
-    try:
-        if object_info_reader is None:
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{GPU2_H3_PORT}/object_info", timeout=5
-            ) as response:
-                object_info = json.loads(response.read().decode("utf-8"))
-        else:
-            object_info = object_info_reader()
-    except Exception as exc:
-        return False, f"ComfyUI node discovery failed: {exc}"
-    if "ClipProjApply" not in set(object_info or {}):
-        return False, "required ClipProjApply node is missing"
     return True, "verified"
 
 
@@ -310,22 +325,14 @@ def gpu2_h3_sage_attention_ready(
     *,
     marker_path: Path = GPU2_H3_SAGE_READY_MARKER,
     object_info_reader: Callable[[], Dict[str, Any]] | None = None,
+    require_feature_flag: bool = True,
 ) -> tuple[bool, str]:
     """Require an offline verification marker plus live ComfyUI node discovery."""
-    if not gpu2_h3_sage_attention_allowed():
+    if require_feature_flag and not gpu2_h3_sage_attention_allowed():
         return False, "disabled"
-    try:
-        marker = json.loads(Path(marker_path).read_text(encoding="utf-8"))
-    except (OSError, ValueError, TypeError) as exc:
-        return False, f"verification marker unavailable: {exc}"
-    if marker.get("verified") is not True:
-        return False, "verification marker is not approved"
-    if str(marker.get("sageattention_version") or "") != "2.2.0":
-        return False, "verified SageAttention version is not 2.2.0"
-    if str(marker.get("cuda_arch") or "") != "sm86":
-        return False, "verified CUDA architecture is not RTX 3060 sm86"
-    if str(marker.get("kjnodes_commit") or "") != GPU2_H3_KJNODES_COMMIT:
-        return False, "verified KJNodes commit does not match the reviewed release"
+    installed, reason = gpu2_h3_sage_attention_installed(marker_path=marker_path)
+    if not installed:
+        return False, reason
     try:
         if object_info_reader is None:
             with urllib.request.urlopen(
@@ -340,6 +347,39 @@ def gpu2_h3_sage_attention_ready(
     if missing:
         return False, f"required acceleration nodes are missing: {', '.join(missing)}"
     return True, "verified"
+
+
+def gpu2_h3_sage_attention_installed(
+    *, marker_path: Path = GPU2_H3_SAGE_READY_MARKER
+) -> tuple[bool, str]:
+    """Verify the reviewed Fast profile marker independent of the active runtime."""
+    try:
+        marker = json.loads(Path(marker_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        return False, f"verification marker unavailable: {exc}"
+    if marker.get("verified") is not True:
+        return False, "verification marker is not approved"
+    if str(marker.get("sageattention_version") or "") != "2.2.0":
+        return False, "verified SageAttention version is not 2.2.0"
+    if str(marker.get("cuda_arch") or "") != "sm86":
+        return False, "verified CUDA architecture is not RTX 3060 sm86"
+    if str(marker.get("kjnodes_commit") or "") != GPU2_H3_KJNODES_COMMIT:
+        return False, "verified KJNodes commit does not match the reviewed release"
+    if marker.get("inference_executed") is not False:
+        return False, "verification marker must be non-inference only"
+    return True, "verified"
+
+
+def gpu2_static_h3_capabilities() -> Dict[str, Any]:
+    """Report installed profiles even while the serialized runtime currently runs Wan."""
+    mini_ready, mini_reason = gpu2_h3_mini_installed()
+    fast_ready, fast_reason = gpu2_h3_sage_attention_installed()
+    return {
+        "minimax_h3_fast": fast_ready,
+        "minimax_h3_fast_installation": fast_reason,
+        "minimax_h3_mini": mini_ready,
+        "minimax_h3_mini_installation": mini_reason,
+    }
 
 
 def _tcp_port_is_listening(port: int) -> bool:
@@ -2473,6 +2513,13 @@ def main() -> None:
             info["local_gpu_maintenance"] = gpu2_agent_maintenance_enabled()
             return info
 
+        def _probe_comfyui_capabilities(self, port, status=""):
+            capabilities = super()._probe_comfyui_capabilities(port, status)
+            if status and status != "healthy":
+                return capabilities
+            capabilities.update(gpu2_static_h3_capabilities())
+            return capabilities
+
         def heartbeat(self):
             return super().heartbeat()
 
@@ -2537,7 +2584,9 @@ def main() -> None:
                 runtime_manager.ensure(profile)
                 acceleration_ready = False
                 if acceleration_requested:
-                    acceleration_ready, acceleration_reason = gpu2_h3_sage_attention_ready()
+                    acceleration_ready, acceleration_reason = gpu2_h3_sage_attention_ready(
+                        require_feature_flag=not gpu2_h3_fast_model_requested(task)
+                    )
                     if acceleration_ready and not long_video_requested:
                         prepared["workflow_json"] = build_gpu2_minimax_h3_fl2va_workflow(
                             prepared, enable_sage_attention=True

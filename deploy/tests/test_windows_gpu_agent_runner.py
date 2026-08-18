@@ -45,9 +45,11 @@ from scripts.windows_gpu_agent_runner import (
     gpu2_h3_duration_seconds,
     gpu2_h3_length_frames,
     gpu2_h3_sage_attention_ready,
+    gpu2_h3_sage_attention_installed,
     gpu2_h3_sage_attention_requested,
     gpu2_h3_fast_model_requested,
     gpu2_h3_mini_ready,
+    gpu2_h3_mini_installed,
     gpu2_h3_mini_requested,
     gpu2_h3_long_video_ready,
     gpu2_h3_long_video_requested,
@@ -357,6 +359,11 @@ def test_gpu2_h3_mini_requires_pinned_marker_models_and_live_node(tmp_path):
         "inference_executed": False,
     }), encoding="utf-8")
 
+    assert gpu2_h3_mini_installed(
+        marker_path=marker,
+        models_root=models_root,
+    ) == (True, "verified")
+
     assert gpu2_h3_mini_ready(
         marker_path=marker,
         models_root=models_root,
@@ -414,7 +421,9 @@ def test_gpu2_h3_sageattention_requires_marker_and_live_nodes(tmp_path, monkeypa
         "sageattention_version": "2.2.0",
         "cuda_arch": "sm86",
         "kjnodes_commit": GPU2_H3_KJNODES_COMMIT,
+        "inference_executed": False,
     }), encoding="utf-8")
+    assert gpu2_h3_sage_attention_installed(marker_path=marker) == (True, "verified")
     ready, reason = gpu2_h3_sage_attention_ready(
         marker_path=marker,
         object_info_reader=lambda: {
@@ -423,6 +432,27 @@ def test_gpu2_h3_sageattention_requires_marker_and_live_nodes(tmp_path, monkeypa
         },
     )
     assert (ready, reason) == (True, "verified")
+
+
+def test_gpu2_h3_fast_profile_does_not_require_legacy_toggle(tmp_path, monkeypatch):
+    marker = tmp_path / "h3-sageattention-ready.json"
+    marker.write_text(json.dumps({
+        "verified": True,
+        "sageattention_version": "2.2.0",
+        "cuda_arch": "sm86",
+        "kjnodes_commit": GPU2_H3_KJNODES_COMMIT,
+        "inference_executed": False,
+    }), encoding="utf-8")
+    monkeypatch.setenv("MECHA_GPU_H3_SAGE_ATTENTION", "0")
+
+    assert gpu2_h3_sage_attention_ready(
+        marker_path=marker,
+        object_info_reader=lambda: {
+            "PathchSageAttentionKJ": {},
+            "MiniMaxH3MemoryEfficientSageAttentionPatch": {},
+        },
+        require_feature_flag=False,
+    ) == (True, "verified")
 
 
 def test_gpu2_minimax_h3_long_video_builds_serialized_director_groups():
