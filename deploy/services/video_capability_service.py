@@ -80,7 +80,20 @@ def _is_minimax_h3_instance(instance: Dict[str, Any]) -> bool:
     except (TypeError, ValueError):
         return False
     capabilities = instance.get("capabilities") or {}
-    return isinstance(capabilities, dict) and capabilities.get(MINIMAX_H3_CAPABILITY_KEY) is True
+    if not isinstance(capabilities, dict):
+        return False
+    # GPU2 keeps the baseline runtime resident and switches to H3 only after a
+    # queued H3 task is claimed. Mini/Fast installation capabilities are
+    # therefore valid even when the live object-info probe belongs to the
+    # baseline runtime and minimax_h3_fl2va is temporarily false.
+    return any(
+        capabilities.get(key) is True
+        for key in (
+            MINIMAX_H3_CAPABILITY_KEY,
+            "minimax_h3_fast",
+            "minimax_h3_mini",
+        )
+    )
 
 
 async def find_minimax_h3_agent_instance() -> Optional[Dict[str, Any]]:

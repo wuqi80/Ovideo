@@ -296,6 +296,17 @@ async def test_video_capabilities_expose_minimax_h3_on_unified_8188_runtime(monk
     assert h3_mini["parameter_rules"]["h3_profile"] == "mini"
 
 
+def test_minimax_h3_instance_accepts_installed_mini_while_baseline_is_resident():
+    assert video_capability_service._is_minimax_h3_instance({
+        "port": 8188,
+        "capabilities": {
+            "minimax_h3_fl2va": False,
+            "minimax_h3_fast": False,
+            "minimax_h3_mini": True,
+        },
+    }) is True
+
+
 async def test_video_capabilities_keep_minimax_h3_visible_when_gpu2_is_online(monkeypatch):
     async def fake_list_agent_nodes():
         return [{
