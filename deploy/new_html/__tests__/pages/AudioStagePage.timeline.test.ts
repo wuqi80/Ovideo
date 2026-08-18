@@ -25,6 +25,8 @@ describe('AudioStagePage timeline visibility', () => {
     expect(source).toContain('音乐生成');
     expect(source).toContain('BGM / 主题曲');
     expect(source).toContain('presentation="embedded"');
+    expect(source).toContain('<MusicAssetSidebar audioTracks={audioTracks} />');
+    expect(source).toContain('audioTracks={audioTracks}');
   });
 
   it('places the audio timeline toggle before its title', () => {

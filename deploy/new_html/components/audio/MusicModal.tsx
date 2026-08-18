@@ -197,7 +197,7 @@ export const MusicModal: React.FC<MusicModalProps> = ({
         aria-label="音乐生成"
         className={presentation === 'modal'
           ? 'app-modal-surface relative max-h-[84vh] w-[640px] overflow-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-xl'
-          : 'mx-auto h-full w-full max-w-5xl overflow-auto rounded-xl border border-n40 bg-n0 p-6 shadow-sm'}
+          : 'h-full w-full overflow-auto rounded-xl border border-n40 bg-n0 p-6 shadow-sm'}
       >
         <div className="mb-5 flex items-center justify-between">
           <div>

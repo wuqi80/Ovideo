@@ -31,6 +31,7 @@ import { VoiceSidebar } from '../components/audio/VoiceSidebar';
 import { DubbingPanel, type DubbingPanelHandle } from '../components/audio/DubbingPanel';
 import { MultiTrackTimeline } from '../components/audio/MultiTrackTimeline';
 import { MusicModal } from '../components/audio/MusicModal';
+import { MusicAssetSidebar } from '../components/audio/MusicAssetSidebar';
 import type {
   AudioClipInfo,
   ClipOverride,
@@ -756,14 +757,17 @@ export const AudioStagePage: React.FC = () => {
           />
         </div>
       ) : (
-        <div className="flex flex-1 min-h-0 overflow-auto bg-n20 p-5">
-          <MusicModal
-            presentation="embedded"
-            episodeId={episodeId}
-            projectId={projectId}
-            script={script}
-            onCreated={reloadAudioTracks}
-          />
+        <div className="flex flex-1 min-h-0 gap-4 overflow-hidden bg-n20 p-5">
+          <MusicAssetSidebar audioTracks={audioTracks} />
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <MusicModal
+              presentation="embedded"
+              episodeId={episodeId}
+              projectId={projectId}
+              script={script}
+              onCreated={reloadAudioTracks}
+            />
+          </div>
         </div>
       )}
 
