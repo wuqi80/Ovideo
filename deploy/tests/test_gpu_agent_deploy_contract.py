@@ -65,6 +65,8 @@ def test_port_cleanup_matches_the_exact_listener_executable_path():
     assert "$proc.ExecutablePath" in source
     assert "[System.StringComparison]::OrdinalIgnoreCase" in source
     assert "if ($samePython -or" in source
+    assert "foreach ($listenerPid in $pids)" in source
+    assert "foreach ($pid in $pids)" not in source
 
 
 def test_gpu_agent_heartbeats_on_a_background_thread_during_long_tasks():

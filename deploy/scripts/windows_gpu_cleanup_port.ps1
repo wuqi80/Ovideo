@@ -39,9 +39,11 @@ try {
     Write-Log "Port $Port occupied by PIDs: $($pids -join ',')"
 
     $foreignPids = @()
-    foreach ($pid in $pids) {
-        if (-not $pid) { continue }
-        $proc = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $pid) -ErrorAction SilentlyContinue
+    # $PID is a built-in, read-only PowerShell automatic variable and variable
+    # names are case-insensitive. Do not reuse it as a foreach iterator.
+    foreach ($listenerPid in $pids) {
+        if (-not $listenerPid) { continue }
+        $proc = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $listenerPid) -ErrorAction SilentlyContinue
         if (-not $proc) { continue }
         $cmd = $proc.CommandLine
         $actualExe = [string]$proc.ExecutablePath
@@ -51,11 +53,11 @@ try {
             [System.StringComparison]::OrdinalIgnoreCase
         )
         if ($samePython -or ($cmd -and $cmd -like "*$CommandMatch*")) {
-            Write-Log "Terminating ComfyUI process PID=$pid Cmd=$cmd"
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            Write-Log "Terminating ComfyUI process PID=$listenerPid Cmd=$cmd"
+            Stop-Process -Id $listenerPid -Force -ErrorAction SilentlyContinue
         } else {
-            $foreignPids += $pid
-            Write-Log "Keep-running non-target process on port $Port PID=${pid}: $cmd"
+            $foreignPids += $listenerPid
+            Write-Log "Keep-running non-target process on port $Port PID=${listenerPid}: $cmd"
         }
     }
 
