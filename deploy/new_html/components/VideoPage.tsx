@@ -45,6 +45,7 @@ import {
 import {
     formatUploadTime,
     generateUUID,
+    getTasks,
     submitDashScopeVideoTask,
     submitSeedanceTask,
     submitTaskQueued,
@@ -96,6 +97,7 @@ import { getVideoSegments } from '../services/episodeDataService';
 import { buildVideoTaskImport } from '../utils/videoTaskImport';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
 import { resolveVideoImageIdentifier } from '../utils/videoImageIdentifier';
+import { reconcileActiveVideoTasks } from '../services/videoTaskReconciliation';
 import { hasStoredVideoResult, mergeStoredVideoResult } from '../utils/videoResultPresentation';
 import {
     buildDownwardMergePlan,
@@ -1240,7 +1242,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         result,
                     };
                     
-                    if (status.state === 'pending' && status.taskId) {
+                    if (['pending', 'running', 'processing'].includes(String(status.state)) && status.taskId) {
                         pendingTaskIds.push({ uuid, taskId: status.taskId });
                     }
                 });
@@ -2616,6 +2618,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     entity_id: entityId,
                     file_role: 'video',
                     episode_id: episodeId,
+                    workspace_group_id: uuid,
                 }, undefined, isSeedanceAgentPlanModel(group.model));
                 console.log('Seedance 任务提交成功:', result.task_id);
                 showToast('任务已提交');
@@ -2671,6 +2674,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     entity_id: entityId,
                     file_role: 'video',
                     episode_id: episodeId,
+                    workspace_group_id: uuid,
                 });
                 console.log('DashScope 任务提交成功:', result.task_id);
                 showToast('任务已提交');
@@ -2789,6 +2793,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     entity_id: entityId,
                     file_role: 'video',
                     episode_id: episodeId,
+                    workspace_group_id: uuid,
                     preferred_agent_id: modelCapability?.preferred_agent_id || undefined,
                     preferred_node_id: modelCapability?.preferred_node_id || undefined,
                 },
@@ -2994,6 +2999,10 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 taskId,
             },
         }));
+        // The normal workspace save is debounced. Persist the backend task id
+        // promptly so a reload immediately after submission cannot restore the
+        // previous failed attempt while the new task is already running.
+        setTimeout(() => { try { saveSessionRef.current?.(); } catch {} }, 250);
 
         const projectId = (() => {
             try { return localStorage.getItem('current_project_id') || undefined; } catch { return undefined; }
@@ -3024,6 +3033,66 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             callbacks: buildPollCallbacks(uuid),
         });
     }, [taskGroups, imagePrompts, sessionScope, buildPollCallbacks, getEffectiveGroupPrompt]);
+
+    // Reconcile durable server-side live tasks after restoring the workspace.
+    // This also recovers tasks submitted by older clients that did not persist
+    // workspace_group_id by matching their video_segment entity_id.
+    useEffect(() => {
+        if (taskGroups.length === 0) return;
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const [taskResponse, segmentResponse] = await Promise.all([
+                    getTasks(100),
+                    episodeId ? getVideoSegments(episodeId).catch(() => ({ segments: [] })) : Promise.resolve({ segments: [] }),
+                ]);
+                if (cancelled) return;
+
+                const groupByStoryboardItem = new Map<string, string>();
+                taskGroups.forEach(group => {
+                    const itemId = String(group.ids?.[0] || '').trim();
+                    if (itemId) groupByStoryboardItem.set(itemId, group.uuid);
+                });
+                const segmentIdByGroup: Record<string, string> = {};
+                for (const segment of ((segmentResponse as any)?.segments || [])) {
+                    const itemId = String(segment.storyboard_item_id ?? segment.storyboardItemId ?? '').trim();
+                    const segmentId = String(segment.segment_id ?? segment.segmentId ?? '').trim();
+                    const uuid = groupByStoryboardItem.get(itemId);
+                    if (uuid && segmentId) segmentIdByGroup[uuid] = segmentId;
+                }
+
+                const recovered = reconcileActiveVideoTasks(
+                    taskGroups,
+                    {},
+                    taskResponse.tasks || [],
+                    segmentIdByGroup,
+                    episodeId,
+                    url => secureMediaUrl(url, { absolute: true }),
+                );
+                if (Object.keys(recovered.statuses).length === 0) return;
+
+                setTasksStatus(prev => reconcileActiveVideoTasks(
+                    taskGroups,
+                    prev,
+                    taskResponse.tasks || [],
+                    segmentIdByGroup,
+                    episodeId,
+                    url => secureMediaUrl(url, { absolute: true }),
+                ).statuses);
+                recovered.resumable.forEach(({ uuid, taskId }) => {
+                    if (!isVideoPollActive(uuid) || getVideoPollTaskId(uuid) !== taskId) {
+                        startPolling(uuid, taskId);
+                    }
+                });
+                console.info(`[VideoPage] 已恢复 ${recovered.resumable.length} 个后台视频任务的实时状态`);
+            } catch (error) {
+                console.warn('[VideoPage] 后台视频任务状态恢复失败（不影响手动生成）:', error);
+            }
+        })();
+
+        return () => { cancelled = true; };
+    }, [episodeId, startPolling, taskGroups]);
     
     const runAllSelected = useCallback(async () => {
         if (isBatchRunning) return;

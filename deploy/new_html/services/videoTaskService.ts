@@ -143,6 +143,7 @@ export async function submitTask(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        workspace_group_id?: string;
         preferred_agent_id?: string;
         preferred_node_id?: string;
     },
@@ -305,6 +306,7 @@ export async function submitTask(
         requestData.file_role = entityOptions.file_role || 'video';
         requestData.project_id = entityOptions.project_id;
         requestData.episode_id = entityOptions.episode_id;
+        requestData.workspace_group_id = entityOptions.workspace_group_id;
     }
 
     if (isComfyUIModel(model)) {
@@ -594,6 +596,7 @@ export async function submitTaskQueued(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        workspace_group_id?: string;
         preferred_agent_id?: string;
         preferred_node_id?: string;
     },
@@ -709,6 +712,7 @@ export async function submitSeedanceTask(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        workspace_group_id?: string;
     },
     draftTaskId?: string,
     agentPlanCompat: boolean = false,
@@ -742,6 +746,7 @@ export async function submitSeedanceTask(
         body.file_role = entityOptions.file_role || 'video';
         body.project_id = entityOptions.project_id;
         body.episode_id = entityOptions.episode_id;
+        body.workspace_group_id = entityOptions.workspace_group_id;
     }
 
     const resp = await apiFetch('/api/generate', {
@@ -774,6 +779,7 @@ export async function submitDashScopeVideoTask(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        workspace_group_id?: string;
     },
 ): Promise<{ task_id: string }> {
     const media = params.media_inputs || [];
@@ -838,6 +844,7 @@ export async function submitDashScopeVideoTask(
         body.file_role = entityOptions.file_role || 'video';
         body.project_id = entityOptions.project_id;
         body.episode_id = entityOptions.episode_id;
+        body.workspace_group_id = entityOptions.workspace_group_id;
     }
 
     const resp = await apiFetch('/api/generate', {

@@ -90,7 +90,7 @@ export interface TaskStatus {
 
 export interface VideoTask {
   task_id: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'pending' | 'running' | 'processing' | 'completed' | 'failed' | 'cancelled';
   task_type: string;
   created_at: string;
   completed_at?: string;
@@ -99,6 +99,9 @@ export interface VideoTask {
   data?: {
     prompt?: string;
     model?: string;
+    entity_id?: string;
+    episode_id?: string;
+    workspace_group_id?: string;
   };
   result?: {
     videos?: Array<{ url: string; filename?: string; generateTime?: number }>;
