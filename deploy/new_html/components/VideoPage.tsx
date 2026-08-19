@@ -12,6 +12,7 @@ import {
     SELECTABLE_MODELS,
     buildVideoModelOptions,
     formatVideoModelOptionLabel,
+    getVideoCreditFallbackCost,
     getVideoCreditEstimateParams,
     getVideoModelRuntimeNames,
     inferDashScopeTaskType,
@@ -865,9 +866,9 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     }, [defaultMiniMaxVideoModel, getDashScopeParams, getSeedanceParams]);
 
     const getGroupVideoCreditFallbackCost = useCallback((group: TaskGroup): number => {
-        if (group.model === 'HappyHorse') return 160;
-        if (isMiniMaxH3Model(group.model) && group.h3Upscale720p === true) return 15;
-        return 10;
+        return getVideoCreditFallbackCost(group.model, {
+            h3_upscale_720p: isMiniMaxH3Model(group.model) && group.h3Upscale720p === true,
+        });
     }, []);
 
     // 2026-05-24 — picker 打开器：DashScope 卡片调用此函数请求选图

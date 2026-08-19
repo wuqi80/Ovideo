@@ -9,9 +9,10 @@ The external-API conversion is anchored to the product decision that a
 5-second HappyHorse 1.0 1080P request costs 160 credits. HappyHorse's public
 list price is CNY 1.60/second. External API prices use the product-friendly
 conversion of 20 credits/CNY.
-Local workflows have no per-call provider fee and use the product minimum of
-10 credits per completed task.  The optional serial 720P post-upscale is a
-separate local workflow and adds 5 credits when requested.
+Local workflows have no per-call provider fee. Standard and Fast H3 use the
+10-credit product minimum, while H3 Mini uses 5 credits. The optional serial
+720P post-upscale is a separate local workflow and adds 5 credits to every H3
+profile when requested.
 """
 from __future__ import annotations
 
@@ -19,9 +20,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, Mapping, Tuple
 
 
-VIDEO_PRICING_VERSION = "2026-08-19-video-cost-v2"
+VIDEO_PRICING_VERSION = "2026-08-19-video-cost-v3"
 CREDITS_PER_CNY = Decimal("20")
 LOCAL_VIDEO_CREDITS = 10
+LOCAL_H3_MINI_CREDITS = 5
 LOCAL_720P_UPSCALE_CREDITS = 5
 
 LOCAL_MODELS = frozenset(
@@ -91,9 +93,15 @@ def _credits_from_cny_per_second(rate: str, duration: int) -> Tuple[int, Decimal
     return max(LOCAL_VIDEO_CREDITS, credits), provider_cost
 
 
-def _fixed_quote(credits: int, profile: str, **extra: Any) -> Dict[str, Any]:
+def _fixed_quote(
+    credits: int,
+    profile: str,
+    *,
+    minimum_credits: int = LOCAL_VIDEO_CREDITS,
+    **extra: Any,
+) -> Dict[str, Any]:
     return {
-        "credits": max(LOCAL_VIDEO_CREDITS, int(credits)),
+        "credits": max(int(minimum_credits), int(credits)),
         "profile": profile,
         "pricing_version": VIDEO_PRICING_VERSION,
         **extra,
@@ -224,12 +232,18 @@ def quote_video_credits(params: Mapping[str, Any] | None) -> Dict[str, Any]:
     family = _infer_family(data)
 
     if family == "local":
-        upscale_720p = data.get("h3_upscale_720p") is True
-        credits = LOCAL_VIDEO_CREDITS + (LOCAL_720P_UPSCALE_CREDITS if upscale_720p else 0)
+        model = _lower(data.get("model") or data.get("video_model"))
+        is_h3 = model in {"minimaxh3", "minimaxh3fast", "minimaxh3mini"}
+        is_h3_mini = model == "minimaxh3mini"
+        base_credits = LOCAL_H3_MINI_CREDITS if is_h3_mini else LOCAL_VIDEO_CREDITS
+        upscale_720p = is_h3 and data.get("h3_upscale_720p") is True
+        credits = base_credits + (LOCAL_720P_UPSCALE_CREDITS if upscale_720p else 0)
         return _fixed_quote(
             credits,
             "local-720p-upscale" if upscale_720p else "local",
+            minimum_credits=base_credits,
             duration_seconds=_positive_int(data.get("duration_seconds"), 5),
+            base_credits=base_credits,
             h3_upscale_720p=upscale_720p,
             upscale_credits=LOCAL_720P_UPSCALE_CREDITS if upscale_720p else 0,
         )

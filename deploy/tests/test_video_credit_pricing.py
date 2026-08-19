@@ -6,20 +6,29 @@ from services.video_credit_pricing import CREDITS_PER_CNY, quote_video_credits
 
 @pytest.mark.parametrize(
     "model",
-    ["Wan2", "LTXNode1", "WanNode2", "一阶", "七阶", "MiniMaxH3", "MiniMaxH3Fast", "MiniMaxH3Mini"],
+    ["Wan2", "LTXNode1", "WanNode2", "一阶", "七阶", "MiniMaxH3", "MiniMaxH3Fast"],
 )
 def test_local_video_models_use_product_minimum(model):
     assert quote_video_credits({"model": model, "duration_seconds": 15})["credits"] == 10
 
 
-@pytest.mark.parametrize("model", ["MiniMaxH3", "MiniMaxH3Fast", "MiniMaxH3Mini"])
-def test_local_h3_720p_upscale_adds_five_credits(model):
+def test_local_h3_mini_uses_half_standard_credits():
+    quote = quote_video_credits({"model": "MiniMaxH3Mini", "duration_seconds": 15})
+    assert quote["credits"] == 5
+    assert quote["base_credits"] == 5
+
+
+@pytest.mark.parametrize(
+    ("model", "expected_credits"),
+    [("MiniMaxH3", 15), ("MiniMaxH3Fast", 15), ("MiniMaxH3Mini", 10)],
+)
+def test_local_h3_720p_upscale_adds_five_credits(model, expected_credits):
     quote = quote_video_credits({
         "model": model,
         "duration_seconds": 5,
         "h3_upscale_720p": True,
     })
-    assert quote["credits"] == 15
+    assert quote["credits"] == expected_credits
     assert quote["profile"] == "local-720p-upscale"
     assert quote["upscale_credits"] == 5
 
@@ -93,4 +102,10 @@ def test_credit_service_uses_server_owned_video_quote():
         "factors": [],
     }
     assert credit_service.compute_cost(rule, {"model": "MiniMaxH3"}) == 10
+    assert credit_service.compute_cost(rule, {"model": "MiniMaxH3Fast"}) == 10
+    assert credit_service.compute_cost(rule, {"model": "MiniMaxH3Mini"}) == 5
+    assert credit_service.compute_cost(rule, {
+        "model": "MiniMaxH3Mini",
+        "h3_upscale_720p": True,
+    }) == 10
     assert credit_service.compute_cost(rule, {"model": "HappyHorse", "duration_seconds": 5}) == 160

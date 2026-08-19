@@ -398,6 +398,20 @@ export function getVideoCreditEstimateParams(
   return applyOverrides(base);
 }
 
+export function getVideoCreditFallbackCost(
+  model: VideoModel,
+  options: { h3_upscale_720p?: boolean } = {},
+): number {
+  if (model === 'HappyHorse') return 160;
+  if (model === 'MiniMaxH3Mini') {
+    return 5 + (options.h3_upscale_720p === true ? 5 : 0);
+  }
+  if (isMiniMaxH3Model(model)) {
+    return 10 + (options.h3_upscale_720p === true ? 5 : 0);
+  }
+  return 10;
+}
+
 const ALL_MODEL_VALUES = new Set<string>(ALL_MODELS);
 
 export interface VideoCapabilityModelLike {

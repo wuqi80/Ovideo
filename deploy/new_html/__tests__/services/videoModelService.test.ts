@@ -3,6 +3,7 @@ import {
   buildVideoModelOptions,
   SELECTABLE_MODELS,
   getModelDisplayName,
+  getVideoCreditFallbackCost,
   getVideoCreditEstimateParams,
   getMiniMaxVideoParamsError,
   inferSeedanceTaskType,
@@ -25,6 +26,15 @@ describe('processing cluster model label', () => {
 });
 
 describe('video credit estimate params', () => {
+  it('keeps standard and fast equal, halves mini, and adds five for 720p upscale', () => {
+    expect(getVideoCreditFallbackCost('MiniMaxH3')).toBe(10);
+    expect(getVideoCreditFallbackCost('MiniMaxH3Fast')).toBe(10);
+    expect(getVideoCreditFallbackCost('MiniMaxH3Mini')).toBe(5);
+    expect(getVideoCreditFallbackCost('MiniMaxH3', { h3_upscale_720p: true })).toBe(15);
+    expect(getVideoCreditFallbackCost('MiniMaxH3Fast', { h3_upscale_720p: true })).toBe(15);
+    expect(getVideoCreditFallbackCost('MiniMaxH3Mini', { h3_upscale_720p: true })).toBe(10);
+  });
+
   it('uses the real default generation spec for each priced provider', () => {
     expect(getVideoCreditEstimateParams('HappyHorse')).toMatchObject({
       duration_seconds: 5,
