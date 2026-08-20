@@ -21,8 +21,9 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 277
-DEFAULT_EXPECTED_OPERATIONS = 336
+DEFAULT_EXPECTED_PATHS = 284
+DEFAULT_EXPECTED_OPERATIONS = 344
+DEFAULT_EXPECTED_FRONTEND_ROUTES = 32
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -33,6 +34,13 @@ ALLOWED_DUPLICATES = {
 }
 
 EXPECTED_ENDPOINTS = {
+    ("/api/final-products/{library_item_id}/share", "GET"): ("final_product_share_routes", "get_share"),
+    ("/api/final-products/{library_item_id}/share", "POST"): ("final_product_share_routes", "create_share"),
+    ("/api/final-products/{library_item_id}/share/{share_id}", "DELETE"): ("final_product_share_routes", "deactivate_share"),
+    ("/api/final-products/{library_item_id}/feedback", "GET"): ("final_product_share_routes", "list_owner_feedback"),
+    ("/api/public/final-products/{share_token}", "GET"): ("final_product_share_routes", "get_public_final"),
+    ("/api/public/final-products/{share_token}/feedback", "POST"): ("final_product_share_routes", "create_public_feedback"),
+    ("/share/final/{share_token}", "GET"): ("routers.frontend_pages", "final_product_share_spa"),
     ("/api/login", "POST"): ("routers.auth", "login"),
     ("/api/auth/register", "POST"): ("routers.auth_legacy", "register_user"),
     ("/api/auth/login", "POST"): ("routers.auth_legacy", "login_user"),
@@ -772,8 +780,11 @@ def check_frontend_pages_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 31:
-        fail(f"routers/frontend_pages.py should own 31 frontend route registrations, found {route_count}")
+    if route_count != DEFAULT_EXPECTED_FRONTEND_ROUTES:
+        fail(
+            "routers/frontend_pages.py should own "
+            f"{DEFAULT_EXPECTED_FRONTEND_ROUTES} frontend route registrations, found {route_count}"
+        )
     return route_count
 
 
@@ -4991,7 +5002,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_model_service, "export const ALL_MODELS: VideoModel[]"),
         (video_model_service, "export const SELECTABLE_MODELS: VideoModel[]"),
         (video_model_service, "'LTXNode1', 'WanNode2'"),
-        (video_model_service, "'MiniMaxH3', 'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶'"),
+        (video_model_service, "'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini', 'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶'"),
         (video_model_service, "'LTXNode1', 'WanNode2'"),
         (video_model_service, "'Veo', 'Sora2', 'MINI', '大能'"),
         (video_model_service, "'Seedance2', 'Seedance2Fast', 'Seedance2Mini'"),

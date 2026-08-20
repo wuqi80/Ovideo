@@ -18,6 +18,7 @@ import {
 import { useTaskManager } from '../contexts/TaskContext';
 import type { RegisteredTask, SourcePage, TaskKind } from '../types';
 import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
+import { formatPublicTaskText } from '../utils/publicTaskTerminology';
 
 // ===== 状态色板（窄域、克制） =====
 const STATUS_THEME = {
@@ -53,18 +54,18 @@ function getKindIcon(kind: TaskKind): React.FC<{ size?: number; className?: stri
 
 // ===== Kind label 中文 =====
 const KIND_LABEL: Record<string, string> = {
-    seedance: 'Seedance', 'seedance-fast': 'Seedance Fast', 'seedance-mini': 'Seedance Mini', 'seedance-1.5': 'Seedance 1.5',
-    wan2: 'Wan2', 'wan2-fast': 'Wan2 Fast',
-    kling: '合体 · Kling', vidu: '大乘 · Vidu', happyhorse: '炼虚 · HappyHorse',
-    sora2: 'Sora2', veo: 'Veo',
+    seedance: '飞升', 'seedance-fast': '渡劫', 'seedance-mini': '元婴', 'seedance-1.5': '视频生成',
+    wan2: '集群视频', 'wan2-fast': '集群视频 Fast',
+    kling: '合体', vidu: '大乘', happyhorse: '炼虚',
+    sora2: '化神', veo: '筑基',
     'video-i2v': '图生视频', 'video-comfy': '集群视频',
-    'comfyui-image': '集群图片', 'gemini-image': 'Gemini 图', 'doubao-image': '豆包图',
-    nanobanana: 'Nanobanana', 'qwen-image': 'Qwen 图', 'qwen-lora': 'Qwen LoRA', kontext: 'Kontext',
+    'comfyui-image': '集群图片', 'gemini-image': 'AI 生图', 'doubao-image': '三阶 · 参考图',
+    nanobanana: '一阶 · 快速', 'qwen-image': '二阶 · 多参考', 'qwen-lora': '二阶 · 风格', kontext: '三阶 · 高质量',
     matting: '抠图', 'angle-adjust': '角度调整',
     'human-multi-angle': '多角度', 'around-angle': '环绕镜头',
     'image-fusion': '图像融合', 'panorama-360': '全景 360', 'panorama-fusion': '全景融合',
     'auto-storyboard': '自动分镜', 'multi-grid-storyboard': '九宫格',
-    'minimax-tts': 'MiniMax 配音', 'gemini-tts': 'Gemini 配音', 'audio-mix': '混音',
+    'minimax-tts': '配音', 'gemini-tts': '配音', 'audio-mix': '混音',
     'video-enhance': '视频增强', 'video-upscale': '画质提升',
     'video-voice': '配音', 'video-edit': '视频编辑', 'video-crop': '视频裁剪',
     'prompt-rewrite': '提示词改写', 'script-segment': '剧本分镜',
@@ -412,7 +413,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onNavigate, onRemove, removeL
                 {/* Title row */}
                 <div className="flex items-center gap-1.5">
                     <KindIcon size={11} className="text-n300 shrink-0" />
-                    <span className="text-sm font-medium text-n800 truncate">{sanitizeProcessingTerminology(task.title)}</span>
+                    <span className="text-sm font-medium text-n800 truncate">{sanitizeProcessingTerminology(formatPublicTaskText(task.title, task.kind))}</span>
                     <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] tabular-nums ${theme.bg} ${theme.text} ${theme.border} border`}>
                         {sanitizeProcessingTerminology(kindLabel)}
                     </span>
@@ -422,7 +423,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task, onNavigate, onRemove, removeL
                 <div className="mt-1 flex items-center gap-2">
                     <span className={`text-xs ${theme.text}`}>{statusText}</span>
                     {task.error && (
-                        <span className="text-xs text-danger truncate">· {sanitizeProcessingTerminology(task.error)}</span>
+                        <span className="text-xs text-danger truncate">· {sanitizeProcessingTerminology(formatPublicTaskText(task.error, task.kind))}</span>
                     )}
                 </div>
 

@@ -1,15 +1,16 @@
 /**
  * CreatePage.tsx — 「一句话，从创意到成片」新建创作首页
- * 完全对齐 docs/design-standard 模板 Home 屏：徽章 → Hero 标题 → 输入卡
- * （题材 / 时长 chips + 渐变生成按钮）→ 示例句 → 四张流水线卡。
+ * 默认采用 Ostory 式简洁入口：一句话开始，题材 / 时长按需展开，
+ * 再用非专业术语说明四步创作流程。
  * 生成动作：创建项目 → 创建首个分集 → 进入 剧本创作 阶段；
  * 一句话创意暂存 sessionStorage（key: create:idea）供剧本页取用。
  */
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
+import { ChevronDown, Sparkles } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
 import AppSidebar from '../components/AppSidebar';
+import { saveCreateIdeaSeed } from '../utils/createIdeaSeed';
 
 const GENRES = ['悬疑', '爱情', '科幻', '喜剧', '温情', '恐怖'];
 const DURATIONS = ['30s', '60s 竖屏', '90s', '180s'];
@@ -19,10 +20,10 @@ const EXAMPLES = [
   '相亲对象太完美，直到我发现他是我自己训练的 AI。',
 ];
 const PIPELINE_CARDS = [
-  { n: '1', title: '剧本创作', sub: '分场景、对白，AI 编剧协作', bg: '#ECE9FF', fg: '#5B49F0' },
-  { n: '2', title: '美术设定', sub: '角色三视图、场景、道具', bg: '#FFF0EB', fg: '#FF6A3D' },
-  { n: '3', title: '分镜设计', sub: '景别、运镜、时长、站位图', bg: '#E4F7EE', fg: '#12B76A' },
-  { n: '4', title: '短片生成', sub: '逐镜出片，一键合成', bg: '#E6F0FF', fg: '#3B7BE5' },
+  { n: '1', title: '写故事', sub: 'AI 把一句想法整理成完整故事和对白', bg: '#ECE9FF', fg: '#5B49F0' },
+  { n: '2', title: '定角色和场景', sub: '选定人物、地点和整部作品的画风', bg: '#FFF0EB', fg: '#FF6A3D' },
+  { n: '3', title: '排好每个画面', sub: '安排画面顺序、对白和声音', bg: '#E4F7EE', fg: '#12B76A' },
+  { n: '4', title: '生成并导出', sub: '生成视频，自动合成可分享的短片', bg: '#E6F0FF', fg: '#3B7BE5' },
 ];
 
 const chipClass = (active: boolean) =>
@@ -70,7 +71,13 @@ export const CreatePage: React.FC = () => {
       const newEpisodeId = row?.episode_id ?? row?.episodeId;
       if (!newEpisodeId) throw new Error('未找到新建分集');
 
-      sessionStorage.setItem('create:idea', JSON.stringify({ sentence: idea, genre, duration }));
+      saveCreateIdeaSeed(sessionStorage, {
+        sentence: idea,
+        genre,
+        duration,
+        projectId: newProjectId,
+        episodeId: newEpisodeId,
+      });
       navigate(`/projects/${newProjectId}/ep/${newEpisodeId}/workflow/script`);
     } catch (e: any) {
       console.error('一句话创建失败:', e);
@@ -87,7 +94,7 @@ export const CreatePage: React.FC = () => {
           {/* 徽章 */}
           <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-primary-light px-3.5 py-1.5 font-mono text-xs font-bold tracking-[0.03em] text-primary">
             <span className="h-[7px] w-[7px] animate-pulse rounded-full bg-primary" />
-            剧本 · 美术 · 分镜 · 成片 一站式
+            不懂专业制作，也能完成一部短片
           </div>
 
           <h1 className="mb-3.5 font-display text-[44px] font-extrabold leading-[1.08] tracking-[-1.5px] text-n900">
@@ -96,8 +103,7 @@ export const CreatePage: React.FC = () => {
             从创意到成片。
           </h1>
           <p className="mb-7 max-w-[560px] text-base leading-relaxed text-n300">
-            输入一个创意，自动生成<strong className="font-bold text-n800">剧本、角色美术设定、分镜脚本</strong>
-            ，直到可播放的短片。专为短视频创作者打造。
+            只需说清楚“谁、发生了什么”。其余内容先交给 AI，你可以在每一步查看、修改，再决定是否生成。
           </p>
 
           {/* Hero 输入卡 */}
@@ -110,24 +116,31 @@ export const CreatePage: React.FC = () => {
               style={{ boxShadow: 'none' }}
             />
             <div className="flex flex-wrap items-end justify-between gap-3.5 px-3 pb-2.5 pt-2">
-              <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="mr-0.5 text-[11px] text-n100">题材</span>
-                  {GENRES.map(g => (
-                    <button key={g} type="button" onClick={() => setGenre(g)} className={chipClass(genre === g)}>
-                      {g}
-                    </button>
-                  ))}
+              <details className="group min-w-0 flex-1">
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-1 py-1 text-[12.5px] text-n300 hover:text-primary">
+                  <ChevronDown size={14} className="transition-transform group-open:rotate-180" />
+                  可选：调整故事类型和成片时长
+                  <span className="text-n100">（{genre} · {duration}）</span>
+                </summary>
+                <div className="mt-2 flex flex-col gap-2 rounded-xl bg-n20 p-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="mr-0.5 w-12 text-[11px] text-n100">故事类型</span>
+                    {GENRES.map(g => (
+                      <button key={g} type="button" onClick={() => setGenre(g)} className={chipClass(genre === g)}>
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="mr-0.5 w-12 text-[11px] text-n100">成片时长</span>
+                    {DURATIONS.map(d => (
+                      <button key={d} type="button" onClick={() => setDuration(d)} className={chipClass(duration === d)}>
+                        {d}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="mr-0.5 text-[11px] text-n100">时长</span>
-                  {DURATIONS.map(d => (
-                    <button key={d} type="button" onClick={() => setDuration(d)} className={chipClass(duration === d)}>
-                      {d}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              </details>
               <button
                 type="button"
                 onClick={generate}
@@ -138,7 +151,7 @@ export const CreatePage: React.FC = () => {
                 style={{ background: canGenerate ? 'linear-gradient(135deg,#5B49F0,#7A5BFF)' : '#c9c5e8' }}
               >
                 <Sparkles size={16} />
-                {busy ? '正在创建…' : '生成剧本 Generate'}
+                {busy ? '正在准备…' : '开始创作'}
               </button>
             </div>
           </div>
@@ -146,7 +159,7 @@ export const CreatePage: React.FC = () => {
 
           {/* 示例句 */}
           <div className="mt-5 flex flex-wrap items-center gap-2">
-            <span className="text-[12.5px] text-n100">试试这些 ↴</span>
+            <span className="text-[12.5px] text-n100">不知道怎么写？试试这些</span>
             {EXAMPLES.map(example => (
               <button
                 key={example}

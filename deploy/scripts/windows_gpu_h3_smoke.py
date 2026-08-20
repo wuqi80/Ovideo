@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw
 ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
 AGENT_DIR = ROOT / "agent"
 LOG_DIR = ROOT / "logs"
-BASE_URL = os.environ.get("MECHA_H3_COMFYUI_URL", "http://127.0.0.1:8189")
+BASE_URL = os.environ.get("MECHA_H3_COMFYUI_URL", "http://127.0.0.1:8188")
 TIMEOUT_SECONDS = 6 * 60 * 60
 
 sys.path.insert(0, str(AGENT_DIR))

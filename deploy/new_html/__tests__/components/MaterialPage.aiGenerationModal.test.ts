@@ -13,6 +13,7 @@ describe('MaterialPage AI generation modal', () => {
     expect(source).toContain('DESIGN_IMAGE_MODEL_OPTIONS.map');
     expect(source).toContain("generationModel.resolutions.map");
     expect(source).toContain('图生图');
+    expect(source).toContain('xl:min-w-[556px] xl:justify-start xl:pl-[84px]');
     expect(source).toContain('InlineCreditEstimate');
     expect(source).toContain('generationModel.hint');
     expect(source).toContain('<option key={option.id} value={option.id}>{option.label}</option>');

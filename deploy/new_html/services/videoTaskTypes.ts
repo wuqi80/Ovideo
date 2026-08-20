@@ -43,6 +43,12 @@ export interface TaskGroup {
   minimaxParams?: MiniMaxVideoParams;
   /** Parameters declared by /api/video/capabilities for the selected model. */
   videoParams?: Record<string, string | number | boolean>;
+  /** Opt-in request for the verified MiniMax H3 SageAttention workflow. */
+  h3SageAttention?: boolean;
+  /** Opt-in request for the guarded MiniMax H3 Director multi-segment workflow. */
+  h3LongVideo?: boolean;
+  /** After H3 unloads, serially upscale its result to a 720P delivery file. */
+  h3Upscale720p?: boolean;
   mergedFrom?: MergedCardSnapshot[];
 }
 
@@ -54,6 +60,7 @@ export interface MergedCardSnapshot {
   shotType?: ShotType;
   duration?: number;
   durationUserOverride?: boolean;
+  h3SageAttention?: boolean;
   mediaInputs?: SeedanceMediaInput[];
   seedanceParams?: SeedanceParams;
   dashScopeParams?: DashScopeVideoParams;
@@ -83,7 +90,7 @@ export interface TaskStatus {
 
 export interface VideoTask {
   task_id: string;
-  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'pending' | 'running' | 'processing' | 'completed' | 'failed' | 'cancelled';
   task_type: string;
   created_at: string;
   completed_at?: string;
@@ -92,6 +99,9 @@ export interface VideoTask {
   data?: {
     prompt?: string;
     model?: string;
+    entity_id?: string;
+    episode_id?: string;
+    workspace_group_id?: string;
   };
   result?: {
     videos?: Array<{ url: string; filename?: string; generateTime?: number }>;

@@ -1,9 +1,8 @@
 /**
  * AppSidebar.tsx — 全局深色侧边栏（完全对齐 docs/design-standard 模板的侧栏结构）
  *
- * 结构自上而下：品牌块 → 主导航（新建创作 · New / 我的作品 · Projects / 导出分享 · Export）
- * → 最近项目 RECENT（自取 /api/projects 前 3 条）→ 上下文工具区（可选）→ 弹性空隙
- * → CREDITS 积分卡（渐变条）→ 用户行（个人中心 / 退出登录 上拉菜单）。
+ * 结构自上而下：品牌块 → 面向普通用户的主导航 → 最近项目
+ * → 更多功能（可选）→ 创作点数 → 用户行。
  * credits 传 undefined 时组件自行拉取；仅视觉与导航，不承载业务状态。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -31,9 +30,9 @@ interface RecentProject {
 }
 
 interface AppSidebarProps {
-  /** 导出分享 的目标路由；缺省时不渲染该项（无分集上下文的页面） */
+  /** 成片与分享的目标路由；缺省时不渲染该项（无分集上下文的页面） */
   exportTo?: string;
-  /** 上下文工具区（如工作流内的 素材库 / 历史 / 自由创作） */
+  /** 按需使用的功能区（如工作流内的 我的素材 / 版本记录 / 专业画布） */
   tools?: AppSidebarItem[];
   credits?: number | null;
   className?: string;
@@ -144,16 +143,16 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools = [], cr
       {/* 主导航（模板固定三项） */}
       <NavLink to="/create" className={({ isActive }) => itemClass(isActive)}>
         <Plus size={17} className="shrink-0" />
-        <span className="truncate">新建创作 · New</span>
+        <span className="truncate">开始新作品</span>
       </NavLink>
       <NavLink to="/projects" end className={({ isActive }) => itemClass(isActive)}>
         <LayoutGrid size={17} className="shrink-0" />
-        <span className="truncate">我的作品 · Projects</span>
+        <span className="truncate">我的作品</span>
       </NavLink>
       {exportTo && (
         <NavLink to={exportTo} className={({ isActive }) => itemClass(isActive)}>
           <Share2 size={17} className="shrink-0" />
-          <span className="truncate">导出分享 · Export</span>
+          <span className="truncate">成片与分享</span>
         </NavLink>
       )}
 
@@ -163,7 +162,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools = [], cr
         {/* 最近项目 RECENT */}
         {recent.length > 0 && (
           <>
-            <div className={sectionLabelClass}>最近项目 RECENT</div>
+            <div className={sectionLabelClass}>最近作品</div>
             {recent.map((project, index) => (
               <button
                 key={project.project_id}
@@ -184,7 +183,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools = [], cr
         {/* 上下文工具区 */}
         {tools.length > 0 && (
           <>
-            <div className={`${sectionLabelClass} pt-3`}>工具 TOOLS</div>
+            <div className={`${sectionLabelClass} pt-3`}>更多功能</div>
             {tools.map(item => {
               const Icon = item.icon;
               const inner = (
@@ -222,20 +221,20 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools = [], cr
         )}
       </div>
 
-      {/* CREDITS 积分卡 */}
+      {/* 创作点数卡 */}
       <button
         type="button"
         onClick={() => navigate('/credits')}
         className="ui-dark-panel mb-3 mt-3 w-full px-3.5 py-3 text-left transition-colors hover:border-n400"
-        title="查看积分明细"
+        title="查看创作点数明细"
       >
         <span className="flex items-center justify-between">
-          <span className="font-mono text-[11px] font-bold tracking-[0.05em] text-b200">CREDITS</span>
-          <span className="text-[11px] text-n200">积分明细 →</span>
+          <span className="text-[11px] font-bold tracking-[0.05em] text-b200">创作点数</span>
+          <span className="text-[11px] text-n200">查看明细 →</span>
         </span>
         <span className="mt-1 block font-display text-[22px] font-bold text-n0">
           {typeof shownCredits === 'number' ? shownCredits.toLocaleString() : '—'}
-          <span className="ml-1 font-sans text-[13px] font-normal text-n200">可用积分</span>
+          <span className="ml-1 font-sans text-[13px] font-normal text-n200">可用</span>
         </span>
         <span className="mt-2 block h-1.5 overflow-hidden rounded bg-n600">
           <span

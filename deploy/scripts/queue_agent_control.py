@@ -230,7 +230,10 @@ async def main_async(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Queue a constrained GPU Agent control task")
-    parser.add_argument("action", choices=["status", "self_update", "install_h3_sidecar"])
+    parser.add_argument(
+        "action",
+        choices=["status", "self_update", "install_h3_sidecar", "sync_runtime_tools"],
+    )
     parser.add_argument("--agent-id", default="", help="Pin the control task to one Agent ID")
     parser.add_argument("--script-url", default="", help="Override self-update script URL")
     parser.add_argument("--wait", action="store_true", help="Wait for the agent to report completion")

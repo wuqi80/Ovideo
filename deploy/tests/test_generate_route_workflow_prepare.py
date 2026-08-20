@@ -5,9 +5,19 @@ import pytest
 from fastapi import HTTPException
 
 import routers.tasks as tasks_router_module
-from routers.tasks import _gpu_queue_snapshot, _should_prepare_workflow, create_task_router
+from routers.tasks import _gpu_queue_snapshot, _local_gpu_maintenance, _should_prepare_workflow, create_task_router
 from schemas.generation import GenerateRequest
 from services.generation_access_service import GenerationAccessDenied
+
+
+@pytest.fixture(autouse=True)
+def _explicitly_enable_local_gpu_for_normal_route_tests(monkeypatch):
+    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE", "0")
+
+
+def test_local_gpu_maintenance_defaults_closed(monkeypatch):
+    monkeypatch.delenv("MECHA_LOCAL_GPU_MAINTENANCE", raising=False)
+    assert _local_gpu_maintenance()["enabled"] is True
 
 
 @pytest.mark.parametrize("task_type", ["i2v", "morph", "upscale", "upscale_hd"])
@@ -31,15 +41,37 @@ def test_generate_route_skips_prepare_for_external_api_tasks(task_type):
     assert _should_prepare_workflow(task_type) is False
 
 
+def test_generate_route_skips_generic_prepare_for_agent_built_music3_workflow():
+    assert _should_prepare_workflow("minimax_music3") is False
+    assert _should_prepare_workflow(" MiniMax_Music3 ") is False
+
+
 @pytest.mark.asyncio
-async def test_gpu_queue_preflight_reports_anonymous_serial_position_and_eta():
+async def test_music3_queue_preflight_uses_serial_music_profile():
+    queue = Mock()
+    queue.get_queue_length = AsyncMock(return_value=1)
+    queue.get_processing_count = AsyncMock(return_value=1)
+
+    result = await _gpu_queue_snapshot(
+        queue,
+        GenerateRequest(task_type="minimax_music3", model="MiniMax-Music3", prompt="score"),
+    )
+
+    assert result["runtime_profile"] == "music"
+    assert result["tasks_ahead"] == 2
+    assert result["estimated_wait_seconds"] == 1530
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model", ["MiniMaxH3", "MiniMaxH3Fast", "MiniMaxH3Mini"])
+async def test_gpu_queue_preflight_reports_anonymous_serial_position_and_eta(model):
     queue = Mock()
     queue.get_queue_length = AsyncMock(return_value=2)
     queue.get_processing_count = AsyncMock(return_value=1)
 
     result = await _gpu_queue_snapshot(
         queue,
-        GenerateRequest(task_type="i2v", model="MiniMaxH3", prompt="x"),
+        GenerateRequest(task_type="i2v", model=model, prompt="x"),
     )
 
     assert result["queue_mode"] == "gpu2_serial"
@@ -49,6 +81,48 @@ async def test_gpu_queue_preflight_reports_anonymous_serial_position_and_eta():
     assert result["estimated_wait_seconds"] == 2820
     assert result["requires_confirmation"] is True
     assert result["can_cancel_before_submit"] is True
+    assert result["accepting_submissions"] is True
+
+
+@pytest.mark.asyncio
+async def test_gpu_queue_preflight_blocks_local_tasks_during_maintenance(monkeypatch):
+    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE", "1")
+    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE_MESSAGE", "DFS recovery in progress")
+    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE_RESUME_AT", "2026-08-17")
+    queue = Mock()
+
+    result = await _gpu_queue_snapshot(
+        queue,
+        GenerateRequest(task_type="upscale_hd", prompt="x"),
+    )
+
+    assert result == {
+        "queue_mode": "maintenance",
+        "runtime_profile": "wan",
+        "public_comfyui_port": 8188,
+        "tasks_ahead": 0,
+        "estimated_wait_seconds": 0,
+        "estimated_wait_time": 0,
+        "requires_confirmation": False,
+        "can_cancel_before_submit": True,
+        "accepting_submissions": False,
+        "maintenance_message": "DFS recovery in progress",
+        "estimated_resume_at": "2026-08-17",
+    }
+    queue.get_queue_length.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_gpu_queue_preflight_keeps_external_api_available_during_local_maintenance(monkeypatch):
+    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE", "1")
+
+    result = await _gpu_queue_snapshot(
+        Mock(),
+        GenerateRequest(task_type="seedance_i2v", prompt="x"),
+    )
+
+    assert result["queue_mode"] == "external"
+    assert result["accepting_submissions"] is True
 
 
 @pytest.mark.asyncio
@@ -87,6 +161,41 @@ async def test_generate_route_submits_i2v_with_prepare_enabled():
     assert response["success"] is True
     service.submit.assert_awaited_once()
     assert service.submit.call_args.kwargs["prepare"] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_route_rejects_direct_local_submit_during_maintenance(monkeypatch):
+    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE", "true")
+    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE_MESSAGE", "DFS first")
+
+    service = Mock()
+    service.submit = AsyncMock(return_value="should-not-submit")
+    task_service_module = Mock()
+    task_service_module.get.return_value = service
+    router = create_task_router(
+        require_auth_dependency=AsyncMock(return_value="u-test"),
+        jwt_auth_module=Mock(),
+        task_service_module=task_service_module,
+        task_dao=Mock(),
+        file_dao=Mock(),
+        get_pubsub_redis_client=Mock(),
+        logger=Mock(),
+    )
+    create_generate_task = next(
+        route.endpoint for route in router.routes
+        if getattr(route, "path", None) == "/api/generate"
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await create_generate_task(
+            GenerateRequest(task_type="upscale_hd", prompt="x"),
+            username="u-test",
+        )
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail["code"] == "local_gpu_maintenance"
+    assert exc.value.detail["message"] == "DFS first"
+    service.submit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

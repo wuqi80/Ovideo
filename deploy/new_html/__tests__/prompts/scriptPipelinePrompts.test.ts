@@ -27,14 +27,17 @@ describe('latest three-step script prompts', () => {
     expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('平均时长应≥10秒');
     expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('情绪闭环');
     expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('任何段落估算超过15秒都是错误');
+    expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('{targetSegmentCount}');
+    expect(SPLIT_SCRIPT_INTO_SEGMENTS.user).toContain('{minimumSegmentCount}-{maximumSegmentCount}');
   });
 
   it('uses the latest stage-two rules and hierarchical numbering', () => {
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('每组中分镜数严禁大于5个');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('任何分段累计>15秒都必须重新拆分或重新分配分镜');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.system).toContain('完整剧本分段必须一进一出');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('完整剧本输入只输出“分段1”');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('不得新增分段');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('1-2 日 内 浅浅家');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('分镜1-1');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('分镜2-1');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(`约${MIN_VISUAL_STYLE_CHARACTERS}字为完整度基准`);
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(`约${MIN_STABILITY_CONSTRAINT_CHARACTERS}字为完整度基准`);
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('不足时继续增加约束细节');
@@ -42,14 +45,13 @@ describe('latest three-step script prompts', () => {
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(STABILITY_CONSTRAINT_REFERENCE);
   });
 
-  it('generates all stage-one segments in one stage-two request', () => {
+  it('keeps an all-segment stage-two request aligned with stage-one boundaries', () => {
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('{segmentsText}');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('不要求输出分段数量与输入分段数量一一相等');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('一句话创意种子');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('必须把它扩展/拆分成多个连续输出分段');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('输出必须与输入分段数量、顺序严格一一对应');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('只有整个输入明显是一条创意种子');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('绝对不得超过15秒');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.user).toContain('发现局部不合格时只修正该段');
-    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.system).not.toContain('逐段一一转换');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS.system).toContain('逐段一一转换');
   });
 
   it('merges revisions with both stage-one and full stage-two constraints', () => {

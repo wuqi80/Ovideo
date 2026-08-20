@@ -26,16 +26,64 @@ logger = logging.getLogger(__name__)
 DOUBAO_IMAGE_TASK_PENDING_STATUSES = {"queued", "pending", "running", "processing", "in_progress"}
 DOUBAO_IMAGE_TASK_SUCCESS_STATUSES = {"succeeded", "success", "completed", "done"}
 DOUBAO_IMAGE_TASK_FAILED_STATUSES = {"failed", "error", "cancelled", "canceled", "expired"}
+DOUBAO_IMAGE_STANDARD_MIN_PIXELS = 2560 * 1440
+DOUBAO_IMAGE_DIMENSION_MULTIPLE = 16
+DOUBAO_SENSITIVE_INPUT_MARKERS = (
+    "inputtextsensitivecontentdetected",
+    "input text may contain sensitive information",
+)
+DOUBAO_ABSTRACT_GEOGRAPHY_REPLACEMENTS = (
+    ("全国高校地图", "多地区高校数据可视化背景"),
+    ("中国地图", "抽象地区轮廓"),
+    ("全国地图", "多地区数据可视化背景"),
+    ("各省份", "各地区"),
+    ("省份", "地区"),
+    ("全国", "多地区"),
+    ("地图", "数据分布图"),
+)
+DOUBAO_SENSITIVE_INPUT_MESSAGE = (
+    "提示词触发了供应商内容安全审核，请调整涉及真实地图、"
+    "地区边界或敏感标识的描述后重试，本次不扣积分。"
+)
 
 
-def normalize_doubao_image_size(size: str, *, minimum_square: Optional[int] = None) -> str:
+def _expand_image_dimensions(
+    width: int,
+    height: int,
+    *,
+    minimum_pixels: int,
+) -> tuple[int, int]:
+    if minimum_pixels <= 0 or width * height >= minimum_pixels:
+        return width, height
+
+    scale = math.sqrt(minimum_pixels / (width * height))
+    multiple = DOUBAO_IMAGE_DIMENSION_MULTIPLE
+    return (
+        math.ceil((width * scale) / multiple) * multiple,
+        math.ceil((height * scale) / multiple) * multiple,
+    )
+
+
+def normalize_doubao_image_size(
+    size: str,
+    *,
+    minimum_square: Optional[int] = None,
+    minimum_pixels: Optional[int] = None,
+) -> str:
     value = (size or "").strip().lower().replace("×", "x").replace("*", "x")
     value = re.sub(r"\s+", "", value)
+    required_pixels = max(
+        int(minimum_pixels or 0),
+        int(minimum_square or 0) ** 2,
+    )
 
     if value == "1k":
-        if minimum_square and minimum_square > 1024:
-            return f"{minimum_square}x{minimum_square}"
-        return "1024x1024"
+        width, height = _expand_image_dimensions(
+            1024,
+            1024,
+            minimum_pixels=required_pixels,
+        )
+        return f"{width}x{height}"
     if value in {"2k", "3k", "4k"}:
         return value
 
@@ -43,15 +91,46 @@ def normalize_doubao_image_size(size: str, *, minimum_square: Optional[int] = No
     if match:
         width = int(match.group(1))
         height = int(match.group(2))
-        if minimum_square and width * height < minimum_square * minimum_square:
-            scale = math.sqrt((minimum_square * minimum_square) / (width * height))
-            width = math.ceil((width * scale) / 16) * 16
-            height = math.ceil((height * scale) / 16) * 16
+        width, height = _expand_image_dimensions(
+            width,
+            height,
+            minimum_pixels=required_pixels,
+        )
         return f"{width}x{height}"
 
     if minimum_square:
         return f"{minimum_square}x{minimum_square}"
     return "1024x1024"
+
+
+def normalize_doubao_standard_image_size(size: str) -> str:
+    return normalize_doubao_image_size(
+        size,
+        minimum_pixels=DOUBAO_IMAGE_STANDARD_MIN_PIXELS,
+    )
+
+
+def is_doubao_sensitive_input_error(exc: AIProxyUpstreamError) -> bool:
+    error_text = f"{exc.detail} {exc.upstream}".lower()
+    return any(marker in error_text for marker in DOUBAO_SENSITIVE_INPUT_MARKERS)
+
+
+def abstract_doubao_geography_prompt(prompt: str) -> str:
+    rewritten = str(prompt or "").strip()
+    original = rewritten
+    for source, replacement in DOUBAO_ABSTRACT_GEOGRAPHY_REPLACEMENTS:
+        rewritten = rewritten.replace(source, replacement)
+    if rewritten == original:
+        return original
+    return f"{rewritten}\n画面仅使用虚构的抽象几何轮廓和装饰性数据点。"
+
+
+def _doubao_sensitive_input_error(exc: AIProxyUpstreamError) -> AIProxyUpstreamError:
+    return AIProxyUpstreamError(
+        DOUBAO_SENSITIVE_INPUT_MESSAGE,
+        status_code=422,
+        upstream=exc.upstream,
+    )
 
 
 def build_doubao_image_payload(
@@ -371,7 +450,7 @@ async def _post_doubao_image_generation(
     else:
         payload = {
             **payload,
-            "size": normalize_doubao_image_size(str(payload.get("size") or "")),
+            "size": normalize_doubao_standard_image_size(str(payload.get("size") or "")),
         }
 
     result = await _post_json_request_async(
@@ -417,7 +496,7 @@ async def generate_doubao_images(
     resolved_size = (
         _normalize_agent_plan_size(size)
         if doubao_image_access_mode(config.endpoint) == "agent_plan"
-        else normalize_doubao_image_size(size)
+        else normalize_doubao_standard_image_size(size)
     )
     payload = build_doubao_image_payload(
         prompt=prompt,
@@ -427,10 +506,31 @@ async def generate_doubao_images(
         count=count,
         reference_inputs=reference_inputs,
     )
-    images = await _post_doubao_image_generation(
-        config=config,
-        payload=payload,
-    )
+    try:
+        images = await _post_doubao_image_generation(
+            config=config,
+            payload=payload,
+        )
+    except AIProxyUpstreamError as exc:
+        if not is_doubao_sensitive_input_error(exc):
+            raise
+
+        abstract_prompt = abstract_doubao_geography_prompt(prompt)
+        if abstract_prompt == str(prompt or "").strip():
+            raise _doubao_sensitive_input_error(exc) from exc
+
+        logger.warning(
+            "Doubao rejected geographic prompt as sensitive; retrying once with abstract wording"
+        )
+        try:
+            images = await _post_doubao_image_generation(
+                config=config,
+                payload={**payload, "prompt": abstract_prompt},
+            )
+        except AIProxyUpstreamError as retry_exc:
+            if is_doubao_sensitive_input_error(retry_exc):
+                raise _doubao_sensitive_input_error(retry_exc) from retry_exc
+            raise
     if not images:
         raise AIProxyUpstreamError("豆包未返回图片")
     return images

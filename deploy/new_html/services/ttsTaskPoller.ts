@@ -63,6 +63,9 @@ export async function pollTtsTaskUntilDone(
 
     const status = s?.status;
     if (status === 'completed') {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('credits:updated'));
+      }
       const result = s.result || {};
       return {
         audio_url: result.audio_url || result.file_url || '',

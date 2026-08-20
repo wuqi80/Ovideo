@@ -9,36 +9,34 @@ import { getCreditBalance } from '../services/creditService';
 import { apiJson } from '../services/httpClient';
 import AppSidebar, { type AppSidebarItem } from '../components/AppSidebar';
 
-// 2026-08-10 模板化改版（docs/design-standard 剧本分镜生成器）：顶栏为四阶段流水线步骤条
-// （剧本创作 → 美术设定 → 分镜设计 → 短片生成），既有 8 个制作子页归并到阶段内的子页签；
-// 素材库 / 历史 / 自由创作 移入侧栏工具区。路由与业务逻辑保持不变。
+// NewUI 默认使用面向非专业用户的四步描述；原有制作子页、路由和业务逻辑保持不变。
 interface StageSub {
   path: string;
   label: string;
   sourcePage: SourcePage;
 }
-const STAGES: { key: string; label: string; en: string; primary: string; subs: StageSub[] }[] = [
-  { key: 'script', label: '剧本创作', en: 'SCRIPT', primary: 'script', subs: [{ path: 'script', label: '剧本', sourcePage: 'script' }] },
+const STAGES: { key: string; label: string; hint: string; primary: string; subs: StageSub[] }[] = [
+  { key: 'script', label: '写故事', hint: '第 1 步', primary: 'script', subs: [{ path: 'script', label: '故事内容', sourcePage: 'script' }] },
   {
-    key: 'art', label: '美术设定', en: 'ART', primary: 'design',
+    key: 'art', label: '定角色和场景', hint: '第 2 步', primary: 'design',
     subs: [
-      { path: 'design', label: '设计', sourcePage: 'design' },
-      { path: 'materials', label: '素材', sourcePage: 'materials' },
+      { path: 'design', label: '角色场景', sourcePage: 'design' },
+      { path: 'materials', label: '可用素材', sourcePage: 'materials' },
     ],
   },
   {
-    key: 'storyboard', label: '分镜设计', en: 'STORYBOARD', primary: 'storyboard',
+    key: 'storyboard', label: '排画面和声音', hint: '第 3 步', primary: 'storyboard',
     subs: [
-      { path: 'storyboard', label: '分镜', sourcePage: 'storyboard' },
-      { path: 'audio', label: '配音', sourcePage: 'audio' },
+      { path: 'storyboard', label: '镜头画面', sourcePage: 'storyboard' },
+      { path: 'audio', label: '声音对白', sourcePage: 'audio' },
     ],
   },
   {
-    key: 'video', label: '短片生成', en: 'VIDEO', primary: 'video',
+    key: 'video', label: '生成短片', hint: '第 4 步', primary: 'video',
     subs: [
-      { path: 'video', label: '视频', sourcePage: 'video' },
-      { path: 'enhance', label: '美化', sourcePage: 'enhance' },
-      { path: 'final', label: '成品', sourcePage: 'final' },
+      { path: 'video', label: '生成视频', sourcePage: 'video' },
+      { path: 'enhance', label: '优化合成', sourcePage: 'enhance' },
+      { path: 'final', label: '导出成片', sourcePage: 'final' },
     ],
   },
 ];
@@ -100,9 +98,9 @@ export const WorkflowLayout: React.FC = () => {
   const activeStage = activeStageIdx >= 0 ? STAGES[activeStageIdx] : null;
 
   const sidebarTools: AppSidebarItem[] = [
-    { key: 'canvas', label: '自由创作', icon: Brush, to: `/projects/${projectId}/ep/${episodeId}/canvas` },
-    { key: 'media-library', label: '素材库', icon: Library, to: 'media-library', badge: <TaskBadge page="media-library" /> },
-    { key: 'history', label: '历史', icon: Clock, to: 'history', badge: <TaskBadge page="history" /> },
+    { key: 'canvas', label: '专业画布', icon: Brush, to: `/projects/${projectId}/ep/${episodeId}/canvas` },
+    { key: 'media-library', label: '我的素材', icon: Library, to: 'media-library', badge: <TaskBadge page="media-library" /> },
+    { key: 'history', label: '版本记录', icon: Clock, to: 'history', badge: <TaskBadge page="history" /> },
   ];
 
   return (
@@ -113,8 +111,8 @@ export const WorkflowLayout: React.FC = () => {
           <header className="workflow-shell-header flex shrink-0 items-center gap-4 border-b border-n40 bg-n20/90 px-5">
             {/* 左：分集标题 */}
             <div className="min-w-[130px] max-w-[210px] shrink-0 leading-tight">
-              <div className="truncate font-display text-[15px] font-bold tracking-tight">{episodeTitle || '流程化制作'}</div>
-              <div className="mt-0.5 truncate text-[11px] text-n200">流程化制作 · Pipeline</div>
+              <div className="truncate font-display text-[15px] font-bold tracking-tight">{episodeTitle || '创作作品'}</div>
+              <div className="mt-0.5 truncate text-[11px] text-n200">跟着 4 步完成作品</div>
             </div>
 
             {/* 中：四阶段步骤条 */}
@@ -154,7 +152,7 @@ export const WorkflowLayout: React.FC = () => {
                         >
                           {stage.label}
                         </span>
-                        <span className="whitespace-nowrap font-mono text-[10px] tracking-[0.03em] text-n80">{stage.en}</span>
+                        <span className="whitespace-nowrap text-[10px] tracking-[0.03em] text-n80">{stage.hint}</span>
                       </span>
                     </button>
                   </React.Fragment>
@@ -181,7 +179,7 @@ export const WorkflowLayout: React.FC = () => {
                 className="inline-flex h-8 items-center gap-1.5 rounded-[9px] bg-primary px-3.5 text-xs font-semibold text-n0 shadow-glow transition-colors hover:bg-primary-hover"
               >
                 <Download size={13} />
-                导出
+                查看成片
               </button>
             </div>
           </header>

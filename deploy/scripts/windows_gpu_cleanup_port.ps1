@@ -8,6 +8,12 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$CommandMatch,
 
+    [ValidateRange(1, 60)]
+    [int]$WaitTimeoutSeconds = 15,
+
+    [ValidateRange(100, 5000)]
+    [int]$PollMilliseconds = 500,
+
     [string]$LogFile = "E:\MECHA-GPU\logs\agent-port-cleanup.log"
 )
 
@@ -39,17 +45,25 @@ try {
     Write-Log "Port $Port occupied by PIDs: $($pids -join ',')"
 
     $foreignPids = @()
-    foreach ($pid in $pids) {
-        if (-not $pid) { continue }
-        $proc = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $pid) -ErrorAction SilentlyContinue
+    # $PID is a built-in, read-only PowerShell automatic variable and variable
+    # names are case-insensitive. Do not reuse it as a foreach iterator.
+    foreach ($listenerPid in $pids) {
+        if (-not $listenerPid) { continue }
+        $proc = Get-CimInstance Win32_Process -Filter ("ProcessId=" + $listenerPid) -ErrorAction SilentlyContinue
         if (-not $proc) { continue }
         $cmd = $proc.CommandLine
-        if ($cmd -and ($cmd -like "*$CommandMatch*" -or $cmd -like "*$PythonExe*")) {
-            Write-Log "Terminating ComfyUI process PID=$pid Cmd=$cmd"
-            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+        $actualExe = [string]$proc.ExecutablePath
+        $samePython = $actualExe -and [string]::Equals(
+            [System.IO.Path]::GetFullPath($actualExe),
+            [System.IO.Path]::GetFullPath($PythonExe),
+            [System.StringComparison]::OrdinalIgnoreCase
+        )
+        if ($samePython -or ($cmd -and $cmd -like "*$CommandMatch*")) {
+            Write-Log "Terminating ComfyUI process PID=$listenerPid Cmd=$cmd"
+            Stop-Process -Id $listenerPid -Force -ErrorAction SilentlyContinue
         } else {
-            $foreignPids += $pid
-            Write-Log "Keep-running non-target process on port $Port PID=$pid: $cmd"
+            $foreignPids += $listenerPid
+            Write-Log "Keep-running non-target process on port $Port PID=${listenerPid}: $cmd"
         }
     }
 
@@ -59,16 +73,24 @@ try {
         exit 2
     }
 
-    Start-Sleep -Seconds 1
-    $left = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+    # Stop-Process can return before Windows has removed the listening socket.
+    # Wait for the exact managed listener to disappear instead of turning a
+    # normal shutdown delay into a failed runtime switch.
+    $deadline = (Get-Date).AddSeconds($WaitTimeoutSeconds)
+    do {
+        $left = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
+        if (-not $left) { break }
+        Start-Sleep -Milliseconds $PollMilliseconds
+    } while ((Get-Date) -lt $deadline)
+
     if ($left) {
-        Write-Log "Port $Port still has listeners after cleanup: $($left -join ',')"
+        Write-Log "Port $Port still has listeners after ${WaitTimeoutSeconds}s cleanup wait: $($left -join ',')"
         exit 3
     }
 
     Write-Log "Port $Port cleanup complete."
     exit 0
 } catch {
-    Write-Log "Port cleanup failed on $Port: $($_.Exception.Message)"
+    Write-Log "Port cleanup failed on ${Port}: $($_.Exception.Message)"
     exit 1
 }

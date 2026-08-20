@@ -98,6 +98,30 @@ class TaskDAO:
             await db.execute(query, status, task_id)
 
     @staticmethod
+    async def update_task_progress(
+        task_id: str,
+        progress: float,
+        message: str = "",
+    ) -> None:
+        """Persist Agent progress for DB-backed status reads and recovery."""
+        db = get_db_manager()
+        query = """
+            UPDATE tasks
+            SET metadata = COALESCE(metadata, '{}'::jsonb) ||
+                jsonb_build_object(
+                    'progress', $2::double precision,
+                    'progress_message', $3::text
+                )
+            WHERE task_id = $1
+        """
+        await db.execute(
+            query,
+            task_id,
+            min(95.0, max(1.0, float(progress))),
+            str(message or "")[:200],
+        )
+
+    @staticmethod
     async def reconcile_terminal_task(
         task_id: str,
         status: str,

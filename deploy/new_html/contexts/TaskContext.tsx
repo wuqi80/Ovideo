@@ -68,6 +68,14 @@ function isAdminRoute(): boolean {
   }
 }
 
+function isPublicShareRoute(): boolean {
+  try {
+    return typeof window !== 'undefined' && window.location.pathname.startsWith('/share/final/');
+  } catch {
+    return false;
+  }
+}
+
 function inferRuntimeTaskKind(task: GlobalTask): TaskKind {
   const category = String(task.category || '').toLowerCase();
   const name = String(task.displayName || task.id || '').toLowerCase();
@@ -139,7 +147,7 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [taskUserScope]);
 
   useEffect(() => {
-    if (isAdminRoute()) return;
+    if (isAdminRoute() || isPublicShareRoute()) return;
     if (startedRef.current) return;
     startedRef.current = true;
     taskRegistry.setUserScope(taskUserScope, false);

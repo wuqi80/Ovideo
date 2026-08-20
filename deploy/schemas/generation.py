@@ -35,6 +35,7 @@ class GenerateRequest(BaseModel):
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")
     project_id: Optional[str] = Field(None, description="项目ID，用于素材库归属")
     episode_id: Optional[str] = Field(None, description="集ID，用于缓存失效")
+    workspace_group_id: Optional[str] = Field(None, description="视频工作台卡片ID，用于刷新后恢复实时任务状态")
     preferred_agent_id: Optional[str] = Field(None, description="指定执行任务的处理节点")
     preferred_node_id: Optional[str] = Field(None, description="指定执行任务的集群节点")
     # Seedance 2.0 (飞升/渡劫) 专用字段

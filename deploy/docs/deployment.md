@@ -42,7 +42,7 @@
 | Vite 前端（开发） | 3000 | 开发模式热更新，代理 `/api` → 后端 |
 | PostgreSQL | 5432 | 主数据库，61 张表 |
 | Redis | 6379 | 任务队列 + SSE Pub/Sub |
-| ComfyUI | 8188, 8189... | GPU Worker 节点（图片/视频生成） |
+| ComfyUI | 8188 | GPU Worker 单入口（图片/视频串行执行） |
 
 ---
 

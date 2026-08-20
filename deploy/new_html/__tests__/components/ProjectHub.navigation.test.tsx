@@ -244,7 +244,7 @@ describe('ProjectHub navigation and filters', () => {
     expect(cover.getAttribute('src')).toContain('/api/files/file_cover/download?token=token-cover');
   });
 
-  it('edits project metadata and adds members from the card menu', async () => {
+  it('adds members, saves project metadata, and closes the edit dialog', async () => {
     render(
       <MemoryRouter>
         <ProjectHub />
@@ -259,6 +259,19 @@ describe('ProjectHub navigation and filters', () => {
     expect(screen.getAllByText('admin').some(node => node.tagName.toLowerCase() === 'div')).toBe(true);
     expect(screen.getAllByText('alice').some(node => node.tagName.toLowerCase() === 'div')).toBe(true);
 
+    const memberInput = screen.getByPlaceholderText('例如 admin 或 user_xxx，可换行输入多个成员');
+    expect(memberInput.tagName).toBe('TEXTAREA');
+    expect(memberInput).toHaveClass('min-h-[88px]', 'w-full');
+    fireEvent.change(memberInput, {
+      target: { value: 'bob' },
+    });
+    fireEvent.click(screen.getByText('添加'));
+
+    await waitFor(() => {
+      expect(addProjectMember).toHaveBeenCalledWith('active-1', 'bob', 'member', 'all');
+      expect(screen.getByRole('button', { name: '添加' })).toBeEnabled();
+    });
+
     fireEvent.change(screen.getByDisplayValue('树洞里的星辰'), {
       target: { value: '树洞里的星辰 · 新封面版' },
     });
@@ -272,15 +285,26 @@ describe('ProjectHub navigation and filters', () => {
         project_name: '树洞里的星辰 · 新封面版',
         description: '更新后的项目描述',
       });
+      expect(screen.queryByRole('dialog', { name: '编辑项目' })).not.toBeInTheDocument();
     });
+  });
 
-    fireEvent.change(screen.getByPlaceholderText('例如 admin 或 user_xxx'), {
-      target: { value: 'bob' },
-    });
-    fireEvent.click(screen.getByText('添加'));
+  it('keeps the edit dialog open when interacting outside and closes only explicitly', async () => {
+    render(
+      <MemoryRouter>
+        <ProjectHub />
+      </MemoryRouter>,
+    );
 
-    await waitFor(() => {
-      expect(addProjectMember).toHaveBeenCalledWith('active-1', 'bob', 'member', 'all');
-    });
+    await screen.findByText('树洞里的星辰');
+    fireEvent.click(screen.getByLabelText('树洞里的星辰 更多操作'));
+    fireEvent.click(screen.getByText('编辑项目'));
+
+    const dialog = await screen.findByRole('dialog', { name: '编辑项目' });
+    fireEvent.click(dialog);
+    expect(screen.getByRole('dialog', { name: '编辑项目' })).toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: '关闭' }));
+    expect(screen.queryByRole('dialog', { name: '编辑项目' })).not.toBeInTheDocument();
   });
 });

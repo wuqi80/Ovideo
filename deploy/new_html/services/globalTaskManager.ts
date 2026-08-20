@@ -112,6 +112,9 @@ export class GlobalTaskManager {
 
     private handleSSEMessage(data: any) {
         if (data.type === 'task_complete' || data.type === 'task_failed') {
+            if (data.type === 'task_complete' && typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('credits:updated'));
+            }
             const notification: TaskNotification = {
                 id: data.task_id,
                 type: this.mapTaskType(data.task_type || ''),

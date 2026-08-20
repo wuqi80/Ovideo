@@ -24,4 +24,20 @@ describe('EnhancePage compose audio mode', () => {
     expect(source).toContain("audioClips.length > 0 && composeAudioMode === 'video_original'");
     expect(source).toContain('将忽略时间线配音');
   });
+
+  it('exposes voice, music and sound-effect entry points with separate timeline lanes', () => {
+    expect(source).toContain('加入配音');
+    expect(source).toContain('背景音乐');
+    expect(source).toContain('特效音');
+    expect(source).toContain("{ key: 'voice', clips: voiceClips }");
+    expect(source).toContain("{ key: 'bgm', clips: bgmClips }");
+    expect(source).toContain("{ key: 'sfx', clips: sfxClips }");
+  });
+
+  it('offers precise audio alignment controls instead of drag-only editing', () => {
+    expect(source).toContain('对齐当前视频片段');
+    expect(source).toContain('移到播放头');
+    expect(source).toContain('开始时间（秒）');
+    expect(source).toContain('使用时长（秒）');
+  });
 });

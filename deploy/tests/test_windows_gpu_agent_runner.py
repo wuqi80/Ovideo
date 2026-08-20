@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from scripts.windows_gpu_agent_runner import (
     COMFYUI_RECOVERY_COOLDOWN_SECONDS,
     COMFYUI_RECOVERY_FAILURE_THRESHOLD,
@@ -8,9 +12,17 @@ from scripts.windows_gpu_agent_runner import (
     GPU2_HUMAN_ANGLE_PROMPTS,
     GPU2_H3_FPS,
     GPU2_H3_HEIGHT,
+    GPU2_H3_KJNODES_COMMIT,
+    GPU2_H3_DIRECTOR_COMMIT,
     GPU2_H3_MODEL_FILES,
+    GPU2_H3_MINI_MODEL_FILES,
+    GPU2_H3_MINI_MODEL_SIZES,
+    GPU2_H3_CLIPPROJ_COMMIT,
     GPU2_H3_PORT,
+    GPU2_MUSIC3_MODEL_FILES,
     GPU2_COMFYUI_PORT,
+    GIB,
+    Gpu2ModelReleaseGate,
     Gpu2RuntimeManager,
     GPU2_H3_WIDTH,
     GPU2_QWEN_MODEL_FILES,
@@ -22,6 +34,8 @@ from scripts.windows_gpu_agent_runner import (
     build_gpu2_infinitetalk_workflow,
     build_gpu2_matting_workflow,
     build_gpu2_minimax_h3_fl2va_workflow,
+    build_gpu2_minimax_h3_long_video_workflow,
+    build_gpu2_minimax_music3_workflow,
     build_gpu2_qwen_workflow,
     build_gpu2_upscale_workflow,
     build_gpu2_video_upscale_workflow,
@@ -30,18 +44,72 @@ from scripts.windows_gpu_agent_runner import (
     gpu2_infinitetalk_total_frames,
     gpu2_h3_duration_seconds,
     gpu2_h3_length_frames,
+    gpu2_h3_sage_attention_ready,
+    gpu2_h3_sage_attention_installed,
+    gpu2_h3_sage_attention_requested,
+    gpu2_h3_fast_model_requested,
+    gpu2_h3_mini_ready,
+    gpu2_h3_mini_installed,
+    gpu2_h3_mini_requested,
+    gpu2_h3_long_video_ready,
+    gpu2_h3_long_video_requested,
+    gpu2_h3_upscale_720p_requested,
+    gpu2_agent_maintenance_enabled,
     gpu2_wan_chunk_frame_counts,
     gpu2_wan_duration_seconds,
     gpu2_wan_total_frames,
     is_gpu2_h3_task,
+    is_gpu2_music3_task,
     is_gpu2_infinitetalk_task,
     is_gpu2_qwen_compatible_task,
     is_gpu2_wan_i2v_task,
     normalize_gpu2_image_dimensions,
     normalize_gpu2_video_resolution,
+    normalize_gpu2_video_seed,
+    execute_gpu2_h3_post_upscale_720p,
     prepare_gpu2_task,
+    _runtime_profile_from_process,
     tune_gpu2_qwen_workflow,
 )
+
+
+def test_gpu2_minimax_music3_uses_fixed_int8_models_and_shared_runtime():
+    task = {
+        "task_type": "minimax_music3",
+        "params": {
+            "caption": "warm cinematic instrumental",
+            "lyrics": "[Instrumental]",
+            "duration_seconds": 30,
+            "seed": 42,
+        },
+    }
+
+    workflow = build_gpu2_minimax_music3_workflow(task)
+    prepared = prepare_gpu2_task(task)
+
+    assert is_gpu2_music3_task(task)
+    assert workflow["1"]["inputs"]["unet_name"] == GPU2_MUSIC3_MODEL_FILES["diffusion"]
+    assert workflow["2"]["inputs"]["clip_name"] == GPU2_MUSIC3_MODEL_FILES["text_encoder"]
+    assert workflow["2"]["inputs"]["type"] == "minimax"
+    assert workflow["3"]["inputs"]["vae_name"] == GPU2_MUSIC3_MODEL_FILES["vae"]
+    assert workflow["4"]["inputs"]["max_duration"] == 30
+    assert workflow["6"]["inputs"]["seconds"] == ["4", 1]
+    assert workflow["8"]["class_type"] == "VAEDecodeAudioTiled"
+    assert workflow["9"]["class_type"] == "SaveAudioAdvanced"
+    assert workflow["9"]["inputs"]["format"] == "mp3"
+    assert workflow["9"]["inputs"]["format.quality"] == "V0"
+    assert prepared["workflow_name"] == "gpu2_minimax_music3"
+    assert prepared["params"]["preferred_comfyui_port"] == GPU2_COMFYUI_PORT
+    assert prepared["params"]["gpu2_runtime_profile"] == "music"
+    assert prepared["params"]["comfyui_timeout_seconds"] == 3600
+
+
+def test_gpu2_agent_maintenance_gate_defaults_closed(monkeypatch):
+    monkeypatch.delenv("MECHA_GPU_AGENT_MAINTENANCE", raising=False)
+    assert gpu2_agent_maintenance_enabled() is True
+
+    monkeypatch.setenv("MECHA_GPU_AGENT_MAINTENANCE", "0")
+    assert gpu2_agent_maintenance_enabled() is False
 
 
 def test_gpu2_port_recovery_waits_for_sustained_outage_and_respects_cooldown(tmp_path):
@@ -50,8 +118,8 @@ def test_gpu2_port_recovery_waits_for_sustained_outage_and_respects_cooldown(tmp
     launched = []
     now = [1000.0]
     recovery = ComfyUIPortRecovery(
-        [8189],
-        command_map={8189: command},
+        [8288],
+        command_map={8288: command},
         port_is_listening=lambda _port: False,
         launcher=lambda path: launched.append(path) or True,
         clock=lambda: now[0],
@@ -185,6 +253,285 @@ def test_gpu2_minimax_h3_routes_to_single_8188_port_and_audio_video_nodes():
     assert prepared["params"]["gpu2_runtime_profile"] == "h3"
 
 
+def test_gpu2_minimax_h3_sageattention_only_rewires_model_attention():
+    task = {
+        "task_type": "i2v",
+        "params": {
+            "model": "MiniMaxH3",
+            "image_path": "first.png",
+            "prompt": "same prompt",
+            "duration": 15,
+            "seed": 77,
+        },
+        "files": [{"param": "image_path", "filename": "first.png"}],
+    }
+
+    baseline = build_gpu2_minimax_h3_fl2va_workflow(task)
+    accelerated = build_gpu2_minimax_h3_fl2va_workflow(
+        task, enable_sage_attention=True
+    )
+
+    assert accelerated["7"] == {
+        "class_type": "PathchSageAttentionKJ",
+        "inputs": {
+            "model": ["6", 0],
+            "sage_attention": "auto",
+            "allow_compile": True,
+        },
+    }
+    assert accelerated["8"] == {
+        "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+        "inputs": {"model": ["7", 0]},
+    }
+    assert accelerated["9"]["inputs"]["model"] == ["8", 0]
+    assert accelerated["16"]["inputs"]["model"] == ["8", 0]
+    for node_id in ("3", "9", "17", "104"):
+        baseline_inputs = dict(baseline[node_id]["inputs"])
+        accelerated_inputs = dict(accelerated[node_id]["inputs"])
+        baseline_inputs.pop("model", None)
+        accelerated_inputs.pop("model", None)
+        assert accelerated_inputs == baseline_inputs
+
+
+def test_gpu2_minimax_h3_fast_and_mini_are_explicit_model_profiles():
+    fast = {
+        "task_type": "i2v",
+        "params": {"model": "MiniMaxH3Fast", "image_path": "first.png"},
+    }
+    mini = {
+        "task_type": "i2v",
+        "params": {"model": "MiniMaxH3Mini", "image_path": "first.png"},
+    }
+
+    assert is_gpu2_h3_task(fast) is True
+    assert gpu2_h3_sage_attention_requested(fast) is True
+    assert gpu2_h3_fast_model_requested(fast) is True
+    assert gpu2_h3_mini_requested(fast) is False
+    assert is_gpu2_h3_task(mini) is True
+    assert gpu2_h3_sage_attention_requested(mini) is False
+    assert gpu2_h3_mini_requested(mini) is True
+
+
+def test_gpu2_minimax_h3_mini_rewires_only_the_clip_path():
+    task = {
+        "task_type": "i2v",
+        "params": {
+            "model": "MiniMaxH3Mini",
+            "image_path": "first.png",
+            "prompt": "same prompt",
+            "seed": 77,
+        },
+    }
+
+    baseline = build_gpu2_minimax_h3_fl2va_workflow(task)
+    mini = build_gpu2_minimax_h3_fl2va_workflow(task, use_mini_clip=True)
+
+    assert mini["13"]["inputs"] == {
+        "clip_name": GPU2_H3_MINI_MODEL_FILES["text_encoder"],
+        "type": "krea2",
+        "device": "default",
+    }
+    assert mini["12"] == {
+        "class_type": "ClipProjApply",
+        "inputs": {
+            "clip": ["13", 0],
+            "projection": GPU2_H3_MINI_MODEL_FILES["projection"],
+        },
+    }
+    assert mini["104"]["inputs"]["clip"] == ["12", 0]
+    assert mini["6"] == baseline["6"]
+    assert mini["11"] == baseline["11"]
+    assert mini["24"] == baseline["24"]
+
+
+def test_gpu2_h3_mini_requires_pinned_marker_models_and_live_node(tmp_path):
+    models_root = tmp_path / "models"
+    text_encoder = models_root / "text_encoders" / GPU2_H3_MINI_MODEL_FILES["text_encoder"]
+    projection = models_root / "clip_projections" / GPU2_H3_MINI_MODEL_FILES["projection"]
+    text_encoder.parent.mkdir(parents=True)
+    projection.parent.mkdir(parents=True)
+    with text_encoder.open("wb") as handle:
+        handle.truncate(GPU2_H3_MINI_MODEL_SIZES["text_encoder"])
+    with projection.open("wb") as handle:
+        handle.truncate(GPU2_H3_MINI_MODEL_SIZES["projection"])
+    marker = tmp_path / "h3-mini-ready.json"
+    marker.write_text(json.dumps({
+        "verified": True,
+        "clipproj_commit": GPU2_H3_CLIPPROJ_COMMIT,
+        "inference_executed": False,
+    }), encoding="utf-8-sig")
+
+    assert gpu2_h3_mini_installed(
+        marker_path=marker,
+        models_root=models_root,
+    ) == (True, "verified")
+
+    assert gpu2_h3_mini_ready(
+        marker_path=marker,
+        models_root=models_root,
+        object_info_reader=lambda: {"ClipProjApply": {}},
+    ) == (True, "verified")
+    ready, reason = gpu2_h3_mini_ready(
+        marker_path=marker,
+        models_root=models_root,
+        object_info_reader=lambda: {},
+    )
+    assert ready is False
+    assert "ClipProjApply" in reason
+
+
+def test_gpu2_minimax_h3_sageattention_preserves_data_payload_on_prepare():
+    task = {
+        "task_type": "i2v",
+        "data": {
+            "model": "MiniMaxH3",
+            "image_path": "first.png",
+            "prompt": "preserve this prompt",
+            "duration": 15,
+            "seed": 77,
+            "h3_sage_attention": True,
+        },
+        "files": [{"param": "image_path", "filename": "first.png"}],
+    }
+
+    prepared = prepare_gpu2_task(task)
+    accelerated = build_gpu2_minimax_h3_fl2va_workflow(
+        prepared, enable_sage_attention=True
+    )
+
+    assert gpu2_h3_sage_attention_requested(task) is True
+    assert prepared["params"]["prompt"] == "preserve this prompt"
+    assert prepared["params"]["duration"] == 15
+    assert prepared["params"]["seed"] == 77
+    assert accelerated["104"]["inputs"]["prompt"] == "preserve this prompt"
+    assert accelerated["15"]["inputs"]["noise_seed"] == 77
+    assert accelerated["104"]["inputs"]["length"] == gpu2_h3_length_frames(task)
+
+
+def test_gpu2_h3_sageattention_requires_marker_and_live_nodes(tmp_path, monkeypatch):
+    marker = tmp_path / "h3-sageattention-ready.json"
+    monkeypatch.setenv("MECHA_GPU_H3_SAGE_ATTENTION", "1")
+
+    ready, reason = gpu2_h3_sage_attention_ready(
+        marker_path=marker, object_info_reader=lambda: {}
+    )
+    assert ready is False
+    assert "marker unavailable" in reason
+
+    marker.write_text(json.dumps({
+        "verified": True,
+        "sageattention_version": "2.2.0",
+        "cuda_arch": "sm86",
+        "kjnodes_commit": GPU2_H3_KJNODES_COMMIT,
+        "inference_executed": False,
+    }), encoding="utf-8")
+    assert gpu2_h3_sage_attention_installed(marker_path=marker) == (True, "verified")
+    ready, reason = gpu2_h3_sage_attention_ready(
+        marker_path=marker,
+        object_info_reader=lambda: {
+            "PathchSageAttentionKJ": {},
+            "MiniMaxH3MemoryEfficientSageAttentionPatch": {},
+        },
+    )
+    assert (ready, reason) == (True, "verified")
+
+
+def test_gpu2_h3_fast_profile_does_not_require_legacy_toggle(tmp_path, monkeypatch):
+    marker = tmp_path / "h3-sageattention-ready.json"
+    marker.write_text(json.dumps({
+        "verified": True,
+        "sageattention_version": "2.2.0",
+        "cuda_arch": "sm86",
+        "kjnodes_commit": GPU2_H3_KJNODES_COMMIT,
+        "inference_executed": False,
+    }), encoding="utf-8")
+    monkeypatch.setenv("MECHA_GPU_H3_SAGE_ATTENTION", "0")
+
+    assert gpu2_h3_sage_attention_ready(
+        marker_path=marker,
+        object_info_reader=lambda: {
+            "PathchSageAttentionKJ": {},
+            "MiniMaxH3MemoryEfficientSageAttentionPatch": {},
+        },
+        require_feature_flag=False,
+    ) == (True, "verified")
+
+
+def test_gpu2_minimax_h3_long_video_builds_serialized_director_groups():
+    task = {
+        "task_type": "i2v",
+        "params": {
+            "model": "MiniMaxH3",
+            "image_path": "first.png",
+            "h3_long_video": True,
+            "h3_long_video_segments": [
+                {
+                    "prompt": "continue walking",
+                    "duration": 5,
+                    "image_path": "first.png",
+                    "image_path_end": "first_end.png",
+                },
+                {
+                    "prompt": "turn and wave",
+                    "duration": 7,
+                    "image_path": "second.png",
+                },
+            ],
+            "seed": 77,
+        },
+    }
+
+    workflow = build_gpu2_minimax_h3_long_video_workflow(task)
+    timeline = json.loads(workflow["81"]["inputs"]["timeline_data"])
+
+    assert gpu2_h3_long_video_requested(task) is True
+    assert workflow["g0"]["inputs"]["first_frame"] == ["l0f", 0]
+    assert workflow["g0"]["inputs"]["last_frame"] == ["l0l", 0]
+    assert workflow["g1"]["inputs"]["first_frame"] == ["l1f", 0]
+    assert "last_frame" not in workflow["g1"]["inputs"]
+    assert workflow["80"]["inputs"] == {
+        "groups.group_0": ["g0", 0],
+        "groups.group_1": ["g1", 0],
+    }
+    assert workflow["81"]["class_type"] == "MiniMaxH3Director"
+    assert workflow["81"]["inputs"]["clear_vram_between_segments"] is True
+    assert workflow["81"]["inputs"]["steps"] == 25
+    assert workflow["81"]["inputs"]["export_source_images"] is False
+    assert workflow["91"]["inputs"]["fps"] == ["81", 2]
+    assert timeline["output"]["continuityEnabled"] is True
+    assert timeline["output"]["continuityOverlapFrames"] == 22
+    assert timeline["segments"][1]["continuityFromPrev"] is True
+
+
+def test_gpu2_h3_long_video_requires_exact_marker_nodes_and_no_conflicting_pack(
+    tmp_path, monkeypatch
+):
+    marker = tmp_path / "h3-long-video-ready.json"
+    monkeypatch.setenv("MECHA_GPU_H3_LONG_VIDEO", "1")
+    marker.write_text(json.dumps({
+        "verified": True,
+        "director_commit": GPU2_H3_DIRECTOR_COMMIT,
+        "inference_executed": False,
+    }), encoding="utf-8")
+    nodes = {
+        "MiniMaxH3Director": {},
+        "MiniMaxH3DirectorGroupImageToVideo": {},
+        "MiniMaxH3DirectorGroupsCombine": {},
+        "CreateVideo": {},
+        "SaveVideo": {},
+    }
+
+    assert gpu2_h3_long_video_ready(
+        marker_path=marker, object_info_reader=lambda: nodes
+    ) == (True, "verified")
+    nodes["MiniMaxH3MotionContext"] = {}
+    ready, reason = gpu2_h3_long_video_ready(
+        marker_path=marker, object_info_reader=lambda: nodes
+    )
+    assert ready is False
+    assert "conflicts with Director" in reason
+
+
 def test_gpu2_runtime_manager_stops_previous_profile_before_single_port_switch(tmp_path):
     wan = tmp_path / "wan.cmd"
     h3 = tmp_path / "h3.cmd"
@@ -209,6 +556,7 @@ def test_gpu2_runtime_manager_stops_previous_profile_before_single_port_switch(t
         listener=lambda _port: listening[0],
         stopper=stop,
         launcher=launch,
+        profile_detector=lambda _port: "wan",
         sleeper=lambda _seconds: None,
     )
     manager.ensure("h3")
@@ -216,6 +564,209 @@ def test_gpu2_runtime_manager_stops_previous_profile_before_single_port_switch(t
     assert stopped == ["wan"]
     assert launched == [h3]
     assert manager.active_profile == "h3"
+
+
+def test_gpu2_runtime_manager_recovers_existing_h3_profile_after_agent_restart(tmp_path):
+    h3 = tmp_path / "h3.cmd"
+    h3.write_text("@echo off\n", encoding="utf-8")
+    stopped = []
+    launched = []
+    manager = Gpu2RuntimeManager(
+        commands={"h3": h3},
+        listener=lambda _port: True,
+        stopper=lambda profile: stopped.append(profile) or True,
+        launcher=lambda command: launched.append(command) or True,
+        profile_detector=lambda _port: "h3",
+    )
+
+    manager.ensure("h3")
+
+    assert manager.active_profile == "h3"
+    assert stopped == []
+    assert launched == []
+
+
+def test_gpu2_runtime_manager_still_refuses_unknown_listener(tmp_path):
+    h3 = tmp_path / "h3.cmd"
+    h3.write_text("@echo off\n", encoding="utf-8")
+    manager = Gpu2RuntimeManager(
+        commands={"h3": h3},
+        listener=lambda _port: True,
+        profile_detector=lambda _port: None,
+    )
+
+    with pytest.raises(RuntimeError, match="unknown ComfyUI listener"):
+        manager.ensure("h3")
+
+
+def test_gpu2_runtime_manager_reports_managed_listener_stop_timeout(tmp_path):
+    h3 = tmp_path / "h3.cmd"
+    h3.write_text("@echo off\n", encoding="utf-8")
+    manager = Gpu2RuntimeManager(
+        commands={"h3": h3},
+        listener=lambda _port: True,
+        profile_detector=lambda _port: "wan",
+        stopper=lambda _profile: False,
+    )
+
+    with pytest.raises(RuntimeError, match="Managed wan ComfyUI runtime did not release port 8188"):
+        manager.ensure("h3")
+
+
+def test_gpu2_runtime_profile_matches_only_reviewed_executable_and_main_paths(tmp_path):
+    root = tmp_path / "MECHA-GPU"
+    h3_python = root / "ComfyUI-H3" / "python_embeded" / "python.exe"
+    h3_main = root / "ComfyUI-H3" / "ComfyUI" / "main.py"
+
+    assert _runtime_profile_from_process(
+        str(h3_python),
+        f'"{h3_python}" -s "{h3_main}" --port 8188',
+        root=root,
+    ) == "h3"
+    assert _runtime_profile_from_process(
+        str(h3_python),
+        'python.exe -s C:\\unknown\\main.py --port 8188',
+        root=root,
+    ) is None
+    assert _runtime_profile_from_process(
+        'C:\\Python\\python.exe',
+        f'python.exe -s "{h3_main}" --port 8188',
+        root=root,
+    ) is None
+
+
+def test_gpu2_model_release_gate_requires_three_consecutive_safe_samples():
+    now = [0.0]
+    released = []
+    snapshots = iter([
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+        {"ram_free": 7 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 40 * GIB},
+    ])
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    gate = Gpu2ModelReleaseGate(
+        release_request=lambda: released.append(True) or True,
+        memory_reader=lambda: next(snapshots),
+        sleeper=sleep,
+        clock=lambda: now[0],
+        timeout_seconds=30,
+        poll_seconds=1,
+        stable_samples=3,
+        min_free_ram_gib=8,
+        min_free_vram_gib=8,
+    )
+    assert gate.released is False
+    gate.mark_models_loaded()
+
+    assert gate.release_and_wait() is True
+    assert gate.released is True
+    assert released == [True]
+
+
+def test_gpu2_model_release_gate_fails_closed_when_memory_does_not_release():
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    gate = Gpu2ModelReleaseGate(
+        release_request=lambda: True,
+        memory_reader=lambda: {
+            "ram_free": 20 * GIB,
+            "vram_total": 48 * GIB,
+            "vram_free": 12 * GIB,
+        },
+        sleeper=sleep,
+        clock=lambda: now[0],
+        timeout_seconds=3,
+        poll_seconds=1,
+        stable_samples=2,
+        min_free_ram_gib=8,
+        min_free_vram_gib=8,
+    )
+    gate.mark_models_loaded()
+
+    assert gate.release_and_wait() is False
+    assert gate.ensure_released() is False
+    assert gate.released is False
+    assert "RAM/VRAM baseline" in gate.last_error
+
+
+def test_gpu2_model_release_gate_requires_pre_task_memory_recovery():
+    now = [0.0]
+    snapshots = iter([
+        {"ram_free": 24 * GIB, "vram_total": 48 * GIB, "vram_free": 44 * GIB},
+        {"ram_free": 19 * GIB, "vram_total": 48 * GIB, "vram_free": 42 * GIB},
+        {"ram_free": 19 * GIB, "vram_total": 48 * GIB, "vram_free": 42 * GIB},
+    ])
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    gate = Gpu2ModelReleaseGate(
+        release_request=lambda: True,
+        memory_reader=lambda: next(snapshots),
+        sleeper=sleep,
+        clock=lambda: now[0],
+        timeout_seconds=1,
+        poll_seconds=1,
+        stable_samples=1,
+        min_free_ram_gib=8,
+        min_free_vram_gib=8,
+        ram_tolerance_gib=4,
+        vram_tolerance_gib=1,
+    )
+    gate.mark_models_loaded()
+
+    assert gate.release_and_wait() is False
+    assert gate.released is False
+
+
+def test_gpu2_runtime_manager_blocks_next_task_until_release_gate_opens(tmp_path):
+    wan = tmp_path / "wan.cmd"
+    wan.write_text("@echo off\n", encoding="utf-8")
+    attempts = []
+    gate = Gpu2ModelReleaseGate(
+        release_request=lambda: attempts.append(True) or False,
+        memory_reader=lambda: None,
+    )
+    manager = Gpu2RuntimeManager(
+        commands={"wan": wan},
+        listener=lambda _port: True,
+        profile_detector=lambda _port: "wan",
+        model_gate=gate,
+    )
+    manager.mark_models_loaded()
+
+    assert manager.release_models() is False
+    assert manager.ready_for_next_task() is False
+    assert attempts == [True, True]
+
+
+def test_gpu2_runtime_manager_emergency_stop_targets_only_active_owned_profile(tmp_path):
+    wan = tmp_path / "wan.cmd"
+    h3 = tmp_path / "h3.cmd"
+    wan.write_text("@echo off\n", encoding="utf-8")
+    h3.write_text("@echo off\n", encoding="utf-8")
+    stopped = []
+    manager = Gpu2RuntimeManager(
+        commands={"wan": wan, "h3": h3},
+        listener=lambda _port: True,
+        profile_detector=lambda _port: "wan",
+        stopper=lambda profile: stopped.append(profile) or True,
+    )
+    manager.active_profile = "h3"
+
+    assert manager.emergency_stop() is True
+    assert stopped == ["h3"]
+    assert manager.active_profile is None
+    assert manager.model_gate.released is True
 
 
 def test_gpu2_minimax_h3_preserves_first_and_last_frame_inputs():
@@ -461,6 +1012,105 @@ def test_gpu2_video_resolution_accepts_frontend_labels_and_caps_large_targets():
     assert normalize_gpu2_video_resolution("2K") == 1080
     assert normalize_gpu2_video_resolution("4K") == 1080
     assert normalize_gpu2_video_resolution("unexpected") == 720
+
+
+def test_gpu2_video_seed_maps_random_sentinel_into_seedvr2_range():
+    assert normalize_gpu2_video_seed(-1) == 42
+    assert normalize_gpu2_video_seed("-1") == 42
+    assert normalize_gpu2_video_seed(None) == 42
+    assert normalize_gpu2_video_seed(456) == 456
+    assert normalize_gpu2_video_seed(999999999999) == 4294967295
+    assert build_gpu2_video_upscale_workflow({
+        "params": {"video_filename": "clip.mp4", "seed": -1},
+    })["4"]["inputs"]["seed"] == 42
+
+
+def test_gpu2_h3_720p_request_is_explicit_only():
+    assert gpu2_h3_upscale_720p_requested({"params": {"h3_upscale_720p": True}}) is True
+    assert gpu2_h3_upscale_720p_requested({"params": {}}) is False
+
+
+def test_gpu2_h3_720p_postprocess_unloads_before_upscaler(tmp_path):
+    source = tmp_path / "h3.mp4"
+    source.write_bytes(b"video")
+    events = []
+
+    class _Gate:
+        last_error = ""
+
+    class _Runtime:
+        model_gate = _Gate()
+
+        def release_models(self):
+            events.append("release_h3")
+            return True
+
+        def ensure(self, profile):
+            events.append(f"ensure_{profile}")
+
+        def mark_models_loaded(self):
+            events.append("mark_seedvr_loaded")
+
+    class _Resources:
+        last_error = ""
+
+        def ready_for_new_task(self):
+            events.append("resource_gate")
+            return True
+
+    class _Agent:
+        def _upload_to_comfyui(self, port, path):
+            events.append(f"upload_{port}")
+            assert path == str(source)
+            return "h3.mp4"
+
+    def _execute(task):
+        events.append("execute_upscale")
+        assert task["workflow_name"] == "gpu2_h3_post_upscale_720p"
+        assert task["workflow_json"]["4"]["inputs"]["resolution"] == 720
+        assert task["workflow_json"]["4"]["inputs"]["seed"] == 42
+        return {"status": "completed", "output_files": ["upscaled.mp4"]}
+
+    result = execute_gpu2_h3_post_upscale_720p(
+        agent=_Agent(),
+        runtime_manager=_Runtime(),
+        resource_controller=_Resources(),
+        execute_workflow=_execute,
+        generation_result={"status": "completed", "output_files": [str(source)]},
+        params={"seed": -1},
+    )
+
+    assert events == [
+        "release_h3",
+        "resource_gate",
+        "ensure_wan",
+        f"upload_{GPU2_COMFYUI_PORT}",
+        "mark_seedvr_loaded",
+        "execute_upscale",
+    ]
+    assert result["result_payload"]["h3_upscale_720p_completed"] is True
+    assert result["result_payload"]["upscale_resolution"] == "1280x720"
+
+
+def test_gpu2_h3_720p_postprocess_fails_closed_when_h3_does_not_unload(tmp_path):
+    source = tmp_path / "h3.mp4"
+    source.write_bytes(b"video")
+
+    class _Runtime:
+        model_gate = type("Gate", (), {"last_error": "still loaded"})()
+
+        def release_models(self):
+            return False
+
+    with pytest.raises(RuntimeError, match="did not fully unload"):
+        execute_gpu2_h3_post_upscale_720p(
+            agent=object(),
+            runtime_manager=_Runtime(),
+            resource_controller=object(),
+            execute_workflow=lambda _task: {},
+            generation_result={"status": "completed", "output_files": [str(source)]},
+            params={},
+        )
 
 
 def test_gpu2_qwen_compatibility_covers_frontend_image_workflows():

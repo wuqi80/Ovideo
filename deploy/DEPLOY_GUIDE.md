@@ -269,7 +269,7 @@ nohup python cluster_main.py > logs/server.log 2>&1 &
 | 3000 | 前端 Vite 开发服务器 (仅开发时) |
 | 5432 | PostgreSQL |
 | 6379 | Redis |
-| 8188-8189 | ComfyUI 节点 (可选) |
+| 8188 | ComfyUI 节点（单入口、串行模型切换） |
 
 ### 步骤 10: 验证部署
 
@@ -329,13 +329,13 @@ pip install requests
 python comfyui_agent.py \
   --server http://后端IP:8000 \
   --token sk-agent-xxxxxxxx \
-  --ports 8188,8189
+  --ports 8188
 
 # 后台运行
 nohup python comfyui_agent.py \
   --server http://后端IP:8000 \
   --token sk-agent-xxxxxxxx \
-  --ports 8188,8189 \
+  --ports 8188 \
   > /var/log/comfyui-agent.log 2>&1 &
 ```
 

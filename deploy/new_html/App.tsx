@@ -50,6 +50,7 @@ const DesignPage = React.lazy(() => import('./pages/DesignPage').then(m => ({ de
 const GenerationPage = React.lazy(() => import('./pages/GenerationPage').then(m => ({ default: m.GenerationPage })));
 const EnhancePage = React.lazy(() => import('./pages/EnhancePage').then(m => ({ default: m.EnhancePage })));
 const FinalProductPage = React.lazy(() => import('./pages/FinalProductPage'));
+const FinalProductSharePage = React.lazy(() => import('./pages/FinalProductSharePage'));
 const StoryboardGenPage = React.lazy(() => import('./pages/StoryboardGenPage').then(m => ({ default: m.StoryboardGenPage })));
 const VideoGenPage = React.lazy(() => import('./pages/VideoGenPage').then(m => ({ default: m.VideoGenPage })));
 const HistoryPage = React.lazy(() => import('./pages/HistoryPage').then(m => ({ default: m.HistoryPage })));
@@ -116,6 +117,9 @@ const App: React.FC = () => {
                 <DeferredCrmHost />
                 <React.Suspense fallback={<RouteFallback />}>
                 <Routes>
+                    {/* 无需登录的指定成品审阅页；令牌只授予单个成品访问能力。 */}
+                    <Route path="/share/final/:token" element={<FinalProductSharePage />} />
+
                     {/* ========== 项目管理中心 ========== */}
                     <Route path="/projects" element={<ProjectHub />} />
                     {/* 一句话新建创作（docs/design-standard 模板 Home） */}

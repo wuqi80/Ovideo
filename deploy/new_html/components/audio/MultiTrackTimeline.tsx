@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   GripVertical,
+  Link2,
   Music,
   Plus,
   Scissors,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import { MusicModal } from './MusicModal';
 import { SfxModal } from './SfxModal';
+import { AudioClipReferenceModal } from './AudioClipReferenceModal';
 import type { AudioClipInfo, AudioTrack, StoryboardItemDB } from '../../types';
 import { resolveShotDurationMs } from '../../utils/audioTimeline';
 import {
@@ -88,6 +90,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
 }) => {
   const [showMusicModal, setShowMusicModal] = useState(false);
   const [showSfxModal, setShowSfxModal] = useState(false);
+  const [referenceTarget, setReferenceTarget] = useState<'bgm' | 'sfx_global' | null>(null);
   const [pixelsPerSecond, setPixelsPerSecond] = useState(40);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [draftEdits, setDraftEdits] = useState<Record<string, AudioTrackTimelineEdit>>({});
@@ -294,7 +297,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
     label: string,
     extra?: React.ReactNode,
   ) => (
-    <div className="sticky left-0 z-20 flex h-full w-48 shrink-0 items-center justify-between border-r border-n40 bg-n20 px-3 text-[10px] text-n100">
+    <div className="sticky left-0 z-20 flex h-full w-64 shrink-0 items-center justify-between border-r border-n40 bg-n20 px-3 text-[10px] text-n100">
       <span className="font-medium">{label}</span>
       {extra}
     </div>
@@ -494,7 +497,7 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
           )}
 
           <div className="flex-1 overflow-auto" onWheel={handleWheel}>
-            <div style={{ minWidth: `${trackWidth + 192}px` }}>
+            <div style={{ minWidth: `${trackWidth + 256}px` }}>
           <div className="flex h-7 items-center border-b border-n40">
             {renderTrackLabel('镜头')}
             <div className="flex h-full" style={{ width: `${trackWidth}px` }}>
@@ -545,6 +548,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
               <div className="flex items-center gap-1">
                 <button
                   type="button"
+                  onClick={() => setReferenceTarget('bgm')}
+                  className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/5 px-2 py-1 text-[10px] font-semibold text-primary transition-colors hover:bg-primary/10"
+                  title="引用本集已经生成的配音作为 BGM"
+                >
+                  <Link2 size={11} /> 引用配音
+                </button>
+                <button
+                  type="button"
                   onClick={() => setShowMusicModal(true)}
                   className="inline-flex items-center gap-1 rounded border border-n40 bg-n0 px-2 py-1 text-[10px] font-semibold text-n700 transition-colors hover:bg-n30"
                   title="上传已有背景音乐"
@@ -570,6 +581,14 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
             {renderTrackLabel(
               '音效',
               <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setReferenceTarget('sfx_global')}
+                  className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/5 px-2 py-1 text-[10px] font-semibold text-primary transition-colors hover:bg-primary/10"
+                  title="引用本集已经生成的配音作为音效"
+                >
+                  <Link2 size={11} /> 引用配音
+                </button>
                 <button
                   type="button"
                   onClick={() => setShowSfxModal(true)}
@@ -618,6 +637,18 @@ export const MultiTrackTimeline: React.FC<MultiTrackTimelineProps> = ({
                 await reload();
                 setShowSfxModal(false);
               }}
+            />
+          )}
+
+          {referenceTarget && (
+            <AudioClipReferenceModal
+              episodeId={episodeId}
+              targetTrackType={referenceTarget}
+              clips={clips}
+              localAudio={localAudio}
+              clipKeyFn={clipKeyFn}
+              onClose={() => setReferenceTarget(null)}
+              onCreated={reload}
             />
           )}
         </>

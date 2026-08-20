@@ -238,7 +238,11 @@ async def test_video_capabilities_expose_minimax_h3_on_unified_8188_runtime(monk
                 "agent_id": "agent_gpu2",
                 "port": 8188,
                 "healthy": True,
-                "capabilities": {"minimax_h3_fl2va": True},
+                "capabilities": {
+                    "minimax_h3_fl2va": True,
+                    "minimax_h3_fast": True,
+                    "minimax_h3_mini": True,
+                },
             },
         ]
 
@@ -270,6 +274,8 @@ async def test_video_capabilities_expose_minimax_h3_on_unified_8188_runtime(monk
     result = await video_capability_service.get_video_capabilities()
 
     h3 = next(model for model in result["models"] if model["key"] == "MiniMaxH3")
+    h3_fast = next(model for model in result["models"] if model["key"] == "MiniMaxH3Fast")
+    h3_mini = next(model for model in result["models"] if model["key"] == "MiniMaxH3Mini")
     assert h3["available"] is True
     assert h3["provider"] == "processing_cluster"
     assert h3["model_name"] == "MiniMax-H3 FL2VA"
@@ -284,6 +290,21 @@ async def test_video_capabilities_expose_minimax_h3_on_unified_8188_runtime(monk
         "maximum": 15,
     }
     assert h3["supports_generated_audio"] is True
+    assert h3_fast["available"] is True
+    assert h3_fast["parameter_rules"]["h3_profile"] == "fast"
+    assert h3_mini["available"] is True
+    assert h3_mini["parameter_rules"]["h3_profile"] == "mini"
+
+
+def test_minimax_h3_instance_accepts_installed_mini_while_baseline_is_resident():
+    assert video_capability_service._is_minimax_h3_instance({
+        "port": 8188,
+        "capabilities": {
+            "minimax_h3_fl2va": False,
+            "minimax_h3_fast": False,
+            "minimax_h3_mini": True,
+        },
+    }) is True
 
 
 async def test_video_capabilities_keep_minimax_h3_visible_when_gpu2_is_online(monkeypatch):

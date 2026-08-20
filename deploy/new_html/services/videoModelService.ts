@@ -1,9 +1,11 @@
 // Shared video model names, parameter types, and pure inference helpers.
 
-const COMFYUI_MODELS: string[] = ['Wan2', 'LTXNode1', 'WanNode2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', 'MiniMaxH3'];
+const MINIMAX_H3_MODELS = ['MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini'] as const;
+const COMFYUI_MODELS: string[] = ['Wan2', 'LTXNode1', 'WanNode2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', ...MINIMAX_H3_MODELS];
 
 export type VideoModel =
-  | 'Wan2' | 'LTXNode1' | 'WanNode2' | '一阶' | '二阶' | '三阶' | '四阶' | '五阶' | '六阶' | '七阶' | 'MiniMaxH3'
+  | 'Wan2' | 'LTXNode1' | 'WanNode2' | '一阶' | '二阶' | '三阶' | '四阶' | '五阶' | '六阶' | '七阶'
+  | 'MiniMaxH3' | 'MiniMaxH3Fast' | 'MiniMaxH3Mini'
   | 'Veo' | 'Sora2' | 'MINI' | '大能'
   | 'Seedance15' | 'Seedance2' | 'Seedance2Fast' | 'Seedance2Mini'
   | 'Kling' | 'Vidu' | 'HappyHorse';
@@ -54,6 +56,10 @@ export type DashScopeVideoModel = 'Kling' | 'Vidu' | 'HappyHorse';
 
 export function isComfyUIModel(model: VideoModel): boolean {
   return COMFYUI_MODELS.includes(model);
+}
+
+export function isMiniMaxH3Model(model: VideoModel): boolean {
+  return (MINIMAX_H3_MODELS as readonly string[]).includes(model);
 }
 
 export function isDashScopeVideoModel(model: VideoModel): model is DashScopeVideoModel {
@@ -319,7 +325,9 @@ export function getModelDisplayName(model: VideoModel): string {
     '五阶': '五阶',
     '六阶': '六阶',
     '七阶': '七阶',
-    MiniMaxH3: 'MiniMax H3 本地版',
+    MiniMaxH3: '本地 MiniMax H3',
+    MiniMaxH3Fast: 'MiniMax H3 Fast',
+    MiniMaxH3Mini: '本地 MiniMax H3 Mini',
     Veo: '筑基',
     MINI: '金丹',
     Sora2: '化神',
@@ -336,19 +344,73 @@ export function getModelDisplayName(model: VideoModel): string {
 }
 
 export const ALL_MODELS: VideoModel[] = [
-  'Wan2', 'LTXNode1', 'WanNode2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', 'MiniMaxH3',
+  'Wan2', 'LTXNode1', 'WanNode2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶', ...MINIMAX_H3_MODELS,
   'Veo', 'Sora2', 'MINI', '大能',
   'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
   'Kling', 'Vidu', 'HappyHorse',
 ];
 
 export const SELECTABLE_MODELS: VideoModel[] = [
-  'MiniMaxH3', 'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶',
+  'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini', 'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶',
   'LTXNode1', 'WanNode2',
   'Veo', 'Sora2', 'MINI', '大能',
   'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
   'Kling', 'Vidu', 'HappyHorse',
 ];
+
+export function getVideoCreditEstimateParams(
+  model: VideoModel,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const applyOverrides = (defaults: Record<string, unknown>): Record<string, unknown> => {
+    const definedOverrides = Object.fromEntries(
+      Object.entries(overrides).filter(([key, value]) => (
+        key !== 'model'
+        && value !== undefined
+        && value !== null
+        && value !== ''
+      )),
+    );
+    return { ...defaults, ...definedOverrides, model };
+  };
+  const base: Record<string, unknown> = { model, duration_seconds: 5 };
+  if (model === 'HappyHorse') return applyOverrides({ ...base, hh_resolution: '1080P' });
+  if (model === 'Vidu') return applyOverrides({ ...base, sub_model: 'q3', vidu_resolution: '720P' });
+  if (model === 'Kling') return applyOverrides({ ...base, resolution: '720P', audio: false });
+  if (model === '大能') return applyOverrides({ ...base, resolution: '1080P' });
+  if (model === 'MINI') {
+    return applyOverrides({
+      model,
+      duration_seconds: 6,
+      minimax_model: DEFAULT_MINIMAX_VIDEO_PARAMS.model,
+      minimax_resolution: DEFAULT_MINIMAX_VIDEO_PARAMS.resolution,
+    });
+  }
+  if (isSeedanceVideoModel(model)) {
+    return applyOverrides({
+      ...base,
+      sub_model: seedanceSubModelForVideoModel(model),
+      resolution: '720P',
+    });
+  }
+  if (model === 'Sora2') return applyOverrides({ model, duration_seconds: 15, resolution: '720P' });
+  if (model === 'Veo') return applyOverrides({ model, duration_seconds: 8, resolution: '720P' });
+  return applyOverrides(base);
+}
+
+export function getVideoCreditFallbackCost(
+  model: VideoModel,
+  options: { h3_upscale_720p?: boolean } = {},
+): number {
+  if (model === 'HappyHorse') return 160;
+  if (model === 'MiniMaxH3Mini') {
+    return 5 + (options.h3_upscale_720p === true ? 5 : 0);
+  }
+  if (isMiniMaxH3Model(model)) {
+    return 10 + (options.h3_upscale_720p === true ? 5 : 0);
+  }
+  return 10;
+}
 
 const ALL_MODEL_VALUES = new Set<string>(ALL_MODELS);
 
@@ -428,9 +490,10 @@ export function buildVideoModelOptions(
     const capability = capabilityByKey.get(model);
     const available = capability ? capability.available !== false : false;
     const runtimeLabel = formatVideoModelRuntimeLabel(capability);
+    const label = formatVideoModelOptionLabel(model, capability);
     return [{
       value: model,
-      label: formatVideoModelOptionLabel(model, capability),
+      label: available ? label : `${label}（当前不可用）`,
       baseLabel: getModelDisplayName(model),
       runtimeLabel,
       available,

@@ -2408,7 +2408,7 @@ const MaterialAIModal: React.FC<{
                                 )}
                             </div>
 
-                            <div className="flex min-w-[390px] items-center justify-end gap-2">
+                            <div className="flex items-center gap-2 xl:min-w-[556px] xl:justify-start xl:pl-[84px]">
                                 <label className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs ${
                                     generationModel.supportsImageToImageBatch
                                         ? 'border-n40 text-n700'

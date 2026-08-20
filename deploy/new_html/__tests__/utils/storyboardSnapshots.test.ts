@@ -4,6 +4,7 @@ import {
   collectConversationStoryboardSnapshots,
   createStoryboardSnapshot,
   mergeStoryboardSnapshots,
+  resolvePersistableStoryboardVersion,
 } from '../../utils/storyboardSnapshots';
 
 const file: ProjectFile = {
@@ -60,5 +61,41 @@ describe('storyboardSnapshots', () => {
       'snapshot-1',
       'snapshot-2',
     ]);
+  });
+
+  it('falls back from a local legacy version to the latest server-backed version', () => {
+    const conversation = {
+      scriptId: 'script-1',
+      currentVersionId: 'legacy_script-1',
+      messages: [],
+      versions: [
+        { id: 'ver_legacy_script-1', versionNo: 1 },
+        { id: 'ver-2', versionNo: 2 },
+        { id: 'legacy_script-1', versionNo: 3 },
+      ],
+    } as ScriptConversation;
+
+    expect(resolvePersistableStoryboardVersion(conversation)?.id).toBe('ver-2');
+    expect(resolvePersistableStoryboardVersion(
+      conversation,
+      conversation.versions[2],
+    )?.id).toBe('ver-2');
+  });
+
+  it('keeps a preferred server-backed version as the snapshot owner', () => {
+    const conversation = {
+      scriptId: 'script-1',
+      currentVersionId: 'ver-2',
+      messages: [],
+      versions: [
+        { id: 'ver-1', versionNo: 1 },
+        { id: 'ver-2', versionNo: 2 },
+      ],
+    } as ScriptConversation;
+
+    expect(resolvePersistableStoryboardVersion(
+      conversation,
+      conversation.versions[0],
+    )?.id).toBe('ver-1');
   });
 });

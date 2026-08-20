@@ -6,6 +6,9 @@ const LONG_EDGE_BY_RESOLUTION: Record<DoubaoImageResolution, number> = {
   '4K': 4096,
 };
 
+const DOUBAO_STANDARD_MIN_PIXELS = 2560 * 1440;
+const DOUBAO_DIMENSION_MULTIPLE = 16;
+
 const SUPPORTED_RATIOS: Record<string, readonly [number, number]> = {
   '1:1': [1, 1],
   '3:4': [3, 4],
@@ -27,8 +30,21 @@ export function recommendDoubaoImageSize(
 
   const [ratioWidth, ratioHeight] = dimensions;
   const longEdge = LONG_EDGE_BY_RESOLUTION[resolution];
+  let width: number;
+  let height: number;
   if (ratioWidth >= ratioHeight) {
-    return `${longEdge}x${Math.round(longEdge * ratioHeight / ratioWidth)}`;
+    width = longEdge;
+    height = Math.round(longEdge * ratioHeight / ratioWidth);
+  } else {
+    width = Math.round(longEdge * ratioWidth / ratioHeight);
+    height = longEdge;
   }
-  return `${Math.round(longEdge * ratioWidth / ratioHeight)}x${longEdge}`;
+
+  if (width * height < DOUBAO_STANDARD_MIN_PIXELS) {
+    const scale = Math.sqrt(DOUBAO_STANDARD_MIN_PIXELS / (width * height));
+    width = Math.ceil((width * scale) / DOUBAO_DIMENSION_MULTIPLE) * DOUBAO_DIMENSION_MULTIPLE;
+    height = Math.ceil((height * scale) / DOUBAO_DIMENSION_MULTIPLE) * DOUBAO_DIMENSION_MULTIPLE;
+  }
+
+  return `${width}x${height}`;
 }

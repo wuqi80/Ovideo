@@ -3,6 +3,8 @@ import {
   buildVideoModelOptions,
   SELECTABLE_MODELS,
   getModelDisplayName,
+  getVideoCreditFallbackCost,
+  getVideoCreditEstimateParams,
   getMiniMaxVideoParamsError,
   inferSeedanceTaskType,
   isSeedanceAgentPlanModel,
@@ -20,6 +22,76 @@ describe('processing cluster model label', () => {
     expect(getModelDisplayName('LTXNode1')).toBe('处理节点1 · LTX');
     expect(getModelDisplayName('WanNode2')).toBe('处理节点2 · Wan');
     expect(getModelDisplayName('Wan2')).toBe('集群视频（旧版兼容）');
+  });
+});
+
+describe('video credit estimate params', () => {
+  it('keeps standard and fast equal, halves mini, and adds five for 720p upscale', () => {
+    expect(getVideoCreditFallbackCost('MiniMaxH3')).toBe(10);
+    expect(getVideoCreditFallbackCost('MiniMaxH3Fast')).toBe(10);
+    expect(getVideoCreditFallbackCost('MiniMaxH3Mini')).toBe(5);
+    expect(getVideoCreditFallbackCost('MiniMaxH3', { h3_upscale_720p: true })).toBe(15);
+    expect(getVideoCreditFallbackCost('MiniMaxH3Fast', { h3_upscale_720p: true })).toBe(15);
+    expect(getVideoCreditFallbackCost('MiniMaxH3Mini', { h3_upscale_720p: true })).toBe(10);
+  });
+
+  it('uses the real default generation spec for each priced provider', () => {
+    expect(getVideoCreditEstimateParams('HappyHorse')).toMatchObject({
+      duration_seconds: 5,
+      hh_resolution: '1080P',
+    });
+    expect(getVideoCreditEstimateParams('MINI')).toMatchObject({
+      duration_seconds: 6,
+      minimax_model: 'MiniMax-Hailuo-2.3',
+      minimax_resolution: '768P',
+    });
+    expect(getVideoCreditEstimateParams('Seedance2Fast')).toMatchObject({
+      duration_seconds: 5,
+      sub_model: 'fast',
+      resolution: '720P',
+    });
+    expect(getVideoCreditEstimateParams('MiniMaxH3')).toEqual({
+      model: 'MiniMaxH3',
+      duration_seconds: 5,
+    });
+    expect(getVideoCreditEstimateParams('MiniMaxH3', {
+      h3_upscale_720p: true,
+    })).toEqual({
+      model: 'MiniMaxH3',
+      duration_seconds: 5,
+      h3_upscale_720p: true,
+    });
+  });
+
+  it('lets a video card override defaults with its current generation settings', () => {
+    expect(getVideoCreditEstimateParams('HappyHorse', {
+      duration_seconds: 10,
+      hh_resolution: '720P',
+    })).toMatchObject({
+      model: 'HappyHorse',
+      duration_seconds: 10,
+      hh_resolution: '720P',
+    });
+    expect(getVideoCreditEstimateParams('Vidu', {
+      task_type: 'vidu_morph',
+      sub_model: 'q3-turbo',
+      vidu_resolution: '1080P',
+    })).toMatchObject({
+      model: 'Vidu',
+      task_type: 'vidu_morph',
+      sub_model: 'q3-turbo',
+      vidu_resolution: '1080P',
+    });
+    expect(getVideoCreditEstimateParams('MINI', {
+      duration_seconds: 10,
+      minimax_model: 'MiniMax-Hailuo-2.3-Fast',
+      minimax_resolution: '768P',
+    })).toMatchObject({
+      model: 'MINI',
+      duration_seconds: 10,
+      minimax_model: 'MiniMax-Hailuo-2.3-Fast',
+      minimax_resolution: '768P',
+    });
   });
 });
 
@@ -124,8 +196,10 @@ describe('Seedance model mapping', () => {
 
 describe('buildVideoModelOptions', () => {
   it('keeps the local and legacy workflow entries visible at the top of the selector', () => {
-    expect(SELECTABLE_MODELS.slice(0, 9)).toEqual([
+    expect(SELECTABLE_MODELS.slice(0, 11)).toEqual([
       'MiniMaxH3',
+      'MiniMaxH3Fast',
+      'MiniMaxH3Mini',
       'Wan2',
       '一阶',
       '二阶',
@@ -183,19 +257,36 @@ describe('buildVideoModelOptions', () => {
       },
       {
         key: 'MiniMaxH3',
-        label: 'MiniMax H3 本地版',
+        label: '本地 MiniMax H3',
         provider: 'processing_cluster',
         model_name: 'MiniMax-H3 FL2VA',
+        available: true,
+      },
+      {
+        key: 'MiniMaxH3Fast',
+        label: 'MiniMax H3 Fast',
+        provider: 'processing_cluster',
+        model_name: 'MiniMax-H3 FL2VA + SageAttention',
+        available: true,
+      },
+      {
+        key: 'MiniMaxH3Mini',
+        label: '本地 MiniMax H3 Mini',
+        provider: 'processing_cluster',
+        model_name: 'MiniMax-H3 FL2VA + Qwen3-VL-4B ClipProj',
         available: true,
       },
     ]);
 
     expect(options.map(option => option.value)).toEqual(SELECTABLE_MODELS);
     expect(options.find(option => option.value === 'LTXNode1')?.available).toBe(false);
+    expect(options.find(option => option.value === 'LTXNode1')?.label).toContain('当前不可用');
     expect(options.find(option => option.value === 'WanNode2')?.available).toBe(true);
     expect(options.find(option => option.value === 'HappyHorse')?.label).toContain('happyhorse-1.0-r2v');
     expect(options.find(option => option.value === 'Seedance2Mini')?.label).toContain('doubao-seedance-2-0-mini-260615');
     expect(options.find(option => option.value === 'MiniMaxH3')?.label).toContain('MiniMax-H3 FL2VA');
+    expect(options.find(option => option.value === 'MiniMaxH3Fast')?.label).toContain('SageAttention');
+    expect(options.find(option => option.value === 'MiniMaxH3Mini')?.label).toContain('Qwen3-VL-4B ClipProj');
     expect(options.find(option => option.value === 'MINI')?.label).toContain('MiniMax-Hailuo-2.3');
   });
 

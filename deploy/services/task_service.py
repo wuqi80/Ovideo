@@ -174,21 +174,50 @@ class TaskService:
             task_id:   可选的预分配任务 ID；用于在入队前完成积分冻结等关联操作
         """
         task_id = task_id or allocate_task_id()
-
-        if prepare:
-            await self._prepare_for_agent(task_type, task_data, user_id)
-
-        task = Task(
-            task_id=task_id,
-            task_type=task_type,
-            data=task_data,
-            priority=priority,
-            user_id=user_id,
+        from services.task_credit_billing_service import (
+            release_task_credits,
+            reserve_task_credits,
         )
+        from services.credit_service import InsufficientCreditsError
 
-        success = await self.queue.enqueue(task)
-        if not success:
-            raise HTTPException(status_code=500, detail="任务入队失败")
+        reserved = False
+        try:
+            try:
+                reserved = bool(await reserve_task_credits(
+                    task_id=task_id,
+                    task_type=task_type,
+                    task_data=task_data,
+                    user_id=user_id,
+                ))
+            except InsufficientCreditsError as exc:
+                raise HTTPException(status_code=402, detail=f"积分不足：{exc}") from exc
+
+            if prepare:
+                await self._prepare_for_agent(task_type, task_data, user_id)
+
+            task = Task(
+                task_id=task_id,
+                task_type=task_type,
+                data=task_data,
+                priority=priority,
+                user_id=user_id,
+            )
+
+            success = await self.queue.enqueue(task)
+            if not success:
+                raise HTTPException(status_code=500, detail="任务入队失败")
+        except Exception:
+            if reserved:
+                try:
+                    await release_task_credits(
+                        task_id=task_id,
+                        task_data=task_data,
+                        user_id=user_id,
+                        reason="enqueue_failed",
+                    )
+                except Exception as release_error:
+                    logger.error("释放未入队任务积分失败 %s: %s", task_id, release_error)
+            raise
 
         logger.info(f"✅ 任务已提交: {task_id} (type={task_type}, user={user_id})")
         return task_id
@@ -213,6 +242,50 @@ class TaskService:
                     continue
                 task_data[param] = resolved["filename"]
                 agent_files.append(resolved)
+
+            if task_data.get("h3_long_video") is True:
+                segments = task_data.get("h3_long_video_segments")
+                if not isinstance(segments, list) or not 2 <= len(segments) <= 8:
+                    raise ValueError("H3 long video requires 2-8 structured segments")
+                total_duration = 0.0
+                for index, segment in enumerate(segments):
+                    if not isinstance(segment, dict):
+                        raise ValueError(f"H3 long video segment {index + 1} is invalid")
+                    try:
+                        duration = float(segment.get("duration") or 0)
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(
+                            f"H3 long video segment {index + 1} duration is invalid"
+                        ) from exc
+                    if not 4.0 <= duration <= 15.0:
+                        raise ValueError(
+                            f"H3 long video segment {index + 1} must be 4-15 seconds"
+                        )
+                    total_duration += duration
+                    for field, suffix in (("image_path", "first"), ("image_path_end", "last")):
+                        value = segment.get(field)
+                        if field == "image_path" and not value:
+                            raise ValueError(
+                                f"H3 long video segment {index + 1} is missing a first frame"
+                            )
+                        if not value:
+                            continue
+                        param = f"h3_segment_{index}_{suffix}_frame"
+                        resolved = await self._resolve_agent_file(param, value, username)
+                        if not resolved:
+                            raise ValueError(
+                                f"H3 long video segment {index + 1} {suffix} frame is unavailable"
+                            )
+                        segment[field] = resolved["filename"]
+                        if not any(
+                            existing.get("filename") == resolved["filename"]
+                            and existing.get("url") == resolved["url"]
+                            for existing in agent_files
+                        ):
+                            agent_files.append(resolved)
+                if total_duration > 120.0:
+                    raise ValueError("H3 long video total duration exceeds 120 seconds")
+                task_data["duration"] = total_duration
 
             if "image_path" in task_data:
                 task_data["uploaded_image"] = task_data["image_path"]

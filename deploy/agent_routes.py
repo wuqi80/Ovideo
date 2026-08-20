@@ -25,6 +25,9 @@ MIME_MAP = {
     ".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg", ".gif": "image/gif", ".bmp": "image/bmp",
     ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
+    ".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac",
+    ".ogg": "audio/ogg", ".opus": "audio/opus", ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
 }
 
 
@@ -33,13 +36,16 @@ def save_output_file(content: bytes, task_id: str, filename: str, content_type: 
     ext = Path(filename).suffix.lower()
     IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff"}
     VIDEO_EXTS = {".mp4", ".webm", ".mov", ".avi", ".mkv"}
+    AUDIO_EXTS = {".mp3", ".wav", ".flac", ".ogg", ".opus", ".m4a", ".aac"}
     if ext in IMAGE_EXTS:
         category = "images"
     elif ext in VIDEO_EXTS:
         category = "videos"
+    elif ext in AUDIO_EXTS:
+        category = "audios"
     else:
         major = content_type.split("/")[0] if content_type else "other"
-        category = {"image": "images", "video": "videos"}.get(major, "others")
+        category = {"image": "images", "video": "videos", "audio": "audios"}.get(major, "others")
     year_month = datetime.now().strftime("%Y%m")
     disk_name = f"{task_id}_{filename}"
     rel_path = f"{category}/{year_month}/{disk_name}"
@@ -47,7 +53,12 @@ def save_output_file(content: bytes, task_id: str, filename: str, content_type: 
     full_path.parent.mkdir(parents=True, exist_ok=True)
     full_path.write_bytes(content)
     ext_lower = ext.lower()
-    file_type = "video" if ext_lower in {".mp4", ".webm", ".mov", ".avi", ".mkv"} else "image"
+    if ext_lower in VIDEO_EXTS:
+        file_type = "video"
+    elif ext_lower in AUDIO_EXTS:
+        file_type = "audio"
+    else:
+        file_type = "image"
     return {
         "url": f"/storage/{rel_path}",
         "filename": filename,
@@ -79,7 +90,10 @@ async def _persist_to_db(entries: list, task_id: str, task_data: dict, user_id: 
     for entry in entries:
         try:
             ft = entry.get("file_type", "image")
-            role = file_role or ("generated_image" if ft == "image" else "video")
+            role = file_role or {
+                "image": "generated_image",
+                "audio": "generated_audio",
+            }.get(ft, "video")
             record = await FileDAO.create_file(
                 version_id=None,
                 user_id=user_id,
@@ -123,14 +137,22 @@ async def _persist_to_db(entries: list, task_id: str, task_data: dict, user_id: 
 
 def build_task_result(file_entries: list, duration: float = 0.0) -> dict:
     """Build standardized result dict from file entries."""
-    images, videos = [], []
+    images, videos, audios = [], [], []
     for entry in file_entries:
         fname = entry.get("filename", "").lower()
         if any(fname.endswith(ext) for ext in (".mp4", ".webm", ".mov", ".avi")):
             videos.append(entry)
+        elif any(fname.endswith(ext) for ext in (".mp3", ".wav", ".flac", ".ogg", ".opus", ".m4a", ".aac")):
+            audios.append(entry)
         else:
             images.append(entry)
-    return {"images": images, "videos": videos, "output_files": file_entries, "duration": duration}
+    return {
+        "images": images,
+        "videos": videos,
+        "audios": audios,
+        "output_files": file_entries,
+        "duration": duration,
+    }
 
 
 class RegisterRequest(BaseModel):
@@ -143,6 +165,13 @@ class HeartbeatRequest(BaseModel):
     comfyui_instances: list = Field(default_factory=list)
     system_info: dict = Field(default_factory=dict)
     current_tasks: int = 0
+
+
+class ProgressRequest(BaseModel):
+    task_id: str = Field(min_length=1, max_length=128)
+    agent_id: str = Field(min_length=1, max_length=128)
+    progress: float = Field(ge=0, le=95)
+    message: str = Field(default="", max_length=200)
 
 
 async def _verify_agent_token(authorization: str = Header(...)) -> dict:
@@ -576,6 +605,76 @@ async def debug_queue(authorization: str = Header(...)):
     }
 
 
+@router.post("/progress")
+async def agent_progress(
+    request: ProgressRequest,
+    authorization: str = Header(...),
+):
+    """Accept authenticated, task-scoped live progress from a GPU Agent."""
+    agent = await _verify_agent_token(authorization)
+    try:
+        from cluster_main import redis_client
+        from cluster_config import RedisConfig
+        import task_service
+    except ImportError as exc:
+        raise HTTPException(status_code=503, detail="Task storage is unavailable") from exc
+
+    raw_hash = (
+        await redis_client.hgetall(
+            f"{RedisConfig.TASK_STATUS_PREFIX}{request.task_id}"
+        )
+        if redis_client
+        else {}
+    )
+    task_hash = _decode_task_hash(raw_hash)
+    db_row = await TaskDAO.get_task_by_task_id(request.task_id)
+    db_task = dict(db_row) if db_row else None
+    _assert_agent_completion_scope(
+        agent,
+        request.agent_id,
+        request.task_id,
+        task_hash,
+        db_task,
+    )
+
+    terminal_status = _existing_terminal_task_status(task_hash, db_task)
+    if terminal_status:
+        return {
+            "success": True,
+            "task_id": request.task_id,
+            "already_terminal": True,
+            "status": terminal_status,
+        }
+
+    progress = min(95.0, max(1.0, float(request.progress)))
+    updated = await task_service.get_queue().update_progress(
+        request.task_id,
+        progress,
+        request.message,
+    )
+    if not updated:
+        raise HTTPException(status_code=409, detail="Active task state is unavailable")
+
+    try:
+        await TaskDAO.update_task_progress(
+            request.task_id,
+            progress,
+            request.message,
+        )
+    except Exception as exc:
+        logger.warning(
+            "DB progress update failed for %s (non-fatal): %s",
+            request.task_id,
+            exc,
+        )
+
+    return {
+        "success": True,
+        "task_id": request.task_id,
+        "progress": progress,
+    }
+
+
 @router.post("/complete")
 async def agent_complete(
     task_id: str = Form(...),
@@ -617,8 +716,43 @@ async def agent_complete(
 
     _assert_agent_completion_scope(agent, agent_id, task_id, task_hash, db_task)
 
+    if not user_id and db_task:
+        user_id = str(db_task.get("user_id") or "")
+    if not task_data and db_task:
+        raw_db_data = db_task.get("task_data") or {}
+        if isinstance(raw_db_data, str):
+            try:
+                raw_db_data = json.loads(raw_db_data)
+            except (json.JSONDecodeError, TypeError):
+                raw_db_data = {}
+        task_data = raw_db_data if isinstance(raw_db_data, dict) else {}
+
     existing_status = _existing_terminal_task_status(task_hash, db_task)
     if existing_status:
+        # Agent callbacks may be retried after a network timeout.  Re-running
+        # the idempotent settlement here repairs the rare case where task
+        # status reached a terminal state before the response was received.
+        try:
+            from services.task_credit_billing_service import (
+                release_task_credits,
+                settle_task_credits,
+            )
+            if existing_status == "completed":
+                await settle_task_credits(
+                    task_id=task_id,
+                    task_data=task_data,
+                    user_id=user_id,
+                )
+            else:
+                await release_task_credits(
+                    task_id=task_id,
+                    task_data=task_data,
+                    user_id=user_id,
+                    reason=f"agent_{existing_status}",
+                )
+        except Exception as billing_error:
+            logger.error("agent_complete retry billing failed for %s: %s", task_id, billing_error)
+            raise HTTPException(status_code=503, detail="Credit settlement is temporarily unavailable")
         logger.info(
             "agent_complete: task=%s already terminal (%s), acknowledging retry",
             task_id,
@@ -631,17 +765,6 @@ async def agent_complete(
             "already_terminal": True,
             "status": existing_status,
         }
-
-    if not user_id and db_task:
-        user_id = str(db_task.get("user_id") or "")
-    if not task_data and db_task:
-        raw_db_data = db_task.get("task_data") or {}
-        if isinstance(raw_db_data, str):
-            try:
-                raw_db_data = json.loads(raw_db_data)
-            except (json.JSONDecodeError, TypeError):
-                raw_db_data = {}
-        task_data = raw_db_data if isinstance(raw_db_data, dict) else {}
 
     # ---- 1. Save files to disk ----
     file_entries = []
@@ -675,6 +798,31 @@ async def agent_complete(
         else:
             result = result_payload
     logger.info(f"agent_complete: task={task_id}, status={status}, files={len(file_entries)}")
+
+    # Credit settlement is part of the Agent acknowledgement contract.  A
+    # transient ledger error returns 503 before the terminal state is written,
+    # allowing the Agent to retry without duplicate charging.
+    try:
+        from services.task_credit_billing_service import (
+            release_task_credits,
+            settle_task_credits,
+        )
+        if status == "completed":
+            await settle_task_credits(
+                task_id=task_id,
+                task_data=task_data,
+                user_id=user_id,
+            )
+        else:
+            await release_task_credits(
+                task_id=task_id,
+                task_data=task_data,
+                user_id=user_id,
+                reason="agent_failed",
+            )
+    except Exception as billing_error:
+        logger.error("agent_complete billing failed for %s: %s", task_id, billing_error, exc_info=True)
+        raise HTTPException(status_code=503, detail="Credit settlement is temporarily unavailable")
 
     # ---- 2. Update Redis (critical path — unblocks frontend) ----
     try:

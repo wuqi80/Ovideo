@@ -102,6 +102,42 @@ async def test_prepare_resolves_plain_file_id_to_download_url_and_extension(fake
 
 
 @pytest.mark.asyncio
+async def test_prepare_resolves_nested_h3_long_video_frames(fake_dependencies, monkeypatch):
+    service = TaskService(_Redis())
+
+    async def resolve(param, value, _username):
+        if not value:
+            return None
+        filename = f"{value}.png"
+        return {"param": param, "filename": filename, "url": f"/files/{filename}"}
+
+    monkeypatch.setattr(service, "_resolve_agent_file", resolve)
+    task_data = {
+        "image_path": "shot1",
+        "model": "MiniMaxH3",
+        "h3_long_video": True,
+        "h3_long_video_segments": [
+            {"prompt": "first", "duration": 5, "image_path": "shot1"},
+            {
+                "prompt": "second",
+                "duration": 7,
+                "image_path": "shot2",
+                "image_path_end": "shot2_end",
+            },
+        ],
+    }
+
+    await service._prepare_for_agent("i2v", task_data, "admin")
+
+    assert task_data["duration"] == 12
+    assert task_data["h3_long_video_segments"][0]["image_path"] == "shot1.png"
+    assert task_data["h3_long_video_segments"][1]["image_path_end"] == "shot2_end.png"
+    assert {item["filename"] for item in task_data["agent_files"]} == {
+        "shot1.png", "shot2.png", "shot2_end.png",
+    }
+
+
+@pytest.mark.asyncio
 async def test_prepare_resolves_server_filename_to_authenticated_download_route(fake_dependencies):
     file_id = "file_9cf3de8c6079"
     _FileDAO.record = {

@@ -3,9 +3,10 @@
 ComfyUI Agent - Deploy on GPU servers.
 Polls backend for tasks, executes them on local ComfyUI instances, reports results.
 
-Usage: python comfyui_agent.py --server URL --token TOKEN --ports 8188,8189
+Usage: python comfyui_agent.py --server URL --token TOKEN --ports 8188
 """
 import argparse
+import asyncio
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 import requests
 from datetime import datetime
 from pathlib import Path
@@ -29,7 +31,7 @@ logger = logging.getLogger("comfyui-agent")
 
 POLL_INTERVAL = 3
 HEARTBEAT_INTERVAL = 3
-AGENT_VERSION = "2026-08-07-background-heartbeat-v1"
+AGENT_VERSION = "2026-08-19-agent-runtime-stop-wait-v2"
 PLATFORM_DOWNLOAD_RETRIES = 3
 PLATFORM_DOWNLOAD_PATH_PREFIXES = ("/api/agent/tasks/", "/storage/")
 CAPABILITY_CACHE_TTL_SECONDS = 60
@@ -47,6 +49,13 @@ MINIMAX_H3_REQUIRED_NODES = (
     "RandomNoise",
     "CreateVideo",
     "SaveVideo",
+)
+MINIMAX_H3_FAST_REQUIRED_NODES = (
+    "PathchSageAttentionKJ",
+    "MiniMaxH3MemoryEfficientSageAttentionPatch",
+)
+MINIMAX_H3_MINI_REQUIRED_NODES = (
+    "ClipProjApply",
 )
 
 
@@ -82,6 +91,132 @@ class ComfyUIAgent:
 
     def _headers(self):
         return {"Authorization": f"Bearer {self.token}"}
+
+    def _report_progress(self, task_id, progress, message=""):
+        """Best-effort live progress callback; completion remains authoritative."""
+        if not task_id or not self.agent_id:
+            return False
+        normalized = min(95.0, max(1.0, float(progress)))
+        try:
+            response = requests.post(
+                f"{self.server_url}/api/agent/progress",
+                json={
+                    "task_id": str(task_id),
+                    "agent_id": str(self.agent_id),
+                    "progress": normalized,
+                    "message": str(message or "")[:200],
+                },
+                headers=self._headers(),
+                timeout=(3, 10),
+            )
+            response.raise_for_status()
+            return True
+        except Exception as exc:
+            logger.debug("Progress callback failed for %s: %s", task_id, exc)
+            return False
+
+    @staticmethod
+    def _progress_from_comfyui_event(event_data):
+        try:
+            value = float(event_data.get("value", 0))
+            maximum = float(event_data.get("max", 0))
+        except (TypeError, ValueError):
+            return None
+        if maximum <= 0:
+            return None
+        return min(90.0, max(10.0, 10.0 + (value / maximum) * 80.0))
+
+    async def _monitor_comfyui_progress(
+        self,
+        port,
+        client_id,
+        task_id,
+        prompt_ref,
+        stop_event,
+        ready_event,
+    ):
+        """Listen to ComfyUI progress without making task success depend on WS."""
+        try:
+            import aiohttp
+
+            ws_url = f"ws://127.0.0.1:{port}/ws?clientId={client_id}"
+            async with aiohttp.ClientSession() as session:
+                async with session.ws_connect(ws_url, heartbeat=15) as websocket:
+                    ready_event.set()
+                    last_reported = 10.0
+                    last_reported_at = 0.0
+                    while not stop_event.is_set():
+                        try:
+                            message = await asyncio.wait_for(
+                                websocket.receive(), timeout=2.0
+                            )
+                        except asyncio.TimeoutError:
+                            continue
+                        if message.type != aiohttp.WSMsgType.TEXT:
+                            continue
+                        try:
+                            payload = json.loads(message.data)
+                        except (TypeError, json.JSONDecodeError):
+                            continue
+                        data = payload.get("data") or {}
+                        prompt_id = prompt_ref.get("prompt_id")
+                        event_prompt_id = data.get("prompt_id")
+                        if prompt_id and event_prompt_id and event_prompt_id != prompt_id:
+                            continue
+
+                        event_type = payload.get("type")
+                        if event_type == "progress":
+                            current = self._progress_from_comfyui_event(data)
+                            now = time.monotonic()
+                            if (
+                                current is not None
+                                and current >= last_reported + 1.0
+                                and now - last_reported_at >= 1.0
+                            ):
+                                last_reported = current
+                                last_reported_at = now
+                                self._report_progress(
+                                    task_id,
+                                    current,
+                                    f"ComfyUI 正在生成 {int(data.get('value', 0))}/{int(data.get('max', 0))}",
+                                )
+                        elif event_type == "executing" and data.get("node") is None:
+                            self._report_progress(task_id, 95.0, "正在保存生成结果")
+                        elif event_type == "execution_error":
+                            return
+        except Exception as exc:
+            logger.info(
+                "ComfyUI live progress unavailable for %s; history polling continues: %s",
+                task_id,
+                exc,
+            )
+        finally:
+            ready_event.set()
+
+    def _start_comfyui_progress_monitor(self, port, client_id, task_id, prompt_ref):
+        stop_event = threading.Event()
+        ready_event = threading.Event()
+
+        def runner():
+            asyncio.run(
+                self._monitor_comfyui_progress(
+                    port,
+                    client_id,
+                    task_id,
+                    prompt_ref,
+                    stop_event,
+                    ready_event,
+                )
+            )
+
+        thread = threading.Thread(
+            target=runner,
+            name=f"comfyui-progress-{task_id}",
+            daemon=True,
+        )
+        thread.start()
+        ready_event.wait(timeout=3)
+        return stop_event, thread
 
     def _is_platform_download_url(self, url):
         """Only permit a TLS fallback for authenticated files on this backend."""
@@ -182,9 +317,21 @@ class ComfyUIAgent:
                     node: node in object_info
                     for node in MINIMAX_H3_REQUIRED_NODES
                 }
+                fast_required = {
+                    node: node in object_info
+                    for node in MINIMAX_H3_FAST_REQUIRED_NODES
+                }
+                mini_required = {
+                    node: node in object_info
+                    for node in MINIMAX_H3_MINI_REQUIRED_NODES
+                }
                 capabilities = {
                     "minimax_h3_fl2va": all(required.values()),
                     "minimax_h3_required_nodes": required,
+                    "minimax_h3_fast": all(required.values()) and all(fast_required.values()),
+                    "minimax_h3_fast_required_nodes": fast_required,
+                    "minimax_h3_mini": all(required.values()) and all(mini_required.values()),
+                    "minimax_h3_mini_required_nodes": mini_required,
                 }
         except Exception as exc:
             logger.debug("Capability probe failed for ComfyUI:%s: %s", port, exc)
@@ -363,12 +510,29 @@ class ComfyUIAgent:
                 logger.info(f"Replaced filename in workflow: {old_name} -> {new_name}")
         final_workflow = json.loads(workflow_str)
 
-        resp = requests.post(
-            f"http://127.0.0.1:{port}/prompt",
-            json={"prompt": final_workflow},
-            timeout=30
+        task_id = str(task.get("task_id") or "")
+        client_id = f"mecha-agent-{self.agent_id or 'unknown'}-{uuid.uuid4().hex}"
+        prompt_ref = {}
+        progress_stop, progress_thread = self._start_comfyui_progress_monitor(
+            port,
+            client_id,
+            task_id,
+            prompt_ref,
         )
+        self._report_progress(task_id, 5.0, "输入素材已准备，正在提交工作流")
+        try:
+            resp = requests.post(
+                f"http://127.0.0.1:{port}/prompt",
+                json={"prompt": final_workflow, "client_id": client_id},
+                timeout=30
+            )
+        except Exception:
+            progress_stop.set()
+            progress_thread.join(timeout=2)
+            raise
         if not resp.ok:
+            progress_stop.set()
+            progress_thread.join(timeout=2)
             return {
                 "status": "failed",
                 "error": (
@@ -379,16 +543,25 @@ class ComfyUIAgent:
             }
         prompt_id = resp.json().get("prompt_id")
         if not prompt_id:
+            progress_stop.set()
+            progress_thread.join(timeout=2)
             return {"status": "failed", "error": "No prompt_id returned", "output_files": []}
+        prompt_ref["prompt_id"] = prompt_id
+        self._report_progress(task_id, 10.0, "工作流已提交，正在加载模型")
 
         try:
-            output_files = self._wait_for_completion(port, prompt_id)
+            timeout_seconds = int(params.get("comfyui_timeout_seconds") or 600)
+            timeout_seconds = max(60, min(6 * 60 * 60, timeout_seconds))
+            output_files = self._wait_for_completion(port, prompt_id, timeout=timeout_seconds)
         except Exception as e:
             return {
                 "status": "failed",
                 "error": f"ComfyUI prompt {prompt_id} failed: {e}",
                 "output_files": [],
             }
+        finally:
+            progress_stop.set()
+            progress_thread.join(timeout=2)
         if not output_files:
             return {
                 "status": "failed",
@@ -493,6 +666,15 @@ class ComfyUIAgent:
                 "status": "completed",
                 "result_payload": result,
                 "output_files": [],
+                "restart_agent": bool(data.get("restart_agent", False)),
+            }
+
+        if action == "sync_runtime_tools":
+            result = self._sync_runtime_tools()
+            return {
+                "status": "completed",
+                "result_payload": result,
+                "output_files": [],
                 "restart_agent": True,
             }
 
@@ -570,6 +752,40 @@ class ComfyUIAgent:
         path.write_text(content, encoding="utf-8")
         return {"path": str(path), "changed": True, "backup": str(backup or "")}
 
+    def _sync_runtime_tools(self):
+        """Refresh only the reviewed Agent runtime files, then restart this Agent."""
+        if platform.system().lower() != "windows":
+            raise RuntimeError("GPU runtime tool sync is only supported on Windows agents")
+
+        root = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+        tool_specs = (
+            (
+                "windows_gpu_agent_runner.py",
+                root / "agent" / "windows_gpu_agent_runner.py",
+                ("GPU2_H3_PORT = GPU2_COMFYUI_PORT", "Gpu2RuntimeManager"),
+            ),
+            (
+                "windows_gpu_cleanup_port.ps1",
+                root / "scripts" / "windows_gpu_cleanup_port.ps1",
+                ("WaitTimeoutSeconds", "CommandMatch"),
+            ),
+        )
+        installed = []
+        downloads = []
+        for filename, destination, markers in tool_specs:
+            url, content = self._download_text_tool(filename, markers)
+            downloads.append({"filename": filename, "url": url, "destination": str(destination)})
+            installed.append(self._write_text_with_backup(destination, content))
+
+        return {
+            "action": "sync_runtime_tools",
+            "agent_id": self.agent_id,
+            "root": str(root),
+            "installed": installed,
+            "downloads": downloads,
+            "restart": True,
+        }
+
     def _install_h3_sidecar(self, data):
         if platform.system().lower() != "windows":
             raise RuntimeError("MiniMax H3 sidecar installer is only supported on Windows GPU agents")
@@ -583,7 +799,17 @@ class ComfyUIAgent:
             (
                 "windows_gpu_agent_runner.py",
                 agent_dir / "windows_gpu_agent_runner.py",
-                ("GPU2_H3_PORT = 8189", "build_gpu2_minimax_h3_fl2va_workflow"),
+                ("GPU2_H3_PORT = GPU2_COMFYUI_PORT", "Gpu2ResourceController"),
+            ),
+            (
+                "windows_gpu_cleanup_port.ps1",
+                scripts_dir / "windows_gpu_cleanup_port.ps1",
+                ("WaitTimeoutSeconds", "CommandMatch"),
+            ),
+            (
+                "windows_gpu_resource_guard.py",
+                agent_dir / "windows_gpu_resource_guard.py",
+                ("class Gpu2ResourceController", "class BoundedJsonlTelemetry"),
             ),
             (
                 "windows_gpu_h3_setup.ps1",
@@ -606,14 +832,39 @@ class ComfyUIAgent:
                 ("windows_gpu_h3_smoke.py",),
             ),
             (
+                "windows_gpu_h3_sage_verify.py",
+                scripts_dir / "windows_gpu_h3_sage_verify.py",
+                ("REQUIRED_SAGE_VERSION", "inference_executed"),
+            ),
+            (
+                "windows_gpu_h3_long_video_verify.py",
+                scripts_dir / "windows_gpu_h3_long_video_verify.py",
+                ("REVIEWED_DIRECTOR_COMMIT", "inference_executed"),
+            ),
+            (
                 "windows_gpu_start_h3_comfyui.cmd",
                 scripts_dir / "windows_gpu_start_h3_comfyui.cmd",
-                ("ComfyUI-H3", "8189"),
+                ("ComfyUI-H3", "MECHA_COMFYUI_PORT"),
+            ),
+            (
+                "windows_gpu_start_music3_comfyui.cmd",
+                scripts_dir / "windows_gpu_start_music3_comfyui.cmd",
+                ("windows_gpu_start_music3_comfyui.ps1", "MECHA_COMFYUI_PORT"),
+            ),
+            (
+                "windows_gpu_start_music3_comfyui.ps1",
+                scripts_dir / "windows_gpu_start_music3_comfyui.ps1",
+                ("JobMemoryLimitGiB", "MECHA_MUSIC3_DISABLE_FLASH_DECODE"),
+            ),
+            (
+                "windows_gpu_music3_compat_patch.py",
+                scripts_dir / "windows_gpu_music3_compat_patch.py",
+                ("MECHA_MUSIC3_DISABLE_FLASH_DECODE", "already-patched"),
             ),
             (
                 "windows_gpu_start_agent.cmd",
                 scripts_dir / "windows_gpu_start_agent.cmd",
-                ("windows_gpu_agent_runner.py", "MECHA_COMFYUI_PORTS=8188,8189"),
+                ("windows_gpu_agent_runner.py", "MECHA_COMFYUI_PORTS=8188"),
             ),
         ]
 
@@ -631,7 +882,6 @@ class ComfyUIAgent:
             "Bypass",
             "-File",
             str(setup_path),
-            "-NoAgentRestart",
         ]
         if data.get("skip_model_downloads"):
             command.append("-SkipModelDownloads")
@@ -651,7 +901,7 @@ class ComfyUIAgent:
             tail = (stdout + "\n" + stderr)[-4000:]
             raise RuntimeError(f"MiniMax H3 setup failed with exit code {completed.returncode}: {tail}")
 
-        os.environ["MECHA_COMFYUI_PORTS"] = "8188,8189"
+        os.environ["MECHA_COMFYUI_PORTS"] = "8188"
 
         return {
             "action": "install_h3_sidecar",
@@ -662,8 +912,8 @@ class ComfyUIAgent:
             "setup_returncode": completed.returncode,
             "setup_stdout_tail": stdout[-3000:],
             "setup_stderr_tail": stderr[-3000:],
-            "ports_after_restart": [8188, 8189],
-            "restart": True,
+            "ports_after_restart": [8188],
+            "restart": bool(data.get("restart_agent", False)),
         }
 
     def _restart_process(self):
@@ -854,6 +1104,19 @@ class ComfyUIAgent:
                                 files.append(self._download_comfyui_output(port, img))
                             for vid in node_output.get("gifs", []) + node_output.get("videos", []):
                                 files.append(self._download_comfyui_output(port, vid))
+                            audio_items = node_output.get("audio", [])
+                            if isinstance(audio_items, dict):
+                                audio_items = [audio_items]
+                            elif not isinstance(audio_items, (list, tuple)):
+                                audio_items = []
+                            extra_audio_items = node_output.get("audios", [])
+                            if isinstance(extra_audio_items, dict):
+                                extra_audio_items = [extra_audio_items]
+                            elif not isinstance(extra_audio_items, (list, tuple)):
+                                extra_audio_items = []
+                            audio_items = list(audio_items) + list(extra_audio_items)
+                            for audio in audio_items:
+                                files.append(self._download_comfyui_output(port, audio))
                         downloaded = [f for f in files if f]
                         if not downloaded:
                             raise RuntimeError(

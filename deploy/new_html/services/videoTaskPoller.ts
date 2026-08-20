@@ -89,6 +89,9 @@ function buildPollFn(uuid: string): () => Promise<void> {
             if (status.status === 'completed') {
                 stopAndClear(uuid);
                 try { taskRegistry.complete(entry.backendTaskId); } catch { /* noop */ }
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('credits:updated'));
+                }
                 cbs?.onComplete?.({ status });
             } else if (status.status === 'failed' || status.status === 'cancelled') {
                 stopAndClear(uuid);

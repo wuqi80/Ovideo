@@ -81,7 +81,11 @@ describe('SHOTFORGE design-system contract', () => {
       const source = readProjectFile(modalFile);
       expect(source, modalFile).toContain('app-modal-backdrop');
       expect(source, modalFile).toContain('app-modal-surface');
-      expect(source, modalFile).toContain('aria-modal="true"');
+      if (modalFile === 'components/audio/MusicModal.tsx') {
+        expect(source, modalFile).toContain("aria-modal={presentation === 'modal' ? true : undefined}");
+      } else {
+        expect(source, modalFile).toContain('aria-modal="true"');
+      }
     }
 
     const voiceDrawer = readProjectFile('components/audio/VoiceSidebar.tsx');

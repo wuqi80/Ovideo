@@ -4,11 +4,26 @@ import { resolve } from 'node:path';
 
 const source = readFileSync(resolve(__dirname, '../../WorkspaceApp.tsx'), 'utf-8')
   .replace(/\r\n/g, '\n');
+const generationPageSource = readFileSync(resolve(__dirname, '../../components/GenerationPage.tsx'), 'utf-8')
+  .replace(/\r\n/g, '\n');
 
 describe('WorkspaceApp script workflow persistence', () => {
+  it('protects the final script file without silently clearing its content', () => {
+    expect(source).toContain('if (files.length <= 1)');
+    expect(source).toContain('每个分集至少需要保留一个剧本文件，最后一个剧本不能删除。请先新建或上传另一个剧本。');
+    expect(source).not.toMatch(/if \(files\.length <= 1\) \{[\s\S]{0,500}originalContent: ''/);
+  });
+
   it('persists only the script record whose content changed', () => {
     expect(source).toContain('savedScriptSignaturesRef.current[file.id] === signature');
     expect(source).toContain('updateEpisodeScriptById(propEpisodeId, file.id');
+  });
+
+  it('persists the one-sentence create idea into the matching episode before showing the script workspace', () => {
+    expect(source).toContain('readCreateIdeaSeed(sessionStorage, propEpisodeId)');
+    expect(source).toContain('original_content: pendingCreateIdea.sentence');
+    expect(source).toContain("original_content: pendingCreateIdea?.sentence || ''");
+    expect(source).toContain('if (pendingCreateIdeaHandled) clearCreateIdeaSeed(sessionStorage)');
   });
 
   it('replaces the active storyboard design only after archiving the previous current design', () => {
@@ -46,12 +61,22 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('waitForRemote?: boolean');
     expect(source).toContain('if (options.waitForRemote === false)');
     expect(source).toContain('void persistRemoteSnapshot().catch');
+    expect(source).toContain('resolvePersistableStoryboardVersion(conversation, options.version)');
+    expect(source).toContain('await persistRemoteSnapshot();');
+    expect(source).toContain('applyLocalSnapshot();');
     expect(source).toContain('{ [STORYBOARD_SNAPSHOTS_METADATA_KEY]: snapshots }');
     expect(source).toContain("source: 'auto'");
     expect(source).toContain("source: 'manual'");
-    expect(source).toContain('waitForRemote: false');
     expect(source).toContain('collectConversationStoryboardSnapshots(mergedConversation)');
     expect(source).toContain('handleConversationGenerateDesign(version, { autoSnapshot: false })');
+  });
+
+  it('waits for manual snapshot persistence and keeps save failures visible', () => {
+    expect(source).toMatch(/source: 'manual',\n\s*\}\);/);
+    expect(generationPageSource).toContain('await onSaveVersion(versionName.trim());');
+    expect(generationPageSource).toContain("setVersionSaveError(error instanceof Error ? error.message : '存档保存失败，请稍后重试');");
+    expect(generationPageSource).toContain("{isSavingVersion ? '保存中...' : '确认保存'}");
+    expect(generationPageSource).toContain('setShowHistory(true);');
   });
 
   it('offers persistent writing and the master four-column quick pipeline', () => {
@@ -90,6 +115,17 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('messages: [...current.messages.filter(item => item.id !== message.id), message]');
     expect(source).toContain('versions: [...current.versions.filter(item => item.id !== selectedVersion.id), selectedVersion]');
     expect(source).toContain('mergeScriptConversationWithLocalFile(file, scriptConversations[fileId])');
+  });
+
+  it('refreshes writing mode without dropping quick versions created during a stale history request', () => {
+    expect(source).toContain('function mergePersistedScriptConversation');
+    expect(source).toContain('const cachedOnlyMessages = cached.messages.filter');
+    expect(source).toContain('const cachedOnlyVersions = cached.versions.filter');
+    expect(source).toContain('cached.currentVersionId && !persistedVersionIds.has(cached.currentVersionId)');
+    expect(source).toContain('const refreshScriptConversationForWriting = useCallback');
+    expect(source).toContain("if (mode === 'writing' && selectedFileId && !selectedFileId.startsWith('local_'))");
+    expect(source).toContain('void refreshScriptConversationForWriting(selectedFileId)');
+    expect(source).toContain('mergePersistedScriptConversation(latestFile, conversation, prev[selectedFileId])');
   });
 
   it('uses one direct streaming prompt for both initial generation and revisions', () => {

@@ -5,6 +5,7 @@ import {
     inferDashScopeTaskType,
     inferSeedanceTaskType,
     isComfyUIModel,
+    isMiniMaxH3Model,
     isSeedanceVideoModel,
     normalizeMiniMaxVideoParams,
     normalizeSeedanceMediaForSubmission,
@@ -22,6 +23,13 @@ import { confirmProcessingQueue } from './processingQueueService';
 export type { VideoTask } from './videoTaskTypes';
 export { cancelTask, deleteTask } from './taskControlService';
 
+export interface H3LongVideoSegment {
+    prompt: string;
+    duration: number;
+    image_path: string;
+    image_path_end?: string;
+}
+
 export interface VideoGenerationOptions {
     duration?: number;
     resolution?: string;
@@ -31,6 +39,15 @@ export interface VideoGenerationOptions {
     minimax_model?: string;
     minimax_resolution?: '768P' | '1080P';
     minimax_prompt_optimizer?: boolean;
+    /** Legacy import compatibility; new UI submissions use the dedicated Fast model key. */
+    h3_sage_attention?: boolean;
+    /** Selected automatically by the dedicated Mini model key. */
+    h3_low_vram?: boolean;
+    /** Separate guarded Director mode; it never changes the normal H3 workflow. */
+    h3_long_video?: boolean;
+    h3_long_video_segments?: H3LongVideoSegment[];
+    /** Serial post-process: unload H3 before loading SeedVR2 and exporting 720P. */
+    h3_upscale_720p?: boolean;
 }
 
 export function buildComfyUIVideoTaskPayload(
@@ -54,11 +71,31 @@ export function buildComfyUIVideoTaskPayload(
     if (imageFilenameEnd) {
         payload.image_path_end = imageFilenameEnd;
     }
+    if (isMiniMaxH3Model(model)) {
+        payload.h3_sage_attention = model === 'MiniMaxH3Fast';
+        payload.h3_low_vram = model === 'MiniMaxH3Mini';
+        payload.h3_upscale_720p = generationOptions?.h3_upscale_720p === true;
+        if (generationOptions?.h3_long_video === true) {
+            const segments = generationOptions.h3_long_video_segments || [];
+            if (segments.length < 2) {
+                throw new Error('H3 长视频至少需要 2 个已合并镜头');
+            }
+            if (segments.length > 8) {
+                throw new Error('H3 长视频单次最多支持 8 个镜头');
+            }
+            const totalDuration = segments.reduce((sum, segment) => sum + Number(segment.duration || 0), 0);
+            if (totalDuration > 120) {
+                throw new Error('H3 长视频单次总时长不能超过 120 秒');
+            }
+            payload.h3_long_video = true;
+            payload.h3_long_video_segments = segments.map(segment => ({ ...segment }));
+        }
+    }
     return payload;
 }
 
 function requiresStrictProcessingNode(model: VideoModel): boolean {
-    return model === 'MiniMaxH3' || model === 'LTXNode1' || model === 'WanNode2';
+    return isMiniMaxH3Model(model) || model === 'LTXNode1' || model === 'WanNode2';
 }
 
 function hasAuthHeader(): boolean {
@@ -106,6 +143,7 @@ export async function submitTask(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        workspace_group_id?: string;
         preferred_agent_id?: string;
         preferred_node_id?: string;
     },
@@ -268,6 +306,7 @@ export async function submitTask(
         requestData.file_role = entityOptions.file_role || 'video';
         requestData.project_id = entityOptions.project_id;
         requestData.episode_id = entityOptions.episode_id;
+        requestData.workspace_group_id = entityOptions.workspace_group_id;
     }
 
     if (isComfyUIModel(model)) {
@@ -557,6 +596,7 @@ export async function submitTaskQueued(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        workspace_group_id?: string;
         preferred_agent_id?: string;
         preferred_node_id?: string;
     },
@@ -672,6 +712,7 @@ export async function submitSeedanceTask(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        workspace_group_id?: string;
     },
     draftTaskId?: string,
     agentPlanCompat: boolean = false,
@@ -705,6 +746,7 @@ export async function submitSeedanceTask(
         body.file_role = entityOptions.file_role || 'video';
         body.project_id = entityOptions.project_id;
         body.episode_id = entityOptions.episode_id;
+        body.workspace_group_id = entityOptions.workspace_group_id;
     }
 
     const resp = await apiFetch('/api/generate', {
@@ -737,6 +779,7 @@ export async function submitDashScopeVideoTask(
         file_role?: string;
         project_id?: string;
         episode_id?: string;
+        workspace_group_id?: string;
     },
 ): Promise<{ task_id: string }> {
     const media = params.media_inputs || [];
@@ -801,6 +844,7 @@ export async function submitDashScopeVideoTask(
         body.file_role = entityOptions.file_role || 'video';
         body.project_id = entityOptions.project_id;
         body.episode_id = entityOptions.episode_id;
+        body.workspace_group_id = entityOptions.workspace_group_id;
     }
 
     const resp = await apiFetch('/api/generate', {

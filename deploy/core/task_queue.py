@@ -253,6 +253,20 @@ class TaskQueue:
                 await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task_id)
                 logger.info(f"任务 {task_id} 已取消，忽略迟到的完成结果")
                 return False
+
+            # Credits were reserved before enqueue.  Confirm before publishing
+            # the terminal event; duplicate worker callbacks are idempotent.
+            try:
+                from services.task_credit_billing_service import settle_task_credits
+                await settle_task_credits(
+                    task_id=task_id,
+                    task_data=task.data,
+                    user_id=task.user_id,
+                )
+            except Exception as billing_error:
+                # The amount remains frozen (not spendable), so a transient
+                # ledger error cannot turn into free usage or lose the result.
+                logger.error("任务 %s 积分结算待重试: %s", task_id, billing_error, exc_info=True)
             
             task.status = TaskStatus.COMPLETED
             task.completed_at = datetime.now().isoformat()
@@ -376,6 +390,17 @@ class TaskQueue:
                 # 终态任务绝不能继续留在待处理集合。否则 SQL 已失败但 Agent
                 # 恢复后仍会再次领取同一任务，造成重复生成和状态/积分错乱。
                 await self._remove_pending_task_members(task_id)
+
+                try:
+                    from services.task_credit_billing_service import release_task_credits
+                    await release_task_credits(
+                        task_id=task_id,
+                        task_data=task.data,
+                        user_id=task.user_id,
+                        reason="task_failed",
+                    )
+                except Exception as billing_error:
+                    logger.error("任务 %s 失败后释放积分异常: %s", task_id, billing_error, exc_info=True)
 
                 # 同步到 SQL，避免 Redis 已终态但 /api/tasks/active 从 DB 继续读到 processing。
                 try:
@@ -510,6 +535,8 @@ class TaskQueue:
         的情况——此时仍尝试更新数据库 + 清理队列，让用户能取消僵尸任务。
         """
         redis_ok = False
+        task = None
+        db_task = None
         try:
             task = await self.get_task(task_id)
             if task:
@@ -558,6 +585,27 @@ class TaskQueue:
             return False
 
         logger.info(f"任务 {task_id} 已取消 (redis={redis_ok}, db={db_ok})")
+        try:
+            from services.task_credit_billing_service import release_task_credits
+            task_data = task.data if task else None
+            task_user_id = task.user_id if task else None
+            if not task_data and db_task:
+                raw_task_data = db_task.get("task_data") or {}
+                if isinstance(raw_task_data, str):
+                    try:
+                        raw_task_data = json.loads(raw_task_data)
+                    except (json.JSONDecodeError, TypeError):
+                        raw_task_data = {}
+                task_data = raw_task_data if isinstance(raw_task_data, dict) else None
+                task_user_id = task_user_id or db_task.get("user_id")
+            await release_task_credits(
+                task_id=task_id,
+                task_data=task_data,
+                user_id=task_user_id,
+                reason="task_cancelled",
+            )
+        except Exception as billing_error:
+            logger.error("任务 %s 取消后释放积分异常: %s", task_id, billing_error, exc_info=True)
         return True
     
     async def delete_task(self, task_id: str) -> bool:

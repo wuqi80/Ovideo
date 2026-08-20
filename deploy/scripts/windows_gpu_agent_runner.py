@@ -1,6 +1,7 @@
 """Run the MECHA ComfyUI Agent without exposing its token in process arguments."""
 from __future__ import annotations
 
+import json
 import math
 import os
 import random
@@ -15,7 +16,21 @@ from pathlib import Path
 from typing import Any, Callable, Dict
 
 
-ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+# The Windows embeddable Python runtime ignores the script directory in isolated
+# mode. Bootstrap the two reviewed local module roots before importing the guard.
+_BOOTSTRAP_ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+for _module_root in (_BOOTSTRAP_ROOT / "agent", _BOOTSTRAP_ROOT / "scripts"):
+    _module_root_text = str(_module_root)
+    if _module_root_text not in sys.path:
+        sys.path.insert(0, _module_root_text)
+
+try:
+    from scripts.windows_gpu_resource_guard import Gpu2ResourceController
+except ImportError:  # Direct execution on the Windows GPU host.
+    from windows_gpu_resource_guard import Gpu2ResourceController
+
+
+ROOT = _BOOTSTRAP_ROOT
 AGENT_DIR = ROOT / "agent"
 TOKEN_FILE = ROOT / "config" / "agent-token.txt"
 
@@ -48,6 +63,13 @@ GPU2_WAN_MAX_GENERATION_SECONDS = 15.0
 
 GPU2_COMFYUI_PORT = 8188
 GPU2_H3_PORT = GPU2_COMFYUI_PORT
+GPU2_MUSIC3_MODEL_FILES = {
+    "diffusion": "minimax_music3_dit_int8_convrot.safetensors",
+    "text_encoder": "minimax_music3_text_encoder_pruned_int8_convrot.safetensors",
+    "vae": "minimax_music3_dav.safetensors",
+}
+GPU2_MUSIC3_MIN_DURATION_SECONDS = 10.0
+GPU2_MUSIC3_MAX_DURATION_SECONDS = 300.0
 GPU2_H3_MODEL_FILES = {
     "diffusion": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
     "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
@@ -64,6 +86,40 @@ GPU2_H3_FPS = 24
 GPU2_H3_DEFAULT_DURATION_SECONDS = 5.0
 GPU2_H3_MIN_DURATION_SECONDS = 4.0
 GPU2_H3_MAX_DURATION_SECONDS = 15.0
+GPU2_H3_SAGE_NODE_TYPES = {
+    "PathchSageAttentionKJ",
+    "MiniMaxH3MemoryEfficientSageAttentionPatch",
+}
+GPU2_H3_MINI_MODEL_FILES = {
+    "text_encoder": "qwen3vl_4b_fp8_scaled.safetensors",
+    "projection": "mmh3-4b-ClipProj-v3-mlp.safetensors",
+}
+GPU2_H3_MINI_MODEL_SIZES = {
+    "text_encoder": 5242467968,
+    "projection": 503434368,
+}
+GPU2_H3_CLIPPROJ_COMMIT = "e556987e6bbf9c6448dd5691fe29ce9a7a6970ae"
+GPU2_H3_MINI_READY_MARKER = ROOT / "config" / "h3-mini-ready.json"
+GPU2_H3_KJNODES_COMMIT = "6ab7e8130e449ed2c0037589bcf84146ceb7fc9c"
+GPU2_H3_SAGE_READY_MARKER = ROOT / "config" / "h3-sageattention-ready.json"
+GPU2_H3_DIRECTOR_COMMIT = "85863be2411eb1b5877c23414d88396c47838467"
+GPU2_H3_LONG_READY_MARKER = ROOT / "config" / "h3-long-video-ready.json"
+GPU2_H3_LONG_MAX_SEGMENTS = 8
+GPU2_H3_LONG_MAX_DURATION_SECONDS = 120.0
+GPU2_H3_LONG_CONTEXT_FRAMES = 22
+GPU2_H3_DIRECTOR_NODE_TYPES = {
+    "MiniMaxH3Director",
+    "MiniMaxH3DirectorGroupImageToVideo",
+    "MiniMaxH3DirectorGroupsCombine",
+    "CreateVideo",
+    "SaveVideo",
+}
+GPU2_H3_STANDALONE_MOTION_NODE_TYPES = {
+    "MiniMaxH3MotionContext",
+    "MiniMaxH3MotionContextTrim",
+    "MiniMaxH3MotionContextSaveLatent",
+    "MiniMaxH3MotionContextLoadLatent",
+}
 
 COMFYUI_RECOVERY_FAILURE_THRESHOLD = 10
 COMFYUI_RECOVERY_COOLDOWN_SECONDS = 5 * 60
@@ -73,6 +129,7 @@ COMFYUI_START_COMMANDS = {
 GPU2_RUNTIME_COMMANDS = {
     "wan": ROOT / "start_comfyui.cmd",
     "h3": ROOT / "scripts" / "windows_gpu_start_h3_comfyui.cmd",
+    "music": ROOT / "scripts" / "windows_gpu_start_music3_comfyui.cmd",
 }
 
 GPU2_QWEN_COMPAT_PREFIXES = (
@@ -98,8 +155,243 @@ GPU2_QWEN_COMPAT_TASKS = {
     "auto_storyboard",
 }
 GPU2_LONG_TASK_TIMEOUT_SECONDS = 6 * 60 * 60
+GPU2_MODEL_RELEASE_TIMEOUT_SECONDS = 120
+GPU2_MODEL_RELEASE_POLL_SECONDS = 5
+GPU2_MODEL_RELEASE_STABLE_SAMPLES = 3
+GPU2_MODEL_RELEASE_MIN_FREE_RAM_GIB = 96
+GPU2_MODEL_RELEASE_MIN_FREE_VRAM_GIB = 8
+GPU2_MODEL_RELEASE_RAM_TOLERANCE_GIB = 4
+GPU2_MODEL_RELEASE_VRAM_TOLERANCE_GIB = 1
+GPU2_MODEL_RELEASE_MIN_FREE_VRAM_RATIO = 0.75
+GIB = 1024 ** 3
 
 sys.path.insert(0, str(AGENT_DIR))
+
+
+def gpu2_agent_maintenance_enabled() -> bool:
+    """Fail closed unless production activation explicitly enables task claims."""
+    return str(os.environ.get("MECHA_GPU_AGENT_MAINTENANCE", "1")).strip().lower() not in {
+        "0", "false", "no", "off",
+    }
+
+
+def gpu2_h3_sage_attention_allowed() -> bool:
+    return str(os.environ.get("MECHA_GPU_H3_SAGE_ATTENTION", "0")).strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def gpu2_h3_sage_attention_requested(task: Dict[str, Any]) -> bool:
+    model = str(
+        _gpu2_task_params(task).get("model")
+        or _gpu2_task_params(task).get("model_name")
+        or ""
+    ).strip().lower()
+    if model in {"minimaxh3fast", "minimax-h3-fast", "minimax_h3_fast"}:
+        return True
+    value = _gpu2_task_params(task).get("h3_sage_attention", False)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def gpu2_h3_mini_requested(task: Dict[str, Any]) -> bool:
+    params = _gpu2_task_params(task)
+    model = str(params.get("model") or params.get("model_name") or "").strip().lower()
+    if model in {"minimaxh3mini", "minimax-h3-mini", "minimax_h3_mini"}:
+        return True
+    value = params.get("h3_low_vram", False)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def gpu2_h3_fast_model_requested(task: Dict[str, Any]) -> bool:
+    params = _gpu2_task_params(task)
+    model = str(params.get("model") or params.get("model_name") or "").strip().lower()
+    return model in {"minimaxh3fast", "minimax-h3-fast", "minimax_h3_fast"}
+
+
+def gpu2_h3_mini_ready(
+    *,
+    marker_path: Path = GPU2_H3_MINI_READY_MARKER,
+    object_info_reader: Callable[[], Dict[str, Any]] | None = None,
+    models_root: Path | None = None,
+) -> tuple[bool, str]:
+    """Fail closed unless the pinned ClipProj node and both Mini assets are ready."""
+    installed, reason = gpu2_h3_mini_installed(
+        marker_path=marker_path,
+        models_root=models_root,
+    )
+    if not installed:
+        return False, reason
+    try:
+        if object_info_reader is None:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{GPU2_H3_PORT}/object_info", timeout=5
+            ) as response:
+                object_info = json.loads(response.read().decode("utf-8"))
+        else:
+            object_info = object_info_reader()
+    except Exception as exc:
+        return False, f"ComfyUI node discovery failed: {exc}"
+    if "ClipProjApply" not in set(object_info or {}):
+        return False, "required ClipProjApply node is missing"
+    return True, "verified"
+
+
+def gpu2_h3_mini_installed(
+    *,
+    marker_path: Path = GPU2_H3_MINI_READY_MARKER,
+    models_root: Path | None = None,
+) -> tuple[bool, str]:
+    """Verify the installed Mini profile without depending on the active runtime."""
+    try:
+        # Windows PowerShell commonly writes UTF-8 JSON with a BOM. Accept it
+        # so a valid locally generated verification marker is not reported as
+        # unavailable by the long-running Agent process.
+        marker = json.loads(Path(marker_path).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError, TypeError) as exc:
+        return False, f"verification marker unavailable: {exc}"
+    if marker.get("verified") is not True:
+        return False, "verification marker is not approved"
+    if str(marker.get("clipproj_commit") or "") != GPU2_H3_CLIPPROJ_COMMIT:
+        return False, "verified ClipProj commit does not match the reviewed release"
+    if marker.get("inference_executed") is not False:
+        return False, "verification marker must be non-inference only"
+    root = Path(models_root or (ROOT / "ComfyUI-H3" / "ComfyUI" / "models"))
+    expected_files = {
+        root / "text_encoders" / GPU2_H3_MINI_MODEL_FILES["text_encoder"]:
+            GPU2_H3_MINI_MODEL_SIZES["text_encoder"],
+        root / "clip_projections" / GPU2_H3_MINI_MODEL_FILES["projection"]:
+            GPU2_H3_MINI_MODEL_SIZES["projection"],
+    }
+    for path, expected_size in expected_files.items():
+        try:
+            if path.stat().st_size != expected_size:
+                return False, f"model file size mismatch: {path.name}"
+        except OSError as exc:
+            return False, f"model file unavailable: {path.name}: {exc}"
+    return True, "verified"
+
+
+def gpu2_h3_long_video_allowed() -> bool:
+    return str(os.environ.get("MECHA_GPU_H3_LONG_VIDEO", "0")).strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+def gpu2_h3_long_video_requested(task: Dict[str, Any]) -> bool:
+    value = _gpu2_task_params(task).get("h3_long_video", False)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def gpu2_h3_upscale_720p_requested(task: Dict[str, Any]) -> bool:
+    value = _gpu2_task_params(task).get("h3_upscale_720p", False)
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def gpu2_h3_long_video_ready(
+    *,
+    marker_path: Path = GPU2_H3_LONG_READY_MARKER,
+    object_info_reader: Callable[[], Dict[str, Any]] | None = None,
+) -> tuple[bool, str]:
+    """Fail closed unless the reviewed Director-only runtime is live."""
+    if not gpu2_h3_long_video_allowed():
+        return False, "disabled"
+    try:
+        marker = json.loads(Path(marker_path).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError, TypeError) as exc:
+        return False, f"verification marker unavailable: {exc}"
+    if marker.get("verified") is not True:
+        return False, "verification marker is not approved"
+    if str(marker.get("director_commit") or "") != GPU2_H3_DIRECTOR_COMMIT:
+        return False, "verified Director commit does not match the reviewed release"
+    if marker.get("inference_executed") is not False:
+        return False, "verification marker must be non-inference only"
+    try:
+        if object_info_reader is None:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{GPU2_H3_PORT}/object_info", timeout=5
+            ) as response:
+                object_info = json.loads(response.read().decode("utf-8"))
+        else:
+            object_info = object_info_reader()
+    except Exception as exc:
+        return False, f"ComfyUI node discovery failed: {exc}"
+    live_nodes = set(object_info or {})
+    conflicting = sorted(GPU2_H3_STANDALONE_MOTION_NODE_TYPES & live_nodes)
+    if conflicting:
+        return False, f"standalone Motion Context conflicts with Director: {', '.join(conflicting)}"
+    missing = sorted(GPU2_H3_DIRECTOR_NODE_TYPES - live_nodes)
+    if missing:
+        return False, f"required Director nodes are missing: {', '.join(missing)}"
+    return True, "verified"
+
+
+def gpu2_h3_sage_attention_ready(
+    *,
+    marker_path: Path = GPU2_H3_SAGE_READY_MARKER,
+    object_info_reader: Callable[[], Dict[str, Any]] | None = None,
+    require_feature_flag: bool = True,
+) -> tuple[bool, str]:
+    """Require an offline verification marker plus live ComfyUI node discovery."""
+    if require_feature_flag and not gpu2_h3_sage_attention_allowed():
+        return False, "disabled"
+    installed, reason = gpu2_h3_sage_attention_installed(marker_path=marker_path)
+    if not installed:
+        return False, reason
+    try:
+        if object_info_reader is None:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{GPU2_H3_PORT}/object_info", timeout=5
+            ) as response:
+                object_info = json.loads(response.read().decode("utf-8"))
+        else:
+            object_info = object_info_reader()
+    except Exception as exc:
+        return False, f"ComfyUI node discovery failed: {exc}"
+    missing = sorted(GPU2_H3_SAGE_NODE_TYPES - set(object_info or {}))
+    if missing:
+        return False, f"required acceleration nodes are missing: {', '.join(missing)}"
+    return True, "verified"
+
+
+def gpu2_h3_sage_attention_installed(
+    *, marker_path: Path = GPU2_H3_SAGE_READY_MARKER
+) -> tuple[bool, str]:
+    """Verify the reviewed Fast profile marker independent of the active runtime."""
+    try:
+        marker = json.loads(Path(marker_path).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError, TypeError) as exc:
+        return False, f"verification marker unavailable: {exc}"
+    if marker.get("verified") is not True:
+        return False, "verification marker is not approved"
+    if str(marker.get("sageattention_version") or "") != "2.2.0":
+        return False, "verified SageAttention version is not 2.2.0"
+    if str(marker.get("cuda_arch") or "") != "sm86":
+        return False, "verified CUDA architecture is not RTX 3060 sm86"
+    if str(marker.get("kjnodes_commit") or "") != GPU2_H3_KJNODES_COMMIT:
+        return False, "verified KJNodes commit does not match the reviewed release"
+    if marker.get("inference_executed") is not False:
+        return False, "verification marker must be non-inference only"
+    return True, "verified"
+
+
+def gpu2_static_h3_capabilities() -> Dict[str, Any]:
+    """Report installed profiles even while the serialized runtime currently runs Wan."""
+    mini_ready, mini_reason = gpu2_h3_mini_installed()
+    fast_ready, fast_reason = gpu2_h3_sage_attention_installed()
+    return {
+        "minimax_h3_fast": fast_ready,
+        "minimax_h3_fast_installation": fast_reason,
+        "minimax_h3_mini": mini_ready,
+        "minimax_h3_mini_installation": mini_reason,
+    }
 
 
 def _tcp_port_is_listening(port: int) -> bool:
@@ -200,7 +492,9 @@ class ComfyUIPortRecovery:
 
 
 def gpu2_runtime_profile(task: Dict[str, Any]) -> str:
-    """Map every GPU2 task to one of the two isolated ComfyUI runtimes."""
+    """Map every GPU2 task to one isolated runtime on the shared port."""
+    if is_gpu2_music3_task(task):
+        return "music"
     return "h3" if is_gpu2_h3_task(task) else "wan"
 
 
@@ -212,6 +506,9 @@ def _stop_gpu2_runtime(profile: str) -> bool:
     if profile == "h3":
         python_exe = ROOT / "ComfyUI-H3" / "python_embeded" / "python.exe"
         command_match = ROOT / "ComfyUI-H3" / "ComfyUI" / "main.py"
+    elif profile == "music":
+        python_exe = ROOT / "ComfyUI-Music3" / "python_embeded" / "python.exe"
+        command_match = ROOT / "ComfyUI-Music3" / "ComfyUI" / "main.py"
     else:
         python_exe = ROOT / "ComfyUI_windows_portable" / "python_embeded" / "python.exe"
         command_match = ROOT / "ComfyUI_windows_portable" / "ComfyUI" / "main.py"
@@ -231,7 +528,77 @@ def _stop_gpu2_runtime(profile: str) -> bool:
     return result.returncode == 0
 
 
-def _free_gpu2_models() -> None:
+def _runtime_profile_from_process(
+    executable_path: str,
+    command_line: str,
+    *,
+    root: Path = ROOT,
+) -> str | None:
+    """Identify only reviewed Drama ComfyUI runtimes from exact process paths."""
+    executable = str(executable_path or "").replace("/", "\\").casefold().strip('" ')
+    command = str(command_line or "").replace("/", "\\").casefold()
+    profile_paths = {
+        "wan": (
+            root / "ComfyUI_windows_portable" / "python_embeded" / "python.exe",
+            root / "ComfyUI_windows_portable" / "ComfyUI" / "main.py",
+        ),
+        "h3": (
+            root / "ComfyUI-H3" / "python_embeded" / "python.exe",
+            root / "ComfyUI-H3" / "ComfyUI" / "main.py",
+        ),
+        "music": (
+            root / "ComfyUI-Music3" / "python_embeded" / "python.exe",
+            root / "ComfyUI-Music3" / "ComfyUI" / "main.py",
+        ),
+    }
+    for profile, (expected_executable, expected_main) in profile_paths.items():
+        expected_executable_text = str(expected_executable).replace("/", "\\").casefold()
+        expected_main_text = str(expected_main).replace("/", "\\").casefold()
+        if executable == expected_executable_text and expected_main_text in command:
+            return profile
+    return None
+
+
+def _detect_gpu2_runtime_profile(port: int) -> str | None:
+    """Read the listener PID and fail closed unless it is a reviewed runtime."""
+    if os.name != "nt":
+        return None
+    script = (
+        "$ErrorActionPreference='Stop';"
+        "[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false);"
+        f"$c=Get-NetTCPConnection -LocalPort {int(port)} -State Listen "
+        "| Select-Object -First 1;"
+        "if(-not $c){exit 3};"
+        "$p=Get-CimInstance Win32_Process -Filter "
+        "(\"ProcessId=$($c.OwningProcess)\");"
+        "if(-not $p){exit 4};"
+        "[pscustomobject]@{executable=$p.ExecutablePath;command=$p.CommandLine}"
+        "| ConvertTo-Json -Compress"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", script],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            check=False,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        details = json.loads(result.stdout.lstrip("\ufeff").strip())
+    except (OSError, subprocess.SubprocessError, ValueError, TypeError):
+        return None
+    return _runtime_profile_from_process(
+        details.get("executable", ""),
+        details.get("command", ""),
+    )
+
+
+def _free_gpu2_models() -> bool:
     payload = b'{"unload_models":true,"free_memory":true}'
     request = urllib.request.Request(
         f"http://127.0.0.1:{GPU2_COMFYUI_PORT}/free",
@@ -240,14 +607,156 @@ def _free_gpu2_models() -> None:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=10):
-            pass
-    except OSError:
-        pass
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return 200 <= int(getattr(response, "status", 200)) < 300
+    except (OSError, ValueError):
+        return False
+
+
+def _read_gpu2_memory_snapshot() -> Dict[str, int] | None:
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{GPU2_COMFYUI_PORT}/system_stats",
+            timeout=10,
+        ) as response:
+            payload = json.load(response)
+    except (OSError, ValueError, TypeError):
+        return None
+
+    system = payload.get("system")
+    devices = payload.get("devices")
+    if not isinstance(system, dict) or not isinstance(devices, list):
+        return None
+    try:
+        ram_total = int(system["ram_total"])
+        ram_free = int(system["ram_free"])
+        vram_totals = [
+            int(device["vram_total"])
+            for device in devices
+            if isinstance(device, dict)
+            and device.get("vram_total") is not None
+            and device.get("vram_free") is not None
+        ]
+        vram_free_values = [
+            int(device["vram_free"])
+            for device in devices
+            if isinstance(device, dict)
+            and device.get("vram_total") is not None
+            and device.get("vram_free") is not None
+        ]
+    except (KeyError, TypeError, ValueError):
+        return None
+    if ram_total <= 0 or ram_free < 0 or not vram_totals:
+        return None
+    if any(total <= 0 for total in vram_totals) or len(vram_totals) != len(vram_free_values):
+        return None
+    return {
+        "ram_total": ram_total,
+        "ram_free": ram_free,
+        "vram_total": sum(vram_totals),
+        "vram_free": sum(vram_free_values),
+    }
+
+
+class Gpu2ModelReleaseGate:
+    """Fail closed until ComfyUI proves the previous model is unloaded."""
+
+    def __init__(
+        self,
+        *,
+        release_request: Callable[[], bool] = _free_gpu2_models,
+        memory_reader: Callable[[], Dict[str, int] | None] = _read_gpu2_memory_snapshot,
+        sleeper: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic,
+        timeout_seconds: int = GPU2_MODEL_RELEASE_TIMEOUT_SECONDS,
+        poll_seconds: int = GPU2_MODEL_RELEASE_POLL_SECONDS,
+        stable_samples: int = GPU2_MODEL_RELEASE_STABLE_SAMPLES,
+        min_free_ram_gib: int = GPU2_MODEL_RELEASE_MIN_FREE_RAM_GIB,
+        min_free_vram_gib: int = GPU2_MODEL_RELEASE_MIN_FREE_VRAM_GIB,
+        ram_tolerance_gib: int = GPU2_MODEL_RELEASE_RAM_TOLERANCE_GIB,
+        vram_tolerance_gib: int = GPU2_MODEL_RELEASE_VRAM_TOLERANCE_GIB,
+        min_free_vram_ratio: float = GPU2_MODEL_RELEASE_MIN_FREE_VRAM_RATIO,
+    ) -> None:
+        self.release_request = release_request
+        self.memory_reader = memory_reader
+        self.sleeper = sleeper
+        self.clock = clock
+        self.timeout_seconds = max(1, int(timeout_seconds))
+        self.poll_seconds = max(1, int(poll_seconds))
+        self.stable_samples = max(1, int(stable_samples))
+        self.min_free_ram = max(0, int(min_free_ram_gib)) * GIB
+        self.min_free_vram = max(0, int(min_free_vram_gib)) * GIB
+        self.ram_tolerance = max(0, int(ram_tolerance_gib)) * GIB
+        self.vram_tolerance = max(0, int(vram_tolerance_gib)) * GIB
+        self.min_free_vram_ratio = min(1.0, max(0.0, float(min_free_vram_ratio)))
+        self.baseline: Dict[str, int] | None = None
+        self.released = False
+        self.last_error = "startup model state has not been verified"
+
+    def mark_models_loaded(self) -> None:
+        baseline = self.memory_reader()
+        self.baseline = baseline
+        self.released = False
+        self.last_error = "previous task models have not been released"
+
+    def mark_process_stopped(self) -> None:
+        self.released = True
+        self.baseline = None
+        self.last_error = ""
+
+    def _is_safe_snapshot(self, snapshot: Dict[str, int] | None) -> bool:
+        if snapshot is None:
+            return False
+        try:
+            ram_free = int(snapshot["ram_free"])
+            vram_total = int(snapshot["vram_total"])
+            vram_free = int(snapshot["vram_free"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        if ram_free < self.min_free_ram or vram_free < self.min_free_vram:
+            return False
+        if vram_total <= 0 or vram_free / vram_total < self.min_free_vram_ratio:
+            return False
+        if self.baseline is None:
+            return True
+        return (
+            ram_free >= int(self.baseline.get("ram_free", 0)) - self.ram_tolerance
+            and vram_free >= int(self.baseline.get("vram_free", 0)) - self.vram_tolerance
+        )
+
+    def release_and_wait(self) -> bool:
+        self.released = False
+        if not self.release_request():
+            self.last_error = "ComfyUI rejected or did not answer the model release request"
+            return False
+
+        deadline = self.clock() + self.timeout_seconds
+        consecutive = 0
+        while self.clock() <= deadline:
+            snapshot = self.memory_reader()
+            if self._is_safe_snapshot(snapshot):
+                consecutive += 1
+                if consecutive >= self.stable_samples:
+                    self.released = True
+                    self.baseline = snapshot
+                    self.last_error = ""
+                    return True
+            else:
+                consecutive = 0
+            self.sleeper(self.poll_seconds)
+
+        self.last_error = (
+            "model release did not recover the pre-task RAM/VRAM baseline "
+            f"within {self.timeout_seconds}s"
+        )
+        return False
+
+    def ensure_released(self) -> bool:
+        return self.released or self.release_and_wait()
 
 
 class Gpu2RuntimeManager:
-    """Serialize Wan/H3 runtime switching on the single public port 8188."""
+    """Serialize Wan/H3/Music runtime switching on the single public port."""
 
     def __init__(
         self,
@@ -256,7 +765,8 @@ class Gpu2RuntimeManager:
         listener: Callable[[int], bool] = _tcp_port_is_listening,
         launcher: Callable[[Path], bool] = _launch_comfyui_command,
         stopper: Callable[[str], bool] = _stop_gpu2_runtime,
-        model_releaser: Callable[[], None] = _free_gpu2_models,
+        profile_detector: Callable[[int], str | None] = _detect_gpu2_runtime_profile,
+        model_gate: Gpu2ModelReleaseGate | None = None,
         sleeper: Callable[[float], None] = time.sleep,
         startup_timeout: int = 180,
     ) -> None:
@@ -264,10 +774,15 @@ class Gpu2RuntimeManager:
         self.listener = listener
         self.launcher = launcher
         self.stopper = stopper
-        self.model_releaser = model_releaser
+        self.profile_detector = profile_detector
+        self.model_gate = model_gate or Gpu2ModelReleaseGate()
         self.sleeper = sleeper
         self.startup_timeout = max(1, int(startup_timeout))
-        self.active_profile: str | None = "wan" if listener(GPU2_COMFYUI_PORT) else None
+        self.active_profile: str | None = (
+            self.profile_detector(GPU2_COMFYUI_PORT)
+            if listener(GPU2_COMFYUI_PORT)
+            else None
+        )
         self._lock = threading.Lock()
 
     def ensure(self, profile: str) -> None:
@@ -277,9 +792,16 @@ class Gpu2RuntimeManager:
             if self.active_profile == profile and self.listener(GPU2_COMFYUI_PORT):
                 return
             if self.listener(GPU2_COMFYUI_PORT):
-                current = self.active_profile
-                if not current or not self.stopper(current):
+                current = self.active_profile or self.profile_detector(GPU2_COMFYUI_PORT)
+                if current == profile:
+                    self.active_profile = current
+                    return
+                if not current:
                     raise RuntimeError("Refused to replace an unknown ComfyUI listener on port 8188")
+                if not self.stopper(current):
+                    raise RuntimeError(
+                        f"Managed {current} ComfyUI runtime did not release port 8188 in time"
+                    )
             command = Path(self.commands[profile])
             if not command.is_file():
                 raise RuntimeError(f"GPU2 runtime launcher is missing: {command}")
@@ -293,10 +815,38 @@ class Gpu2RuntimeManager:
                 self.sleeper(1)
             raise RuntimeError(f"GPU2 {profile} runtime did not open port 8188 in time")
 
-    def release_models(self) -> None:
+    def mark_models_loaded(self) -> None:
         with self._lock:
-            if self.listener(GPU2_COMFYUI_PORT):
-                self.model_releaser()
+            self.model_gate.mark_models_loaded()
+
+    def release_models(self) -> bool:
+        with self._lock:
+            if not self.listener(GPU2_COMFYUI_PORT):
+                self.model_gate.mark_process_stopped()
+                return True
+            return self.model_gate.release_and_wait()
+
+    def ready_for_next_task(self) -> bool:
+        with self._lock:
+            if not self.listener(GPU2_COMFYUI_PORT):
+                self.model_gate.mark_process_stopped()
+                return True
+            return self.model_gate.ensure_released()
+
+    def emergency_stop(self) -> bool:
+        """Stop only the runtime profile already owned by this Agent."""
+        with self._lock:
+            if not self.listener(GPU2_COMFYUI_PORT):
+                self.model_gate.mark_process_stopped()
+                return True
+            profile = self.active_profile
+            if not profile or profile not in self.commands:
+                return False
+            stopped = self.stopper(profile)
+            if stopped:
+                self.active_profile = None
+                self.model_gate.mark_process_stopped()
+            return stopped
 
 
 def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -405,11 +955,22 @@ def normalize_gpu2_video_resolution(value: Any) -> int:
     return max(360, min(1080, resolution))
 
 
+def normalize_gpu2_video_seed(value: Any) -> int:
+    """Map frontend random-seed sentinels into SeedVR2's unsigned range."""
+    try:
+        seed = int(value)
+    except (TypeError, ValueError):
+        return 42
+    if seed < 0:
+        return 42
+    return min(seed, 4294967295)
+
+
 def build_gpu2_video_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
     """Build a serial, CPU-offloaded SeedVR2 graph for video enhancement."""
     params = _gpu2_task_params(task)
     video_name = _gpu2_input_video_name(task)
-    seed = int(params.get("seed") or params.get("seed_0") or 42)
+    seed = normalize_gpu2_video_seed(params.get("seed", params.get("seed_0", 42)))
     target_resolution = normalize_gpu2_video_resolution(params.get("resolution"))
     return {
         "1": {
@@ -895,6 +1456,119 @@ def _gpu2_seed(task: Dict[str, Any]) -> int:
     return seed if seed >= 0 else random.randint(0, 2**63 - 1)
 
 
+def is_gpu2_music3_task(task: Dict[str, Any]) -> bool:
+    task_type = str(task.get("task_type") or "").strip().lower()
+    workflow_name = _gpu2_workflow_name(task)
+    return task_type == "minimax_music3" or workflow_name == "gpu2_minimax_music3"
+
+
+def gpu2_music3_duration_seconds(task: Dict[str, Any]) -> float:
+    params = _gpu2_task_params(task)
+    try:
+        duration = float(
+            params.get("duration_seconds")
+            or params.get("duration")
+            or 30.0
+        )
+    except (TypeError, ValueError):
+        duration = 30.0
+    return max(
+        GPU2_MUSIC3_MIN_DURATION_SECONDS,
+        min(GPU2_MUSIC3_MAX_DURATION_SECONDS, duration),
+    )
+
+
+def build_gpu2_minimax_music3_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the native low-VRAM MiniMax Music 3 graph.
+
+    The int8 DiT/text encoder and tiled VAE decode are intentionally fixed here
+    so a client cannot select a larger precision variant on the production node.
+    """
+    params = _gpu2_task_params(task)
+    caption = str(
+        params.get("caption")
+        or params.get("prompt")
+        or "Cinematic instrumental background score, coherent structure, no vocals."
+    ).strip()
+    lyrics = str(params.get("lyrics") or "[Instrumental]").strip()
+    seed = _gpu2_seed(task)
+    duration = gpu2_music3_duration_seconds(task)
+    return {
+        "1": {
+            "class_type": "UNETLoader",
+            "inputs": {
+                "unet_name": GPU2_MUSIC3_MODEL_FILES["diffusion"],
+                "weight_dtype": "default",
+            },
+        },
+        "2": {
+            "class_type": "CLIPLoader",
+            "inputs": {
+                "clip_name": GPU2_MUSIC3_MODEL_FILES["text_encoder"],
+                "type": "minimax",
+                "device": "default",
+            },
+        },
+        "3": {
+            "class_type": "VAELoader",
+            "inputs": {"vae_name": GPU2_MUSIC3_MODEL_FILES["vae"]},
+        },
+        "4": {
+            "class_type": "MiniMaxMusic3TextEncode",
+            "inputs": {
+                "clip": ["2", 0],
+                "caption": caption,
+                "lyrics": lyrics,
+                "seed": seed,
+                "max_duration": duration,
+                "cfg_scale": 1.7,
+                "top_k": 50,
+            },
+        },
+        "5": {
+            "class_type": "ConditioningZeroOut",
+            "inputs": {"conditioning": ["4", 0]},
+        },
+        "6": {
+            "class_type": "EmptyMiniMaxMusic3LatentAudio",
+            "inputs": {"seconds": ["4", 1], "batch_size": 1},
+        },
+        "7": {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": ["1", 0],
+                "positive": ["4", 0],
+                "negative": ["5", 0],
+                "latent_image": ["6", 0],
+                "seed": seed + 1,
+                "steps": 30,
+                "cfg": 1.7,
+                "sampler_name": "euler",
+                "scheduler": "simple",
+                "denoise": 1.0,
+            },
+        },
+        "8": {
+            "class_type": "VAEDecodeAudioTiled",
+            "inputs": {
+                "samples": ["7", 0],
+                "vae": ["3", 0],
+                "tile_size": 1536,
+                "overlap": 64,
+            },
+        },
+        "9": {
+            "class_type": "SaveAudioAdvanced",
+            "inputs": {
+                "audio": ["8", 0],
+                "filename_prefix": "audio/MECHA_GPU2_minimax_music3",
+                "format": "mp3",
+                "format.quality": "V0",
+            },
+        },
+    }
+
+
 def is_gpu2_h3_task(task: Dict[str, Any]) -> bool:
     task_type = str(task.get("task_type") or "").strip().lower()
     workflow_name = _gpu2_workflow_name(task)
@@ -923,8 +1597,10 @@ def gpu2_h3_length_frames(task: Dict[str, Any]) -> int:
     return int(requested + (5 - (requested % 17)) % 17)
 
 
-def build_gpu2_minimax_h3_fl2va_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
-    """Build the official MiniMax H3 FL2VA graph for the isolated GPU2:8189 ComfyUI."""
+def build_gpu2_minimax_h3_fl2va_workflow(
+    task: Dict[str, Any], *, enable_sage_attention: bool = False, use_mini_clip: bool = False
+) -> Dict[str, Any]:
+    """Build the MiniMax H3 FL2VA graph for the Agent-switched local runtime."""
     params = _gpu2_task_params(task)
     image_names = _gpu2_input_image_names(task)
     if not image_names:
@@ -1046,7 +1722,348 @@ def build_gpu2_minimax_h3_fl2va_workflow(task: Dict[str, Any]) -> Dict[str, Any]
         }
         workflow["104"]["inputs"]["last_frame"] = ["4", 0]
         workflow["92"]["inputs"]["filename_prefix"] = "MECHA_GPU2_minimax_h3_fl2va"
+    if use_mini_clip:
+        workflow["13"]["inputs"] = {
+            "clip_name": GPU2_H3_MINI_MODEL_FILES["text_encoder"],
+            "type": "krea2",
+            "device": "default",
+        }
+        workflow["12"] = {
+            "class_type": "ClipProjApply",
+            "inputs": {
+                "clip": ["13", 0],
+                "projection": GPU2_H3_MINI_MODEL_FILES["projection"],
+            },
+        }
+        workflow["104"]["inputs"]["clip"] = ["12", 0]
+        workflow["92"]["inputs"]["filename_prefix"] += "_mini"
+    if enable_sage_attention:
+        workflow["7"] = {
+            "class_type": "PathchSageAttentionKJ",
+            "inputs": {
+                "model": ["6", 0],
+                "sage_attention": "auto",
+                "allow_compile": True,
+            },
+        }
+        workflow["8"] = {
+            "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+            "inputs": {"model": ["7", 0]},
+        }
+        workflow["9"]["inputs"]["model"] = ["8", 0]
+        workflow["16"]["inputs"]["model"] = ["8", 0]
     return workflow
+
+
+def _gpu2_h3_long_video_segments(task: Dict[str, Any]) -> list[Dict[str, Any]]:
+    params = _gpu2_task_params(task)
+    raw_segments = params.get("h3_long_video_segments")
+    if not isinstance(raw_segments, list) or not 2 <= len(raw_segments) <= GPU2_H3_LONG_MAX_SEGMENTS:
+        raise RuntimeError(
+            f"GPU2 H3 long video requires 2-{GPU2_H3_LONG_MAX_SEGMENTS} segments"
+        )
+    segments: list[Dict[str, Any]] = []
+    total_duration = 0.0
+    for index, raw in enumerate(raw_segments):
+        if not isinstance(raw, dict):
+            raise RuntimeError(f"GPU2 H3 long video segment {index + 1} is invalid")
+        first_frame = str(raw.get("image_path") or "").strip()
+        last_frame = str(raw.get("image_path_end") or "").strip()
+        if not first_frame:
+            raise RuntimeError(
+                f"GPU2 H3 long video segment {index + 1} is missing a first frame"
+            )
+        try:
+            duration = float(raw.get("duration") or 0)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"GPU2 H3 long video segment {index + 1} duration is invalid"
+            ) from exc
+        if not GPU2_H3_MIN_DURATION_SECONDS <= duration <= GPU2_H3_MAX_DURATION_SECONDS:
+            raise RuntimeError(
+                f"GPU2 H3 long video segment {index + 1} must be 4-15 seconds"
+            )
+        total_duration += duration
+        segments.append({
+            "prompt": str(raw.get("prompt") or "").strip(),
+            "duration": duration,
+            "image_path": first_frame,
+            "image_path_end": last_frame,
+        })
+    if total_duration > GPU2_H3_LONG_MAX_DURATION_SECONDS:
+        raise RuntimeError(
+            f"GPU2 H3 long video exceeds {GPU2_H3_LONG_MAX_DURATION_SECONDS:g} seconds"
+        )
+    return segments
+
+
+def _gpu2_h3_director_segment_frames(duration: float) -> int:
+    requested = max(5, round(float(duration) * GPU2_H3_FPS))
+    return int(requested + (5 - (requested % 17)) % 17)
+
+
+def build_gpu2_minimax_h3_long_video_workflow(
+    task: Dict[str, Any], *, enable_sage_attention: bool = False, use_mini_clip: bool = False
+) -> Dict[str, Any]:
+    """Build one serialized Director prompt from an existing merged H3 card."""
+    segments = _gpu2_h3_long_video_segments(task)
+    seed = _gpu2_seed(task)
+    frame_counts = [_gpu2_h3_director_segment_frames(segment["duration"]) for segment in segments]
+    total_frames = sum(frame_counts)
+    timeline_segments = []
+    cursor = 0
+    for index, (segment, frame_count) in enumerate(zip(segments, frame_counts)):
+        timeline_segments.append({
+            "id": f"shot{index}",
+            "start": cursor,
+            "length": frame_count,
+            "frameCount": frame_count,
+            "durationSec": segment["duration"],
+            "prompt": segment["prompt"],
+            "continuityFromPrev": index > 0,
+        })
+        cursor += frame_count
+    timeline_data = json.dumps({
+        "version": 5,
+        "editMode": "segment",
+        "timelineMode": "fl2v",
+        "totalFrames": total_frames,
+        "frameRate": GPU2_H3_FPS,
+        "width": GPU2_H3_WIDTH,
+        "height": GPU2_H3_HEIGHT,
+        "refMaxSize": GPU2_H3_WIDTH,
+        "output": {
+            "mode": "fixed",
+            "longEdge": GPU2_H3_WIDTH,
+            "width": GPU2_H3_WIDTH,
+            "height": GPU2_H3_HEIGHT,
+            "maxExportFrames": 0,
+            "exportMode": "all",
+            "audioMode": "generate",
+            "continuityEnabled": True,
+            "continuityOverlapFrames": GPU2_H3_LONG_CONTEXT_FRAMES,
+        },
+        "global": {
+            "taskType": "fl2v",
+            "prompt": "",
+            "refs": [],
+            "referenceVideo": {},
+            "continuousReference": False,
+        },
+        "segments": timeline_segments,
+    }, ensure_ascii=False, separators=(",", ":"))
+
+    model_link: list[Any] = ["6", 0]
+    workflow: Dict[str, Any] = {
+        "6": {
+            "class_type": "UNETLoader",
+            "inputs": {
+                "unet_name": GPU2_H3_MODEL_FILES["diffusion"],
+                "weight_dtype": "default",
+            },
+        },
+        "11": {
+            "class_type": "VAELoader",
+            "inputs": {"vae_name": GPU2_H3_MODEL_FILES["video_vae"]},
+        },
+        "13": {
+            "class_type": "CLIPLoader",
+            "inputs": {
+                "clip_name": GPU2_H3_MODEL_FILES["text_encoder"],
+                "type": "minimax",
+                "device": "default",
+            },
+        },
+        "24": {
+            "class_type": "VAELoader",
+            "inputs": {"vae_name": GPU2_H3_MODEL_FILES["audio_vae"]},
+        },
+    }
+    clip_link: list[Any] = ["13", 0]
+    if use_mini_clip:
+        workflow["13"]["inputs"] = {
+            "clip_name": GPU2_H3_MINI_MODEL_FILES["text_encoder"],
+            "type": "krea2",
+            "device": "default",
+        }
+        workflow["12"] = {
+            "class_type": "ClipProjApply",
+            "inputs": {
+                "clip": ["13", 0],
+                "projection": GPU2_H3_MINI_MODEL_FILES["projection"],
+            },
+        }
+        clip_link = ["12", 0]
+    if enable_sage_attention:
+        workflow["7"] = {
+            "class_type": "PathchSageAttentionKJ",
+            "inputs": {
+                "model": ["6", 0],
+                "sage_attention": "auto",
+                "allow_compile": True,
+            },
+        }
+        workflow["8"] = {
+            "class_type": "MiniMaxH3MemoryEfficientSageAttentionPatch",
+            "inputs": {"model": ["7", 0]},
+        }
+        model_link = ["8", 0]
+
+    group_links: list[list[Any]] = []
+    for index, segment in enumerate(segments):
+        first_id = f"l{index}f"
+        group_id = f"g{index}"
+        workflow[first_id] = {
+            "class_type": "LoadImage",
+            "inputs": {"image": segment["image_path"]},
+        }
+        group_inputs: Dict[str, Any] = {
+            "prompt": segment["prompt"],
+            "duration_sec": segment["duration"],
+            "first_frame": [first_id, 0],
+        }
+        if segment["image_path_end"]:
+            last_id = f"l{index}l"
+            workflow[last_id] = {
+                "class_type": "LoadImage",
+                "inputs": {"image": segment["image_path_end"]},
+            }
+            group_inputs["last_frame"] = [last_id, 0]
+        workflow[group_id] = {
+            "class_type": "MiniMaxH3DirectorGroupImageToVideo",
+            "inputs": group_inputs,
+        }
+        group_links.append([group_id, 0])
+
+    workflow["80"] = {
+        "class_type": "MiniMaxH3DirectorGroupsCombine",
+        # Current Director uses ComfyUI Autogrow, whose API input names retain
+        # the collection prefix (as shown by the reviewed example workflow).
+        "inputs": {f"groups.group_{index}": link for index, link in enumerate(group_links)},
+    }
+    workflow["81"] = {
+        "class_type": "MiniMaxH3Director",
+        "inputs": {
+            "model": model_link,
+            "video_vae": ["11", 0],
+            "audio_vae": ["24", 0],
+            "clip": clip_link,
+            "i2v_groups": ["80", 0],
+            "task_type": "fl2v — 首尾帧生视频(First-Last Frame)",
+            "global_prompt": "",
+            "bd_grp_sample": "采样设置",
+            "cfg": 1.0,
+            "seed": seed,
+            "frame_rate": float(GPU2_H3_FPS),
+            "width": GPU2_H3_WIDTH,
+            "height": GPU2_H3_HEIGHT,
+            "ref_max_size": GPU2_H3_WIDTH,
+            "total_frames": total_frames,
+            "timeline_data": timeline_data,
+            "bd_grp_advanced": "高级采样",
+            "steps": 25,
+            "sampler": "res_multistep",
+            "scheduler": "simple",
+            "shift_video": 12.0,
+            "shift_audio": 3.0,
+            "bd_grp_perf": "性能",
+            "clear_vram_between_segments": True,
+            "export_source_images": False,
+        },
+    }
+    workflow["91"] = {
+        "class_type": "CreateVideo",
+        "inputs": {
+            "images": ["81", 0],
+            "audio": ["81", 1],
+            "fps": ["81", 2],
+            "bit_depth": 8,
+        },
+    }
+    workflow["92"] = {
+        "class_type": "SaveVideo",
+        "inputs": {
+            "video": ["91", 0],
+            "filename_prefix": "MECHA_GPU2_minimax_h3_long",
+            "format": "auto",
+            "codec": "auto",
+        },
+    }
+    if use_mini_clip:
+        workflow["92"]["inputs"]["filename_prefix"] += "_mini"
+    return workflow
+
+
+def _gpu2_output_video_path(result: Dict[str, Any]) -> str:
+    for value in result.get("output_files") or []:
+        path = Path(str(value or ""))
+        if path.suffix.lower() in {".mp4", ".mov", ".mkv", ".webm", ".avi"} and path.is_file():
+            return str(path)
+    raise RuntimeError("H3 completed without a local video output for 720P upscaling")
+
+
+def _gpu2_upload_local_video(agent: Any, port: int, local_path: str) -> str:
+    """Stage a local generated video in ComfyUI input without reloading any model."""
+    path = Path(local_path)
+    if not path.is_file():
+        raise RuntimeError(f"H3 720P source video is unavailable: {path}")
+    response = agent._upload_to_comfyui(port, str(path))
+    if not response:
+        raise RuntimeError("Failed to upload the H3 result for 720P upscaling")
+    return str(response)
+
+
+def execute_gpu2_h3_post_upscale_720p(
+    *,
+    agent: Any,
+    runtime_manager: Any,
+    resource_controller: Any,
+    execute_workflow: Callable[[Dict[str, Any]], Dict[str, Any]],
+    generation_result: Dict[str, Any],
+    params: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Run SeedVR2 only after H3 unload and the host guard both pass."""
+    source_video = _gpu2_output_video_path(generation_result)
+    if not runtime_manager.release_models():
+        raise RuntimeError(
+            "H3 model did not fully unload: " + runtime_manager.model_gate.last_error
+        )
+    if not resource_controller.ready_for_new_task():
+        raise RuntimeError(
+            "host resource guard rejected the upscale: " + resource_controller.last_error
+        )
+    runtime_manager.ensure("wan")
+    uploaded_video = _gpu2_upload_local_video(agent, GPU2_COMFYUI_PORT, source_video)
+    seed = normalize_gpu2_video_seed(params.get("seed", params.get("seed_0", 42)))
+    upscale_params = {
+        "video_filename": uploaded_video,
+        "resolution": "720P",
+        "seed": seed,
+        "preferred_comfyui_port": GPU2_COMFYUI_PORT,
+        "strict_preferred_comfyui_port": True,
+        "gpu2_runtime_profile": "wan",
+    }
+    upscale_task = {
+        "task_type": "upscale",
+        "params": upscale_params,
+        "workflow_json": build_gpu2_video_upscale_workflow({
+            "task_type": "upscale",
+            "params": upscale_params,
+        }),
+        "workflow_name": "gpu2_h3_post_upscale_720p",
+    }
+    runtime_manager.mark_models_loaded()
+    upscale_result = execute_workflow(upscale_task)
+    if str(upscale_result.get("status") or "completed") != "completed":
+        raise RuntimeError(str(upscale_result.get("error") or "unknown upscale error"))
+    payload = dict(upscale_result.get("result_payload") or {})
+    payload.update({
+        "h3_generation_completed": True,
+        "h3_upscale_720p_completed": True,
+        "upscale_resolution": "1280x720",
+    })
+    upscale_result["result_payload"] = payload
+    return upscale_result
 
 
 def is_gpu2_wan_i2v_task(task: Dict[str, Any]) -> bool:
@@ -1516,12 +2533,25 @@ def prepare_gpu2_task(task: Dict[str, Any]) -> Dict[str, Any]:
     prepared = deepcopy(task)
     task_type = str(prepared.get("task_type") or "").lower()
     operation = str(_gpu2_task_params(prepared).get("gpu2_operation") or "").lower()
-    if is_gpu2_h3_task(prepared):
+    if is_gpu2_music3_task(prepared):
+        prepared["workflow_json"] = build_gpu2_minimax_music3_workflow(prepared)
+        prepared["workflow_name"] = "gpu2_minimax_music3"
+        params = prepared.get("params")
+        if not isinstance(params, dict):
+            source_data = prepared.get("data")
+            params = dict(source_data) if isinstance(source_data, dict) else {}
+            prepared["params"] = params
+        params["preferred_comfyui_port"] = GPU2_COMFYUI_PORT
+        params["strict_preferred_comfyui_port"] = True
+        params["gpu2_runtime_profile"] = "music"
+        params["comfyui_timeout_seconds"] = 60 * 60
+    elif is_gpu2_h3_task(prepared):
         prepared["workflow_json"] = build_gpu2_minimax_h3_fl2va_workflow(prepared)
         prepared["workflow_name"] = "gpu2_minimax_h3_fl2va"
         params = prepared.get("params")
         if not isinstance(params, dict):
-            params = {}
+            source_data = prepared.get("data")
+            params = dict(source_data) if isinstance(source_data, dict) else {}
             prepared["params"] = params
         params["preferred_comfyui_port"] = GPU2_H3_PORT
         params["strict_preferred_comfyui_port"] = True
@@ -1576,20 +2606,176 @@ def main() -> None:
         if value.strip()
     ]
     runtime_manager = Gpu2RuntimeManager()
+    resource_controller = Gpu2ResourceController(
+        ROOT,
+        comfy_reader=_read_gpu2_memory_snapshot,
+        emergency_stop=runtime_manager.emergency_stop,
+    )
 
     class Gpu2ComfyUIAgent(ComfyUIAgent):
+        def _get_system_info(self):
+            info = super()._get_system_info()
+            info["resource_guard"] = resource_controller.status()
+            info["local_gpu_maintenance"] = gpu2_agent_maintenance_enabled()
+            return info
+
+        def _probe_comfyui_capabilities(self, port, status=""):
+            capabilities = super()._probe_comfyui_capabilities(port, status)
+            if status and status != "healthy":
+                return capabilities
+            capabilities.update(gpu2_static_h3_capabilities())
+            return capabilities
+
         def heartbeat(self):
             return super().heartbeat()
 
+        def poll(self):
+            if gpu2_agent_maintenance_enabled():
+                print(
+                    "[MECHA] Local GPU maintenance gate is closed; no queued task will be claimed",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return None
+            if not resource_controller.ready_for_new_task():
+                print(
+                    "[MECHA] New task claim blocked by host resource guard: "
+                    f"{resource_controller.last_error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return None
+            if not runtime_manager.ready_for_next_task():
+                print(
+                    "[MECHA] New task claim blocked until the previous model is released: "
+                    f"{runtime_manager.model_gate.last_error}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return None
+            return super().poll()
+
         def execute_comfyui_task(self, task):
+            acceleration_requested = (
+                is_gpu2_h3_task(task)
+                and gpu2_h3_sage_attention_requested(task)
+            )
+            long_video_requested = (
+                is_gpu2_h3_task(task)
+                and gpu2_h3_long_video_requested(task)
+            )
+            upscale_720p_requested = (
+                is_gpu2_h3_task(task)
+                and gpu2_h3_upscale_720p_requested(task)
+            )
+            mini_requested = is_gpu2_h3_task(task) and gpu2_h3_mini_requested(task)
             prepared = prepare_gpu2_task(task)
             params = prepared.get("params") or {}
             profile = params.get("gpu2_runtime_profile") or gpu2_runtime_profile(prepared)
-            runtime_manager.ensure(profile)
+            width = params.get("width") or params.get("output_width") or 0
+            height = params.get("height") or params.get("output_height") or 0
+            duration = params.get("duration") or params.get("duration_seconds") or 0
+            resource_controller.begin_task({
+                "task_id": prepared.get("task_id"),
+                "task_type": prepared.get("task_type"),
+                "runtime_profile": profile,
+                "model": params.get("model") or prepared.get("workflow_name"),
+                "width": width,
+                "height": height,
+                "duration_seconds": duration,
+            })
+            task_status = "failed"
+            models_released = False
             try:
-                return super().execute_comfyui_task(prepared)
+                runtime_manager.ensure(profile)
+                acceleration_ready = False
+                if acceleration_requested:
+                    acceleration_ready, acceleration_reason = gpu2_h3_sage_attention_ready(
+                        require_feature_flag=not gpu2_h3_fast_model_requested(task)
+                    )
+                    if acceleration_ready and not long_video_requested:
+                        prepared["workflow_json"] = build_gpu2_minimax_h3_fl2va_workflow(
+                            prepared, enable_sage_attention=True
+                        )
+                        prepared["workflow_name"] = "gpu2_minimax_h3_fl2va_sageattention"
+                    else:
+                        if gpu2_h3_fast_model_requested(task):
+                            raise RuntimeError(
+                                "H3 Fast is unavailable: " + acceleration_reason
+                            )
+                        print(
+                            "[MECHA] H3 SageAttention requested but not verified; using baseline: "
+                            f"{acceleration_reason}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                if mini_requested:
+                    mini_ready, mini_reason = gpu2_h3_mini_ready()
+                    if not mini_ready:
+                        raise RuntimeError("H3 Mini is unavailable: " + mini_reason)
+                    if not long_video_requested:
+                        prepared["workflow_json"] = build_gpu2_minimax_h3_fl2va_workflow(
+                            prepared, use_mini_clip=True
+                        )
+                        prepared["workflow_name"] = "gpu2_minimax_h3_fl2va_mini"
+                if long_video_requested:
+                    long_video_ready, long_video_reason = gpu2_h3_long_video_ready()
+                    if not long_video_ready:
+                        raise RuntimeError(
+                            "H3 long video is unavailable: " + long_video_reason
+                        )
+                    prepared["workflow_json"] = build_gpu2_minimax_h3_long_video_workflow(
+                        prepared,
+                        enable_sage_attention=bool(acceleration_ready),
+                        use_mini_clip=mini_requested,
+                    )
+                    prepared["workflow_name"] = (
+                        "gpu2_minimax_h3_long_director_sageattention"
+                        if acceleration_ready
+                        else (
+                            "gpu2_minimax_h3_long_director_mini"
+                            if mini_requested
+                            else "gpu2_minimax_h3_long_director"
+                        )
+                    )
+                runtime_manager.mark_models_loaded()
+                result = super().execute_comfyui_task(prepared)
+                task_status = str(result.get("status") or "completed")
+                if upscale_720p_requested and task_status == "completed":
+                    generation_result = result
+                    try:
+                        base_execute = super().execute_comfyui_task
+                        result = execute_gpu2_h3_post_upscale_720p(
+                            agent=self,
+                            runtime_manager=runtime_manager,
+                            resource_controller=resource_controller,
+                            execute_workflow=base_execute,
+                            generation_result=generation_result,
+                            params=params,
+                        )
+                        task_status = "completed"
+                    except Exception as exc:
+                        task_status = "failed"
+                        result = {
+                            "status": "failed",
+                            "error": "H3 video completed but 720P upscale failed: " + str(exc),
+                            "output_files": generation_result.get("output_files") or [],
+                            "result_payload": {
+                                "h3_generation_completed": True,
+                                "h3_upscale_720p_completed": False,
+                            },
+                        }
+                return result
             finally:
-                runtime_manager.release_models()
+                models_released = runtime_manager.release_models()
+                if not models_released:
+                    print(
+                        "[MECHA] Model release gate is closed; queued tasks will remain unclaimed: "
+                        f"{runtime_manager.model_gate.last_error}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                resource_controller.finish_task(task_status, models_released=models_released)
 
         def _wait_for_completion(self, port, prompt_id, timeout=GPU2_LONG_TASK_TIMEOUT_SECONDS):
             return super()._wait_for_completion(
@@ -1603,7 +2789,11 @@ def main() -> None:
         raise RuntimeError(f"Agent token is empty: {TOKEN_FILE}")
 
     server_url = os.environ.get("MECHA_SERVER_URL", "https://spti.ai")
-    Gpu2ComfyUIAgent(server_url, token, ports).run()
+    resource_controller.start()
+    try:
+        Gpu2ComfyUIAgent(server_url, token, ports).run()
+    finally:
+        resource_controller.stop()
 
 
 if __name__ == "__main__":

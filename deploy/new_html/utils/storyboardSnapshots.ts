@@ -76,6 +76,19 @@ export function collectConversationStoryboardSnapshots(conversation: ScriptConve
   );
 }
 
+export function resolvePersistableStoryboardVersion(
+  conversation: ScriptConversation | undefined,
+  preferredVersion?: ScriptStoryboardVersion,
+): ScriptStoryboardVersion | undefined {
+  const versions = conversation?.versions || [];
+  const currentVersion = versions.find(version => version.id === conversation?.currentVersionId);
+  const candidates = [preferredVersion, currentVersion, ...[...versions].reverse()];
+  return candidates.find(version => Boolean(
+    version?.id
+    && !version.id.startsWith('legacy_'),
+  ));
+}
+
 export function cloneStoryboardSnapshot(snapshot: FileVersion): FileVersion {
   return cloneValue(snapshot);
 }

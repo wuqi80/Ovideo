@@ -10,6 +10,7 @@ from services.ai_proxy_task_service import (
     create_deepseek_text_task,
     create_minimax_text_task,
     fail_ai_proxy_task,
+    format_public_text_task_name,
     start_ai_proxy_task,
 )
 
@@ -174,7 +175,37 @@ async def test_minimax_text_task_uses_own_type_and_user_scoped_notification():
     )
 
     assert _Redis.published[0][0] == "task_complete:yuan"
-    assert _NotificationDAO.created[0]["title"] == "MiniMax M3 文本生成 已完成"
+    assert _NotificationDAO.created[0]["title"] == "一阶 · 连续写作模型 已完成"
+
+
+@pytest.mark.asyncio
+async def test_text_notification_fallback_uses_public_model_label():
+    await complete_ai_proxy_text_task(
+        task_id="deepseek_text_public",
+        text_content="answer",
+        logger=_Logger,
+        task_dao=_TaskDAO,
+        user_id="yuan",
+        task_type="deepseek_text",
+        redis_client=_Redis,
+        notification_dao=_NotificationDAO,
+    )
+
+    event = json.loads(_Redis.published[0][1])
+    assert event["display_name"] == "二阶 · 快速写作模型"
+    assert _NotificationDAO.created[0]["title"] == "二阶 · 快速写作模型 已完成"
+
+
+def test_public_text_task_name_matches_frontend_model_labels():
+    assert format_public_text_task_name(
+        "DeepSeek Reasoner 文本生成",
+        provider="deepseek",
+        model="deepseek-v4-pro",
+    ) == "三阶 · 推理写作模型"
+    assert format_public_text_task_name(
+        "DeepSeek 剧本分镜",
+        provider="deepseek",
+    ) == "二阶 · 快速写作模型 剧本分镜"
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,7 @@ import { normalizePositiveIntegerSeconds } from '../utils/storyboardSegments';
 import type { TextTaskContext } from './textTaskContext';
 
 const loadAiModelService = () => import('./aiModelService');
+const VIDEO_SCRIPT_GENERATION_CONCURRENCY = 3;
 const STORYBOARD_LOCAL_REPAIR_CONCURRENCY = 4;
 
 export interface PipelineUsage {
@@ -85,9 +86,31 @@ function failSplitScriptValidation(message: string): never {
 }
 
 const BRIEF_SOURCE_MAX_CHARACTERS = 80;
+const SPLIT_TARGET_CHARACTERS = 72;
+const SPLIT_COUNT_MAX_VARIANCE = 3;
+
+export interface ScriptSplitCountPlan {
+  target: number;
+  minimum: number;
+  maximum: number;
+}
 
 function countContentCharacters(value: string): number {
   return String(value || '').replace(/\s+/g, '').length;
+}
+
+export function calculateScriptSplitCountPlan(originalContent: string): ScriptSplitCountPlan {
+  const contentCharacters = countContentCharacters(originalContent);
+  const target = Math.max(1, Math.ceil(contentCharacters / SPLIT_TARGET_CHARACTERS));
+  const variance = Math.min(
+    SPLIT_COUNT_MAX_VARIANCE,
+    Math.max(1, Math.round(target * 0.15)),
+  );
+  return {
+    target,
+    minimum: Math.max(1, target - variance),
+    maximum: target + variance,
+  };
 }
 
 function estimateBriefSegmentDurationSec(sourceText: string): number {
@@ -218,31 +241,139 @@ function buildVideoScriptSegmentsFromGroups(
   const groups = parseVideoScriptGroups(content);
   if (groups.length === 0) return [];
 
-  const shouldPreserveSourceSegments = groups.length === orderedSegments.length
-    && !isBriefCreativeSeed(originalContent, orderedSegments);
+  if (!isBriefCreativeSeed(originalContent, orderedSegments)) {
+    if (groups.length !== orderedSegments.length) {
+      failVideoScriptValidation(
+        `第二步分段数量异常：第一步为${orderedSegments.length}段，第二步为${groups.length}段`,
+      );
+    }
+
+    return orderedSegments.map((existing, index) => {
+      const group = groups[index];
+      const groupContent = [`分段${group.groupNo}`, group.rawGroup].filter(Boolean).join('\n').trim();
+      return {
+        ...existing,
+        videoScript: groupContent,
+        status: 'done' as const,
+        errorMessage: '',
+      };
+    });
+  }
 
   return groups.map((group, index) => {
-    const existing = shouldPreserveSourceSegments ? orderedSegments[index] : undefined;
     const durationSec = group.blocks.reduce((total, block) => {
       const duration = normalizePositiveIntegerSeconds(block.durationSec);
       return total + (duration || 0);
     }, 0);
     const groupContent = [`分段${group.groupNo}`, group.rawGroup].filter(Boolean).join('\n').trim();
-    const sourceText = existing?.sourceText
-      || group.blocks.map(block => block.rawBlock).filter(Boolean).join('\n\n')
+    const sourceText = group.blocks.map(block => block.rawBlock).filter(Boolean).join('\n\n')
       || groupContent;
 
     return {
-      ...(existing || {}),
-      id: existing?.id || `seg_local_video_${Date.now().toString(36)}_${group.groupNo}_${index}`,
+      id: `seg_local_video_${Date.now().toString(36)}_${group.groupNo}_${index}`,
       order: index,
       sourceText,
-      estimatedDurationSec: durationSec > 0 ? durationSec : (existing?.estimatedDurationSec ?? null),
+      estimatedDurationSec: durationSec > 0 ? durationSec : null,
       videoScript: groupContent,
       status: 'done' as const,
       errorMessage: '',
     };
   });
+}
+
+function findNearestSemanticBoundary(
+  source: string,
+  targetContentCount: number,
+  minimumRawIndex: number,
+): number {
+  const candidates: Array<{ rawIndex: number; contentCount: number; priority: number }> = [];
+  let contentCount = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (!/\s/.test(character)) contentCount += 1;
+    const priority = /[\n。！？!?；;]/.test(character)
+      ? 0
+      : /[，,、：:]/.test(character) ? 1 : 2;
+    if (priority < 2 || contentCount === targetContentCount) {
+      candidates.push({ rawIndex: index + 1, contentCount, priority });
+    }
+  }
+  const available = candidates.filter(candidate => (
+    candidate.rawIndex > minimumRawIndex && candidate.rawIndex < source.length
+  ));
+  const strongCandidates = available.filter(candidate => (
+    candidate.priority === 0 && Math.abs(candidate.contentCount - targetContentCount) <= 24
+  ));
+  const softCandidates = available.filter(candidate => (
+    candidate.priority === 1 && Math.abs(candidate.contentCount - targetContentCount) <= 18
+  ));
+  const preferred = strongCandidates.length > 0
+    ? strongCandidates
+    : softCandidates.length > 0 ? softCandidates : available;
+  preferred.sort((left, right) => (
+    Math.abs(left.contentCount - targetContentCount) - Math.abs(right.contentCount - targetContentCount)
+    || left.priority - right.priority
+    || left.rawIndex - right.rawIndex
+  ));
+  return preferred[0]?.rawIndex || source.length;
+}
+
+function splitScriptLocallyPreservingContent(
+  originalContent: string,
+  countPlan = calculateScriptSplitCountPlan(originalContent),
+): ScriptSegment[] {
+  const source = String(originalContent || '').replace(/\r\n?/g, '\n').trim();
+  if (!source) return [];
+
+  const totalCharacters = countContentCharacters(source);
+  const targetCount = Math.min(countPlan.target, Math.max(1, totalCharacters));
+  const boundaries: number[] = [];
+  let previousBoundary = 0;
+  for (let groupIndex = 1; groupIndex < targetCount; groupIndex += 1) {
+    const targetContentCount = Math.round((totalCharacters * groupIndex) / targetCount);
+    const boundary = findNearestSemanticBoundary(source, targetContentCount, previousBoundary);
+    if (boundary <= previousBoundary || boundary >= source.length) break;
+    boundaries.push(boundary);
+    previousBoundary = boundary;
+  }
+  const groups = [...boundaries, source.length]
+    .map((end, index) => source.slice(index === 0 ? 0 : boundaries[index - 1], end).trim())
+    .filter(Boolean);
+
+  return groups.map((sourceText, index) => ({
+    id: `seg_local_fallback_${Date.now().toString(36)}_${index}`,
+    order: index,
+    sourceText,
+    estimatedDurationSec: Math.max(4, Math.min(15, Math.round(countContentCharacters(sourceText) / 6))),
+    status: 'done' as const,
+    errorMessage: '',
+  }));
+}
+
+/**
+ * 第一阶段已经决定正式剧本的分段边界。第二阶段即使误返回多个分段，也只把它们
+ * 视为当前段内的连续分镜，避免模型输出把 19 段悄悄改成 27 段。
+ */
+function collapseVideoScriptOutputToSingleGroup(content: string): string {
+  const groups = parseVideoScriptGroups(content);
+  if (groups.length <= 1) return content.trim();
+
+  const blocks = groups.flatMap(group => group.blocks);
+  const body = blocks.map((block, index) => block.rawBlock.replace(
+    /^[ \t]*(?:镜头|分镜)[ \t]*\d+(?:[ \t]*[-－—][ \t]*\d+)?[ \t]*[:：]?[ \t]*$/m,
+    formatVideoScriptShotNumber(1, index + 1),
+  ));
+  const visualStyle = [...new Set(groups.map(group => group.visualStyle).filter(Boolean))].join('；');
+  const stabilityConstraint = [
+    ...new Set(groups.map(group => group.stabilityConstraint).filter(Boolean)),
+  ].join('；');
+
+  return [
+    '分段1',
+    ...body,
+    visualStyle ? `【视觉风格】${visualStyle}` : '',
+    stabilityConstraint ? `【正向稳定约束】${stabilityConstraint}` : '',
+  ].filter(Boolean).join('\n\n').trim();
 }
 
 async function splitWithValidation(
@@ -253,11 +384,33 @@ async function splitWithValidation(
   const briefSeed = buildBriefCreativeSeedSegment(originalContent);
   if (briefSeed) return [briefSeed];
 
+  const countPlan = calculateScriptSplitCountPlan(originalContent);
   const { aiSplitScriptIntoSegments } = await loadAiModelService();
-  const segments = normalizeSplitSegments(
-    await aiSplitScriptIntoSegments(model, originalContent, undefined, taskContext),
-    originalContent,
-  );
+  let modelSegments: ScriptSegment[];
+  try {
+    modelSegments = await aiSplitScriptIntoSegments(model, originalContent, undefined, {
+      ...taskContext,
+      suppressNotification: true,
+    }, countPlan);
+  } catch (error) {
+    console.warn('[scriptThreeStageService] model split failed; using local structure-preserving fallback', error);
+    modelSegments = splitScriptLocallyPreservingContent(originalContent, countPlan);
+  }
+  const normalizedModelSegments = normalizeSplitSegments(modelSegments, originalContent);
+  const modelPreservesSource = normalizedModelSegments
+    .map(segment => segment.sourceText)
+    .join('')
+    .replace(/\s+/g, '') === String(originalContent || '').replace(/\s+/g, '');
+  const modelCountIsReasonable = normalizedModelSegments.length >= countPlan.minimum
+    && normalizedModelSegments.length <= countPlan.maximum;
+  if (!modelPreservesSource || !modelCountIsReasonable) {
+    console.warn(
+      `[scriptThreeStageService] model split rejected: ${normalizedModelSegments.length} segments, `
+      + `expected ${countPlan.minimum}-${countPlan.maximum}; using bounded local fallback`,
+    );
+    modelSegments = splitScriptLocallyPreservingContent(originalContent, countPlan);
+  }
+  const segments = normalizeSplitSegments(modelSegments, originalContent);
   assertValidSplitSegments(segments);
   return segments;
 }
@@ -288,8 +441,9 @@ async function validateOrRepairGeneratedSegment(
     conversationContext: '这是首次生成中的单个原文分段',
     scopeRequirements: [
       '围绕当前输入文本生成可拍摄的完整分镜脚本；如果当前输入是一句创意种子，允许扩展为多个连续剧情分段。',
-      '每个最终分段的分镜累计时长必须小于或等于15秒，绝对不得超过15秒；如果自然表演超过15秒，必须继续拆成新的连续分段。',
-      '不要被第一步的估算时长锁死；第一步时长只作为拆分参考，不作为第二步扩展上限。',
+      '正式剧本分段必须保持第一步的一进一出，不得在第二步新增或删除分段。',
+      '每个最终分段的分镜累计时长必须小于或等于15秒；只有创意种子扩写时才允许拆成多个连续分段。',
+      '第一步时长作为当前正式分段的生产边界；创意种子不受第一步估算时长限制。',
       '不单独要求这一段满足全剧14-15秒占比或全剧平均时长指标。',
     ].join('\n'),
     enforceDurationDensity: false,
@@ -310,9 +464,9 @@ export async function generateVideoScriptForSegments(
   const outputTexts: string[] = [];
   inputTexts.push(originalContent);
 
-  const outputs: string[] = [];
   const orderedSegments = prepareVideoScriptSegments(originalContent, segments);
   inputTexts.push(...orderedSegments.map(segment => segment.sourceText));
+  const allowSegmentExpansion = isBriefCreativeSeed(originalContent, orderedSegments);
 
   let completed = 0;
   options.onProgress?.({
@@ -322,43 +476,50 @@ export async function generateVideoScriptForSegments(
   });
 
   const { aiGenerateVideoScriptFromSegment } = await loadAiModelService();
-  for (const segment of orderedSegments) {
-    const generationSegment = segmentForVideoScriptGeneration(
-      segment,
-      originalContent,
-      orderedSegments,
-    );
-    const initialDraft = await aiGenerateVideoScriptFromSegment(
-      model,
-      generationSegment,
-      undefined,
-      {
-        ...options.taskContext,
-        suppressNotification: true,
-      },
-    );
-    const output = await validateOrRepairGeneratedSegment(
-      model,
-      segment,
-      initialDraft,
-      options.taskContext,
-    );
-    outputs.push(output);
-    outputTexts.push(output);
-    completed += 1;
-    options.onProgress?.({
-      stage: 'videoScript',
-      completed,
-      total: orderedSegments.length,
-    });
-  }
+  const outputs = await runWithConcurrencyInOrder(
+    orderedSegments,
+    VIDEO_SCRIPT_GENERATION_CONCURRENCY,
+    async (segment) => {
+      const generationSegment = segmentForVideoScriptGeneration(
+        segment,
+        originalContent,
+        orderedSegments,
+      );
+      const initialDraft = await aiGenerateVideoScriptFromSegment(
+        model,
+        generationSegment,
+        undefined,
+        {
+          ...options.taskContext,
+          suppressNotification: true,
+        },
+      );
+      const output = await validateOrRepairGeneratedSegment(
+        model,
+        segment,
+        initialDraft,
+        options.taskContext,
+      );
+      completed += 1;
+      options.onProgress?.({
+        stage: 'videoScript',
+        completed,
+        total: orderedSegments.length,
+      });
+      return allowSegmentExpansion
+        ? output
+        : collapseVideoScriptOutputToSingleGroup(output);
+    },
+  );
+  outputTexts.push(...outputs);
 
   const content = combineVideoScriptOutputs(outputs);
   const groups = parseVideoScriptGroups(content);
+  const finalSegmentCount = allowSegmentExpansion ? groups.length : orderedSegments.length;
   options.onProgress?.({
     stage: 'videoScript',
-    completed: groups.length || orderedSegments.length,
-    total: groups.length || orderedSegments.length,
+    completed: finalSegmentCount,
+    total: finalSegmentCount,
     content,
   });
   if (groups.length === 0) throw new Error('视频脚本生成未返回可解析的分段/分镜，请手动调整后重试');

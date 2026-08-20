@@ -1,13 +1,16 @@
 import { apiJson } from './httpClient';
 
 export type ProcessingQueuePreflight = {
-    queue_mode: 'gpu2_serial' | 'external';
-    runtime_profile?: 'wan' | 'h3' | null;
+    queue_mode: 'gpu2_serial' | 'external' | 'maintenance';
+    runtime_profile?: 'wan' | 'h3' | 'music' | null;
     public_comfyui_port?: number;
     tasks_ahead: number;
     estimated_wait_seconds: number;
     requires_confirmation: boolean;
     can_cancel_before_submit: boolean;
+    accepting_submissions?: boolean;
+    maintenance_message?: string | null;
+    estimated_resume_at?: string | null;
 };
 
 export class QueueSubmissionCancelledError extends Error {
@@ -17,11 +20,30 @@ export class QueueSubmissionCancelledError extends Error {
     }
 }
 
+export class QueueMaintenanceError extends Error {
+    readonly estimatedResumeAt?: string | null;
+
+    constructor(message: string, estimatedResumeAt?: string | null) {
+        super(message);
+        this.name = 'QueueMaintenanceError';
+        this.estimatedResumeAt = estimatedResumeAt;
+    }
+}
+
 export async function confirmProcessingQueue(payload: Record<string, any>): Promise<ProcessingQueuePreflight> {
     const preflight = await apiJson<ProcessingQueuePreflight>('/api/generate/preflight', {
         method: 'POST',
         body: JSON.stringify(payload),
     }, 'processingQueuePreflight');
+    if (preflight.accepting_submissions === false || preflight.queue_mode === 'maintenance') {
+        const resume = preflight.estimated_resume_at
+            ? `\n预计恢复时间：${preflight.estimated_resume_at}`
+            : '';
+        throw new QueueMaintenanceError(
+            `${preflight.maintenance_message || '本地 GPU 正在维护，暂不接收新任务。'}${resume}`,
+            preflight.estimated_resume_at,
+        );
+    }
     if (!preflight.requires_confirmation || typeof window === 'undefined') return preflight;
 
     const minutes = Math.max(1, Math.ceil(preflight.estimated_wait_seconds / 60));

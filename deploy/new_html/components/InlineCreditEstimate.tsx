@@ -7,6 +7,7 @@ interface InlineCreditEstimateProps {
   params: Record<string, unknown>;
   fallbackCost: number;
   className?: string;
+  compact?: boolean;
 }
 
 export const InlineCreditEstimate: React.FC<InlineCreditEstimateProps> = ({
@@ -14,6 +15,7 @@ export const InlineCreditEstimate: React.FC<InlineCreditEstimateProps> = ({
   params,
   fallbackCost,
   className = '',
+  compact = false,
 }) => {
   const [cost, setCost] = useState(fallbackCost);
   const paramsKey = JSON.stringify(params);
@@ -38,9 +40,9 @@ export const InlineCreditEstimate: React.FC<InlineCreditEstimateProps> = ({
 
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs text-warning ${className}`}>
-      <Coins size={14} />
-      预计消耗 {cost} 积分
-      <span className="text-n100">· 成功后扣除</span>
+      <Coins size={compact ? 11 : 14} />
+      {compact ? `预计 ${cost} 积分` : `预计消耗 ${cost} 积分`}
+      {!compact && <span className="text-n100">· 成功后扣除</span>}
     </span>
   );
 };

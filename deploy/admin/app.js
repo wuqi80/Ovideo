@@ -511,7 +511,7 @@ async function createAgent() {
   const token = data.token;
   document.getElementById('token-value').textContent = token;
   document.getElementById('token-command').textContent =
-    `curl -fsSL ${location.origin}/storage/tools/processing_agent.py -o processing_agent.py\npython processing_agent.py \\\n  --server ${location.origin} \\\n  --token ${token} \\\n  --ports 8188,8189`;
+    `curl -fsSL ${location.origin}/storage/tools/processing_agent.py -o processing_agent.py\npython processing_agent.py \\\n  --server ${location.origin} \\\n  --token ${token} \\\n  --ports 8188`;
   document.getElementById('token-result').classList.remove('hidden');
   showToast('处理节点创建成功', 'success');
   fetchAgents();

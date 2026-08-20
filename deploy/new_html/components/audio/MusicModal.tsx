@@ -1,6 +1,12 @@
 import React, { useCallback, useState } from 'react';
 import { X, FileText, Music, Wand2, Loader, Upload } from 'lucide-react';
-import { minimaxLyrics, minimaxMusic, createAudioTrack } from '../../services/audioGenerationService';
+import {
+  cancelLocalMiniMaxMusic3,
+  createAudioTrack,
+  minimaxLyrics,
+  submitLocalMiniMaxMusic3,
+  waitForLocalMiniMaxMusic3,
+} from '../../services/audioGenerationService';
 import { uploadMediaItem } from '../../services/mediaLibraryService';
 
 function resolveUrl(path: string) {
@@ -31,23 +37,50 @@ function readAudioDurationMs(file: File): Promise<number> {
   });
 }
 
+function readAudioUrlDurationMs(path: string): Promise<number> {
+  return new Promise(resolve => {
+    const audio = document.createElement('audio');
+    let settled = false;
+    const finish = (durationMs: number) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      audio.removeAttribute('src');
+      resolve(durationMs);
+    };
+    const timeoutId = window.setTimeout(() => finish(0), 10_000);
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => {
+      finish(Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0);
+    };
+    audio.onerror = () => finish(0);
+    audio.src = resolveUrl(path);
+  });
+}
+
 export interface MusicModalProps {
   episodeId: string;
   projectId?: string;
   script: any;
-  onClose: () => void;
+  onClose?: () => void;
   onCreated: () => Promise<void>;
+  presentation?: 'modal' | 'embedded';
 }
 
 export const MusicModal: React.FC<MusicModalProps> = ({
-  episodeId, projectId, script, onClose, onCreated,
+  episodeId, projectId, script, onClose = () => {}, onCreated, presentation = 'modal',
 }) => {
   const [lyricsInput, setLyricsInput] = useState('');
   const [generatedLyrics, setGeneratedLyrics] = useState('');
   const [lyricsLoading, setLyricsLoading] = useState(false);
 
   const [musicLyrics, setMusicLyrics] = useState('');
+  const [musicMode, setMusicMode] = useState<'instrumental' | 'theme'>('instrumental');
+  const [musicDescription, setMusicDescription] = useState('电影感漫剧背景音乐，旋律连贯，开场克制，逐步推进，结尾留有余韵');
+  const [musicDuration, setMusicDuration] = useState(30);
   const [musicLoading, setMusicLoading] = useState(false);
+  const [musicTaskId, setMusicTaskId] = useState('');
+  const [musicProgress, setMusicProgress] = useState(0);
   const [musicResult, setMusicResult] = useState<{ url: string; durationMs: number } | null>(null);
 
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -102,40 +135,84 @@ export const MusicModal: React.FC<MusicModalProps> = ({
   }, [lyricsInput, script]);
 
   const handleGenerateMusic = useCallback(async () => {
-    if (!musicLyrics.trim()) return;
+    if (!musicDescription.trim() || (musicMode === 'theme' && !musicLyrics.trim())) return;
     setMusicLoading(true);
+    setMusicProgress(0);
     try {
-      const res = await minimaxMusic(musicLyrics);
-      if (res.audio_url) {
-        setMusicResult({ url: resolveUrl(res.audio_url), durationMs: res.duration_ms || 0 });
-        await createAudioTrack(episodeId, {
-          track_type: 'bgm',
-          name: `AI 音乐 ${new Date().toLocaleTimeString()}`,
-          audio_url: res.audio_url,
-          duration_ms: res.duration_ms || 0,
-          generation_params: { source: 'minimax_music' },
-        });
-        await onCreated();
-      }
+      const seed = Math.floor(Math.random() * 2_147_483_647);
+      const submitted = await submitLocalMiniMaxMusic3({
+        caption: musicDescription,
+        lyrics: musicMode === 'theme' ? musicLyrics : '[Instrumental]',
+        durationSeconds: musicDuration,
+        seed,
+        projectId,
+        episodeId,
+      });
+      setMusicTaskId(submitted.task_id);
+      const generated = await waitForLocalMiniMaxMusic3(submitted.task_id, setMusicProgress);
+      const actualDurationMs = await readAudioUrlDurationMs(generated.url);
+      const storedDurationMs = actualDurationMs || musicDuration * 1000;
+      setMusicResult({ url: resolveUrl(generated.url), durationMs: storedDurationMs });
+      await createAudioTrack(episodeId, {
+        track_type: 'bgm',
+        name: `${musicMode === 'theme' ? 'AI 主题曲' : 'AI 背景音乐'} ${new Date().toLocaleTimeString()}`,
+        audio_url: generated.url,
+        duration_ms: storedDurationMs,
+        generation_params: {
+          source: 'local_minimax_music3',
+          model: 'MiniMax-Music3',
+          mode: musicMode,
+          caption: musicDescription,
+          lyrics: musicMode === 'theme' ? musicLyrics : '[Instrumental]',
+          seed,
+          requested_max_duration_seconds: musicDuration,
+          actual_duration_ms: actualDurationMs || null,
+          task_id: submitted.task_id,
+          file_id: generated.fileId || null,
+        },
+      });
+      await onCreated();
     } catch (e) {
       console.error('音乐生成失败:', e);
       alert(`音乐生成失败: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setMusicLoading(false);
+      setMusicTaskId('');
     }
-  }, [musicLyrics, episodeId, onCreated]);
+  }, [episodeId, musicDescription, musicDuration, musicLyrics, musicMode, onCreated, projectId]);
 
-  return (
-    <div className="app-modal-backdrop fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-n900/50" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-label="添加背景音乐" className="app-modal-surface relative max-h-[84vh] w-[640px] overflow-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-xl">
+  const handleCancelMusic = useCallback(async () => {
+    if (!musicTaskId) return;
+    try {
+      await cancelLocalMiniMaxMusic3(musicTaskId);
+    } catch (e) {
+      alert(`当前任务可能已经开始执行，无法取消: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [musicTaskId]);
+
+  const surface = (
+      <div
+        role={presentation === 'modal' ? 'dialog' : 'region'}
+        aria-modal={presentation === 'modal' ? true : undefined}
+        aria-label="音乐生成"
+        className={presentation === 'modal'
+          ? 'app-modal-surface relative max-h-[84vh] w-[640px] overflow-auto rounded-2xl border border-n40 bg-n0 p-6 shadow-xl'
+          : 'h-full w-full overflow-auto rounded-xl border border-n40 bg-n0 p-6 shadow-sm'}
+      >
         <div className="mb-5 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-base font-bold text-n800">
-            <Music size={16} className="text-success" /> 添加背景音乐
-          </h3>
-          <button onClick={onClose} className="text-n100 hover:text-n700">
-            <X size={18} />
-          </button>
+          <div>
+            <h3 className="flex items-center gap-2 text-base font-bold text-n800">
+              <Music size={16} className="text-success" /> 音乐生成
+            </h3>
+            {presentation === 'embedded' && (
+              <p className="mt-1 text-xs text-n100">生成纯音乐或主题曲，完成后自动加入下方 BGM 音轨。</p>
+            )}
+          </div>
+          {presentation === 'modal' && (
+            <button onClick={onClose} className="text-n100 hover:text-n700">
+              <X size={18} />
+            </button>
+          )}
         </div>
 
         <div className="mb-4 rounded-md border border-n40 bg-n30 p-4">
@@ -193,9 +270,49 @@ export const MusicModal: React.FC<MusicModalProps> = ({
 
         <div className="rounded-md border border-n40 bg-n30 p-4">
           <h4 className="mb-3 flex items-center gap-2 text-sm font-bold text-n700">
-            <Music size={14} className="text-success" /> AI 音乐制作
+            <Music size={14} className="text-success" /> 本地 MiniMax Music 3
           </h4>
           <div className="space-y-3">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMusicMode('instrumental')}
+                className={`rounded-lg border px-3 py-2 text-sm ${musicMode === 'instrumental' ? 'border-success bg-success/10 text-success' : 'border-n40 bg-n0 text-n700'}`}
+              >
+                纯音乐 / BGM
+              </button>
+              <button
+                type="button"
+                onClick={() => setMusicMode('theme')}
+                className={`rounded-lg border px-3 py-2 text-sm ${musicMode === 'theme' ? 'border-success bg-success/10 text-success' : 'border-n40 bg-n0 text-n700'}`}
+              >
+                主题曲（含歌词）
+              </button>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-n100">音乐风格、情绪与编排</label>
+              <textarea
+                value={musicDescription}
+                onChange={e => setMusicDescription(e.target.value)}
+                rows={3}
+                placeholder="例如：悬疑国风，低沉弦乐与古琴，逐步增强，结尾克制..."
+                className="w-full resize-none rounded-lg border border-n40 bg-n0 px-3 py-2 text-sm text-n700"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="text-xs text-n100">最长时长</label>
+              <input
+                type="number"
+                min={10}
+                max={300}
+                step={5}
+                value={musicDuration}
+                onChange={e => setMusicDuration(Math.max(10, Math.min(300, Number(e.target.value) || 30)))}
+                className="w-24 rounded-lg border border-n40 bg-n0 px-3 py-2 text-sm text-n700"
+              />
+              <span className="text-xs text-n100">秒（10–300）</span>
+            </div>
+            {musicMode === 'theme' && (
             <div>
               <label className="mb-1 block text-xs text-n100">歌词</label>
               <textarea
@@ -206,14 +323,28 @@ export const MusicModal: React.FC<MusicModalProps> = ({
                 className="w-full resize-none rounded-lg border border-n40 bg-n0 px-3 py-2 text-sm text-n700"
               />
             </div>
+            )}
             <button
               onClick={handleGenerateMusic}
-              disabled={musicLoading || !musicLyrics.trim()}
+              disabled={musicLoading || !musicDescription.trim() || (musicMode === 'theme' && !musicLyrics.trim())}
               className="flex items-center gap-2 rounded-lg bg-success px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-success disabled:opacity-50"
             >
               {musicLoading ? <Loader size={14} className="animate-spin" /> : <Music size={14} />}
-              生成音乐
+              {musicLoading ? '排队或生成中…' : musicMode === 'theme' ? '生成主题曲' : '生成纯音乐'}
             </button>
+            {musicLoading && (
+              <div className="flex items-center justify-between rounded-lg border border-n40 bg-n0 px-3 py-2 text-xs text-n100">
+                <span>{musicProgress > 0 ? `生成进度 ${Math.round(musicProgress > 1 ? musicProgress : musicProgress * 100)}%` : '等待本地模型处理'}</span>
+                {musicTaskId && (
+                  <button type="button" onClick={handleCancelMusic} className="text-danger hover:underline">
+                    取消排队
+                  </button>
+                )}
+              </div>
+            )}
+            <p className="text-[11px] leading-5 text-n100">
+              本地生成由 MiniMax-Music3 提供。任务与其他本地大模型共用串行队列，切换前会先卸载上一模型。
+            </p>
             {musicResult && (
               <div className="flex items-center gap-3 pt-2">
                 <audio controls src={musicResult.url} className="h-10 flex-1" />
@@ -223,6 +354,14 @@ export const MusicModal: React.FC<MusicModalProps> = ({
           </div>
         </div>
       </div>
+  );
+
+  if (presentation === 'embedded') return surface;
+
+  return (
+    <div className="app-modal-backdrop fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-n900/50" onClick={onClose} />
+      {surface}
     </div>
   );
 };

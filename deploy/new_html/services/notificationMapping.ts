@@ -16,6 +16,7 @@
 // 内存中正在跑的 RegisteredTask 同键，避免重复），缺失时回退到 notification_id。
 
 import type { RegisteredTask, SourcePage, TaskKind, GlobalTaskStatus, TaskNotification } from '../types';
+import { formatPublicTaskText } from '../utils/publicTaskTerminology';
 
 // 后端 dao_notification row 的 JSON 形态
 export interface ServerNotificationRow {
@@ -140,11 +141,12 @@ export function mapNotificationToTask(n: ServerNotificationRow): RegisteredTask 
         ? (n.metadata as Record<string, unknown>)
         : undefined;
 
+    const kind = inferKindFromCategoryAndTitle(n.category, n.title);
     return {
         taskId,
         notificationId: n.notification_id,
-        kind: inferKindFromCategoryAndTitle(n.category, n.title),
-        title: stripStatusSuffix(n.title),
+        kind,
+        title: formatPublicTaskText(stripStatusSuffix(n.title), kind),
         status,
         progress: status === 'completed' ? 1 : undefined,
         createdAt: ts,
@@ -171,14 +173,15 @@ export function mapRuntimeNotificationToTask(n: TaskNotification): RegisteredTas
     const taskId = n.taskId || n.id;
     if (!taskId) return null;
     const timestamp = Number.isFinite(n.timestamp) ? n.timestamp : Date.now();
-    const title = stripStatusSuffix(n.message || taskId);
+    const rawTitle = stripStatusSuffix(n.message || taskId);
     const status: GlobalTaskStatus = n.status === 'failed' ? 'failed' : 'completed';
+    const kind = inferKindFromCategoryAndTitle(n.type, rawTitle);
 
     return {
         taskId,
         notificationId: n.id && n.id !== taskId ? n.id : undefined,
-        kind: inferKindFromCategoryAndTitle(n.type, title),
-        title,
+        kind,
+        title: formatPublicTaskText(rawTitle, kind),
         status,
         progress: status === 'completed' ? 1 : undefined,
         createdAt: timestamp,

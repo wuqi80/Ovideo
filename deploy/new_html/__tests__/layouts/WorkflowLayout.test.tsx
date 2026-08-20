@@ -49,10 +49,10 @@ describe('WorkflowLayout template pipeline shell', () => {
     expect(source).toContain('className="workflow-shell-workspace');
   });
 
-  it('maps the production sub-pages into the template four stages', () => {
-    for (const stage of ['剧本创作', '美术设定', '分镜设计', '短片生成']) expect(source).toContain(stage);
-    for (const en of ["en: 'SCRIPT'", "en: 'ART'", "en: 'STORYBOARD'", "en: 'VIDEO'"]) expect(source).toContain(en);
-    for (const sub of ["label: '设计'", "label: '素材'", "label: '配音'", "label: '视频'", "label: '美化'", "label: '成品'"]) {
+  it('maps the production sub-pages into four plain-language stages', () => {
+    for (const stage of ['写故事', '定角色和场景', '排画面和声音', '生成短片']) expect(source).toContain(stage);
+    for (const hint of ["hint: '第 1 步'", "hint: '第 2 步'", "hint: '第 3 步'", "hint: '第 4 步'"]) expect(source).toContain(hint);
+    for (const sub of ["label: '故事内容'", "label: '角色场景'", "label: '声音对白'", "label: '生成视频'", "label: '优化合成'", "label: '导出成片'"]) {
       expect(source).toContain(sub);
     }
     expect(source).toContain('{STAGES.map');
@@ -61,18 +61,20 @@ describe('WorkflowLayout template pipeline shell', () => {
     expect(source).toContain('activeStage.subs.length > 1');
   });
 
-  it('keeps the dark sidebar with template nav, tools, credits card and user row', () => {
+  it('keeps the dark sidebar with plain-language navigation and optional advanced tools', () => {
     expect(sidebarSource).toContain('bg-n900');
     expect(sidebarSource).toContain('<BrandLogo');
-    expect(sidebarSource).toContain('新建创作 · New');
-    expect(sidebarSource).toContain('我的作品 · Projects');
-    expect(sidebarSource).toContain('导出分享 · Export');
-    expect(sidebarSource).toContain('最近项目 RECENT');
+    expect(sidebarSource).toContain('开始新作品');
+    expect(sidebarSource).toContain('我的作品');
+    expect(sidebarSource).toContain('成片与分享');
+    expect(sidebarSource).toContain('最近作品');
+    expect(sidebarSource).toContain('更多功能');
+    expect(sidebarSource).toContain('创作点数');
     expect(sidebarSource).toContain('ui-dark-panel');
     expect(source).toContain('exportTo="final"');
-    expect(source).toContain("label: '素材库'");
-    expect(source).toContain("label: '历史'");
-    expect(source).toContain("label: '自由创作'");
+    expect(source).toContain("label: '我的素材'");
+    expect(source).toContain("label: '版本记录'");
+    expect(source).toContain("label: '专业画布'");
   });
 
   it('keeps the sidebar first, the stepper centered, and credits/notification/export rightmost', () => {
@@ -96,8 +98,13 @@ describe('WorkflowLayout template pipeline shell', () => {
     expect(createSource).toContain('从创意到成片。');
     expect(createSource).toContain("apiJson<any>('/api/projects'");
     expect(createSource).toContain('/episodes`');
+    expect(createSource).toContain('saveCreateIdeaSeed(sessionStorage');
+    expect(createSource).toContain('episodeId: newEpisodeId');
     expect(createSource).toContain("navigate(`/projects/${newProjectId}/ep/${newEpisodeId}/workflow/script`)");
-    expect(createSource).toContain('生成剧本 Generate');
+    expect(createSource).toContain('开始创作');
+    expect(createSource).toContain('<details');
+    expect(createSource).toContain('可选：调整故事类型和成片时长');
+    expect(createSource).toContain('只需说清楚“谁、发生了什么”');
     expect(createSource).toContain('<AppSidebar');
   });
 

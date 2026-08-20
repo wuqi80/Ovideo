@@ -83,13 +83,85 @@ const formatTime = (value: number) => new Date(value).toLocaleString('zh-CN', {
   minute: '2-digit',
 });
 
-interface ConversationTurn {
+export interface ConversationTurn {
   id: string;
   anchorMessageId: string;
   number: number;
   preview: string;
+  isInitial?: boolean;
   versionNo?: number;
 }
+
+const buildTurnPreview = (content: string, fallback: string) => (
+  content.replace(/\s+/g, ' ').trim().slice(0, 42) || fallback
+);
+
+export const buildConversationTurns = (
+  messages: ScriptConversationMessage[],
+  versions: ScriptStoryboardVersion[],
+  fallbackInitialContent = '',
+): ConversationTurn[] => {
+  const fallbackAnchorMessageId = messages[0]?.id || '';
+  const messagesById = new Map(messages.map(message => [message.id, message]));
+  const firstUserMessage = messages.find(message => message.role === 'user');
+  const realVersions = versions.filter(version => !version.id.startsWith('legacy_'));
+  const orderedVersions = [...(realVersions.length > 0 ? realVersions : versions)].sort((left, right) => (
+    left.versionNo - right.versionNo
+      || left.createdAt - right.createdAt
+      || left.id.localeCompare(right.id)
+  ));
+  const turns: ConversationTurn[] = [];
+  const initialContent = firstUserMessage?.content || fallbackInitialContent;
+
+  if (initialContent.trim()) {
+    turns.push({
+      id: `initial-${firstUserMessage?.id || 'script'}`,
+      anchorMessageId: firstUserMessage?.id || fallbackAnchorMessageId,
+      number: 0,
+      preview: buildTurnPreview(initialContent, '初始剧本'),
+      isInitial: true,
+    });
+  }
+
+  if (orderedVersions.length > 0) {
+    turns.push(...orderedVersions.map((version, index) => {
+      const versionMessage = version.messageId ? messagesById.get(version.messageId) : undefined;
+      return {
+        id: `version-${version.id}`,
+        anchorMessageId: versionMessage?.id || fallbackAnchorMessageId,
+        number: index + 1,
+        preview: buildTurnPreview(version.content || versionMessage?.content || '', '分镜脚本'),
+        versionNo: version.versionNo,
+      };
+    }));
+    return turns;
+  }
+
+  if (turns.length > 0) return turns;
+
+  turns.push(...messages
+    .filter(message => message.role === 'user')
+    .map((message, index) => ({
+      id: `turn-${message.id}`,
+      anchorMessageId: message.id,
+      number: index + 1,
+      preview: buildTurnPreview(message.content, '未命名对话'),
+    })));
+
+  if (turns.length === 0) {
+    const firstAssistantMessage = messages.find(message => message.role === 'assistant');
+    if (firstAssistantMessage) {
+      turns.push({
+        id: `turn-${firstAssistantMessage.id}`,
+        anchorMessageId: firstAssistantMessage.id,
+        number: 1,
+        preview: buildTurnPreview(firstAssistantMessage.content, '分镜脚本'),
+      });
+    }
+  }
+
+  return turns;
+};
 
 export const setCollapsedEntry = (
   current: Set<string>,
@@ -241,35 +313,11 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     ));
     return firstUserMessage?.content || selectedFile?.originalContent || '';
   }, [conversation?.messages, selectedFile?.originalContent]);
-  const conversationTurns = useMemo(() => {
-    const turns: ConversationTurn[] = [];
-    for (const message of conversation?.messages || []) {
-      if (message.role === 'user') {
-        const number = turns.length + 1;
-        turns.push({
-          id: `turn-${message.id}`,
-          anchorMessageId: message.id,
-          number,
-          preview: message.content.replace(/\s+/g, ' ').trim().slice(0, 42) || '未命名对话',
-        });
-        continue;
-      }
-      if (message.role !== 'assistant') continue;
-      let turn = turns[turns.length - 1];
-      if (!turn) {
-        turn = {
-          id: `turn-${message.id}`,
-          anchorMessageId: message.id,
-          number: 1,
-          preview: '分镜脚本',
-        };
-        turns.push(turn);
-      }
-      const version = versionByMessageId.get(message.id);
-      if (version) turn.versionNo = version.versionNo;
-    }
-    return turns;
-  }, [conversation?.messages, versionByMessageId]);
+  const conversationTurns = useMemo(() => buildConversationTurns(
+    conversation?.messages || [],
+    conversation?.versions || [],
+    selectedFile?.originalContent || '',
+  ), [conversation?.messages, conversation?.versions, selectedFile?.originalContent]);
   const creditEstimateParams = useMemo(() => {
     if (!selectedFile) return null;
     const versions = conversation?.versions || [];
@@ -792,7 +840,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                       className={`w-full rounded px-2 py-2 text-left transition-colors ${activeTurnId === turn.id ? 'bg-n0 text-primary shadow-sm' : 'text-n300 hover:bg-n0 hover:text-n700'}`}
                     >
                       <span className="flex items-center gap-1.5 text-[10px] font-semibold">
-                        <span>{turn.number === 1 ? '初始剧本' : `第 ${turn.number} 轮`}</span>
+                        <span>{turn.isInitial ? '初始剧本' : `第 ${turn.number} 轮`}</span>
                         {turn.versionNo && <span className="rounded bg-primary-light px-1 py-0.5 text-[9px] text-primary">V{turn.versionNo}</span>}
                       </span>
                       <span className="mt-1 block truncate text-[10px] leading-4 text-n100">{turn.preview}</span>

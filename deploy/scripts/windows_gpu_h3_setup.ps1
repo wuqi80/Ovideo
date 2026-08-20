@@ -1,9 +1,9 @@
 param(
     [string]$InstallRoot = "E:\MECHA-GPU",
-    [int]$Port = 8189,
+    [int]$Port = 8188,
     [switch]$SkipModelDownloads,
     [switch]$ForceRefreshComfyUI,
-    [switch]$NoAgentRestart,
+    [switch]$RestartAgent,
     [string]$HuggingFaceToken = $env:HF_TOKEN,
     [string]$HuggingFaceEndpoint = $env:HF_ENDPOINT
 )
@@ -22,6 +22,7 @@ $Logs = Join-Path $InstallRoot "logs"
 $ScriptsRoot = Join-Path $InstallRoot "scripts"
 $LogFile = Join-Path $Logs "h3-setup.log"
 $ReportFile = Join-Path $InstallRoot "h3-readiness-report.json"
+$MiniReportFile = Join-Path $InstallRoot "config\h3-mini-ready.json"
 $StartCmd = Join-Path $ScriptsRoot "windows_gpu_start_h3_comfyui.cmd"
 $AgentStartCmd = Join-Path $ScriptsRoot "windows_gpu_start_agent.cmd"
 $LegacyAgentStartCmd = Join-Path $InstallRoot "start_agent.cmd"
@@ -53,6 +54,25 @@ $ModelExpectedSizes = @{
     "text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors" = [Int64]15687142551
     "vae/minimax_h3_audio_vae_fp32.safetensors" = [Int64]605254808
 }
+$ClipProjCommit = "e556987e6bbf9c6448dd5691fe29ce9a7a6970ae"
+$ClipProjVersion = "0.1.13"
+$ClipProjRoot = Join-Path $ComfyRoot "custom_nodes\ComfyUI-ClipProj"
+$MiniModelFiles = @(
+    @{
+        Repo = "Comfy-Org/Krea-2"
+        Source = "text_encoders/qwen3vl_4b_fp8_scaled.safetensors"
+        Target = "text_encoders/qwen3vl_4b_fp8_scaled.safetensors"
+        Size = [Int64]5242467968
+        Sha256 = "54bd5144df0bbc25dd6ccadfcb826b521445a1b06ae5a42570bdd2974ca87094"
+    },
+    @{
+        Repo = "NicoLab28/ClipProj-MiniMax-H3"
+        Source = "mmh3-4b-ClipProj-v3-mlp.safetensors"
+        Target = "clip_projections/mmh3-4b-ClipProj-v3-mlp.safetensors"
+        Size = [Int64]503434368
+        Sha256 = "feef06ef3b9aede3b1f3331b71eebbc873e21a867d73bcf40ea2c0b007270693"
+    }
+)
 
 New-Item -ItemType Directory -Force -Path $Downloads, $Logs, $ScriptsRoot | Out-Null
 
@@ -118,6 +138,34 @@ function Install-PythonRequirements {
     if ($LASTEXITCODE -ne 0) {
         throw "huggingface_hub install failed"
     }
+}
+
+function Install-H3MiniClipProj {
+    $commitMarker = Join-Path $ClipProjRoot ".mecha-pinned-commit"
+    if ((Test-Path -LiteralPath $commitMarker) -and
+        ((Get-Content -LiteralPath $commitMarker -Raw -Encoding UTF8).Trim() -eq $ClipProjCommit)) {
+        Write-Step "Pinned ClipProj node already present: $ClipProjCommit"
+        return
+    }
+    $zip = Join-Path $Downloads "ComfyUI-ClipProj-$ClipProjCommit.zip"
+    $extractRoot = Join-Path $Downloads "clipproj-extract"
+    Write-Step "Downloading pinned ClipProj $ClipProjVersion ($ClipProjCommit)"
+    & $Curl --location --fail --retry 12 --retry-all-errors --retry-delay 5 --output $zip "https://github.com/nicolab28/ComfyUI-ClipProj/archive/$ClipProjCommit.zip"
+    if ($LASTEXITCODE -ne 0) {
+        throw "ClipProj download failed"
+    }
+    Remove-Item -LiteralPath $extractRoot -Recurse -Force -ErrorAction SilentlyContinue
+    Expand-Archive -LiteralPath $zip -DestinationPath $extractRoot -Force
+    $source = Get-ChildItem -LiteralPath $extractRoot -Directory | Select-Object -First 1
+    if (-not $source) {
+        throw "ClipProj archive did not contain a directory"
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ClipProjRoot) | Out-Null
+    if (Test-Path -LiteralPath $ClipProjRoot) {
+        Move-Item -LiteralPath $ClipProjRoot -Destination "$ClipProjRoot.bak.$(Get-Date -Format yyyyMMddHHmmss)"
+    }
+    Move-Item -LiteralPath $source.FullName -Destination $ClipProjRoot
+    Set-Content -LiteralPath $commitMarker -Value $ClipProjCommit -Encoding ASCII
 }
 
 function Install-H3ModelDownloader {
@@ -383,6 +431,84 @@ function Download-H3Models {
     }
 }
 
+function Download-H3MiniModels {
+    if ($SkipModelDownloads) {
+        Write-Step "Skipping H3 Mini model downloads by request"
+        return
+    }
+    $modelsRoot = Join-Path $ComfyRoot "models"
+    $endpoints = New-Object System.Collections.Generic.List[string]
+    if ($HuggingFaceEndpoint) {
+        $endpoints.Add($HuggingFaceEndpoint)
+    }
+    $endpoints.Add("https://huggingface.co")
+    $endpoints.Add("https://hf-mirror.com")
+    $uniqueEndpoints = $endpoints | Select-Object -Unique
+    $downloadLog = Join-Path $Logs "h3-mini-download.log"
+    $downloader = Install-H3ModelDownloader
+    foreach ($asset in $MiniModelFiles) {
+        $target = Join-Path $modelsRoot ($asset.Target -replace "/", "\")
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
+        $downloadArgs = @(
+            "-s", $downloader,
+            "--repo-id", $asset.Repo,
+            "--relative-path", $asset.Source,
+            "--target", $target,
+            "--log", $downloadLog,
+            "--expected-size", "$($asset.Size)"
+        )
+        foreach ($endpoint in $uniqueEndpoints) {
+            $downloadArgs += @("--endpoint", $endpoint.TrimEnd("/"))
+        }
+        if ($HuggingFaceToken) {
+            $downloadArgs += @("--token", $HuggingFaceToken)
+        }
+        Write-Step "Downloading H3 Mini asset: $($asset.Target)"
+        & $H3Python @downloadArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "MiniMax H3 Mini asset download failed: $($asset.Target)"
+        }
+    }
+}
+
+function Write-H3MiniReadiness {
+    $modelsRoot = Join-Path $ComfyRoot "models"
+    $modelResults = @{}
+    foreach ($asset in $MiniModelFiles) {
+        $path = Join-Path $modelsRoot ($asset.Target -replace "/", "\")
+        $modelResults[$asset.Target] = (
+            (Test-Path -LiteralPath $path) -and
+            ([Int64](Get-Item -LiteralPath $path).Length -eq [Int64]$asset.Size)
+        )
+    }
+    $commitMarker = Join-Path $ClipProjRoot ".mecha-pinned-commit"
+    $nodeReady = (Test-Path -LiteralPath (Join-Path $ClipProjRoot "__init__.py")) -and
+        (Test-Path -LiteralPath $commitMarker) -and
+        ((Get-Content -LiteralPath $commitMarker -Raw -Encoding UTF8).Trim() -eq $ClipProjCommit)
+    $report = @{
+        verified = $nodeReady -and -not ($modelResults.Values -contains $false)
+        clipproj_version = $ClipProjVersion
+        clipproj_commit = $ClipProjCommit
+        inference_executed = $false
+        models = $modelResults
+        expected_sha256 = @{
+            "qwen3vl_4b_fp8_scaled.safetensors" = $MiniModelFiles[0].Sha256
+            "mmh3-4b-ClipProj-v3-mlp.safetensors" = $MiniModelFiles[1].Sha256
+        }
+        generated_at = (Get-Date).ToString("o")
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $MiniReportFile) | Out-Null
+    $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $MiniReportFile -Encoding UTF8
+    if (-not $report.verified) {
+        if ($SkipModelDownloads) {
+            Write-Step "H3 Mini remains unavailable because its model downloads were skipped"
+            return
+        }
+        throw "H3 Mini readiness failed. See $MiniReportFile"
+    }
+    Write-Step "H3 Mini files verified without inference. Report: $MiniReportFile"
+}
+
 function Install-H3StartCommand {
     @"
 @echo off
@@ -395,45 +521,33 @@ set "COMFYUI_ROOT=$ComfyRoot"
 set "PYTHON_EXE=$H3Python"
 if not exist "$Logs" mkdir "$Logs"
 cd /d "%COMFYUI_ROOT%"
-"%PYTHON_EXE%" -s main.py --listen 0.0.0.0 --port $Port --lowvram --preview-method none --disable-auto-launch >> "$Logs\comfyui-h3-$Port.log" 2>&1
+"%PYTHON_EXE%" -s "%COMFYUI_ROOT%\main.py" --listen 0.0.0.0 --port $Port --lowvram --preview-method none --disable-auto-launch >> "$Logs\comfyui-h3-$Port.log" 2>&1
 endlocal
 "@ | Set-Content -LiteralPath $StartCmd -Encoding ASCII
 }
 
 function Update-AgentPortList {
-    [Environment]::SetEnvironmentVariable("MECHA_COMFYUI_PORTS", "8188,$Port", "Machine")
+    [Environment]::SetEnvironmentVariable("MECHA_COMFYUI_PORTS", "8188", "Machine")
     foreach ($candidate in @($AgentStartCmd, $LegacyAgentStartCmd)) {
         if (-not (Test-Path -LiteralPath $candidate)) {
             continue
         }
         $source = Get-Content -LiteralPath $candidate -Raw -Encoding UTF8
-        $updated = $source -replace "set MECHA_COMFYUI_PORTS=.*", "set MECHA_COMFYUI_PORTS=8188,$Port"
+        $updated = $source -replace "set MECHA_COMFYUI_PORTS=.*", "set MECHA_COMFYUI_PORTS=8188"
         if ($updated -ne $source) {
-            Write-Step "Updating Agent startup command ports to 8188,${Port}: $candidate"
+            Write-Step "Updating Agent startup command to the single managed port: $candidate"
             Set-Content -LiteralPath $candidate -Value $updated -Encoding UTF8
         }
     }
 }
 
-function Ensure-H3FirewallRule {
-    Write-Step "Allowing H3 ComfyUI from the local subnet only on port $Port"
+function Disable-LegacyH3Startup {
+    Write-Step "Disabling the legacy independently-started H3 task and firewall rule"
     Get-NetFirewallRule -DisplayName "MECHA GPU ComfyUI H3 LAN" -ErrorAction SilentlyContinue |
         Remove-NetFirewallRule -ErrorAction SilentlyContinue
-    New-NetFirewallRule `
-        -DisplayName "MECHA GPU ComfyUI H3 LAN" `
-        -Direction Inbound `
-        -Action Allow `
-        -Protocol TCP `
-        -LocalPort $Port `
-        -RemoteAddress "192.168.31.0/24" `
-        -Profile Any | Out-Null
-}
-
-function Register-H3ScheduledTask {
-    Write-Step "Registering startup task MECHA-GPU-ComfyUI-H3"
-    schtasks.exe /Create /F /TN "MECHA-GPU-ComfyUI-H3" /SC ONSTART /RL HIGHEST /RU SYSTEM /TR "`"$StartCmd`""
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to register MECHA-GPU-ComfyUI-H3 scheduled task"
+    $legacyTask = Get-ScheduledTask -TaskName "MECHA-GPU-ComfyUI-H3" -ErrorAction SilentlyContinue
+    if ($legacyTask) {
+        Disable-ScheduledTask -TaskName "MECHA-GPU-ComfyUI-H3" | Out-Null
     }
 }
 
@@ -487,19 +601,21 @@ function Test-H3Readiness {
 Ensure-H3Python
 Install-ComfyUI
 Install-PythonRequirements
+Install-H3MiniClipProj
 Download-H3Models
+Download-H3MiniModels
+Write-H3MiniReadiness
 Install-H3StartCommand
 Update-AgentPortList
-Ensure-H3FirewallRule
-Register-H3ScheduledTask
-Test-H3Readiness
+Disable-LegacyH3Startup
+Write-Step "H3 installed for Agent-managed on-demand switching; no runtime smoke was started"
 
-if (-not $NoAgentRestart) {
-    Write-Step "Restarting Agent so it reports 8188,$Port"
+if ($RestartAgent) {
+    Write-Step "Restarting Agent with the single managed port"
     schtasks.exe /End /TN "MECHA-GPU-Agent" 2>$null | Out-Null
     Start-Sleep -Seconds 3
     schtasks.exe /Run /TN "MECHA-GPU-Agent" | Out-Null
 } else {
-    Write-Step "Skipping Agent scheduled-task restart by request; caller will restart Agent"
+    Write-Step "Agent restart was not requested; installed files remain inactive"
 }
 Write-Step "MiniMax H3 GPU2 setup completed"

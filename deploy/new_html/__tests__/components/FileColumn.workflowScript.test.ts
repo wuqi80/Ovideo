@@ -24,6 +24,16 @@ describe('FileColumn workflow script control', () => {
     expect(source).not.toContain('1. 文件列表');
   });
 
+  it('places the primary-script badge below the title row so the file name keeps its width', () => {
+    const controlRow = source.match(
+      /data-testid="file-card-control-row"[\s\S]*?data-testid="file-card-content"/,
+    )?.[0] || '';
+    expect(controlRow).not.toContain('当前主剧本');
+    expect(source).toContain('data-testid="file-primary-status"');
+    expect(source.indexOf('data-testid="file-primary-status"'))
+      .toBeGreaterThan(source.indexOf('data-testid="file-card-content"'));
+  });
+
   it('uses compact row items with a blue selected rail and tinted background', () => {
     expect(source).toContain('className="flex shrink-0 items-center justify-end gap-1"');
     expect(source).toContain('className="flex flex-col"');
@@ -59,6 +69,12 @@ describe('FileColumn workflow script control', () => {
   it('shows a light square hover surface around both ordering arrows', () => {
     const arrowHoverClass = 'rounded-md border border-transparent text-n300 transition-colors hover:border-n40 hover:bg-n30 hover:text-n800';
     expect(source.match(new RegExp(arrowHoverClass, 'g'))).toHaveLength(2);
+  });
+
+  it('explains why the final script file cannot be deleted', () => {
+    expect(source).toContain('if (files.length <= 1)');
+    expect(source).toContain('每个分集至少需要保留一个剧本文件，最后一个剧本不能删除。请先新建或上传另一个剧本。');
+    expect(source).toContain('window.alert(');
   });
 
   it('renders the file settings panel through a portal to the right of the sidebar', () => {

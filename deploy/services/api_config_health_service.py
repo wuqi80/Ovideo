@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 import aiohttp
 
 from services.ai_proxy_doubao_image_service import (
+    normalize_doubao_standard_image_size,
     parse_doubao_image_task_response,
 )
 from services.ai_proxy_minimax_text_service import minimax_anthropic_messages_url
@@ -697,8 +698,13 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
         model = normalize_doubao_image_model_for_endpoint(model, endpoint)
         url = normalize_doubao_image_endpoint(endpoint)
         is_agent_plan = doubao_image_access_mode(endpoint) == "agent_plan"
-        # Agent Plan uses the image generation endpoint and requires 2K+.
-        size = "2048x2048" if is_agent_plan else "1024x1024"
+        # Agent Plan requires a 2K square. The current pay-as-you-go SeedDream
+        # models require at least 3,686,400 pixels even for a lightweight test.
+        size = (
+            "2048x2048"
+            if is_agent_plan
+            else normalize_doubao_standard_image_size("1024x1024")
+        )
         payload = {
             "model": model,
             "prompt": "A simple blue square icon on a white background.",

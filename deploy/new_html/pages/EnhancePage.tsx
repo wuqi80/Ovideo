@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Wand2, MonitorPlay, Zap, Mic2, Volume2, Film, Play, Pause,
   Scissors, Trash2, Music, ZoomIn, ZoomOut, GripHorizontal,
-  Maximize, Loader, CheckCircle, Download, RefreshCw,
+  Maximize, Loader, CheckCircle, Download, RefreshCw, Sparkles, AlignStartVertical,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
 import type { VideoSegment, StoryboardItemDB, AudioTrack } from '../types';
@@ -23,7 +23,11 @@ import { uploadAudio } from '../services/videoMediaService';
 import { startVideoPoll, attachVideoPollCallbacks, getKnownVideoTaskIds } from '../services/videoTaskPoller';
 import { apiFetch, secureApiUrl } from '../services/httpClient';
 import { syncTimelineAudioPlayback } from '../utils/enhanceTimelineAudio';
+import { resolveAudioTrackTimeline, patchAudioTrackTimeline } from '../utils/audioTrackTimeline';
+import { updateAudioTrack } from '../services/audioGenerationService';
 import LazyVideo from '../components/LazyVideo';
+import { MusicModal } from '../components/audio/MusicModal';
+import { SfxModal } from '../components/audio/SfxModal';
 import { withEntityFileVideoFallbacks } from '../utils/enhanceSourceClips';
 import {
   clusterNodePreferenceId,
@@ -35,6 +39,7 @@ import {
   type ClusterNodeOption,
 } from '../services/clusterNodeService';
 import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
+import { InlineCreditEstimate } from '../components/InlineCreditEstimate';
 
 interface MediaClip {
   id: string;
@@ -44,6 +49,12 @@ interface MediaClip {
   model?: string;
   comfyFilename?: string;
   sourceLabel?: string;
+  audioKind?: 'voice' | 'bgm' | 'sfx';
+  audioTrackId?: string;
+  sourceDuration?: number;
+  volume?: number;
+  fadeIn?: number;
+  fadeOut?: number;
   startTime: number;
   duration: number;
   sourceOffset: number;
@@ -109,7 +120,7 @@ function itemDurationMs(item: StoryboardItemDB & Record<string, any>): number {
   return Number.isFinite(n) && n > 0 ? n : 3000;
 }
 
-function buildEnhanceSourceClips(
+export function buildEnhanceSourceClips(
   videoSegments: VideoSegment[],
   storyboardAudioItems: StoryboardItemDB[],
   audioTracks: AudioTrack[],
@@ -121,12 +132,19 @@ function buildEnhanceSourceClips(
   const storyboardById = new Map(
     storyboardAudioItems.map(item => [itemId(item as StoryboardItemDB & Record<string, any>), item]),
   );
+  const videoTimelineByStoryboardId = new Map<string, { startMs: number; durationMs: number }>();
   for (let i = 0; i < sortedSegs.length; i++) {
     const seg = sortedSegs[i];
     const storyboard = seg.storyboardItemId ? storyboardById.get(seg.storyboardItemId) : undefined;
     const dur = (seg.durationMs || 5000) / 1000;
     const videoUrl = seg.videoUrl ? secureMediaUrl(seg.videoUrl) : '';
     if (videoUrl) {
+      if (seg.storyboardItemId) {
+        videoTimelineByStoryboardId.set(seg.storyboardItemId, {
+          startMs: Math.round(videoTime * 1000),
+          durationMs: Math.round(dur * 1000),
+        });
+      }
       allClips.push({
         id: seg.segmentId || `vid_${i}`,
         url: videoUrl,
@@ -148,20 +166,15 @@ function buildEnhanceSourceClips(
   const sortedItems = [...storyboardAudioItems].sort((a, b) =>
     itemSort(a as StoryboardItemDB & Record<string, any>) - itemSort(b as StoryboardItemDB & Record<string, any>)
   );
-  const itemStartMs = new Map<string, number>();
-  let audioTimelineMs = 0;
-  for (const raw of sortedItems) {
-    const item = raw as StoryboardItemDB & Record<string, any>;
-    const id = itemId(item);
-    if (id) itemStartMs.set(id, audioTimelineMs);
-    audioTimelineMs += itemDurationMs(item);
-  }
-
   for (const raw of sortedItems) {
     const item = raw as StoryboardItemDB & Record<string, any>;
     const id = itemId(item);
     if (!id) continue;
-    const startTime = (itemStartMs.get(id) || 0) / 1000;
+    const videoAnchor = videoTimelineByStoryboardId.get(id);
+    // 美化工作区只展示已有视频段；未生成视频的分镜音频不能沿用完整分镜
+    // 累计时间，否则会在只有部分镜头时被错误推到时间线末端。
+    if (!videoAnchor) continue;
+    const startTime = videoAnchor.startMs / 1000;
     const duration = itemDurationMs(item) / 1000;
     const mixedUrl = item.mixedAudioUrl ?? item.mixed_audio_url;
     if (mixedUrl) {
@@ -173,6 +186,7 @@ function buildEnhanceSourceClips(
         sourceOffset: 0,
         type: 'audio',
         sourceLabel: '参考配音',
+        audioKind: 'voice',
       });
       continue;
     }
@@ -192,22 +206,35 @@ function buildEnhanceSourceClips(
         sourceOffset: 0,
         type: 'audio',
         sourceLabel: kind === 'dialogue' ? '参考对白' : kind === 'narration' ? '参考旁白' : '参考音效',
+        audioKind: kind === 'sfx' ? 'sfx' : 'voice',
       });
     }
   }
 
   for (const track of audioTracks) {
     if (!track.audioUrl) continue;
-    const startMs = track.startItemId ? itemStartMs.get(track.startItemId) ?? 0 : 0;
-    const durationMs = track.durationMs || Math.max(audioTimelineMs, 3000);
+    const episodeDurationMs = Math.max(100, Math.round(videoTime * 1000));
+    const timeline = resolveAudioTrackTimeline(track, episodeDurationMs);
+    const hasPersistedTimeline = Boolean(track.generationParams?.timeline && typeof track.generationParams.timeline === 'object');
+    const anchoredStartMs = track.startItemId
+      ? videoTimelineByStoryboardId.get(track.startItemId)?.startMs
+      : undefined;
+    const startMs = hasPersistedTimeline ? timeline.startMs : anchoredStartMs ?? timeline.startMs;
+    const kind = track.trackType === 'bgm' ? 'bgm' : track.trackType === 'sfx_global' ? 'sfx' : 'voice';
     allClips.push({
       id: `aud_track_${track.trackId}`,
       url: secureMediaUrl(track.audioUrl),
       startTime: startMs / 1000,
-      duration: durationMs / 1000,
-      sourceOffset: 0,
+      duration: timeline.durationMs / 1000,
+      sourceOffset: timeline.sourceOffsetMs / 1000,
       type: 'audio',
       sourceLabel: track.name || '音频轨道',
+      audioKind: kind,
+      audioTrackId: track.trackId,
+      sourceDuration: Math.max(0.1, (track.durationMs || timeline.durationMs) / 1000),
+      volume: timeline.volume,
+      fadeIn: timeline.fadeInMs / 1000,
+      fadeOut: timeline.fadeOutMs / 1000,
     });
   }
 
@@ -309,6 +336,8 @@ export const EnhancePage: React.FC = () => {
   const [clips, setClips] = useState<MediaClip[]>([]);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [showMusicModal, setShowMusicModal] = useState(false);
+  const [showSfxModal, setShowSfxModal] = useState(false);
 
   const [enhancementKind, setEnhancementKind] = useState<EnhancementKind>('upscale');
   const [targetResolution, setTargetResolution] = useState<'720p' | '1080p' | '4K'>('1080p');
@@ -436,6 +465,8 @@ export const EnhancePage: React.FC = () => {
         sourceOffset: 0,
         type: 'audio' as const,
         sourceLabel: '演员录音',
+        audioKind: 'voice' as const,
+        volume: 1,
       }));
     }))
       .then(groups => {
@@ -484,6 +515,9 @@ export const EnhancePage: React.FC = () => {
 
   const videoClips = useMemo(() => clips.filter(c => c.type === 'video'), [clips]);
   const audioClips = useMemo(() => clips.filter(c => c.type === 'audio'), [clips]);
+  const voiceClips = useMemo(() => audioClips.filter(c => (c.audioKind || 'voice') === 'voice'), [audioClips]);
+  const bgmClips = useMemo(() => audioClips.filter(c => c.audioKind === 'bgm'), [audioClips]);
+  const sfxClips = useMemo(() => audioClips.filter(c => c.audioKind === 'sfx'), [audioClips]);
   const selectedClip = clips.find(c => c.id === selectedClipId);
   const videoUnderPlayhead = videoClips.find(
     c => currentTime >= c.startTime && currentTime <= c.startTime + c.duration
@@ -515,6 +549,7 @@ export const EnhancePage: React.FC = () => {
         startTime: clip.startTime,
         duration: clip.duration,
         sourceOffset: clip.sourceOffset,
+        volume: clip.volume,
       })),
       audioElements: audioElementRefs.current,
       currentTime,
@@ -522,10 +557,22 @@ export const EnhancePage: React.FC = () => {
     }).catch(() => {});
   }, [audioClips, currentTime, playing, composeAudioMode]);
 
-  const totalDuration = useMemo(
-    () => Math.max(...clips.map(c => c.startTime + c.duration), currentTime + 10, 60),
-    [clips, currentTime]
+  const videoDuration = useMemo(
+    () => Math.max(0, ...videoClips.map(c => c.startTime + c.duration)),
+    [videoClips],
   );
+  const totalDuration = useMemo(
+    () => Math.max(10, videoDuration, ...clips.map(c => c.startTime + c.duration), currentTime + 1),
+    [clips, currentTime, videoDuration]
+  );
+  const modalScript = useMemo(() => ({
+    adaptedScript: storyboardAudioItems
+      .slice()
+      .sort((a, b) => itemSort(a as StoryboardItemDB & Record<string, any>) - itemSort(b as StoryboardItemDB & Record<string, any>))
+      .map(item => item.dialogue || '')
+      .filter(Boolean)
+      .join('\n'),
+  }), [storyboardAudioItems]);
 
   const togglePlay = useCallback(() => {
     if (playing) {
@@ -585,6 +632,8 @@ export const EnhancePage: React.FC = () => {
         type: 'audio',
         comfyFilename: uploaded.filename,
         sourceLabel: '演员录音',
+        audioKind: 'voice',
+        volume: 1,
       };
       setClips(prev => [...prev, newClip]);
       setLipSyncAudioClipId(newClip.id);
@@ -643,22 +692,70 @@ export const EnhancePage: React.FC = () => {
     setSelectedClipId(null);
   }, [selectedClipId]);
 
+  const persistAudioClip = useCallback(async (clip: MediaClip) => {
+    if (!clip.audioTrackId) return;
+    const track = audioTracks.find(item => item.trackId === clip.audioTrackId);
+    if (!track) return;
+    await updateAudioTrack(track.trackId, {
+      generation_params: patchAudioTrackTimeline(track, {
+        startMs: Math.round(clip.startTime * 1000),
+        sourceOffsetMs: Math.round(clip.sourceOffset * 1000),
+        durationMs: Math.round(clip.duration * 1000),
+        fadeInMs: Math.round((clip.fadeIn || 0) * 1000),
+        fadeOutMs: Math.round((clip.fadeOut || 0) * 1000),
+        volume: clip.volume ?? (track.trackType === 'bgm' ? 0.35 : 1),
+      }),
+    });
+  }, [audioTracks]);
+
+  const updateSelectedAudioClip = useCallback((updates: Partial<MediaClip>, persist = false) => {
+    if (!selectedClipId) return;
+    const current = clips.find(clip => clip.id === selectedClipId && clip.type === 'audio');
+    if (!current) return;
+    const updated = { ...current, ...updates };
+    setClips(prev => prev.map(clip => clip.id === selectedClipId ? updated : clip));
+    if (persist) void persistAudioClip(updated).catch(error => {
+      console.warn('[EnhancePage] audio timeline update failed:', error);
+      alert(`保存音频剪辑位置失败：${error instanceof Error ? error.message : error}`);
+    });
+  }, [clips, persistAudioClip, selectedClipId]);
+
+  const alignSelectedAudioToVideo = useCallback(() => {
+    if (!selectedClip || selectedClip.type !== 'audio') return;
+    const target = videoClips.find(clip => (
+      currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration
+    )) || videoClips.find(clip => Math.abs(clip.startTime - selectedClip.startTime) < 0.5) || videoClips[0];
+    if (!target) return;
+    const duration = Math.min(selectedClip.sourceDuration || selectedClip.duration, target.duration);
+    updateSelectedAudioClip({ startTime: target.startTime, sourceOffset: 0, duration }, true);
+  }, [currentTime, selectedClip, updateSelectedAudioClip, videoClips]);
+
   const handleDragStart = useCallback((e: React.MouseEvent, clip: MediaClip) => {
     e.stopPropagation();
     setSelectedClipId(clip.id);
     const startX = e.clientX;
     const initialStart = clip.startTime;
+    let finalStart = initialStart;
     const onMove = (me: MouseEvent) => {
       const delta = (me.clientX - startX) / scale;
-      setClips(prev => prev.map(c => c.id === clip.id ? { ...c, startTime: Math.max(0, initialStart + delta) } : c));
+      const rawStart = Math.max(0, initialStart + delta);
+      const boundaries = videoClips.flatMap(item => [item.startTime, item.startTime + item.duration]);
+      const nearby = boundaries.find(boundary => Math.abs(boundary - rawStart) <= 0.2);
+      finalStart = nearby ?? Math.round(rawStart * 10) / 10;
+      setClips(prev => prev.map(c => c.id === clip.id ? { ...c, startTime: finalStart } : c));
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      if (clip.type === 'audio' && clip.audioTrackId) {
+        void persistAudioClip({ ...clip, startTime: finalStart }).catch(error => {
+          console.warn('[EnhancePage] audio drag persist failed:', error);
+        });
+      }
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
-  }, [scale]);
+  }, [persistAudioClip, scale, videoClips]);
 
   const handleRulerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!timelineContainerRef.current) return;
@@ -1227,6 +1324,16 @@ export const EnhancePage: React.FC = () => {
                   </div>
                 )}
 
+                <InlineCreditEstimate
+                  featureKey="video_enhancement"
+                  params={{
+                    operation: enhancementKind,
+                    target_fps: targetFps,
+                    resolution: targetResolution,
+                  }}
+                  fallbackCost={5}
+                  className="mb-2 justify-center"
+                />
                 <button
                   onClick={() => void applyEnhancement()}
                   disabled={processing || !selectedClusterNodeUsable || ((enhancementKind === 'lipSync' || enhancementKind === 'dub') && !lipSyncAudioClipId)}
@@ -1245,6 +1352,84 @@ export const EnhancePage: React.FC = () => {
                   </div>
                 )}
               </>
+            ) : selectedClip?.type === 'audio' ? (
+              <div className="space-y-4">
+                <div>
+                  <div className="mb-1 flex items-center gap-2">
+                    <Music size={15} className="text-primary" />
+                    <h3 className="text-sm font-semibold text-n800">音频剪辑</h3>
+                  </div>
+                  <p className="truncate text-[11px] text-n100">{selectedClip.sourceLabel || '音频轨道'}</p>
+                </div>
+
+                <div className="rounded-lg border border-n40 bg-n0 p-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1">
+                      <span className="text-[11px] text-n300">开始时间（秒）</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.1}
+                        value={selectedClip.startTime.toFixed(1)}
+                        onChange={event => updateSelectedAudioClip({ startTime: Math.max(0, Number(event.target.value) || 0) })}
+                        onBlur={() => void persistAudioClip(selectedClip)}
+                        className="w-full rounded border border-n40 px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[11px] text-n300">使用时长（秒）</span>
+                      <input
+                        type="number"
+                        min={0.1}
+                        max={selectedClip.sourceDuration || undefined}
+                        step={0.1}
+                        value={selectedClip.duration.toFixed(1)}
+                        onChange={event => updateSelectedAudioClip({
+                          duration: Math.max(0.1, Math.min(selectedClip.sourceDuration || Number.POSITIVE_INFINITY, Number(event.target.value) || 0.1)),
+                        })}
+                        onBlur={() => void persistAudioClip(selectedClip)}
+                        className="w-full rounded border border-n40 px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                      />
+                    </label>
+                  </div>
+                  <label className="block space-y-1">
+                    <span className="flex justify-between text-[11px] text-n300">
+                      <span>音量</span><span>{Math.round((selectedClip.volume ?? 1) * 100)}%</span>
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={Math.min(1, selectedClip.volume ?? 1)}
+                      onChange={event => updateSelectedAudioClip({ volume: Number(event.target.value) })}
+                      onPointerUp={() => void persistAudioClip(selectedClip)}
+                      className="w-full accent-primary"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2">
+                  <button
+                    type="button"
+                    onClick={alignSelectedAudioToVideo}
+                    disabled={videoClips.length === 0}
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded border border-primary/30 bg-primary-light text-xs font-medium text-primary disabled:opacity-50"
+                  >
+                    <AlignStartVertical size={13} /> 对齐当前视频片段
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateSelectedAudioClip({ startTime: currentTime }, true)}
+                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded border border-n40 bg-n0 text-xs text-n500 hover:border-primary hover:text-primary"
+                  >
+                    <Play size={12} /> 移到播放头
+                  </button>
+                </div>
+                <p className="text-[11px] leading-5 text-n100">
+                  可直接拖动下方音频块；靠近视频起止点时会自动吸附。背景音乐和特效音的位置会保存并用于后续合成。
+                </p>
+              </div>
             ) : (
               <div className="text-sm text-n100 text-center py-10">
                 请在下方时间轴选择一个视频片段
@@ -1255,7 +1440,7 @@ export const EnhancePage: React.FC = () => {
       </div>
 
       {/* Bottom Timeline */}
-      <div className="h-56 bg-n0 border-t border-n40 flex flex-col shrink-0 z-20">
+      <div className="h-72 bg-n0 border-t border-n40 flex flex-col shrink-0 z-20">
         <div className="hidden" aria-hidden="true">
           {audioClips.map(clip => (
             <audio
@@ -1303,7 +1488,23 @@ export const EnhancePage: React.FC = () => {
               className="flex items-center gap-1 px-2 py-1.5 hover:bg-n20 rounded text-xs text-n300 hover:text-n700 transition-colors disabled:opacity-50"
             >
               {audioUploading ? <Loader size={12} className="animate-spin" /> : <Mic2 size={12} />}
-              {audioUploading ? '正在上传' : '上传演员录音'}
+              {audioUploading ? '正在上传' : '加入配音'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowMusicModal(true)}
+              disabled={!episodeId}
+              className="flex items-center gap-1 px-2 py-1.5 hover:bg-n20 rounded text-xs text-n300 hover:text-success transition-colors disabled:opacity-50"
+            >
+              <Music size={12} /> 背景音乐
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSfxModal(true)}
+              disabled={!episodeId}
+              className="flex items-center gap-1 px-2 py-1.5 hover:bg-n20 rounded text-xs text-n300 hover:text-primary transition-colors disabled:opacity-50"
+            >
+              <Sparkles size={12} /> 特效音
             </button>
             <input type="file" accept="audio/*" className="hidden" ref={fileInputRef} onChange={handleAudioUpload} />
           </div>
@@ -1333,8 +1534,14 @@ export const EnhancePage: React.FC = () => {
             <div className="h-16 border-b border-n40 flex items-center justify-center text-[11px] text-n100 gap-1">
               <MonitorPlay size={12} /> 视频
             </div>
-            <div className="h-14 border-b border-n40 flex items-center justify-center text-[11px] text-n100 gap-1">
-              <Music size={12} /> 音频
+            <div className="h-10 border-b border-n40 flex items-center justify-center text-[11px] text-n100 gap-1">
+              <Mic2 size={12} /> 配音
+            </div>
+            <div className="h-10 border-b border-n40 flex items-center justify-center text-[11px] text-n100 gap-1">
+              <Music size={12} /> 音乐
+            </div>
+            <div className="h-10 border-b border-n40 flex items-center justify-center text-[11px] text-n100 gap-1">
+              <Sparkles size={12} /> 音效
             </div>
           </div>
 
@@ -1414,16 +1621,25 @@ export const EnhancePage: React.FC = () => {
                 ))}
               </div>
 
-              {/* Audio track */}
-              <div className="h-14 border-b border-n40 relative bg-n0">
-                {audioClips.map(clip => (
+              {/* Audio tracks */}
+              {[
+                { key: 'voice', clips: voiceClips },
+                { key: 'bgm', clips: bgmClips },
+                { key: 'sfx', clips: sfxClips },
+              ].map(group => (
+              <div key={group.key} className="h-10 border-b border-n40 relative bg-n0">
+                {group.clips.map(clip => (
                   <div
                     key={clip.id}
                     onMouseDown={e => handleDragStart(e, clip)}
-                    className={`absolute top-1.5 bottom-1.5 rounded border-2 overflow-hidden cursor-grab active:cursor-grabbing ${
+                    className={`absolute top-1 bottom-1 rounded border overflow-hidden cursor-grab active:cursor-grabbing ${
                       selectedClipId === clip.id
-                        ? 'border-primary z-20 bg-primary-light'
-                        : 'border-primary z-10 hover:border-primary bg-primary-light'
+                        ? 'border-primary z-20 bg-primary-light shadow-sm'
+                        : group.key === 'bgm'
+                          ? 'border-success/40 z-10 hover:border-success bg-success/10'
+                          : group.key === 'sfx'
+                            ? 'border-warning/40 z-10 hover:border-warning bg-warning/10'
+                            : 'border-primary/40 z-10 hover:border-primary bg-primary-light'
                     }`}
                     style={{ left: `${clip.startTime * scale}px`, width: `${clip.duration * scale}px` }}
                   >
@@ -1442,10 +1658,35 @@ export const EnhancePage: React.FC = () => {
                   </div>
                 ))}
               </div>
+              ))}
             </div>
           </div>
         </div>
       </div>
+      {showMusicModal && episodeId && (
+        <MusicModal
+          episodeId={episodeId}
+          projectId={projectId || undefined}
+          script={modalScript}
+          onClose={() => setShowMusicModal(false)}
+          onCreated={async () => {
+            reloadEnhanceData();
+            setShowMusicModal(false);
+          }}
+        />
+      )}
+      {showSfxModal && episodeId && (
+        <SfxModal
+          episodeId={episodeId}
+          projectId={projectId || undefined}
+          script={modalScript}
+          onClose={() => setShowSfxModal(false)}
+          onCreated={async () => {
+            reloadEnhanceData();
+            setShowSfxModal(false);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -2,6 +2,7 @@ export const DESIGN_CREDIT_FEATURES = {
   imageGeneration: 'design_image_generation',
   promptRefinement: 'design_prompt_refinement',
   angleAdjustment: 'design_angle_adjustment',
+  multiAngleGeneration: 'design_multi_angle_generation',
   upscaleHd: 'design_upscale_hd',
 } as const;
 
@@ -9,6 +10,7 @@ export const DESIGN_CREDIT_DEFAULTS = {
   imageGenerationPerImage: 40,
   promptRefinement: 1,
   angleAdjustment: 5,
+  multiAngleGeneration: 60,
   upscaleHd: 5,
 } as const;
 
@@ -33,10 +35,11 @@ export function designImageCreditParams(options: {
   };
 }
 
-export function designOperationCreditParams(workflow: 'angle_adjustment' | 'upscale_hd') {
+export function designOperationCreditParams(workflow: 'angle_adjustment' | 'human_multi_angle' | 'upscale_hd') {
   return {
     operation_count: 1,
     workflow,
+    ...(workflow === 'human_multi_angle' ? { output_count: 14 } : {}),
   };
 }
 

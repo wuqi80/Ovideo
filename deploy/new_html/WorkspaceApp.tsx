@@ -48,12 +48,14 @@ import {
   createStoryboardSnapshot,
   getVersionStoryboardSnapshots,
   mergeStoryboardSnapshots,
+  resolvePersistableStoryboardVersion,
 } from './utils/storyboardSnapshots';
 import {
   readScriptWorkspaceMode,
   writeScriptWorkspaceMode,
   type ScriptWorkspaceMode,
 } from './utils/scriptWorkspaceMode';
+import { clearCreateIdeaSeed, readCreateIdeaSeed } from './utils/createIdeaSeed';
 import { ScriptWorkspaceModeSwitch } from './components/ScriptWorkspaceModeSwitch';
 
 const loadAiModelService = () => import('./services/aiModelService');
@@ -357,6 +359,43 @@ function mergeScriptConversationWithLocalFile(
   };
 }
 
+function mergePersistedScriptConversation(
+  file: ProjectFile | undefined,
+  persisted: ScriptConversation,
+  cached?: ScriptConversation,
+): ScriptConversation {
+  if (!cached) return mergeScriptConversationWithLocalFile(file, persisted) || persisted;
+
+  const persistedMessageIds = new Set(persisted.messages.map(message => message.id));
+  const persistedVersionIds = new Set(persisted.versions.map(version => version.id));
+  const persistedHasRealVersions = persisted.versions.some(version => !version.id.startsWith('legacy_'));
+  const persistedHasUserMessage = persisted.messages.some(message => message.role === 'user');
+  const cachedOnlyMessages = cached.messages.filter(message => (
+    !persistedMessageIds.has(message.id)
+      && !(persistedHasRealVersions && message.id.startsWith('legacy_assistant_'))
+      && !(persistedHasUserMessage && message.id.startsWith('legacy_user_'))
+  ));
+  const cachedOnlyVersions = cached.versions.filter(version => (
+    !persistedVersionIds.has(version.id)
+      && !(persistedHasRealVersions && version.id.startsWith('legacy_'))
+  ));
+  const cachedCurrentIsNewer = Boolean(
+    cached.currentVersionId && !persistedVersionIds.has(cached.currentVersionId),
+  );
+  const combined: ScriptConversation = {
+    ...cached,
+    ...persisted,
+    currentVersionId: cachedCurrentIsNewer
+      ? cached.currentVersionId
+      : (persisted.currentVersionId || cached.currentVersionId),
+    defaultModel: persisted.defaultModel || cached.defaultModel,
+    messages: [...persisted.messages, ...cachedOnlyMessages],
+    versions: [...persisted.versions, ...cachedOnlyVersions]
+      .sort((left, right) => left.versionNo - right.versionNo || left.createdAt - right.createdAt),
+  };
+  return mergeScriptConversationWithLocalFile(file, combined) || combined;
+}
+
 function parseStoryboardVersionContent(content: string): StoryboardItem[] {
   if (!content.trim()) return [];
   const separated = ensureStoryboardCutSeparators(content);
@@ -603,11 +642,48 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const isResizing = useRef<number | null>(null);
 
+  const refreshScriptConversationForWriting = useCallback(async (fileId: string) => {
+    const persistedConversation = await getScriptConversation(propEpisodeId, fileId);
+    const latestFile = filesRef.current.find(item => item.id === fileId);
+    loadedConversationKeysRef.current.add(`${propEpisodeId}:${fileId}`);
+    setScriptConversations(prev => ({
+      ...prev,
+      [fileId]: mergePersistedScriptConversation(latestFile, persistedConversation, prev[fileId]),
+    }));
+
+    const mergedPersistedConversation = mergeScriptConversationWithLocalFile(
+      latestFile,
+      persistedConversation,
+    ) || persistedConversation;
+    const persistedSnapshots = collectConversationStoryboardSnapshots(mergedPersistedConversation);
+    setFiles(prev => {
+      const next = prev.map(file => (
+        file.id === fileId
+          ? { ...file, versions: mergeStoryboardSnapshots(file.versions || [], persistedSnapshots) }
+          : file
+      ));
+      filesRef.current = next;
+      return next;
+    });
+  }, [propEpisodeId]);
+
   const handleScriptWorkspaceModeChange = useCallback((mode: ScriptWorkspaceMode) => {
     writeScriptWorkspaceMode(localStorage, scriptWorkspaceUsername, mode);
     setScriptWorkspaceMode(mode);
     if (mode !== 'writing') setStoryboardDrawerOpen(false);
-  }, [scriptWorkspaceUsername]);
+    if (mode === 'writing' && selectedFileId && !selectedFileId.startsWith('local_')) {
+      setConversationLoadingId(selectedFileId);
+      setConversationError(null);
+      void refreshScriptConversationForWriting(selectedFileId)
+        .catch(error => {
+          console.error('切换写作版同步版本历史失败:', error);
+          setConversationError('版本历史同步失败，已保留当前缓存；请稍后重试。');
+        })
+        .finally(() => {
+          setConversationLoadingId(current => current === selectedFileId ? null : current);
+        });
+    }
+  }, [refreshScriptConversationForWriting, scriptWorkspaceUsername, selectedFileId]);
 
   const selectedFile = files.find(f => f.id === selectedFileId);
   const rawSelectedConversation = selectedFileId ? scriptConversations[selectedFileId] : undefined;
@@ -674,12 +750,18 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         loadedConversationKeysRef.current.add(cacheKey);
         const latestFile = filesRef.current.find(item => item.id === selectedFileId);
         const mergedConversation = mergeScriptConversationWithLocalFile(latestFile, conversation) || conversation;
-        setScriptConversations(prev => ({ ...prev, [selectedFileId]: mergedConversation }));
+        setScriptConversations(prev => ({
+          ...prev,
+          [selectedFileId]: mergePersistedScriptConversation(latestFile, conversation, prev[selectedFileId]),
+        }));
         const persistedSnapshots = collectConversationStoryboardSnapshots(mergedConversation);
         setFiles(prev => {
           const next = prev.map(file => (
             file.id === selectedFileId
-              ? { ...file, versions: persistedSnapshots }
+              ? {
+                  ...file,
+                  versions: mergeStoryboardSnapshots(file.versions || [], persistedSnapshots),
+                }
               : file
           ));
           filesRef.current = next;
@@ -732,6 +814,26 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       ]);
 
       const scripts: any[] = scriptsRes.success ? (scriptsRes.scripts || []) : [];
+      const pendingCreateIdea = readCreateIdeaSeed(sessionStorage, propEpisodeId);
+      let pendingCreateIdeaHandled = false;
+      if (pendingCreateIdea && scripts.length > 0) {
+        const firstScript = scripts[0];
+        const firstScriptId = firstScript.script_id ?? firstScript.scriptId;
+        const currentSource = firstScript.original_content ?? firstScript.originalContent ?? '';
+        if (currentSource.trim()) {
+          pendingCreateIdeaHandled = true;
+        } else if (firstScriptId) {
+          try {
+            await updateEpisodeScriptById(propEpisodeId, firstScriptId, {
+              original_content: pendingCreateIdea.sentence,
+            });
+            firstScript.original_content = pendingCreateIdea.sentence;
+            pendingCreateIdeaHandled = true;
+          } catch (error) {
+            console.warn('保存新建作品的一句话创意失败，将在下次进入时重试:', error);
+          }
+        }
+      }
       const requestedScriptId = preferredScriptId || initialScriptId;
       const initialStoryboardScriptId = (
         requestedScriptId && scripts.some((script: any) => (script.script_id ?? script.scriptId) === requestedScriptId)
@@ -813,13 +915,17 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           return file;
         });
       } else {
-        const created = await createEpisodeScript(propEpisodeId, { file_name: '分集剧本' }).catch(() => null);
+        const created = await createEpisodeScript(propEpisodeId, {
+          file_name: '分集剧本',
+          original_content: pendingCreateIdea?.sentence || '',
+        }).catch(() => null);
         const newId = created?.script?.script_id || `local_${uuidv4()}`;
+        pendingCreateIdeaHandled = Boolean(pendingCreateIdea && created?.script?.script_id);
         const allItems = mapWorkspaceStoryboardRowsToItems(dbItems);
         projectFiles = [{
           id: newId,
           name: '分集剧本',
-          originalContent: '',
+          originalContent: pendingCreateIdea?.sentence || '',
           scriptContent: null,
           storyboard: allItems.length > 0 ? { items: allItems } : null,
           extractedCharacters: [],
@@ -847,6 +953,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       filesRef.current = projectFiles;
       setFiles(projectFiles);
       setSelectedFileId(restoreId);
+      if (pendingCreateIdeaHandled) clearCreateIdeaSeed(sessionStorage);
       if (!activeScriptId && restoreId) {
         void activateWorkflowScript(restoreId).catch(err => {
           console.error('设置本集采用剧本失败:', err);
@@ -1310,10 +1417,41 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       throw new Error('当前没有可保存的镜头设计');
     }
 
-    const conversation = scriptConversations[fileId];
-    const targetVersion = options.version
-      || conversation?.versions.find(version => version.id === conversation.currentVersionId)
-      || conversation?.versions[conversation.versions.length - 1];
+    let conversation = scriptConversations[fileId];
+    let targetVersion = resolvePersistableStoryboardVersion(conversation, options.version);
+    if (!targetVersion && !fileId.startsWith('local_')) {
+      const cacheKey = `${propEpisodeId}:${fileId}`;
+      let request = conversationRequestsRef.current.get(cacheKey);
+      if (!request) {
+        request = getScriptConversation(propEpisodeId, fileId);
+        conversationRequestsRef.current.set(cacheKey, request);
+      }
+      try {
+        const remoteConversation = await request;
+        const latestFile = filesRef.current.find(item => item.id === fileId);
+        conversation = mergeScriptConversationWithLocalFile(latestFile, remoteConversation)
+          || remoteConversation;
+        loadedConversationKeysRef.current.add(cacheKey);
+        setScriptConversations(prev => ({ ...prev, [fileId]: conversation! }));
+        const persistedSnapshots = collectConversationStoryboardSnapshots(conversation);
+        setFiles(prev => {
+          const next = prev.map(item => item.id === fileId ? {
+            ...item,
+            versions: mergeStoryboardSnapshots(item.versions || [], persistedSnapshots),
+          } : item);
+          filesRef.current = next;
+          return next;
+        });
+        targetVersion = resolvePersistableStoryboardVersion(conversation, options.version);
+      } finally {
+        if (conversationRequestsRef.current.get(cacheKey) === request) {
+          conversationRequestsRef.current.delete(cacheKey);
+        }
+      }
+    }
+    if (!targetVersion || fileId.startsWith('local_')) {
+      throw new Error('剧本版本尚未完成服务器同步，暂时无法创建持久存档，请稍后重试');
+    }
     const timestamp = Date.now();
     const snapshot = createStoryboardSnapshot(file, {
       id: uuidv4(),
@@ -1323,18 +1461,19 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       scriptVersionId: targetVersion?.id,
     });
 
-    setFiles(prev => {
-      const next = prev.map(item => (
-        item.id === fileId
-          ? { ...item, versions: mergeStoryboardSnapshots(item.versions || [], [snapshot]) }
-          : item
-      ));
-      filesRef.current = next;
-      return next;
-    });
+    const applyLocalSnapshot = () => {
+      setFiles(prev => {
+        const next = prev.map(item => (
+          item.id === fileId
+            ? { ...item, versions: mergeStoryboardSnapshots(item.versions || [], [snapshot]) }
+            : item
+        ));
+        filesRef.current = next;
+        return next;
+      });
+    };
 
     const persistRemoteSnapshot = async () => {
-      if (!targetVersion || targetVersion.id.startsWith('legacy_') || fileId.startsWith('local_')) return;
       const snapshots = mergeStoryboardSnapshots(
         getVersionStoryboardSnapshots(targetVersion),
         [snapshot],
@@ -1357,6 +1496,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     };
 
     if (options.waitForRemote === false) {
+      applyLocalSnapshot();
       void persistRemoteSnapshot().catch(error => {
         console.warn('后台同步镜头设计存档失败:', error);
       });
@@ -1364,6 +1504,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     }
 
     await persistRemoteSnapshot();
+    applyLocalSnapshot();
     return snapshot;
   }, [propEpisodeId, scriptConversations]);
 
@@ -1371,7 +1512,6 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     await persistStoryboardSnapshot(id, {
       name: customName,
       source: 'manual',
-      waitForRemote: false,
     });
   }, [persistStoryboardSnapshot]);
 
@@ -2361,16 +2501,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     e.preventDefault();
     e.stopPropagation();
     if (files.length <= 1) {
-      updateFileWithHistory(id, (f) => ({
-        ...f,
-        originalContent: '',
-        scriptContent: null,
-        storyboard: null,
-        extractedCharacters: [],
-        extractedScenes: [],
-        extractedProps: [],
-        lastUpdated: Date.now(),
-      }));
+      window.alert('每个分集至少需要保留一个剧本文件，最后一个剧本不能删除。请先新建或上传另一个剧本。');
       return;
     }
     try {
