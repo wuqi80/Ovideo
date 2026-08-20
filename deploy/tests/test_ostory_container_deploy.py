@@ -9,9 +9,10 @@ def test_ostory_image_builds_both_frontends_and_runs_canonical_migrations():
     dockerfile = (CONTAINER_DIR / "app.Dockerfile").read_text(encoding="utf-8")
     entrypoint = (CONTAINER_DIR / "entrypoint.sh").read_text(encoding="utf-8")
 
-    assert "FROM node:22-bookworm-slim AS newui-build" in dockerfile
-    assert "FROM node:22-bookworm-slim AS studio-build" in dockerfile
-    assert "FROM python:3.12-slim-bookworm AS runtime" in dockerfile
+    assert "FROM docker.io/library/node:22-bookworm-slim AS newui-build" in dockerfile
+    assert "FROM docker.io/library/node:22-bookworm-slim AS studio-build" in dockerfile
+    assert "FROM docker.io/library/python:3.12-slim-bookworm AS runtime" in dockerfile
+    assert "COPY deploy/new_html /source/deploy/new_html" in dockerfile
     assert "COPY --from=newui-build /source/deploy/dist ./dist" in dockerfile
     assert "COPY --from=studio-build /source/studio/dist /studio/dist" in dockerfile
     assert "python db_build/build_fresh_db.py" in entrypoint
