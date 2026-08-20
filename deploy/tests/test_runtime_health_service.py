@@ -141,5 +141,15 @@ async def test_collect_provider_health_uses_cache_without_running_generation(mon
     assert result["channels"][0]["checked_at"] == "2026-07-18T03:04:05Z"
 
 
+def test_critical_provider_ids_falls_back_to_configured_providers_when_env_is_blank(monkeypatch):
+    monkeypatch.setenv("HEALTH_CRITICAL_PROVIDERS", "")
+
+    result = runtime_health_service.critical_provider_ids(
+        ["DeepSeek", "gemini-tts", "deepseek", ""],
+    )
+
+    assert result == ["deepseek", "gemini-tts"]
+
+
 async def _async_result(value):
     return value

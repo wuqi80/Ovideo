@@ -132,7 +132,7 @@ async def collect_database_health(db_manager: Optional[object]) -> dict[str, Any
 
 def critical_provider_ids(configured_providers: Optional[list[str]] = None) -> list[str]:
     raw = os.getenv("HEALTH_CRITICAL_PROVIDERS")
-    source = raw.split(",") if raw is not None else (configured_providers or [])
+    source = raw.split(",") if raw and raw.strip() else (configured_providers or [])
     return list(dict.fromkeys(item.strip().lower() for item in source if item.strip()))
 
 
