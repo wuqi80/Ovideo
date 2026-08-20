@@ -1,0 +1,15 @@
+.git
+.github
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/node_modules
+**/dist
+**/*.log
+deploy/persistent_storage
+deploy/temp
+deploy/uploads
+deploy/outputs
+deploy/logs
+deploy/history
+deploy/redis_data

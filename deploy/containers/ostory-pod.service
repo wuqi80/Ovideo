@@ -1,0 +1,15 @@
+[Unit]
+Description=Ostory NewUI Podman pod
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/podman pod start ostory-pod
+ExecStop=/usr/bin/podman pod stop --time 30 ostory-pod
+TimeoutStartSec=180
+TimeoutStopSec=90
+
+[Install]
+WantedBy=multi-user.target
