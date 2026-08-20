@@ -35,7 +35,7 @@ import {
 } from '../services/modelOptions';
 import type { SmartSequenceItem, VideoGenerationMode } from '../types';
 
-const BOARD_NAME = 'SPTI Studio 自由创作';
+const BOARD_NAME = 'Ostory Studio 自由创作';
 const STATE_NODE_TYPE = 'studio_state';
 const STUDIO_SCHEMA_VERSION = 1;
 const DEFAULT_VOICE_ID = 'male-qn-qingse';
@@ -539,7 +539,7 @@ export function createDramaRuntime(input: {
       ? '你是影视分镜顾问，给出清晰、可执行的镜头建议。'
       : options.isHelpMeWrite
         ? '你是影视创意写作助手，帮助扩写并保留用户意图。'
-        : '你是 SPTI 自由创作助手，回答应简洁、专业并能直接用于内容制作。';
+        : '你是 Ostory 自由创作助手。请用简单、明确的语言回答，并给出可以直接用于视频创作的下一步。';
     return runText(`${conversation}\n用户：${message}`.trim(), mode, '自由创作 AI 助手');
   };
 

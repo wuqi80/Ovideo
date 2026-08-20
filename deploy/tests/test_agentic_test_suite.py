@@ -29,7 +29,7 @@ def test_build_plan_adds_live_smoke_only_when_requested(tmp_path):
     }
 
     local_plan = build_plan(tmp_path, environment, None)
-    live_plan = build_plan(tmp_path, environment, "https://spti.ai")
+    live_plan = build_plan(tmp_path, environment, "https://tv.ostory.ai")
 
     assert "public-smoke" not in {case.case_id for case in local_plan}
     assert "public-smoke" in {case.case_id for case in live_plan}

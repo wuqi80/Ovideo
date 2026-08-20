@@ -15,7 +15,7 @@ class _Response:
 
 def _agent(tmp_path, monkeypatch):
     monkeypatch.setenv("MECHA_AGENT_STATE_DIR", str(tmp_path))
-    return ComfyUIAgent("https://spti.ai", "token", [8188])
+    return ComfyUIAgent("https://tv.ostory.ai", "token", [8188])
 
 
 def test_platform_download_retries_verified_request_before_fallback(tmp_path, monkeypatch):
@@ -31,7 +31,7 @@ def test_platform_download_retries_verified_request_before_fallback(tmp_path, mo
     agent = _agent(tmp_path, monkeypatch)
 
     response = agent._get_platform_download(
-        "https://spti.ai/api/agent/tasks/task-1/files/file-1",
+        "https://tv.ostory.ai/api/agent/tasks/task-1/files/file-1",
         headers={"Authorization": "Bearer token"},
         timeout=10,
         stream=True,
@@ -55,7 +55,7 @@ def test_platform_download_tls_fallback_is_limited_to_same_origin_files(tmp_path
     agent = _agent(tmp_path, monkeypatch)
 
     response = agent._get_platform_download(
-        "https://spti.ai/storage/video/admin/input.mp4",
+        "https://tv.ostory.ai/storage/video/admin/input.mp4",
         headers={},
         timeout=10,
         stream=True,

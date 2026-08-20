@@ -73,14 +73,14 @@ describe('video task reconciliation', () => {
       progress: 100,
       data: { workspace_group_id: 'group-1', model: 'MiniMaxH3' },
       result: { videos: [{ url: '/uploads/result.mp4', generateTime: 42 }] },
-    })], {}, undefined, url => `https://spti.ai${url}`);
+    })], {}, undefined, url => `https://tv.ostory.ai${url}`);
 
     expect(result.statuses['group-1']).toMatchObject({
       state: 'done',
       taskId: 'completed-new',
       progress: 100,
-      result: 'https://spti.ai/uploads/result.mp4',
-      videos: ['https://spti.ai/uploads/result.mp4'],
+      result: 'https://tv.ostory.ai/uploads/result.mp4',
+      videos: ['https://tv.ostory.ai/uploads/result.mp4'],
       videoGenerateTimes: [42],
       videoModels: ['MiniMaxH3'],
     });

@@ -1,4 +1,5 @@
 import React from 'react';
+import { BRAND_NAME } from '../config/brand';
 
 type BrandLogoVariant = 'lockup' | 'mark';
 type BrandLogoTone = 'light' | 'dark';
@@ -12,12 +13,12 @@ interface BrandLogoProps {
 
 const BRAND_ASSETS: Record<BrandLogoTone, Record<BrandLogoVariant, string>> = {
   light: {
-    lockup: '/static/branding/spti-ai-logo-light.png?v=20260731-white-panel-v1',
-    mark: '/static/branding/spti-ai-mark.png?v=20260731-white-panel-v1',
+    lockup: '/static/branding/ostory-tv-logo-on-light.svg?v=20260820-ostory-v1',
+    mark: '/static/branding/ostory-tv-mark.svg?v=20260820-ostory-v1',
   },
   dark: {
-    lockup: '/static/branding/spti-ai-logo-dark.png?v=20260731-white-panel-v1',
-    mark: '/static/branding/spti-ai-mark.png?v=20260731-white-panel-v1',
+    lockup: '/static/branding/ostory-tv-logo-on-dark.svg?v=20260820-ostory-v1',
+    mark: '/static/branding/ostory-tv-mark.svg?v=20260820-ostory-v1',
   },
 };
 
@@ -25,7 +26,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   variant = 'lockup',
   tone = 'light',
   className = '',
-  alt = 'SPTI.AI',
+  alt = BRAND_NAME,
 }) => (
   <img
     src={BRAND_ASSETS[tone][variant]}

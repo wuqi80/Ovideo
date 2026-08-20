@@ -13,7 +13,7 @@ const image = (over: Partial<UploadedImage>): UploadedImage => ({
 describe('extractFileId', () => {
     it('extracts file_id from download urls', () => {
         expect(extractFileId('/api/files/file_abc123/download')).toBe('file_abc123');
-        expect(extractFileId('https://spti.ai/api/files/file_abc123/download')).toBe('file_abc123');
+        expect(extractFileId('https://tv.ostory.ai/api/files/file_abc123/download')).toBe('file_abc123');
     });
 });
 

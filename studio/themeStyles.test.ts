@@ -41,8 +41,8 @@ describe('Studio light canvas element theme styles', () => {
     const app = readStudioFile('App.tsx');
 
     expect(app).toContain("const isDarkCanvas = canvasTheme === 'dark'");
-    expect(app).toContain("'/static/branding/spti-ai-logo-dark.png?v=20260731-white-panel-v1'");
-    expect(app).toContain("'/static/branding/spti-ai-logo-light.png?v=20260731-white-panel-v1'");
-    expect(app).toContain('alt="SPTI.AI"');
+    expect(app).toContain("'/static/branding/ostory-tv-logo-on-dark.svg?v=20260820-ostory-v1'");
+    expect(app).toContain("'/static/branding/ostory-tv-logo-on-light.svg?v=20260820-ostory-v1'");
+    expect(app).toContain('alt="Ostory TV"');
   });
 });

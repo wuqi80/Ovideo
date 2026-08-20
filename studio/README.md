@@ -1,4 +1,4 @@
-# SPTI Studio
+# Ostory Studio
 
 自由创作前端。它以独立 Vite 应用构建到 `studio/dist`，由现有 FastAPI 服务在
 `/studio/` 下托管；主站 `/projects/:projectId/ep/:episodeId/canvas` 路由负责携带

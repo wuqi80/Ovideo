@@ -19,7 +19,7 @@ vi.mock('../../services/finalProductShareService', () => ({
   listFinalFeedback: vi.fn(),
   createFinalShare: vi.fn(),
   deactivateFinalShare: vi.fn(),
-  finalShareUrl: vi.fn((token: string) => `https://spti.ai/share/final/${token}`),
+  finalShareUrl: vi.fn((token: string) => `https://tv.ostory.ai/share/final/${token}`),
 }));
 vi.mock('../../contexts/EpisodeContext', () => ({
   useEpisode: () => ({ episodeId: 'ep_1', assetScopeMode: 'episode', setAssetScopeMode: vi.fn() }),

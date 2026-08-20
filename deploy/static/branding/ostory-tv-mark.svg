@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 368 368" role="img" aria-labelledby="title desc">
+  <title id="title">Ostory TV</title>
+  <desc id="desc">Ostory TV 的 O 字播放标志</desc>
+  <defs>
+    <linearGradient id="brand-gradient" x1="54" y1="48" x2="316" y2="326" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5B49F0"/>
+      <stop offset="0.55" stop-color="#7A5BFF"/>
+      <stop offset="1" stop-color="#FF6A3D"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#17171C" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+  <rect x="24" y="24" width="320" height="320" rx="92" fill="url(#brand-gradient)" filter="url(#shadow)"/>
+  <circle cx="184" cy="184" r="91" fill="none" stroke="#FFFFFF" stroke-width="34"/>
+  <path d="M166 137 239 184 166 231Z" fill="#FFFFFF"/>
+  <circle cx="292" cy="78" r="18" fill="#FFB38F" stroke="#FFFFFF" stroke-width="8"/>
+</svg>

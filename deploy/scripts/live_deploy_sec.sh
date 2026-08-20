@@ -24,7 +24,7 @@ echo "已删死代码 dao_task_history"
 # 4. 注入生产 CORS 域名到 systemd drop-in（与 JWT_SECRET_KEY 并存，幂等）
 DROPIN=/etc/systemd/system/drama.service.d/override.conf
 if ! sudo grep -q 'CORS_ALLOW_ORIGINS' "$DROPIN" 2>/dev/null; then
-  echo 'Environment="CORS_ALLOW_ORIGINS=https://spti.ai,https://messiah.5kcrm.cn"' | sudo tee -a "$DROPIN" >/dev/null
+  echo 'Environment="CORS_ALLOW_ORIGINS=https://tv.ostory.ai,https://messiah.5kcrm.cn"' | sudo tee -a "$DROPIN" >/dev/null
   echo "已注入 CORS_ALLOW_ORIGINS"
 fi
 

@@ -118,7 +118,7 @@ describe('SHOTFORGE design-system contract', () => {
     expect(login).not.toMatch(/#0052CC|#0065FF|#0747A6|#172B4D|#146EF5/i);
   });
 
-  it('uses one SPTI.AI identity and favicon set across public shells', () => {
+  it('uses one Ostory TV identity and favicon set across public shells', () => {
     const appHtml = readProjectFile('index.html');
     const loginHtml = readProjectFile('../login.html');
     const legacyAdminHtml = readProjectFile('../admin/index.html');
@@ -130,9 +130,9 @@ describe('SHOTFORGE design-system contract', () => {
     const studioApp = readProjectFile('../../studio/App.tsx');
 
     for (const assetPath of [
-      '../static/branding/spti-ai-logo-light.png',
-      '../static/branding/spti-ai-logo-dark.png',
-      '../static/branding/spti-ai-mark.png',
+      '../static/branding/ostory-tv-logo-on-light.svg',
+      '../static/branding/ostory-tv-logo-on-dark.svg',
+      '../static/branding/ostory-tv-mark.svg',
       '../static/favicon.ico',
       '../static/favicon-32x32.png',
       '../static/apple-touch-icon.png',
@@ -140,9 +140,9 @@ describe('SHOTFORGE design-system contract', () => {
       expect(fs.statSync(path.join(projectRoot, assetPath)).size, assetPath).toBeGreaterThan(0);
     }
 
-    expect(brandLogo).toContain('/static/branding/spti-ai-logo-light.png');
-    expect(brandLogo).toContain('/static/branding/spti-ai-logo-dark.png');
-    expect(brandLogo).toContain('/static/branding/spti-ai-mark.png');
+    expect(brandLogo).toContain('/static/branding/ostory-tv-logo-on-light.svg');
+    expect(brandLogo).toContain('/static/branding/ostory-tv-logo-on-dark.svg');
+    expect(brandLogo).toContain('/static/branding/ostory-tv-mark.svg');
     expect(brandLogo).toContain("tone = 'light'");
     expect(header).toContain('<BrandLogo');
     expect(header).not.toContain('<text x="14"');
@@ -150,26 +150,31 @@ describe('SHOTFORGE design-system contract', () => {
     expect(accountMenu).toContain("window.location.href = '/profile'");
     expect(app).toContain("const ProfilePage");
     expect(app).toContain('path="/profile"');
-    expect(appHtml).toContain('<title>SPTI.AI 漫剧创作平台</title>');
+    expect(appHtml).toContain('<title>Ostory TV · AI 视频创作平台</title>');
+    expect(appHtml).toContain('<link rel="canonical" href="https://tv.ostory.ai/" />');
+    expect(appHtml).toContain('把一个想法，变成一部好故事');
     expect(appHtml).not.toContain('MECHA.ONE · AI 漫剧创作平台');
-    expect(appHtml).toContain('/favicon.ico?v=20260731-white-panel-v1');
-    expect(appHtml).toContain('/favicon-32x32.png?v=20260731-white-panel-v1');
-    expect(appHtml).toContain('/apple-touch-icon.png?v=20260731-white-panel-v1');
-    expect(loginHtml).toContain('/favicon.ico?v=20260731-white-panel-v1');
-    expect(loginHtml).toContain('/favicon-32x32.png?v=20260731-white-panel-v1');
-    expect(loginHtml).toContain('/apple-touch-icon.png?v=20260731-white-panel-v1');
-    expect(loginHtml).toContain('/static/branding/spti-ai-logo-dark.png');
-    expect(loginHtml).toContain('/static/branding/spti-ai-logo-light.png');
+    expect(appHtml).toContain('/favicon.svg?v=20260820-ostory-v1');
+    expect(appHtml).toContain('/favicon.ico?v=20260820-ostory-v1');
+    expect(loginHtml).toContain('/favicon.svg?v=20260820-ostory-v1');
+    expect(loginHtml).toContain('/favicon.ico?v=20260820-ostory-v1');
+    expect(loginHtml).toContain('/static/branding/ostory-tv-logo-on-dark.svg');
+    expect(loginHtml).toContain('/static/branding/ostory-tv-logo-on-light.svg');
     expect(loginHtml).not.toContain('drop-shadow(2px 0 0 rgba(255,255,255,0.98))');
-    expect(legacyAdminHtml).toContain('/favicon.ico?v=20260731-white-panel-v1');
-    expect(legacyAdminHtml).toContain('/static/branding/spti-ai-logo-dark.png');
-    expect(studioHtml).toContain('/favicon.ico?v=20260731-white-panel-v1');
-    expect(studioHtml).toContain('/apple-touch-icon.png?v=20260731-white-panel-v1');
+    expect(legacyAdminHtml).toContain('/favicon.ico?v=20260820-ostory-v1');
+    expect(legacyAdminHtml).toContain('/static/branding/ostory-tv-logo-on-dark.svg');
+    expect(studioHtml).toContain('/favicon.ico?v=20260820-ostory-v1');
+    expect(studioHtml).toContain('/apple-touch-icon.png?v=20260820-ostory-v1');
     expect(loginHtml).not.toContain('MECHA<span class="brand-dot">.</span>ONE');
-    expect(loginHtml).toContain('SPTI.ai（Story Production Technology Intelligence）意为“故事生产技术智能”，是一个基于 AI 能力打造的漫剧生产智能平台。');
+    expect(loginHtml).toContain('Ostory TV 是面向普通创作者的 AI 视频工作台。');
+    expect(loginHtml).toContain('无需专业制作经验');
     expect(studioApp).toContain("isDarkCanvas");
-    expect(studioApp).toContain('/static/branding/spti-ai-logo-dark.png');
-    expect(studioApp).toContain('/static/branding/spti-ai-logo-light.png');
+    expect(studioApp).toContain('/static/branding/ostory-tv-logo-on-dark.svg');
+    expect(studioApp).toContain('/static/branding/ostory-tv-logo-on-light.svg');
+
+    for (const publicSource of [appHtml, loginHtml, legacyAdminHtml, studioHtml, brandLogo, studioApp]) {
+      expect(publicSource).not.toMatch(/SPTI(?:\.AI)?/i);
+    }
   });
 
   it('keeps project and episode hubs on the shared centered media-library shell', () => {
@@ -186,8 +191,8 @@ describe('SHOTFORGE design-system contract', () => {
 
     expect(projectHub).toContain('全部项目');
     expect(projectHub).toContain('已归档');
-    expect(projectHub).toContain('title="SPTI.AI 漫剧创作平台"');
-    expect(projectHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="SPTI.AI 漫剧创作平台" />');
+    expect(projectHub).toContain('title="Ostory TV · AI 视频创作平台"');
+    expect(projectHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="Ostory TV · AI 视频创作平台" />');
     expect(projectHub).not.toContain('MECHA <span className="text-primary">·</span> 漫剧创作平台');
     expect(projectHub).toContain('include_archived: \'true\'');
     expect(projectHub).toContain('<AccountMenu');
@@ -200,8 +205,8 @@ describe('SHOTFORGE design-system contract', () => {
     expect(episodeHub).toContain('制作中');
     expect(episodeHub).toContain('已完成');
     expect(episodeHub).toContain('已发布');
-    expect(episodeHub).toContain('title="SPTI.AI 漫剧创作平台"');
-    expect(episodeHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="SPTI.AI 漫剧创作平台" />');
+    expect(episodeHub).toContain('title="Ostory TV · AI 视频创作平台"');
+    expect(episodeHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="Ostory TV · AI 视频创作平台" />');
     expect(episodeHub).not.toContain('MECHA <span className="text-primary">·</span> 漫剧创作平台');
     expect(episodeHub).toContain('app-modal-backdrop');
     expect(episodeHub).toContain('aria-modal="true"');

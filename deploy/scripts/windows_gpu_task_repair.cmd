@@ -11,6 +11,6 @@ if not exist "%SCRIPT_PATH%" (
   exit /b 1
 )
 set "SERVER_URL=%~1"
-if not defined SERVER_URL set "SERVER_URL=https://spti.ai"
+if not defined SERVER_URL set "SERVER_URL=https://tv.ostory.ai"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_PATH%" -ServerUrl "%SERVER_URL%" >> E:\MECHA-GPU\logs\task-repair-console.log 2>&1
 exit /b %errorlevel%

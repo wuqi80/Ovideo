@@ -2788,7 +2788,7 @@ def main() -> None:
     if not token:
         raise RuntimeError(f"Agent token is empty: {TOKEN_FILE}")
 
-    server_url = os.environ.get("MECHA_SERVER_URL", "https://spti.ai")
+    server_url = os.environ.get("MECHA_SERVER_URL", "https://tv.ostory.ai")
     resource_controller.start()
     try:
         Gpu2ComfyUIAgent(server_url, token, ports).run()

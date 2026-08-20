@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const baseUrl = (process.argv[2] || process.env.DRAMA_BASE_URL || 'https://spti.ai').replace(/\/$/, '');
+const baseUrl = (process.argv[2] || process.env.DRAMA_BASE_URL || 'https://tv.ostory.ai').replace(/\/$/, '');
 const outDir = path.resolve(process.env.VERIFY_OUT_DIR || 'logs/browser-smoke');
 const cdpPort = Number(process.env.CDP_PORT || (9400 + Math.floor(Math.random() * 400)));
 const profileDir = path.join(outDir, `cdp-profile-${cdpPort}`);

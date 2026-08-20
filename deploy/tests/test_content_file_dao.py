@@ -84,9 +84,9 @@ async def test_get_file_by_url_strips_signed_token_and_accepts_deleted_when_requ
 
 def test_file_url_lookup_candidates_strip_host_and_normalize_storage_prefix():
     candidates = FileDAO._file_url_lookup_candidates(
-        "https://spti.ai/storage/images/u/p/e/202607/x.webp?token=abc#frag"
+        "https://tv.ostory.ai/storage/images/u/p/e/202607/x.webp?token=abc#frag"
     )
 
     assert candidates[0] == "/storage/images/u/p/e/202607/x.webp"
-    assert "https://spti.ai/storage/images/u/p/e/202607/x.webp" in candidates
+    assert "https://tv.ostory.ai/storage/images/u/p/e/202607/x.webp" in candidates
     assert "/storage/image/u/p/e/202607/x.webp" in candidates

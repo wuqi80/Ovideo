@@ -12,6 +12,7 @@ import { apiFetch, apiJson } from '../services/httpClient';
 import { getCreditBalance } from '../services/creditService';
 import { clearAccountIdentity, getStoredUsername } from '../services/accountStorage';
 import BrandLogo from './BrandLogo';
+import { BRAND_PRODUCT_NAME } from '../config/brand';
 
 export interface AppSidebarItem {
   key: string;
@@ -129,14 +130,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools = [], cr
         type="button"
         onClick={() => navigate('/projects')}
         className="mb-4 flex w-full items-center gap-2.5 rounded-[10px] px-2 py-1.5 text-left transition-colors hover:bg-n700"
-        title="SPTI.AI 漫剧创作平台"
+        title={BRAND_PRODUCT_NAME}
       >
         <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-n0/95 p-1 shadow-glow">
           <BrandLogo variant="mark" className="h-6 w-6" />
         </span>
         <span className="min-w-0 leading-tight">
-          <span className="block truncate font-display text-[15px] font-bold tracking-tight text-n0">SPTI.AI</span>
-          <span className="block truncate font-mono text-[10px] uppercase tracking-[0.12em] text-n200">漫剧创作平台</span>
+          <span className="block truncate font-display text-[15px] font-bold tracking-tight text-n0">Ostory TV</span>
+          <span className="block truncate font-mono text-[10px] uppercase tracking-[0.12em] text-n200">AI 视频创作平台</span>
         </span>
       </button>
 

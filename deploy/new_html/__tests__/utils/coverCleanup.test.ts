@@ -20,7 +20,7 @@ describe('coverCleanup utilities', () => {
 
   it('extracts file ids from relative and absolute download urls', () => {
     expect(extractEntityFileIdFromDownloadUrl('/api/files/file_old/download')).toBe('file_old');
-    expect(extractEntityFileIdFromDownloadUrl('https://spti.ai/api/files/file%20old/download?token=abc')).toBe('file old');
+    expect(extractEntityFileIdFromDownloadUrl('https://tv.ostory.ai/api/files/file%20old/download?token=abc')).toBe('file old');
   });
 
   it('skips cleanup for non-platform urls and unchanged file ids', async () => {

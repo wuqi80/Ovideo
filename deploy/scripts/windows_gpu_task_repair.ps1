@@ -1,5 +1,5 @@
 param(
-    [string]$ServerUrl = "https://spti.ai",
+    [string]$ServerUrl = "https://tv.ostory.ai",
     [switch]$StartNow
 )
 

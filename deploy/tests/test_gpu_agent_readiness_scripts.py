@@ -37,14 +37,14 @@ def test_windows_gpu_task_repair_registers_all_startup_services_safely():
     assert repair_script.count('\n        RestartCount = 0') == 1
     assert '$settings.RestartCount = $RestartCount' in repair_script
     assert "without stopping running processes" in repair_script
-    assert "https://spti.ai" in launcher
+    assert "https://tv.ostory.ai" in launcher
     assert "https://192.168.31.134" not in launcher
 
 
 def test_windows_gpu_agent_start_defaults_to_public_backend_and_both_gpu2_ports():
     launcher = (SCRIPTS_DIR / "windows_gpu_start_agent.cmd").read_text(encoding="utf-8")
 
-    assert 'MECHA_SERVER_URL=https://spti.ai' in launcher
+    assert 'MECHA_SERVER_URL=https://tv.ostory.ai' in launcher
     assert 'MECHA_COMFYUI_PORTS=8188' in launcher
     assert 'set MECHA_COMFYUI_PORTS=8188' in launcher
     assert 'MECHA_GPU_AGENT_MAINTENANCE=1' in launcher

@@ -18,14 +18,14 @@ describe('hasStoredVideoResult', () => {
   it('adds a DB fallback video without hiding the latest failed attempt', () => {
     const merged = mergeStoredVideoResult(
       { state: 'failed', progress: 0, error: 'latest generation failed' },
-      'https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=x',
+      'https://tv.ostory.ai/storage/video/u/p/e/202607/ok.mp4?token=x',
       'Seedance2Mini',
     );
 
     expect(merged.state).toBe('failed');
     expect(merged.progress).toBe(0);
-    expect(merged.result).toBe('https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=x');
-    expect(merged.videos).toEqual(['https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=x']);
+    expect(merged.result).toBe('https://tv.ostory.ai/storage/video/u/p/e/202607/ok.mp4?token=x');
+    expect(merged.videos).toEqual(['https://tv.ostory.ai/storage/video/u/p/e/202607/ok.mp4?token=x']);
     expect(merged.videoModels).toEqual(['Seedance2Mini']);
     expect(merged.keepResult).toBe(true);
   });
@@ -33,7 +33,7 @@ describe('hasStoredVideoResult', () => {
   it('deduplicates the same stored video across absolute and relative URLs', () => {
     const original = {
       state: 'done' as const,
-      videos: ['https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=old'],
+      videos: ['https://tv.ostory.ai/storage/video/u/p/e/202607/ok.mp4?token=old'],
     };
     const merged = mergeStoredVideoResult(original, '/storage/video/u/p/e/202607/ok.mp4');
 
@@ -43,7 +43,7 @@ describe('hasStoredVideoResult', () => {
   it('backfills a missing historical model when the persisted segment identifies it', () => {
     const original = {
       state: 'done' as const,
-      videos: ['https://spti.ai/storage/video/u/p/e/202607/ok.mp4?token=old'],
+      videos: ['https://tv.ostory.ai/storage/video/u/p/e/202607/ok.mp4?token=old'],
     };
     const merged = mergeStoredVideoResult(
       original,

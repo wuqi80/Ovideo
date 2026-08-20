@@ -1,6 +1,6 @@
-# SPTI.AI Frontend
+# Ostory TV Frontend
 
-This directory contains the Vite/React frontend for SPTI.AI. It is served by the
+This directory contains the Vite/React frontend for Ostory TV. It is served by the
 FastAPI backend after `npm run build` writes assets to `deploy/dist`.
 
 ## Local Development
