@@ -15,7 +15,6 @@ from dao.admin.api_config import ApiConfigDAO
 from services.api_provider_registry import (
     DASHSCOPE_SUB_MODEL_ENV_MAP,
     DEEPSEEK_OPERATION_MODEL_ENV_MAP,
-    GEMINI_TTS_DEFAULT_MODEL,
     MINIMAX_OPERATION_MODEL_ENV_MAP,
     PROVIDER_EXTRA_ENV_MAP,
     PROVIDER_ENV_MAP,
@@ -72,13 +71,6 @@ GEMINI_IMAGE_LEGACY_MODELS = {
     "nanobanana",
 }
 GEMINI_IMAGE_NEW_MODEL = "gemini-3.1-flash-image-preview"
-GEMINI_TTS_LEGACY_MODELS = {"gemini-2.0-flash", "gemini-2.5-flash-preview-tts"}
-GEMINI_TTS_NEW_MODEL = GEMINI_TTS_DEFAULT_MODEL
-GEMINI_TTS_NEW_ENDPOINT = get_provider_default_endpoint("gemini-tts")
-GEMINI_TTS_LEGACY_ENDPOINTS = {
-    f"{GEMINI_TTS_NEW_ENDPOINT}/openai",
-    f"{GEMINI_TTS_NEW_ENDPOINT}/openai/",
-}
 SORA2_NEW_MODEL = SORA2_DEFAULT_VIDEO_MODEL
 VEO_NEW_MODEL = VEO_DEFAULT_VIDEO_MODEL
 def managed_api_env_keys() -> set[str]:
@@ -402,6 +394,19 @@ async def seed_default_api_providers() -> Dict[str, Any]:
     """Idempotently seed API config placeholders required by the admin UI."""
     try:
         existing = await ApiConfigDAO.list_all()
+        retired = 0
+        active_existing = []
+        for row in existing:
+            provider = str(_config_get(row, "provider", "") or "").strip().lower()
+            if provider != "gemini-tts":
+                active_existing.append(row)
+                continue
+            config_id = _config_get(row, "config_id", "")
+            if not await ApiConfigDAO.delete(config_id):
+                raise RuntimeError(f"Failed to retire Gemini TTS API config: {config_id}")
+            retired += 1
+            logger.info("Retired Gemini TTS API config: %s", config_id)
+        existing = active_existing
         existing_providers = {
             str(_config_get(row, "provider", "") or "").strip().lower()
             for row in existing
@@ -463,32 +468,6 @@ async def seed_default_api_providers() -> Dict[str, Any]:
 
         for row in existing:
             provider = str(_config_get(row, "provider", "") or "").strip().lower()
-            if provider != "gemini-tts":
-                continue
-            model_name = str(_config_get(row, "model_name", "") or "").strip()
-            endpoint = str(_config_get(row, "endpoint", "") or "").strip()
-            update_kwargs: Dict[str, Any] = {}
-            if model_name in GEMINI_TTS_LEGACY_MODELS:
-                update_kwargs["model_name"] = GEMINI_TTS_NEW_MODEL
-                update_kwargs["model_bindings"] = _bindings_with_replaced_primary_model(row, GEMINI_TTS_NEW_MODEL)
-            if endpoint in GEMINI_TTS_LEGACY_ENDPOINTS:
-                update_kwargs["endpoint"] = GEMINI_TTS_NEW_ENDPOINT
-            if not update_kwargs:
-                continue
-
-            old_name = str(_config_get(row, "name", "") or "")
-            await ApiConfigDAO.update(_config_get(row, "config_id", ""), **update_kwargs)
-            upgraded += 1
-            logger.info(
-                "Upgraded Gemini TTS API config %r from model=%s endpoint=%s to %s",
-                old_name,
-                model_name,
-                endpoint,
-                update_kwargs,
-            )
-
-        for row in existing:
-            provider = str(_config_get(row, "provider", "") or "").strip().lower()
             if provider != "sora2":
                 continue
             model_name = str(_config_get(row, "model_name", "") or "").strip()
@@ -531,11 +510,16 @@ async def seed_default_api_providers() -> Dict[str, Any]:
                 VEO_NEW_MODEL,
             )
 
-        if created or upgraded:
-            logger.info("API config seed complete: created=%s upgraded=%s", created, upgraded)
+        if created or upgraded or retired:
+            logger.info(
+                "API config seed complete: created=%s upgraded=%s retired=%s",
+                created,
+                upgraded,
+                retired,
+            )
         else:
             logger.debug("API config seed complete: no changes")
-        return {"success": True, "created": created, "upgraded": upgraded}
+        return {"success": True, "created": created, "upgraded": upgraded, "retired": retired}
     except Exception as exc:
         logger.warning("API config seed failed; startup will continue: %s", exc, exc_info=True)
-        return {"success": False, "created": 0, "upgraded": 0, "error": str(exc)}
+        return {"success": False, "created": 0, "upgraded": 0, "retired": 0, "error": str(exc)}

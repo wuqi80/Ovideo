@@ -69,9 +69,6 @@ def derive_models_health_urls(endpoint: Optional[str], provider: str = "") -> Li
 
     provider = (provider or "").strip().lower()
     lower = endpoint.lower()
-    if provider == "gemini-tts" and lower.endswith("/openai"):
-        endpoint = endpoint[: -len("/openai")].rstrip("/")
-        lower = endpoint.lower()
     candidates: List[str] = []
     matched_specific_endpoint = False
 

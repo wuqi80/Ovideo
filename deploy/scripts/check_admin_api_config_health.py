@@ -212,8 +212,8 @@ async def main() -> int:
         {
             "test": {
                 "ok": True,
-                "provider": "gemini-tts",
-                "model_name": "gemini-3.1-flash-tts-preview",
+                "provider": "minimax",
+                "model_name": "speech-2.8-hd",
                 "status_code": 200,
                 "reachable": True,
                 "auth_ok": True,

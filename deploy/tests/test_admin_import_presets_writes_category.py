@@ -36,8 +36,8 @@ async def test_import_presets_passes_category_for_video_preset():
     )
 
 
-async def test_import_presets_passes_category_for_audio_preset():
-    """Gemini TTS / MiniMax preset 字典里 category=audio；import 时必须传进 DAO。"""
+async def test_import_presets_keeps_minimax_speech_bindings():
+    """MiniMax 综合卡必须保留 Speech HD/Turbo 两个语音模型绑定。"""
     import admin_api_config_routes
     from services import api_config_import_service
 
@@ -49,11 +49,14 @@ async def test_import_presets_passes_category_for_audio_preset():
          patch.object(api_config_import_service.ApiConfigDAO, "create", AsyncMock(return_value={"config_id": "x"})) as mock_create:
         await admin_api_config_routes.admin_import_preset_configs(_FakeRequest())
 
-    audio_calls = [c for c in mock_create.await_args_list if c.kwargs.get("category") == "audio"]
-    assert len(audio_calls) >= 1, (
-        f"应有 audio preset 把 category='audio' 传给 DAO.create。"
-        f" 实际: {[c.kwargs for c in mock_create.await_args_list]}"
+    minimax_call = next(
+        c for c in mock_create.await_args_list
+        if c.kwargs.get("provider") == "minimax"
     )
+    operations = {
+        item["operation"] for item in minimax_call.kwargs["model_bindings"]
+    }
+    assert {"speech-hd", "speech-turbo"}.issubset(operations)
 
 
 async def test_create_api_config_body_accepts_category():

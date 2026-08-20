@@ -204,7 +204,7 @@ entity_type, entity_id, file_role, episode_id
 
 | Method | Path | Handler | Description |
 |--------|------|---------|-------------|
-| POST | `/api/audio/generate-speech` | `api_routes.py` | Gemini TTS → `{audio_url: '/storage/audio/...', file_id, file_url}`。GEMINI_API_KEY 缺失返回 503。**配音页已切到 MiniMax，本接口仅作兜底**。 |
+| POST | `/api/audio/generate-speech` | `api_routes.py` | MiniMax TTS → `{audio_url: '/storage/audio/...', file_id, file_url}`。MINIMAX_API_KEY 缺失返回 503。 |
 | POST | `/api/audio/generate-sfx` | `api_routes.py` | Sound effects → `{audio_url, file_id, file_url}` |
 | POST | `/api/audio/generate-music` | `api_routes.py` | Music generation → `{audio_url, file_id, file_url}` |
 

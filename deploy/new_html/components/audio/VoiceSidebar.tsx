@@ -92,7 +92,7 @@ const SYSTEM_VOICES: Array<{ id: string; label: string; group: '男声' | '女�
 
 const SYSTEM_VOICE_DEFAULT = 'presenter_male';
 
-// 仅在切换到 Gemini TTS 兜底时用到（保留旧 alias，避免历史角色配置失效）
+// 保留旧音色 alias，避免历史角色配置失效。
 const LEGACY_VOICE_ALIAS: Record<string, string> = {
   narrator: 'presenter_male',
   male_young: 'male-qn-qingse',

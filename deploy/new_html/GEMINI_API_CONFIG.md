@@ -1,6 +1,6 @@
 # Gemini Provider Configuration
 
-Gemini text, Gemini image, and Gemini TTS are configured through the backend API
+Gemini text and Gemini image are configured through the backend API
 provider management platform. The frontend must not store Gemini keys in Vite
 environment variables or browser localStorage.
 
@@ -16,7 +16,6 @@ Use the provider cards to configure:
 
 - `gemini-text` for text generation.
 - `gemini-image` for image generation.
-- `gemini-tts` for text-to-speech.
 
 Each provider can be edited without a backend restart. Saving a config refreshes
 the runtime environment, and the card actions distinguish:
@@ -31,7 +30,6 @@ These names are backend runtime keys only. They must not be prefixed with
 
 - `GEMINI_TEXT_API_KEY`
 - `GEMINI_IMAGE_API_KEY`
-- `GEMINI_API_KEY` for Gemini TTS
 
 Endpoint and model overrides are also server-side runtime settings managed by
 the same provider resolver. The admin page shows the resolved operation URL

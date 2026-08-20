@@ -15,7 +15,6 @@ EXPECTED_RUNTIME_WIRING: dict[str, set[str]] = {
     "services/ai_proxy_doubao_image_service.py": {"doubao"},
     "services/ai_proxy_gemini_text_service.py": {"gemini-text"},
     "services/ai_proxy_gemini_image_service.py": {"gemini-image"},
-    "services/audio_provider.py": {"gemini-tts"},
     "external_api/audio/minimax_audio.py": {"minimax"},
     "external_api/video/minimax.py": {"minimax"},
     "external_api/video/sora2.py": {"sora2"},
@@ -1558,25 +1557,17 @@ def check_video_default_model_registry_wiring(registry) -> int:
     checks += 2
 
     audio_provider = (root / "services" / "audio_provider.py").read_text(encoding="utf-8")
-    if not hasattr(registry, "GEMINI_TTS_DEFAULT_MODEL"):
-        fail("Registry missing GEMINI_TTS_DEFAULT_MODEL")
-    if "GEMINI_TTS_DEFAULT_MODEL" not in audio_provider:
-        fail("services/audio_provider.py must source Gemini TTS default model from registry")
-    if "DEFAULT_GEMINI_TTS_MODEL" in audio_provider:
-        fail("services/audio_provider.py must not define a local Gemini TTS default model")
-    if registry.GEMINI_TTS_DEFAULT_MODEL in audio_provider:
-        fail(
-            "services/audio_provider.py must not hardcode "
-            f"Gemini TTS default model literal {registry.GEMINI_TTS_DEFAULT_MODEL!r}"
-        )
-    if "GEMINI_TTS_DEFAULT_MODEL" not in runtime_loader:
-        fail("api_config_runtime_loader.py must use registry GEMINI_TTS_DEFAULT_MODEL")
-    if registry.GEMINI_TTS_DEFAULT_MODEL in runtime_loader:
-        fail(
-            "api_config_runtime_loader.py must not hardcode "
-            f"Gemini TTS default model literal {registry.GEMINI_TTS_DEFAULT_MODEL!r}"
-        )
-    checks += 6
+    if "GeminiAudioProvider" in audio_provider:
+        fail("services/audio_provider.py must not expose the retired Gemini TTS provider")
+    if hasattr(registry, "GEMINI_TTS_DEFAULT_MODEL"):
+        fail("Registry must not expose the retired GEMINI_TTS_DEFAULT_MODEL")
+    if any(item.get("provider") == "gemini-tts" for item in registry.get_api_provider_catalog()):
+        fail("Provider catalog must not expose retired provider=gemini-tts")
+    if any(item.get("provider") == "gemini-tts" for item in registry.get_api_model_presets()):
+        fail("Model presets must not expose retired provider=gemini-tts")
+    if 'provider != "gemini-tts"' not in runtime_loader or "ApiConfigDAO.delete" not in runtime_loader:
+        fail("api_config_runtime_loader.py must retire existing Gemini TTS rows")
+    checks += 5
 
     audio_client = (root / "external_api" / "audio" / "minimax_audio.py").read_text(encoding="utf-8")
     if not hasattr(registry, "MINIMAX_DEFAULT_PROVIDER_MODEL"):

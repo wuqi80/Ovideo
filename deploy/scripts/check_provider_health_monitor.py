@@ -146,8 +146,8 @@ async def main() -> int:
     await monitor.cache_provider_health_result(
         {
             "success": True,
-            "provider": "gemini-tts",
-            "model_name": "gemini-3.1-flash-tts-preview",
+            "provider": "minimax",
+            "model_name": "speech-2.8-hd",
             "status": "ok",
             "latency_ms": 88,
             "checked_at": "2026-07-10T00:00:00Z",
@@ -164,8 +164,8 @@ async def main() -> int:
         redis_client=fake_redis,
     )
     real_generation_key = monitor.provider_health_cache_key(
-        "gemini-tts",
-        "gemini-3.1-flash-tts-preview",
+        "minimax",
+        "speech-2.8-hd",
     )
     if fake_redis.ttl.get(real_generation_key) != monitor.DEFAULT_REAL_GENERATION_HEALTH_TTL_SECONDS:
         fail(
@@ -175,8 +175,8 @@ async def main() -> int:
     preserved = await monitor.cache_provider_health_result(
         {
             "success": True,
-            "provider": "gemini-tts",
-            "model_name": "gemini-3.1-flash-tts-preview",
+            "provider": "minimax",
+            "model_name": "speech-2.8-hd",
             "status": "connectivity_ok",
             "latency_ms": 3,
             "checked_at": "2026-07-10T00:01:00Z",

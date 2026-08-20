@@ -85,7 +85,7 @@ nano .env
 | `DB_HOST` `DB_PORT` `DB_NAME` `DB_USER` `DB_PASSWORD` | 可选：通过进程环境变量覆盖 `configs/database.env` 中的数据库连接 |
 | `REDIS_HOST` `REDIS_PORT` | Redis |
 | `DEEPSEEK_API_KEY` | DeepSeek 文本（化神推断兜底）|
-| `GEMINI_TEXT_API_KEY` `GEMINI_IMAGE_API_KEY` `GEMINI_API_KEY` | Gemini 文本/图像（化神）走 laozhang 网关 |
+| `GEMINI_TEXT_API_KEY` `GEMINI_IMAGE_API_KEY` | Gemini 文本/图像（化神）走 laozhang 网关 |
 | `MINIMAX_API_KEY` | MiniMax 配音 TTS + 视频 |
 | `ARK_API_KEY` | 火山方舟（豆包/Seedance）|
 | `DASHSCOPE_API_KEY` | 阿里百炼（Wan/Kling/Vidu）|

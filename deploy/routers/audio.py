@@ -220,19 +220,20 @@ def create_audio_router(
     @router.post("/api/audio/generate-speech")
     async def gen_speech(data: SpeechGenRequest, user_id: str = Depends(get_current_user)):
         try:
-            provider = get_audio_provider('gemini')
+            _require_minimax_client()
+            provider = get_audio_provider('minimax')
             result = await provider.generate_speech(data.text, persona=data.persona, emotion=data.emotion)
             result = await attach_local_generated_audio_file(
                 result,
                 audio_upload_dir=AUDIO_UPLOAD_DIR,
                 user_id=user_id,
-                source='gemini',
+                source='minimax',
                 entity_type=data.entity_type,
                 entity_id=data.entity_id,
                 file_role=data.file_role or 'dialogue_audio',
                 project_id=data.project_id,
                 episode_id=data.episode_id,
-                media_source='generated_audio_gemini_speech',
+                media_source='generated_audio_minimax_speech',
                 title=(getattr(data, 'text', '') or '')[:80] or None,
                 logger=logger,
                 save_generated_file_to_db=save_generated_file_to_db,
@@ -240,20 +241,14 @@ def create_audio_router(
             return {"success": True, **result}
         except HTTPException:
             raise
-        except RuntimeError as e:
-            msg = str(e)
-            if 'GEMINI_API_KEY' in msg or '\u672a\u914d\u7f6e' in msg:
-                raise HTTPException(status_code=503, detail=msg)
-            logger.error("generate_speech failed: %s", e, exc_info=True)
-            raise HTTPException(status_code=500, detail=msg)
         except Exception as e:
             msg = str(e)
-            if 'Missing key inputs' in msg or 'api_key' in msg:
+            if 'MINIMAX_API_KEY' in msg or '\u672a\u914d\u7f6e' in msg:
                 raise HTTPException(
                     status_code=503,
                     detail=(
-                        "GEMINI_API_KEY \u672a\u914d\u7f6e: \u8bf7\u5728\u7ba1\u7406\u5458\u540e\u53f0 -> API \u914d\u7f6e "
-                        "\u4e2d\u6dfb\u52a0 provider=gemini-tts \u7684\u5bc6\u94a5; \u4fdd\u5b58\u540e\u4f1a\u5b9e\u65f6\u5237\u65b0."
+                        "MINIMAX_API_KEY \u672a\u914d\u7f6e: \u8bf7\u5728\u7ba1\u7406\u5458\u540e\u53f0 -> API \u914d\u7f6e "
+                        "\u4e2d\u6dfb\u52a0 provider=minimax \u7684\u5bc6\u94a5; \u4fdd\u5b58\u540e\u4f1a\u5b9e\u65f6\u5237\u65b0."
                     ),
                 )
             logger.error("generate_speech failed: %s", e, exc_info=True)

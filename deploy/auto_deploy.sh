@@ -13,7 +13,6 @@ command -v npm >/dev/null 2>&1 || { echo "需要 npm"; exit 1; }
 echo ""
 echo "[1/8] 安装 Python 依赖..."
 pip install -r requirements.txt -q 2>/dev/null || pip3 install -r requirements.txt -q
-pip install google-genai -q 2>/dev/null || true
 echo "  OK"
 
 echo ""

@@ -3,7 +3,6 @@
 音频 Provider 测试
 """
 import pytest
-from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 
@@ -18,89 +17,24 @@ async def test_provider_interface_contract():
         await provider.generate_music("sad piano")
 
 
-async def test_gemini_generate_speech_returns_audio():
-    from audio_provider import GeminiAudioProvider
-    with patch.object(GeminiAudioProvider, '_call_gemini', new_callable=AsyncMock) as mock:
-        mock.return_value = {"audio_url": "/storage/audio/speech_test.wav", "duration_ms": 3200}
-        provider = GeminiAudioProvider()
+async def test_minimax_generate_speech_maps_legacy_persona_to_voice_id():
+    from audio_provider import MinimaxAudioProvider
+    with patch('external_api.audio.minimax_audio.get_minimax_audio_client') as get_client:
+        client = get_client.return_value
+        client.tts_sync = AsyncMock(return_value={
+            "audio_url": "/storage/audio/speech_test.mp3", "duration_ms": 3200,
+        })
+        provider = MinimaxAudioProvider()
         result = await provider.generate_speech("你好世界", persona="narrator", emotion="neutral")
-        assert result["audio_url"].endswith(".wav")
-        assert result["duration_ms"] == 3200
-        mock.assert_called_once()
 
-
-async def test_gemini_sfx_music_not_supported():
-    # 2026-06-10：Gemini generate_content 只有 TTS（朗读），做不了音效/音乐，
-    # 应明确报错而不是用 TTS 朗读描述。配音 generate_speech 不受影响。
-    from audio_provider import GeminiAudioProvider
-    provider = GeminiAudioProvider()
-    with pytest.raises(NotImplementedError):
-        await provider.generate_sfx("explosion")
-    with pytest.raises(NotImplementedError):
-        await provider.generate_music("紧张悬疑的背景音乐", duration_ms=30000)
-
-
-async def test_gemini_tts_uses_runtime_model(monkeypatch, tmp_path):
-    import sys
-    import services.audio_provider as audio_module
-    from audio_provider import GeminiAudioProvider
-
-    captured = {}
-
-    class FakeModels:
-        async def generate_content(self, **kwargs):
-            captured.update(kwargs)
-            return SimpleNamespace(
-                candidates=[
-                    SimpleNamespace(
-                        content=SimpleNamespace(
-                            parts=[
-                                SimpleNamespace(
-                                    inline_data=SimpleNamespace(data=b"\x00" * 4800)
-                                )
-                            ]
-                        )
-                    )
-                ]
-            )
-
-    class FakeClient:
-        def __init__(self, api_key, http_options=None):
-            captured["api_key"] = api_key
-            captured["http_options"] = http_options
-            self.aio = SimpleNamespace(models=FakeModels())
-
-    fake_google = ModuleType("google")
-    fake_google.genai = SimpleNamespace(
-        Client=FakeClient,
-        types=SimpleNamespace(
-            GenerateContentConfig=lambda **kwargs: kwargs,
-            SpeechConfig=lambda **kwargs: kwargs,
-            VoiceConfig=lambda **kwargs: kwargs,
-            PrebuiltVoiceConfig=lambda **kwargs: kwargs,
-        ),
+    assert result["audio_url"].endswith(".mp3")
+    client.tts_sync.assert_awaited_once_with(
+        text="你好世界",
+        voice_id="presenter_male",
+        speed=1.0,
+        pitch=0,
+        emotion="neutral",
     )
-
-    monkeypatch.setitem(sys.modules, "google", fake_google)
-    monkeypatch.setattr(audio_module, "AUDIO_UPLOAD_DIR", str(tmp_path))
-    monkeypatch.setattr(
-        audio_module,
-        "resolve_provider",
-        lambda provider, model_name=None: SimpleNamespace(
-            api_key="runtime-gemini-key",
-            endpoint="https://runtime.example.test/gemini/v1beta",
-            model_name="gemini-runtime-tts-model",
-            aiohttp_proxy=lambda: None,
-        ),
-    )
-
-    provider = GeminiAudioProvider()
-    result = await provider._call_gemini("hello", "speech")
-
-    assert result["audio_url"].startswith("/storage/audio/speech_")
-    assert provider.model_name == "gemini-runtime-tts-model"
-    assert captured["model"] == "gemini-runtime-tts-model"
-    assert captured["api_key"] == "runtime-gemini-key"
 
 
 async def test_minimax_generate_music_via_music_generate():
@@ -131,9 +65,15 @@ async def test_minimax_generate_sfx_via_music_generate():
 
 
 async def test_get_audio_provider_factory():
-    from audio_provider import get_audio_provider, GeminiAudioProvider
-    provider = get_audio_provider('gemini')
-    assert isinstance(provider, GeminiAudioProvider)
+    from audio_provider import get_audio_provider, MinimaxAudioProvider
+    provider = get_audio_provider()
+    assert isinstance(provider, MinimaxAudioProvider)
+
+
+async def test_gemini_audio_provider_is_retired():
+    from audio_provider import get_audio_provider
+    with pytest.raises(ValueError, match="Unknown audio provider"):
+        get_audio_provider('gemini')
 
 
 async def test_get_audio_provider_unknown_raises():

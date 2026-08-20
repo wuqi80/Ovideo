@@ -17,7 +17,6 @@ from db_manager import get_db_manager
 from services.api_config_health_service import (
     ProviderHealthNotFound,
     check_provider_health,
-    is_provider_region_blocked,
 )
 from services.api_config_import_service import ApiConfigImportOptions, import_preset_api_configs
 from services.api_config_reload_service import ApiConfigReloadFailed, reload_api_env_runtime
@@ -74,8 +73,6 @@ def _provider_health_from_real_generation_test(result: Dict[str, Any]) -> Option
         status_value = "ok"
     elif error_text == "No API key configured":
         status_value = "no_key"
-    elif is_provider_region_blocked(provider, error_text):
-        status_value = "blocked_region"
     elif str(test.get("status") or "").strip().lower() == "unsupported":
         return None
     else:

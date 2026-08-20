@@ -40,12 +40,8 @@ pyyaml>=6.0
 # === Testing ===
 pytest>=8.0
 pytest-asyncio>=0.23
-# google-genai 2.x requires httpx >=0.28.1. Tests use ASGITransport directly
-# instead of Starlette's legacy TestClient, so this range is safe for FastAPI 0.109.
+# Tests use ASGITransport directly instead of Starlette's legacy TestClient.
 httpx>=0.28.1,<1
 
 # === Optional: MinIO storage ===
 # minio>=7.1.0
-
-# 2026-06-10：Gemini TTS（audio_provider.py 的 from google import genai）所需，原 requirements 遗漏
-google-genai

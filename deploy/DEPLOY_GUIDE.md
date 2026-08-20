@@ -69,8 +69,6 @@ cd /opt/my2
 # 所有依赖已合并为单个文件
 pip install -r requirements.txt
 
-# 安装 Google Gemini SDK (音频生成需要)
-pip install google-genai
 ```
 
 ### 步骤 3: 配置环境变量
@@ -108,7 +106,6 @@ COMFYUI_HOST=127.0.0.1
 COMFYUI_PORT=8188
 
 # ===== AI API 密钥 =====
-GEMINI_API_KEY=你的Gemini密钥
 DASHSCOPE_API_KEY=你的DashScope密钥
 OPENAI_API_KEY=你的OpenAI密钥
 
@@ -237,7 +234,6 @@ npm install
 
 # 创建前端环境变量（如果需要 Gemini 浏览器端调用）
 cat > .env << 'EOF'
-GEMINI_API_KEY=你的Gemini密钥
 EOF
 
 # 构建生产版本
@@ -531,7 +527,6 @@ echo "=== MY2 自动部署 ==="
 # 1. 安装 Python 依赖
 echo "[1/8] 安装 Python 依赖..."
 pip install -r requirements.txt -q
-pip install google-genai -q
 
 # 2. 创建目录
 echo "[2/8] 创建目录..."

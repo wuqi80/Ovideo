@@ -55,7 +55,6 @@ REAL_GENERATION_UNSUPPORTED_ERROR = (
 )
 GENERATION_SENSITIVE_PROVIDERS = {
     "doubao",
-    "gemini-tts",
     "gemini-text",
     "gemini-image",
     "minimax",
@@ -66,7 +65,7 @@ GENERATION_SENSITIVE_PROVIDERS = {
 }
 
 TEXT_GENERATION_TEST_PROVIDERS = {"deepseek", "gemini-text"}
-GEMINI_GENERATION_TEST_PROVIDERS = {"gemini-image", "gemini-tts"}
+GEMINI_GENERATION_TEST_PROVIDERS = {"gemini-image"}
 OPENAI_IMAGE_TEST_PROVIDERS = {"laozhang-gpt-image", "laozhang-sora2"}
 DOUBAO_IMAGE_TEST_PROVIDERS = {"doubao"}
 TASK_PENDING_STATUSES = {"queued", "pending", "running", "processing", "in_progress"}
@@ -156,24 +155,9 @@ def api_config_health_urls(row: Dict[str, Any]) -> List[str]:
     return dedupe_urls(candidates)
 
 
-def uses_provider_api_key_header(provider: str, urls: List[str]) -> bool:
-    normalized = normalize_provider(provider)
-    if normalized != "gemini-tts":
-        return False
-
-    default_endpoint = get_provider_default_endpoint(normalized).strip().rstrip("/").lower()
-    if not default_endpoint:
-        return False
-
-    return any(
-        (url or "").strip().rstrip("/").lower().startswith(default_endpoint)
-        for url in urls
-    )
-
-
 def uses_google_api_key_header(provider: str, endpoint: str) -> bool:
     normalized = normalize_provider(provider)
-    if normalized not in {"gemini-tts", "gemini-image"}:
+    if normalized != "gemini-image":
         return False
     return is_google_generative_language_endpoint(endpoint)
 
@@ -253,16 +237,6 @@ def api_real_generation_result(
             "output_type": output_type,
         },
     }
-
-
-def is_provider_region_blocked(provider: str, error: Optional[str]) -> bool:
-    if normalize_provider(provider) != "gemini-tts":
-        return False
-    text = (error or "").lower()
-    return (
-        "failed_precondition" in text
-        and "user location is not supported" in text
-    ) or "user location is not supported for the api use" in text
 
 
 def is_generation_sensitive_provider(provider: str) -> bool:
@@ -652,21 +626,6 @@ def _real_generation_request(provider: str, row: Dict[str, Any]) -> tuple[str, D
             },
         }, "image"
 
-    if normalized == "gemini-tts":
-        model = model or "gemini-3.1-flash-tts-preview"
-        url = _join_api_url(endpoint, f"models/{model}:generateContent")
-        return url, {
-            "contents": [{"parts": [{"text": "OK."}]}],
-            "generationConfig": {
-                "responseModalities": ["AUDIO"],
-                "speechConfig": {
-                    "voiceConfig": {
-                        "prebuiltVoiceConfig": {"voiceName": "Kore"}
-                    }
-                },
-            },
-        }, "audio"
-
     if normalized == "minimax":
         if category == "video":
             raise ProviderHealthNotFound(REAL_GENERATION_UNSUPPORTED_ERROR)
@@ -936,10 +895,7 @@ async def test_api_config_health(
     headers: Dict[str, str] = {}
     if isinstance(hdrs_raw, dict):
         headers = {str(k): str(v) for k, v in hdrs_raw.items()}
-    if uses_provider_api_key_header(provider, urls_to_try):
-        if "x-goog-api-key" not in {key.lower() for key in headers}:
-            headers["x-goog-api-key"] = api_key
-    elif "Authorization" not in headers and "authorization" not in headers:
+    if "Authorization" not in headers and "authorization" not in headers:
         headers["Authorization"] = f"Bearer {api_key}"
 
     proxy = await resolve_proxy_for_request(
@@ -1085,10 +1041,7 @@ async def check_provider_health(
     test = result.get("test") or {}
     ok = bool(test.get("ok"))
     status = str(test.get("status") or ("ok" if ok else "error"))
-    error_text = str(test.get("error") or "")
-    if is_provider_region_blocked(provider, error_text):
-        status = "blocked_region"
-    elif is_generation_sensitive_provider(provider) and test.get("reachable") and test.get("auth_ok"):
+    if is_generation_sensitive_provider(provider) and test.get("reachable") and test.get("auth_ok"):
         status = "connectivity_ok"
     return {
         "success": True,

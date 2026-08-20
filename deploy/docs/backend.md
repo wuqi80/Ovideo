@@ -300,9 +300,9 @@ API keys stored in `api_configs` table, loaded to env at startup via `load_api_c
 
 | Provider | Env Variable | Used By |
 |----------|-------------|---------|
-| Gemini (text) | `GEMINI_TEXT_API_KEY` (fallback `GEMINI_API_KEY`) | 剧本生成、AI 润色 |
-| Gemini (image) | `GEMINI_IMAGE_API_KEY` (fallback `GEMINI_API_KEY`) | 设计页"化神进阶"AI 生图 |
-| Gemini TTS | `GEMINI_API_KEY` | `/api/audio/generate-speech` (作为兜底，配音页已切到 MiniMax) |
+| Gemini (text) | `GEMINI_TEXT_API_KEY` | 剧本生成、AI 润色 |
+| Gemini (image) | `GEMINI_IMAGE_API_KEY` | 设计页"化神进阶"AI 生图 |
+| MiniMax TTS | `MINIMAX_API_KEY` | `/api/audio/generate-speech`、配音页和自由创作语音 |
 | DeepSeek | `DEEPSEEK_API_KEY` | 文本聊天 / 剧本生成 |
 | Doubao Seedream | `ARK_API_KEY` | 设计页"筑基境界"AI 生图（Volcengine Ark） |
 | MiniMax 海螺 | `MINIMAX_API_KEY`, `MINIMAX_GROUP_ID` | **同时驱动**：Hailuo 视频 + 配音页全部三种模式 (TTS / voice_design / voice_clone) |

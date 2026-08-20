@@ -13,11 +13,11 @@ async def test_export_api_config_keys_decrypts_key_and_omits_encrypted_field(mon
             return_value=[
                 {
                     "config_id": "apicfg_1",
-                    "name": "Gemini TTS",
-                    "provider": "google",
-                    "endpoint": "https://generativelanguage.googleapis.com/v1beta",
+                    "name": "Custom Audio",
+                    "provider": "custom-audio",
+                    "endpoint": "https://audio.example.test/v1",
                     "api_key_encrypted": encrypted,
-                    "model_name": "gemini-3.1-flash-tts-preview",
+                    "model_name": "speech-custom",
                     "proxy_mode": "direct",
                     "custom_proxy": "",
                     "request_template": '{"voice":"Kore"}',
@@ -44,7 +44,7 @@ async def test_export_api_config_keys_decrypts_key_and_omits_encrypted_field(mon
         {
             "operation": "default",
             "label": "default",
-            "model_name": "gemini-3.1-flash-tts-preview",
+            "model_name": "speech-custom",
             "scope": "workflow",
             "scope_label": "流程化制作",
         }

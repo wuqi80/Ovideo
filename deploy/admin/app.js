@@ -1043,7 +1043,7 @@ function guessApiCategory(config) {
     || m.includes('doubao-seedance') || m.includes('kling') || m.includes('vidu')
     || m.includes('happyhorse') || m.includes('wan2.6') || m.startsWith('veo') || m.startsWith('sora-')
   ) return 'video';
-  if (p.includes('gemini-tts') || p.includes('tts') || p.includes('minimax')
+  if (p.includes('tts') || p.includes('minimax')
     || m.startsWith('speech-') || m.startsWith('tts-')) return 'audio';
   if (p.includes('gemini-image') || p.includes('laozhang-gpt-image')
     || p === 'doubao' || p.includes('qwen-image')
@@ -1066,7 +1066,6 @@ function renderApiCard(c) {
   const providerHealthLine = renderProviderHealthLine(provider, runtimeStatus);
   const usageHints = {
     'minimax': '此密钥同时驱动：Hailuo 视频生成 + 配音页 voice-design / voice-clone（共用 MINIMAX_API_KEY）',
-    'gemini-tts': '配音页"系统音色"试听使用此密钥（GEMINI_API_KEY）',
     'gemini-text': '剧本生成 / AI 润色 等文本任务（GEMINI_TEXT_API_KEY）',
     'gemini-image': '设计页 AI 生图（化神进阶）使用此密钥（GEMINI_IMAGE_API_KEY）',
     'doubao': '设计页 AI 生图（筑基境界 Seedream）使用此密钥（ARK_API_KEY）',

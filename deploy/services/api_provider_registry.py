@@ -26,7 +26,6 @@ MODEL_USAGE_SCOPE_LABELS: Dict[str, str] = {
 PROVIDER_ENV_MAP: Dict[str, str] = {
     "gemini-text": "GEMINI_TEXT_API_KEY",
     "gemini-image": "GEMINI_IMAGE_API_KEY",
-    "gemini-tts": "GEMINI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
     "doubao": "ARK_API_KEY",
     "minimax": "MINIMAX_API_KEY",
@@ -99,7 +98,6 @@ PROVIDER_KEY_HELP: Dict[str, str] = {
     "deepseek": "Create a DeepSeek platform API key and paste it as DEEPSEEK_API_KEY.",
     "gemini-text": "Create a Google AI Studio API key and paste it as GEMINI_TEXT_API_KEY.",
     "gemini-image": "Create a Google AI Studio API key and paste it as GEMINI_IMAGE_API_KEY.",
-    "gemini-tts": "Create a Google AI Studio API key and paste it as GEMINI_API_KEY.",
     "doubao": "Create a Volcengine Ark API key and paste it as ARK_API_KEY.",
     "seedance": (
         "Create a Volcengine Ark pay-as-you-go or Agent Plan API key, select the matching "
@@ -250,7 +248,7 @@ MINIMAX_ACCESS_MODES: List[Dict[str, Any]] = [
         "description": "使用 MiniMax 国际站创建的 API Key；国际 Key 不能用于国内 Endpoint。",
     },
 ]
-GEMINI_TTS_DEFAULT_MODEL = "gemini-3.1-flash-tts-preview"
+GOOGLE_GENERATIVE_LANGUAGE_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta"
 SORA2_DEFAULT_VIDEO_MODEL = "sora_video2-landscape-15s"
 SORA2_LEGACY_VIDEO_MODELS = frozenset({"sora-2"})
 VEO_DEFAULT_VIDEO_MODEL = "veo-3.1-landscape-fast-fl"
@@ -734,12 +732,6 @@ PROVIDER_CATALOG: Dict[str, dict] = {
         "capabilities": ["image"],
         "notes": "Google Gemini image generation.",
     },
-    "gemini-tts": {
-        "label": "Gemini TTS",
-        "vendor": "google",
-        "capabilities": ["audio"],
-        "notes": "Fallback TTS provider.",
-    },
     "doubao": {
         "label": "Volcengine Ark / Doubao",
         "vendor": "volcengine",
@@ -836,7 +828,6 @@ PROVIDER_DEFAULT_ENDPOINTS: Dict[str, str] = {
     "seedance": SEEDANCE_STANDARD_ENDPOINT,
     "laozhang-gpt-image": "https://api.laozhang.ai/v1",
     "laozhang-sora2": "https://api.laozhang.ai/v1",
-    "gemini-tts": "https://generativelanguage.googleapis.com/v1beta",
 }
 
 PROVIDER_API_PATHS: Dict[str, Dict[str, str]] = {
@@ -848,10 +839,6 @@ PROVIDER_API_PATHS: Dict[str, Dict[str, str]] = {
     },
     "gemini-image": {
         "generate_content": "models/{model}:generateContent",
-    },
-    "gemini-tts": {
-        "interactions": "interactions",
-        "models": "models",
     },
     "doubao": {
         "image_generations": "images/generations",
@@ -1034,11 +1021,6 @@ API_MODEL_PRESETS: List[dict] = [
         "provider": "laozhang-sora2",
         "model_name": "gpt-image-2",
     },
-    {
-        "name": "Gemini TTS (语音)",
-        "provider": "gemini-tts",
-        "model_name": GEMINI_TTS_DEFAULT_MODEL,
-    },
 ]
 
 
@@ -1204,7 +1186,7 @@ def get_provider_default_endpoint(provider: str) -> str:
 
 
 def is_google_generative_language_endpoint(endpoint: Optional[str]) -> bool:
-    default_endpoint = get_provider_default_endpoint("gemini-tts").strip().rstrip("/").lower()
+    default_endpoint = GOOGLE_GENERATIVE_LANGUAGE_ENDPOINT.rstrip("/").lower()
     value = str(endpoint or "").strip().rstrip("/").lower()
     return bool(default_endpoint and value.startswith(default_endpoint))
 
