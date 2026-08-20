@@ -44,3 +44,17 @@ def test_ostory_public_domain_and_production_defaults_are_explicit():
     assert "ALLOW_DEV_ADMIN_PASSWORD=false" in env_example
     assert "AGENT_ONLY_MODE=true" in env_example
     assert "change-me-" in env_example
+
+
+def test_canonical_migrations_use_the_configured_database_role():
+    migration_files = [
+        DEPLOY_DIR / "sql" / "database_schema.sql",
+        DEPLOY_DIR / "sql" / "db_migration_project_hub.sql",
+        DEPLOY_DIR / "sql" / "db_migration_character_voices.sql",
+        DEPLOY_DIR / "sql" / "db_migration_video_voice_references.sql",
+    ]
+
+    for migration_file in migration_files:
+        sql = migration_file.read_text(encoding="utf-8")
+        assert "my2_user" not in sql
+        assert "CURRENT_USER" in sql

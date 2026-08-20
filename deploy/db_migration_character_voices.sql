@@ -56,19 +56,12 @@ BEGIN
 END $$;
 
 -- ============================================================
--- 权限兜底：保证连接进程的角色（默认 my2_user）拥有这张表 + 序列的全部权限。
+-- 权限兜底：保证执行迁移的应用角色拥有这张表 + 序列的全部权限。
 -- 历史教训：用 postgres 等超级用户跑过 ALTER/重建后，character_voices 的 owner
--- 会变成超级用户，my2_user 触发 INSERT 时直接 InsufficientPrivilegeError。
+-- 会变成超级用户，应用角色触发 INSERT 时直接 InsufficientPrivilegeError。
 -- ALTER ... OWNER + GRANT 都是幂等的，多跑几次没副作用。
 -- ============================================================
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'my2_user') THEN
-        EXECUTE 'ALTER TABLE character_voices OWNER TO my2_user';
-        EXECUTE 'ALTER SEQUENCE character_voices_id_seq OWNER TO my2_user';
-        RAISE NOTICE 'character_voices: owner 已对齐到 my2_user';
-    END IF;
-END $$;
-
-GRANT ALL PRIVILEGES ON TABLE character_voices TO my2_user;
-GRANT ALL PRIVILEGES ON SEQUENCE character_voices_id_seq TO my2_user;
+ALTER TABLE character_voices OWNER TO CURRENT_USER;
+ALTER SEQUENCE character_voices_id_seq OWNER TO CURRENT_USER;
+GRANT ALL PRIVILEGES ON TABLE character_voices TO CURRENT_USER;
+GRANT ALL PRIVILEGES ON SEQUENCE character_voices_id_seq TO CURRENT_USER;

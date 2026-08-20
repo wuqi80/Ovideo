@@ -24,12 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_video_voice_references_project
 CREATE INDEX IF NOT EXISTS idx_video_voice_references_episode
     ON video_voice_references(episode_id);
 
-DO $$
-BEGIN
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'my2_user') THEN
-        EXECUTE 'ALTER TABLE video_voice_references OWNER TO my2_user';
-        EXECUTE 'ALTER SEQUENCE video_voice_references_id_seq OWNER TO my2_user';
-        EXECUTE 'GRANT ALL PRIVILEGES ON TABLE video_voice_references TO my2_user';
-        EXECUTE 'GRANT ALL PRIVILEGES ON SEQUENCE video_voice_references_id_seq TO my2_user';
-    END IF;
-END $$;
+ALTER TABLE video_voice_references OWNER TO CURRENT_USER;
+ALTER SEQUENCE video_voice_references_id_seq OWNER TO CURRENT_USER;
+GRANT ALL PRIVILEGES ON TABLE video_voice_references TO CURRENT_USER;
+GRANT ALL PRIVILEGES ON SEQUENCE video_voice_references_id_seq TO CURRENT_USER;
