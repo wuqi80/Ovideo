@@ -11,8 +11,6 @@ import {
   Trash2,
   Pencil,
   Copy,
-  Maximize2,
-  Minimize2,
   Upload,
 } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
@@ -137,7 +135,6 @@ export const EpisodeHubPage: React.FC = () => {
   const [coverUploadTargetId, setCoverUploadTargetId] = useState<string | null>(null);
   const [uploadingCoverEpisodeId, setUploadingCoverEpisodeId] = useState<string | null>(null);
   const [activeStatusTab, setActiveStatusTab] = useState<EpisodeTab>('all');
-  const [isWideLayout, setIsWideLayout] = useState(() => localStorage.getItem('episode_hub_layout') === 'wide');
   const dragOverlayRef = useRef<HTMLElement | null>(null);
   const transparentDragImageRef = useRef<HTMLElement | null>(null);
   const dragPointerOffsetRef = useRef({ x: 0, y: 0 });
@@ -167,14 +164,6 @@ export const EpisodeHubPage: React.FC = () => {
   }, []);
 
   useEffect(() => removeDragVisuals, [removeDragVisuals]);
-
-  const toggleLayoutWidth = useCallback(() => {
-    setIsWideLayout(prev => {
-      const next = !prev;
-      localStorage.setItem('episode_hub_layout', next ? 'wide' : 'narrow');
-      return next;
-    });
-  }, []);
 
   const coverImageSrc = useCallback((url: string) => {
     if (!url) return '';
@@ -498,10 +487,7 @@ export const EpisodeHubPage: React.FC = () => {
 
   const pageTitle = activeStatusTab === 'all' ? '全部分集' : episodeStatusLabels[activeStatusTab];
 
-  const shellWidthClass = isWideLayout ? 'max-w-none' : 'max-w-[1320px]';
-  const episodeGridClass = isWideLayout
-    ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5'
-    : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5';
+  const episodeGridClass = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5';
 
   return (
     <div className="layout-safe flex min-h-screen bg-n20 text-n800" onClick={() => setMenuOpen(null)}>
@@ -515,7 +501,7 @@ export const EpisodeHubPage: React.FC = () => {
       />
       {/* DESIGN.md 应用外壳：全局深色侧边栏（窄屏隐藏，页头仍保留完整入口） */}
       <AppSidebar className="sticky top-0 hidden h-screen lg:flex" />
-      <div className={`min-h-screen w-full min-w-0 ${shellWidthClass} mx-auto bg-n0 md:border-x md:border-n40`}>
+      <div className="min-h-screen w-full min-w-0 max-w-none bg-n0 md:border-x md:border-n40">
         <header className="animate-slideDown">
           <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
             <div className="flex min-w-0 items-center gap-4">
@@ -535,15 +521,6 @@ export const EpisodeHubPage: React.FC = () => {
             </div>
 
             <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-nowrap lg:gap-3">
-              <button
-                type="button"
-                onClick={toggleLayoutWidth}
-                className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border border-n40 bg-n0 px-3 text-sm text-n300 transition-colors hover:border-n70 hover:text-n800"
-                title={isWideLayout ? '切回窄屏' : '切到宽屏'}
-              >
-                {isWideLayout ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                {isWideLayout ? '窄屏' : '宽屏'}
-              </button>
               <AccountMenu />
             </div>
           </div>

@@ -111,6 +111,16 @@ describe('EpisodeHubPage', () => {
     expect(screen.getByRole('dialog', { name: '新建分集' })).toBeInTheDocument();
   });
 
+  it('always renders the wide episode shell without a width toggle', async () => {
+    localStorage.setItem('episode_hub_layout', 'narrow');
+    const { container } = renderEpisodeHub();
+
+    await screen.findByText('第八期');
+    expect(screen.queryByRole('button', { name: /宽屏|窄屏/ })).not.toBeInTheDocument();
+    expect(container.querySelector('.max-w-none')).not.toBeNull();
+    expect(container.innerHTML).toContain('2xl:grid-cols-5');
+  });
+
   it('persists drag reorder and keeps EP labels based on the current visual order', async () => {
     const { container } = renderEpisodeHub();
 

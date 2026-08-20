@@ -177,12 +177,15 @@ describe('SHOTFORGE design-system contract', () => {
     }
   });
 
-  it('keeps project and episode hubs on the shared centered media-library shell', () => {
+  it('keeps project and episode hubs on the shared always-wide media-library shell', () => {
     const projectHub = readProjectFile('components/ProjectHub.tsx');
     const episodeHub = readProjectFile('pages/EpisodeHubPage.tsx');
 
     for (const source of [projectHub, episodeHub]) {
-      expect(source).toContain("max-w-[1320px]");
+      expect(source).toContain('max-w-none');
+      expect(source).toContain('2xl:grid-cols-5');
+      expect(source).not.toContain("max-w-[1320px]");
+      expect(source).not.toMatch(/切到宽屏|切回窄屏|project_hub_layout|episode_hub_layout/);
       expect(source).toContain('min-h-screen bg-n20');
       expect(source).toContain('<BrandLogo');
       expect(source).toContain('border-y border-n40');

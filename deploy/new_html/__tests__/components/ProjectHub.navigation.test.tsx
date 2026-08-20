@@ -210,6 +210,20 @@ describe('ProjectHub navigation and filters', () => {
     expect(screen.getByRole('dialog', { name: '新建项目' })).toBeInTheDocument();
   });
 
+  it('always renders the wide project shell without a width toggle', async () => {
+    localStorage.setItem('project_hub_layout', 'narrow');
+    const { container } = render(
+      <MemoryRouter>
+        <ProjectHub />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('树洞里的星辰');
+    expect(screen.queryByRole('button', { name: /宽屏|窄屏/ })).not.toBeInTheDocument();
+    expect(container.querySelector('.max-w-none')).not.toBeNull();
+    expect(container.innerHTML).toContain('2xl:grid-cols-5');
+  });
+
   it('uploads a project cover from the card menu and renders it with crop styling', async () => {
     render(
       <MemoryRouter>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Archive, Trash2, Users, Clock, FolderOpen, MoreVertical, Share2, Maximize2, Minimize2, Upload, Pencil, UserPlus } from 'lucide-react';
+import { Plus, Search, Archive, Trash2, Users, Clock, FolderOpen, MoreVertical, Share2, Upload, Pencil, UserPlus } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
 import { secureApiUrl } from '../services/httpClient';
 import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
@@ -55,7 +55,6 @@ const ProjectHub: React.FC = () => {
     const [memberBusyId, setMemberBusyId] = useState<string | null>(null);
     const [newMemberIdentity, setNewMemberIdentity] = useState('');
     const [newMemberRole, setNewMemberRole] = useState('member');
-    const [isWideLayout, setIsWideLayout] = useState(() => localStorage.getItem('project_hub_layout') === 'wide');
 
     // 2026-05-26 组织管理 MVP — workspace 联动 + share dialog 状态
     const orgId = useCurrentOrgId();
@@ -67,14 +66,6 @@ const ProjectHub: React.FC = () => {
     useEffect(() => {
         setNewProjectVisibility('private');
     }, [showCreateModal]);
-
-    const toggleLayoutWidth = useCallback(() => {
-        setIsWideLayout(prev => {
-            const next = !prev;
-            localStorage.setItem('project_hub_layout', next ? 'wide' : 'narrow');
-            return next;
-        });
-    }, []);
 
     const loadProjects = useCallback(async () => {
         setLoading(true);
@@ -430,10 +421,7 @@ const ProjectHub: React.FC = () => {
     };
 
     // 项目中心只调整表现层；查询、组织共享、归档与删除链路保持原样。
-    const shellWidthClass = isWideLayout ? 'max-w-none' : 'max-w-[1320px]';
-    const projectGridClass = isWideLayout
-        ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5'
-        : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5';
+    const projectGridClass = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5';
     const pageTitle = activeTab === 'archived' ? '已归档' : '全部项目';
     const stablePageCount = activeTab === 'archived' ? archivedProjectCount : activeProjectCount;
     const coverImageSrc = useCallback((url: string) => {
@@ -454,7 +442,7 @@ const ProjectHub: React.FC = () => {
             />
             {/* DESIGN.md 应用外壳：全局深色侧边栏（窄屏隐藏，页头仍保留完整入口） */}
             <AppSidebar className="sticky top-0 hidden h-screen lg:flex" />
-            <div className={`min-h-screen w-full min-w-0 ${shellWidthClass} mx-auto bg-n0 md:border-x md:border-n40`}>
+            <div className="min-h-screen w-full min-w-0 max-w-none bg-n0 md:border-x md:border-n40">
                 <header className="animate-slideDown">
                     <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
                         <div className="flex min-w-0 items-center gap-4">
@@ -473,15 +461,6 @@ const ProjectHub: React.FC = () => {
                             </div>
                         </div>
                         <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:flex-nowrap lg:gap-3">
-                        <button
-                            type="button"
-                            onClick={toggleLayoutWidth}
-                            className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-lg border border-n40 bg-n0 px-3 text-sm text-n300 transition-colors hover:border-n70 hover:text-n800"
-                            title={isWideLayout ? '切回窄屏' : '切到宽屏'}
-                        >
-                            {isWideLayout ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                            {isWideLayout ? '窄屏' : '宽屏'}
-                        </button>
                         <AccountMenu />
                         </div>
                     </div>
