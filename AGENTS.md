@@ -16,27 +16,25 @@ A change is not complete after implementation alone. Run a verification loop unt
 
 Do not report a task as complete, commit it, push it, or deploy it while a relevant regression remains unexplained. If an unrelated pre-existing failure prevents a green run, document the exact failure and its ownership instead of hiding it.
 
-## Dual-product synchronization
+## Repository and product boundary
 
-`refactor/v2` and `NewUI` are separate product branches that share the same
-business behavior. Treat `refactor/v2` as the shared business mainline and
-merge it forward into `NewUI`; keep NewUI-only branding, navigation, layout,
-and interaction changes isolated from shared domain behavior.
+This repository is the authoritative Ostory TV product repository:
 
-For every shared change:
+- `wuqi80/Ovideo` branch `main` deploys to `https://tv.ostory.ai`.
+- `wuqi80/Drama` branch `refactor/v2` remains the separate SPTI product and
+  deploys to `https://spti.ai`.
+- `Drama/NewUI` is a migration source only. Do not resume branch-based forward
+  merges after the repository cutover.
 
-1. Assess both products, including persistence, API, task, credit, notification,
-   provider, GPU-agent, and deployment effects.
-2. Preserve the `refactor/v2` implementation for shared business behavior and
-   migrations when resolving forward-merge conflicts.
-3. Preserve the `NewUI` product shell and the SHOTFORGE design contract unless
-   the task explicitly changes the NewUI experience.
-4. Run the focused tests for both the shared behavior and the NewUI surface,
-   followed by the relevant full suites and production builds.
-5. Record intentional product differences instead of silently allowing the
-   branches to drift.
+Do not automatically merge, mirror, or push changes between Ovideo and Drama.
+When a business capability is intentionally needed by both products, assess it
+independently for persistence, API, task, credit, notification, provider,
+GPU-agent, and deployment effects, then port only the reviewed change with its
+tests. Product branding, navigation, defaults, configuration, data, secrets,
+release metadata, and deployment scripts remain isolated.
 
-Ovideo is a product and architecture reference, not a Git merge source. Adopt
-its compatible product principles through Drama's PostgreSQL/FastAPI/React
-architecture. The authoritative mapping and rollout rules live in
+For Ostory TV changes, run the focused and broader tests against this repository
+and deploy only through the Ostory production path. Never run an SPTI deployment
+script against the Ostory environment or copy a full production database between
+the products. The authoritative boundary and rollout rules live in
 `docs/product-sync-contract.md`.
