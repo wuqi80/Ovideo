@@ -142,9 +142,11 @@ export const DEFAULT_COMPOSE_AUDIO_MODE: ComposeAudioMode = 'reference_dubbing';
 
 export interface VideoTake {
   segment_id: string;
+  take_id?: string | null;
   video_url: string;
   thumbnail_url?: string | null;
   created_at?: string | null;
+  is_selected?: boolean;
 }
 
 export interface VideoShot {
@@ -153,6 +155,7 @@ export interface VideoShot {
   scene?: string;
   dialogue?: string;
   takes: VideoTake[];
+  selected_segment_id?: string | null;
 }
 
 export async function createVideoSegment(episodeId: string, data: any) {

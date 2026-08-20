@@ -30,10 +30,12 @@ from services.script_conversation_service import (
     ScriptConversationError,
     ScriptConversationItemNotFound,
     append_script_message,
+    confirm_script_version,
     create_script_version,
     get_script_conversation,
     merge_script_version_metadata,
     revise_script_message,
+    reject_script_version,
     select_script_version,
 )
 
@@ -327,6 +329,7 @@ def create_script_timeline_router(
                 metadata=data.metadata,
                 set_current=data.set_current,
                 conversation_dao=EpisodeScriptConversationDAO,
+                user_id=user_id,
             )
         except ScriptConversationError as exc:
             raise HTTPException(status_code=500, detail="保存分镜脚本版本失败") from exc
@@ -344,6 +347,40 @@ def create_script_timeline_router(
             )
         except ScriptConversationItemNotFound as exc:
             raise HTTPException(status_code=404, detail="分镜脚本版本不存在") from exc
+
+
+    @router.put("/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/confirm")
+    async def confirm_version(episode_id: str, script_id: str, version_id: str,
+                              user_id: str = Depends(get_current_user)):
+        await require_script(episode_id, script_id, user_id)
+        try:
+            from dao.creative.content_workflow import ContentWorkflowDAO
+
+            return await confirm_script_version(
+                episode_id=episode_id,
+                script_id=script_id,
+                version_id=version_id,
+                user_id=user_id,
+                conversation_dao=EpisodeScriptConversationDAO,
+                content_workflow_dao=ContentWorkflowDAO,
+            )
+        except ScriptConversationItemNotFound as exc:
+            raise HTTPException(status_code=404, detail="待确认的剧本版本不存在") from exc
+
+
+    @router.put("/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/reject")
+    async def reject_version(episode_id: str, script_id: str, version_id: str,
+                             user_id: str = Depends(get_current_user)):
+        await require_script(episode_id, script_id, user_id)
+        try:
+            return await reject_script_version(
+                script_id=script_id,
+                version_id=version_id,
+                user_id=user_id,
+                conversation_dao=EpisodeScriptConversationDAO,
+            )
+        except ScriptConversationItemNotFound as exc:
+            raise HTTPException(status_code=404, detail="待确认的剧本版本不存在") from exc
 
 
     @router.patch("/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/metadata")

@@ -171,6 +171,10 @@ async def generate_minimax_tts_sync_response(
         original_ext=".mp3",
         project_id=getattr(data, "project_id", None),
         episode_id=data.episode_id,
+        extra_metadata={
+            "storyboard_lineage_id": getattr(data, "storyboard_lineage_id", None),
+            "requested_entity_id": data.entity_id,
+        },
     )
     file_id = saved["file_id"]
     file_url = saved["file_url"]

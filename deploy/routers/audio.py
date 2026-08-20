@@ -341,6 +341,7 @@ def create_audio_router(
         file_role: Optional[str] = None
         project_id: Optional[str] = None
         episode_id: Optional[str] = None
+        storyboard_lineage_id: Optional[str] = None
         # 2026-05-24 新增：试听场景透传，worker 完成后回写 character_voices.sample_audio_url，
         # 让用户下次打开 VoiceSidebar 直接复用同一段试听，避免重复付费。
         bind_to_character_voice_id: Optional[str] = None
@@ -547,6 +548,7 @@ def create_audio_router(
             "file_role": data.file_role,
             "project_id": data.project_id,
             "episode_id": data.episode_id,
+            "storyboard_lineage_id": data.storyboard_lineage_id,
         }
         # 可选：试听场景透传 bind_to_character_voice_id，
         # 让 worker 完成时回写 character_voices.sample_audio_url

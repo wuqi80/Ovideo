@@ -788,26 +788,30 @@ export const VideoPage: React.FC<VideoPageProps> = ({
 
         // sb_ 开头是分镜项 ID（非 files 表 file_id），不能当 file_id 下发。
         // 留空 file_id → submitDashScopeVideoTask.resolveUrl 会用 url（worker 负责还原 Base64）。
-        const fileIdOf = (id: string): string | undefined =>
-            id && !id.startsWith('sb_') ? id : undefined;
+        const fileIdOf = (img: UploadedImage): string | undefined =>
+            img.fileId || (img.id && !img.id.startsWith('sb_') && !img.id.startsWith('ref_') ? img.id : undefined);
 
         let seedMedia: SeedanceMediaInput[];
         if (model === 'HappyHorse') {
-            // HH 始终 r2v，全部当参考图
-            seedMedia = orderedImgs.map(img => ({
+            // HH 始终 r2v：卡片首图与任务创建时解析出的最新绑定都作为参考图。
+            const orderedReferences = [
+                ...orderedImgs,
+                ...linkedImages.filter(img => !(group?.ids || []).includes(img.id)),
+            ];
+            seedMedia = orderedReferences.map(img => ({
                 kind: 'image' as const,
                 url: img.url,
-                file_id: fileIdOf(img.id),
+                file_id: fileIdOf(img),
                 role: 'reference_image' as const,
             }));
         } else if (isPair && orderedImgs.length >= 2) {
             seedMedia = [
-                { kind: 'image', url: orderedImgs[0].url, file_id: fileIdOf(orderedImgs[0].id), role: 'first_frame' },
-                { kind: 'image', url: orderedImgs[1].url, file_id: fileIdOf(orderedImgs[1].id), role: 'last_frame' },
+                { kind: 'image', url: orderedImgs[0].url, file_id: fileIdOf(orderedImgs[0]), role: 'first_frame' },
+                { kind: 'image', url: orderedImgs[1].url, file_id: fileIdOf(orderedImgs[1]), role: 'last_frame' },
             ];
         } else if (orderedImgs.length >= 1) {
             seedMedia = [
-                { kind: 'image', url: orderedImgs[0].url, file_id: fileIdOf(orderedImgs[0].id), role: 'first_frame' },
+                { kind: 'image', url: orderedImgs[0].url, file_id: fileIdOf(orderedImgs[0]), role: 'first_frame' },
             ];
         } else {
             seedMedia = [];

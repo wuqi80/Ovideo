@@ -16,7 +16,8 @@ describe('MaterialsPage binding propagation', () => {
   it('can either update the current shot only or overwrite all later matching shots', () => {
     expect(source).toContain('const handleBindConfirm = useCallback');
     expect(source).toContain('const handleBindCurrentOnly = useCallback');
-    expect(source).toContain('await persistMaterialBinding(target, tagName, materialId)');
+    expect(source).toContain("await persistNormalizedMaterialBinding(currentItem, tagName, materialId, 'project')");
+    expect(source).toContain('await persistLegacyMaterialBinding(target, tagName, materialId)');
     expect(source).toContain('已仅更新当前镜头素材');
   });
 

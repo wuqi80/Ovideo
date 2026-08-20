@@ -7,6 +7,8 @@ from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from dao.creative.content_workflow import ContentWorkflowDAO
+
 from services.project_access_service import require_project_access
 from services.storyboard_service import (
     EpisodeNotFound,
@@ -237,6 +239,8 @@ def create_storyboard_router(
                 item_id,
                 data.model_dump(exclude_none=True),
                 storyboard_dao=StoryboardDAO,
+                content_workflow_dao=ContentWorkflowDAO,
+                updated_by=user_id,
             )
         except StoryboardItemNotFound as exc:
             raise HTTPException(status_code=404, detail="分镜不存在") from exc

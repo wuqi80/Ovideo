@@ -281,6 +281,33 @@ async def test_get_shots_uses_selected_take_with_latest_default(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_shots_uses_persisted_selection_when_request_omits_picks(monkeypatch):
+    async def fake_rows(_episode_id):
+        return [
+            {
+                "item_id": "shot_1", "sort_order": 1, "scene_heading": "", "dialogue": "",
+                "audio_url": None, "audio_ms": 0, "segment_id": "seg_latest",
+                "video_url": "/storage/video/latest.mp4", "thumbnail_url": None,
+                "created_at": None, "take_id": "take_latest", "is_selected": False,
+            },
+            {
+                "item_id": "shot_1", "sort_order": 1, "scene_heading": "", "dialogue": "",
+                "audio_url": None, "audio_ms": 0, "segment_id": "seg_chosen",
+                "video_url": "/storage/video/chosen.mp4", "thumbnail_url": None,
+                "created_at": None, "take_id": "take_chosen", "is_selected": True,
+            },
+        ]
+
+    monkeypatch.setattr(episode_compose_service.EpisodeComposeDAO, "list_shot_take_rows", fake_rows)
+
+    takes = await episode_compose_service.get_takes("ep_1")
+    shots = await episode_compose_service._get_shots("ep_1")
+
+    assert takes[0]["selected_segment_id"] == "seg_chosen"
+    assert shots[0]["video_url"] == "/storage/video/chosen.mp4"
+
+
+@pytest.mark.asyncio
 async def test_get_shots_falls_back_to_storyboard_audio_parts_when_mixed_missing(monkeypatch):
     async def fake_rows(_episode_id):
         return [

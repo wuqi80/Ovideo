@@ -260,7 +260,30 @@ export interface ScriptStoryboardVersion {
   content: string;
   storyboardItems: StoryboardItem[];
   source: 'ai' | 'manual' | 'legacy';
-  status: 'draft' | 'ready' | 'failed';
+  status: 'draft' | 'ready' | 'failed' | 'rejected';
+  baseVersionId?: string;
+  patch?: {
+    format: string;
+    baseHash: string;
+    candidateHash: string;
+    summary: {
+      added: number;
+      deleted: number;
+      changed: number;
+      operationCount: number;
+    };
+    operations: Array<{
+      op: 'add' | 'delete' | 'change';
+      baseStart: number;
+      baseEnd: number;
+      candidateStart: number;
+      candidateEnd: number;
+      before: string[];
+      after: string[];
+    }>;
+  };
+  confirmedAt?: number;
+  rejectedAt?: number;
   modelAlias?: string;
   provider?: string;
   modelName?: string;
@@ -630,6 +653,7 @@ export interface AssetItem {
 
 export interface StoryboardItemDB {
   itemId: string;
+  lineageId?: string;
   episodeId: string;
   sortOrder: number;
   scriptSegmentId?: string;
@@ -742,6 +766,7 @@ export interface VoiceDesignSetting {
 export interface AudioClipInfo {
   clipId: string;
   itemId: string;
+  lineageId?: string;
   sortOrder: number;
   sequenceIndex: number;
   type: 'narration' | 'dialogue';

@@ -3345,23 +3345,23 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                                 <CheckCircle2 className="w-4 h-4" />
                                             </div>
                                         )}
-                                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity flex justify-between items-end">
-                                            <span className="text-[9px] text-n300 font-mono">
-                                                {new Date(img.timestamp).toLocaleTimeString()}
-                                            </span>
-                                          <div className="flex items-center gap-2">
-                                              <button 
-                                                  onClick={(e) => { 
-                                                      e.stopPropagation(); 
+                                        <span className="pointer-events-none absolute left-2 top-2 rounded bg-black/55 px-1.5 py-0.5 font-mono text-[9px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+                                                 {new Date(img.timestamp).toLocaleTimeString()}
+                                        </span>
+                                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2 opacity-0 transition-opacity group-hover:opacity-100">
+                                          <div data-testid="storyboard-result-actions" className="grid grid-cols-6 gap-1">
+                                               <button
+                                                   onClick={(e) => {
+                                                       e.stopPropagation();
                                                       // 🔧 修改：打开多角度生成弹窗
                                                       setHumanMultiAngleModalImage(img.url || img.thumbnail);
                                                   }}
-                                                  className="inline-flex items-center gap-1 rounded-md bg-blue-500/80 px-2 py-1.5 text-white transition-colors hover:bg-blue-600"
+                                                  className="inline-flex h-7 min-w-0 items-center justify-center rounded-md bg-blue-500/85 text-white transition-colors hover:bg-blue-600"
                                                   title="多角度人物生成：一次生成 14 个身份一致视角"
                                                   aria-label="多角度人物生成，一次生成 14 个身份一致视角"
                                               >
                                                   <Users className="w-3.5 h-3.5" />
-                                                  <span className="text-[9px] font-semibold">14 视角</span>
+                                                  <span className="sr-only">14 视角</span>
                                               </button>
                                               <button 
                                                   onClick={(e) => { 
@@ -3369,38 +3369,42 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                                                       // 🆕 打开全景生成弹窗
                                                       setAroundAngleModalImage(img.url || img.thumbnail);
                                                   }}
-                                                  className="p-1.5 bg-cyan-500/80 hover:bg-cyan-600 text-white rounded-md transition-colors"
+                                                  className="inline-flex h-7 min-w-0 items-center justify-center rounded-md bg-cyan-500/85 text-white transition-colors hover:bg-cyan-600"
                                                   title="全景角度生成"
+                                                  aria-label="全景角度生成"
                                               >
                                                   <RotateCcw className="w-3.5 h-3.5" />
                                               </button>
                                               <button 
                                                   onClick={(e) => { e.stopPropagation(); setCameraModalImage(img.url || img.thumbnail); }}
-                                                  className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1.5 text-white transition-colors hover:bg-primary-hover"
+                                                  className="inline-flex h-7 min-w-0 items-center justify-center rounded-md bg-primary text-white transition-colors hover:bg-primary-hover"
                                                   title="角度调整：生成 1 个指定镜头角度"
                                                   aria-label="角度调整，生成 1 个指定镜头角度"
                                               >
                                                   <Camera className="w-3.5 h-3.5" />
-                                                  <span className="text-[9px] font-semibold">单角度</span>
+                                                  <span className="sr-only">单角度</span>
                                               </button>
                                               <button 
                                                   onClick={(e) => { e.stopPropagation(); setMattingModalImage(img.url || img.thumbnail); }}
-                                                  className="p-1.5 bg-green-500/80 hover:bg-green-600 text-white rounded-md transition-colors"
+                                                  className="inline-flex h-7 min-w-0 items-center justify-center rounded-md bg-green-500/85 text-white transition-colors hover:bg-green-600"
                                                   title="抠图"
+                                                  aria-label="抠图"
                                               >
                                                   <Scissors className="w-3.5 h-3.5" />
                                               </button>
                                               <button 
                                                   onClick={(e) => { e.stopPropagation(); setShowFusionModal(true); }}
-                                                  className="p-1.5 bg-orange-500/80 hover:bg-orange-600 text-white rounded-md transition-colors"
+                                                  className="inline-flex h-7 min-w-0 items-center justify-center rounded-md bg-orange-500/85 text-white transition-colors hover:bg-orange-600"
                                                   title="融合"
+                                                  aria-label="融合"
                                               >
                                                   <Layers className="w-3.5 h-3.5" />
                                               </button>
                                             <button 
                                                     onClick={(e) => { e.stopPropagation(); handleDeleteResult(img.id); }}
-                                                    className="p-1.5 bg-danger hover:bg-danger text-white rounded-md transition-colors"
+                                                    className="inline-flex h-7 min-w-0 items-center justify-center rounded-md bg-danger text-white transition-colors hover:bg-danger"
                                                     title="删除"
+                                                    aria-label="删除结果图片"
                                             >
                                                 <Trash2 className="w-3.5 h-3.5" />
                                             </button>

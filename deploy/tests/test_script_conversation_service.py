@@ -12,6 +12,8 @@ class FakeConversationDAO:
     created_version = None
     selected_version = None
     merged_version = None
+    confirmed_version = None
+    rejected_version = None
     stale_call = None
 
     @classmethod
@@ -57,6 +59,25 @@ class FakeConversationDAO:
         if version_id == "missing":
             return None
         return {"version_id": version_id, "script_id": script_id, "metadata": metadata}
+
+    @classmethod
+    async def confirm_version(cls, script_id, version_id, user_id):
+        cls.confirmed_version = (script_id, version_id, user_id)
+        if version_id == "missing":
+            return None
+        return {
+            "version_id": version_id,
+            "script_id": script_id,
+            "status": "ready",
+            "previous_version_id": "ver_old",
+        }
+
+    @classmethod
+    async def reject_version(cls, script_id, version_id, user_id):
+        cls.rejected_version = (script_id, version_id, user_id)
+        if version_id == "missing":
+            return None
+        return {"version_id": version_id, "script_id": script_id, "status": "rejected"}
 
 
 async def test_get_conversation_returns_messages_versions_and_current_pointer():
@@ -151,3 +172,23 @@ async def test_merge_version_metadata_persists_billing_snapshot():
 
     assert result["version"]["metadata"]["storyboardDesignCreditCost"] == 12
     assert FakeConversationDAO.merged_version[0:2] == ("script_1", "ver_1")
+
+
+async def test_confirm_and_reject_draft_are_explicit_actions():
+    confirmed = await service.confirm_script_version(
+        episode_id="ep_1",
+        script_id="script_1",
+        version_id="ver_draft",
+        user_id="user_1",
+        conversation_dao=FakeConversationDAO,
+    )
+    rejected = await service.reject_script_version(
+        script_id="script_1",
+        version_id="ver_other",
+        user_id="user_1",
+        conversation_dao=FakeConversationDAO,
+    )
+
+    assert confirmed["previous_version_id"] == "ver_old"
+    assert confirmed["version"]["status"] == "ready"
+    assert rejected["version"]["status"] == "rejected"

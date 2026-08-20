@@ -176,6 +176,7 @@ def create_entity_files_router(
                 file_role=req.file_role,
                 entity_file_dao=EntityFileDAO,
                 logger=logger,
+                selected_by=user_id,
             )
         except EntityFileNotFound as exc:
             raise HTTPException(404, "文件不存在或不属于指定实体") from exc

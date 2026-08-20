@@ -450,18 +450,22 @@ async def _list_shot_takes(episode_id: str) -> List[Dict[str, Any]]:
                 "sfx_audio_url": row.get("sfx_audio_url"),
                 "audio_ms": audio_ms,
                 "takes": [],
+                "selected_segment_id": None,
             }
             order.append(item_id)
 
         created_at = row.get("created_at")
-        shots[item_id]["takes"].append(
-            {
+        take = {
                 "segment_id": segment_id,
+                "take_id": row.get("take_id"),
                 "video_url": row.get("video_url"),
                 "thumbnail_url": row.get("thumbnail_url"),
                 "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else created_at,
+                "is_selected": bool(row.get("is_selected")),
             }
-        )
+        shots[item_id]["takes"].append(take)
+        if take["is_selected"]:
+            shots[item_id]["selected_segment_id"] = segment_id
 
     return [shots[item_id] for item_id in order]
 
@@ -477,7 +481,7 @@ async def _get_shots(episode_id: str, selections: Optional[Dict[str, str]] = Non
     for shot in shots:
         if not shot["takes"]:
             continue
-        wanted_segment_id = selected_segments.get(shot["item_id"])
+        wanted_segment_id = selected_segments.get(shot["item_id"]) or shot.get("selected_segment_id")
         chosen = next(
             (take for take in shot["takes"] if take["segment_id"] == wanted_segment_id),
             shot["takes"][0],

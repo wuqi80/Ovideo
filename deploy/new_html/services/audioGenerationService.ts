@@ -110,6 +110,7 @@ export async function minimaxTTS(data: {
     model_scope?: string;
     speed?: number; pitch?: number; emotion?: string;
     entity_type?: string; entity_id?: string; file_role?: string; project_id?: string; episode_id?: string;
+    storyboard_lineage_id?: string;
     bind_to_character_voice_id?: string;
 }, signal?: AbortSignal): Promise<{ success: true; task_id: string }> {
     return apiJson<any>('/api/minimax/tts', {
@@ -132,6 +133,7 @@ export async function minimaxTTSSync(data: {
     file_role?: string;
     project_id?: string;
     episode_id?: string;
+    storyboard_lineage_id?: string;
     bind_to_character_voice_id?: string;
 }, signal?: AbortSignal): Promise<{
     success: true;

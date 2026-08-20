@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 284
-DEFAULT_EXPECTED_OPERATIONS = 344
+DEFAULT_EXPECTED_PATHS = 293
+DEFAULT_EXPECTED_OPERATIONS = 354
 DEFAULT_EXPECTED_FRONTEND_ROUTES = 32
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
@@ -299,6 +299,28 @@ EXPECTED_ENDPOINTS = {
     ("/api/episodes/{episode_id}/timeline-tracks", "GET"): ("routers.script_timeline", "get_timeline_tracks"),
     ("/api/episodes/{episode_id}/timeline-tracks", "POST"): ("routers.script_timeline", "create_timeline_track"),
     ("/api/timeline-tracks/{track_id}", "PUT"): ("routers.script_timeline", "update_timeline_track"),
+    ("/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/confirm", "PUT"): (
+        "routers.script_timeline",
+        "confirm_version",
+    ),
+    ("/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/reject", "PUT"): (
+        "routers.script_timeline",
+        "reject_version",
+    ),
+    ("/api/content-takes", "GET"): ("routers.content_workflow", "get_content_takes"),
+    ("/api/content-takes/{take_id}/select", "PUT"): ("routers.content_workflow", "select_take"),
+    ("/api/episodes/{episode_id}/stale-content", "GET"): ("routers.content_workflow", "get_stale_content"),
+    ("/api/stale-content/{stale_event_id}/resolve", "PUT"): ("routers.content_workflow", "resolve_stale"),
+    ("/api/projects/{project_id}/content-bindings", "GET"): ("routers.content_workflow", "get_bindings"),
+    ("/api/projects/{project_id}/content-bindings", "PUT"): ("routers.content_workflow", "put_binding"),
+    ("/api/projects/{project_id}/content-bindings/{binding_id}", "DELETE"): (
+        "routers.content_workflow",
+        "delete_binding",
+    ),
+    ("/api/projects/{project_id}/content-bindings/resolve", "POST"): (
+        "routers.content_workflow",
+        "resolve_bindings",
+    ),
     ("/api/canvas/boards", "POST"): ("routers.canvas", "create_canvas_board"),
     ("/api/canvas/boards", "GET"): ("routers.canvas", "get_canvas_boards"),
     ("/api/canvas/boards/{board_id}", "GET"): ("routers.canvas", "get_canvas_board_detail"),
@@ -3277,6 +3299,8 @@ def check_script_timeline_routes_extracted(root: Path) -> int:
         "/api/episodes/{episode_id}/scripts/{script_id}/messages/{message_id}",
         "/api/episodes/{episode_id}/scripts/{script_id}/versions",
         "/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/select",
+        "/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/confirm",
+        "/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/reject",
         "/api/episodes/{episode_id}/scripts/{script_id}/versions/{version_id}/metadata",
         "/api/episodes/{episode_id}/timeline-tracks",
         "/api/timeline-tracks/{track_id}",
@@ -3311,8 +3335,8 @@ def check_script_timeline_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 18:
-        fail(f"routers/script_timeline.py should own 18 script/timeline route registrations, found {route_count}")
+    if route_count != 20:
+        fail(f"routers/script_timeline.py should own 20 script/timeline route registrations, found {route_count}")
 
     router_text = script_timeline_path.read_text(encoding="utf-8")
     service_text = script_timeline_service_path.read_text(encoding="utf-8")

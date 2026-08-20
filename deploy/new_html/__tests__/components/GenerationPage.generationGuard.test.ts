@@ -184,3 +184,13 @@ describe('GenerationPage reference actions', () => {
     expect(source).toContain('updateCurrentShotReferences(merged.references)');
   });
 });
+
+describe('GenerationPage result card actions', () => {
+  it('keeps all hover actions in a non-wrapping six-column toolbar', () => {
+    expect(source).toContain('data-testid="storyboard-result-actions"');
+    expect(source).toContain('className="grid grid-cols-6 gap-1"');
+    expect(source).toContain('inline-flex h-7 min-w-0 items-center justify-center');
+    expect(source).toContain('<span className="sr-only">14 视角</span>');
+    expect(source).toContain('<span className="sr-only">单角度</span>');
+  });
+});

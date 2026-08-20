@@ -18,6 +18,17 @@ export interface ProjectVideoTask {
   video_prompt?: string;
   action_text?: string;
   dialogue?: string;
+  resolved_bindings?: Array<{
+    binding_id?: string;
+    binding_version?: number;
+    tag_key?: string;
+    scope?: 'project' | 'shot';
+    asset_id?: string | null;
+    file_id?: string | null;
+    file_url?: string | null;
+    is_disabled?: boolean;
+    locked?: boolean;
+  }>;
   [key: string]: any;
 }
 

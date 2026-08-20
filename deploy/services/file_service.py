@@ -260,10 +260,58 @@ async def save_generated_file_to_db(
         logger.error(f"save_generated_file_to_db DB 写入失败: {e}", exc_info=True)
 
     if db_record and entity_type and entity_id and file_role:
+        # Register every generated image/video/audio in the shared candidate
+        # model.  This is deliberately best-effort: legacy URL persistence must
+        # keep working while a deployment is rolling through the new migration.
+        registered_take = None
         try:
-            await _sync_legacy_on_file_create(entity_type, entity_id, file_role, file_url)
+            from dao.creative.content_workflow import ContentWorkflowDAO
+            from services.content_workflow_service import register_generated_take
+
+            registered_take = await register_generated_take(
+                user_id=user_id,
+                file_id=db_record.get('file_id'),
+                file_type=file_type,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                file_role=file_role,
+                source=source,
+                project_id=project_id,
+                episode_id=episode_id,
+                metadata=metadata,
+                workflow_dao=ContentWorkflowDAO,
+            )
         except Exception as e:
-            logger.warning(f"Legacy field sync failed (non-fatal): {e}")
+            logger.warning("content take registration failed (non-fatal): %s", e)
+
+        # A late result or a newly generated unselected candidate must not
+        # overwrite an explicit user selection in legacy URL columns.  Legacy
+        # sync remains as a compatibility fallback when no selection exists.
+        should_sync_legacy = not bool(registered_take and registered_take.get("is_late"))
+        if should_sync_legacy and registered_take:
+            try:
+                takes = await ContentWorkflowDAO.list_takes(
+                    registered_take["entity_type"],
+                    registered_take["entity_id"],
+                    registered_take["slot"],
+                )
+                selected_take = next((take for take in takes if take.get("is_selected")), None)
+                if selected_take and selected_take.get("take_id") != registered_take.get("take_id"):
+                    should_sync_legacy = False
+            except Exception as e:
+                logger.warning("Selected-take lookup before legacy sync failed (non-fatal): %s", e)
+        if should_sync_legacy:
+            try:
+                selected = await EntityFileDAO.get_selected_file(entity_type, entity_id, file_role)
+                if selected and selected.get("file_id") != db_record.get("file_id"):
+                    should_sync_legacy = False
+            except Exception as e:
+                logger.warning("Selected-file lookup before legacy sync failed (non-fatal): %s", e)
+        if should_sync_legacy:
+            try:
+                await _sync_legacy_on_file_create(entity_type, entity_id, file_role, file_url)
+            except Exception as e:
+                logger.warning(f"Legacy field sync failed (non-fatal): {e}")
 
     # 兜底：在文件保存的统一入口同步进素材库，避免各生成路径（视频/图片/混音等）
     # 各自漏调 create_from_file 导致"生成了却不在素材库"。幂等（按 file_id 去重）、

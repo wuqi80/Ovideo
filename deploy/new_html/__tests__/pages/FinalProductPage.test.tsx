@@ -54,6 +54,11 @@ describe('FinalProductPage', () => {
     expect(screen.getByText('第二次合成')).toBeInTheDocument();
     expect(screen.getByText('第一次合成')).toBeInTheDocument();
     expect(screen.getByText('共 3 个成品，最新版本置顶，历史版本不会覆盖。')).toBeInTheDocument();
+    expect(screen.getByTestId('final-product-scroll')).toHaveClass(
+      'h-full',
+      'min-h-0',
+      'overflow-y-auto',
+    );
     expect(listMediaItems).toHaveBeenCalledWith(expect.objectContaining({ source: 'composed_final' }));
 
     fireEvent.click(screen.getAllByRole('button', { name: '意见' })[0]);

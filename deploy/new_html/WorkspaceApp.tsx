@@ -18,7 +18,7 @@ import {
 } from './utils/scriptPipelineParsers';
 import { parseStreamingBlocks, convertToStoryboardItem, removeControlCharacters, segmentInputContent, countShots } from './utils/storyboardParser';
 import { deriveScriptStagesFromPersisted } from './utils/scriptStageDerivation';
-import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, listEpisodeScriptSegments, batchSaveScriptSegments, getScriptConversation, createScriptMessage, updateScriptMessage, createScriptVersion, selectScriptVersion, updateScriptVersionMetadata } from './services/scriptTimelineService';
+import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, listEpisodeScriptSegments, batchSaveScriptSegments, getScriptConversation, createScriptMessage, updateScriptMessage, createScriptVersion, selectScriptVersion, confirmScriptVersion, rejectScriptVersion, updateScriptVersionMetadata } from './services/scriptTimelineService';
 import { assertEnoughCredits, consumeCredits, estimateTextTokens } from './services/creditService';
 import { exportScript, deleteStoryboardItem } from './services/storyboardMutationService';
 import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
@@ -2101,30 +2101,32 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         content: finalContent,
         storyboardItems: parsedItems,
         source: 'ai',
-        status: 'ready',
+        status: isFirstTurn ? 'ready' : 'draft',
         modelAlias: modelInfo.alias,
         provider: modelInfo.provider,
         modelName: modelInfo.billingModel,
         metadata: versionMetadata,
-        setCurrent: true,
+        setCurrent: isFirstTurn,
       });
-      await updateEpisodeScriptById(propEpisodeId, fileId, {
-        adapted_script: finalContent,
-      });
-      updateFileWithHistory(fileId, current => ({
-        ...current,
-        originalContent: isFirstTurn ? content : current.originalContent,
-        scriptContent: finalContent,
-        status: FileStatus.Completed,
-        lastUpdated: Date.now(),
-      }), { recordHistory: false });
+      if (isFirstTurn) {
+        await updateEpisodeScriptById(propEpisodeId, fileId, {
+          adapted_script: finalContent,
+        });
+        updateFileWithHistory(fileId, current => ({
+          ...current,
+          originalContent: content,
+          scriptContent: finalContent,
+          status: FileStatus.Completed,
+          lastUpdated: Date.now(),
+        }), { recordHistory: false });
+      }
       setScriptConversations(prev => {
         const current = prev[fileId] || conversation;
         return {
           ...prev,
           [fileId]: {
             ...current,
-            currentVersionId: version.id,
+            currentVersionId: isFirstTurn ? version.id : current.currentVersionId,
             defaultModel: modelInfo.billingModel,
             messages: current.messages.map(message => message.id === assistantMessage.id ? completedMessage : message),
             versions: [...current.versions.filter(item => item.id !== version.id), version],
@@ -2166,6 +2168,67 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       setConversationSendingId(null);
     }
   }, [aiModel, propEpisodeId, scriptConversations, scriptModelOptions, selectedFileId, updateFileWithHistory, urlProjectId]);
+
+  const handleConversationConfirmVersion = useCallback(async (version: ScriptStoryboardVersion) => {
+    const fileId = selectedFileId;
+    if (!fileId) return;
+    setConversationSendingId(fileId);
+    setConversationError(null);
+    try {
+      const confirmed = await confirmScriptVersion(propEpisodeId, fileId, version.id);
+      updateFileWithHistory(fileId, current => ({
+        ...current,
+        scriptContent: confirmed.content,
+        status: FileStatus.Completed,
+        lastUpdated: Date.now(),
+      }), { recordHistory: false });
+      setScriptConversations(prev => {
+        const current = prev[fileId];
+        if (!current) return prev;
+        return {
+          ...prev,
+          [fileId]: {
+            ...current,
+            currentVersionId: confirmed.id,
+            versions: current.versions.map(item => item.id === confirmed.id ? confirmed : item),
+          },
+        };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '确认剧本版本失败';
+      setConversationError(message);
+      throw error;
+    } finally {
+      setConversationSendingId(null);
+    }
+  }, [propEpisodeId, selectedFileId, updateFileWithHistory]);
+
+  const handleConversationRejectVersion = useCallback(async (version: ScriptStoryboardVersion) => {
+    const fileId = selectedFileId;
+    if (!fileId) return;
+    setConversationSendingId(fileId);
+    setConversationError(null);
+    try {
+      const rejected = await rejectScriptVersion(propEpisodeId, fileId, version.id);
+      setScriptConversations(prev => {
+        const current = prev[fileId];
+        if (!current) return prev;
+        return {
+          ...prev,
+          [fileId]: {
+            ...current,
+            versions: current.versions.map(item => item.id === rejected.id ? rejected : item),
+          },
+        };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '拒绝剧本版本失败';
+      setConversationError(message);
+      throw error;
+    } finally {
+      setConversationSendingId(null);
+    }
+  }, [propEpisodeId, selectedFileId]);
 
   const handleConversationEditVersion = useCallback(async (
     sourceVersion: ScriptStoryboardVersion,
@@ -4446,6 +4509,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         onDismissError={() => setConversationError(null)}
                         onSend={handleConversationSend}
                         onGenerateDesign={handleConversationGenerateDesign}
+                        onConfirmVersion={handleConversationConfirmVersion}
+                        onRejectVersion={handleConversationRejectVersion}
                         onEditVersion={handleConversationEditVersion}
                         onExportVersion={handleConversationExportVersion}
                         onOpenStoryboard={handleOpenStoryboardDrawer}

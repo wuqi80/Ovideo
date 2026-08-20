@@ -1,6 +1,7 @@
 """Storyboard item, export, asset extraction, and audio mix business logic."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from typing import Any, Dict, Iterable, Optional
@@ -59,6 +60,17 @@ def _row_to_dict(row: Any) -> Optional[Dict[str, Any]]:
 
 def _rows_to_dicts(rows: Iterable[Any]) -> list[Dict[str, Any]]:
     return [_normalize_bound_assets(dict(row)) for row in rows]
+
+
+def _stable_value(value: Any) -> str:
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.startswith(("[", "{")):
+            try:
+                value = json.loads(stripped)
+            except (TypeError, ValueError):
+                pass
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
 
 
 async def require_storyboard_episode_access(
@@ -417,6 +429,8 @@ async def update_storyboard_item(
     fields: Dict[str, Any],
     *,
     storyboard_dao: Any,
+    content_workflow_dao: Any = None,
+    updated_by: Optional[str] = None,
 ) -> Dict[str, Any]:
     if any(field in fields for field in AUDIO_URL_FIELDS):
         fields = {
@@ -424,10 +438,74 @@ async def update_storyboard_item(
             "mixed_audio_url": None,
             "mixed_audio_hash": None,
         }
+    previous = None
+    get_by_id = getattr(storyboard_dao, "get_by_id", None)
+    if callable(get_by_id):
+        previous_row = await get_by_id(item_id)
+        previous = dict(previous_row) if previous_row else None
     item = await storyboard_dao.update(item_id, **fields)
     if not item:
         raise StoryboardItemNotFound("Storyboard item not found")
-    return {"success": True, "item": _normalize_bound_assets(dict(item))}
+    stale_events = []
+    if content_workflow_dao is not None:
+        changed_fields = sorted(
+            field
+            for field, value in fields.items()
+            if previous is None or _stable_value(previous.get(field)) != _stable_value(value)
+        )
+        keyframe_fields = {
+            "scene_heading", "action_text", "image_prompt", "bound_assets",
+            "configured_references", "shot_size", "camera_angle",
+        }
+        video_fields = keyframe_fields | {
+            "video_prompt", "camera_movement", "planned_duration_ms",
+        }
+        audio_fields = {"dialogue"}
+        slots: list[str] = []
+        if set(changed_fields) & keyframe_fields:
+            slots.append("keyframe")
+        if set(changed_fields) & audio_fields:
+            slots.append("dialogue_audio")
+        if set(changed_fields) & (video_fields | audio_fields):
+            slots.append("video")
+        if slots:
+            from services.content_workflow_service import (
+                audio_candidate_slots_for_target,
+                mark_storyboard_targets_stale,
+            )
+
+            targets = await content_workflow_dao.list_storyboard_targets(storyboard_item_id=item_id)
+            value_fingerprint = hashlib.sha256(
+                json.dumps(
+                    {
+                        "before": {field: previous.get(field) for field in changed_fields} if previous else {},
+                        "after": {field: fields.get(field) for field in changed_fields},
+                        "updatedAt": item.get("updated_at") if hasattr(item, "get") else None,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    default=str,
+                ).encode("utf-8")
+            ).hexdigest()
+            for target in targets:
+                target_slots = [slot for slot in slots if slot != "dialogue_audio"]
+                if "dialogue_audio" in slots:
+                    target_slots.extend(audio_candidate_slots_for_target(target))
+                stale_events.extend(await mark_storyboard_targets_stale(
+                    [target],
+                    slots=target_slots,
+                    source_entity_type="storyboard_item",
+                    source_entity_id=item_id,
+                    reason_code="storyboard_content_changed",
+                    detail={"fields": changed_fields, "changeId": value_fingerprint},
+                    created_by=updated_by,
+                    workflow_dao=content_workflow_dao,
+                ))
+    return {
+        "success": True,
+        "item": _normalize_bound_assets(dict(item)),
+        "stale_events": stale_events,
+    }
 
 
 async def delete_storyboard_item(

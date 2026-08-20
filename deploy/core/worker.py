@@ -2663,6 +2663,11 @@ class Worker:
                 original_ext=ext_suffix,
                 project_id=td.get('project_id'),
                 episode_id=td.get('episode_id'),
+                extra_metadata={
+                    'storyboard_lineage_id': td.get('storyboard_lineage_id'),
+                    'requested_entity_id': td.get('entity_id'),
+                    'task_id': task.task_id,
+                },
             )
             file_id = saved['file_id']
             file_url = saved['file_url']

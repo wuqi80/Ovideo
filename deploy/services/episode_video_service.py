@@ -152,6 +152,31 @@ async def update_video_segment(
     segment = await video_segment_dao.update(segment_id, **fields)
     if not segment:
         raise VideoSegmentNotFound("Video segment not found")
+    if fields.get("video_url"):
+        try:
+            from dao.creative.content_workflow import ContentWorkflowDAO
+            from services.content_workflow_service import register_generated_take
+
+            await register_generated_take(
+                user_id=None,
+                file_id=None,
+                file_type="video",
+                entity_type="video_segment",
+                entity_id=segment_id,
+                file_role="video",
+                source="video_segment",
+                project_id=None,
+                episode_id=segment.get("episode_id"),
+                metadata={
+                    "task_id": segment.get("task_id"),
+                    "model": segment.get("model"),
+                    "generation_params": segment.get("input_params") or {},
+                },
+                workflow_dao=ContentWorkflowDAO,
+            )
+        except Exception:
+            # The legacy update remains authoritative during rolling migration.
+            pass
     return {"success": True, "segment": dict(segment)}
 
 

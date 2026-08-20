@@ -57,6 +57,23 @@ export function buildVideoTaskImport(
       model: 'HappyHorse',
       createdAt: groupTs,
     });
+
+    (task.resolved_bindings || []).forEach((binding, bindingIndex) => {
+      if (binding.is_disabled || !binding.file_url) return;
+      const referenceUrl = options.normalizeUrl(binding.file_url);
+      if (!referenceUrl) return;
+      const referenceId = `ref_${groupId}_${binding.binding_id || bindingIndex}`;
+      images.push({
+        id: referenceId,
+        fileId: binding.file_id || undefined,
+        url: referenceUrl,
+        storageUrl: referenceUrl,
+        filename: `${binding.tag_key || 'binding'}_reference.png`,
+        uploadTime: now(),
+        linkedGroupUuids: [groupId],
+        tags: [binding.tag_key || 'binding', binding.scope || 'project'],
+      });
+    });
   });
 
   return { images, groups, prompts, skipped };

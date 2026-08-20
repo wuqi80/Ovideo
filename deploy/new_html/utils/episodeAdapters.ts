@@ -56,6 +56,7 @@ export function normalizeStoryboardRecord(record: any): StoryboardItemDB {
   );
   return {
     itemId: record.item_id ?? record.itemId ?? '',
+    lineageId: record.lineage_id ?? record.lineageId ?? undefined,
     episodeId: record.episode_id ?? record.episodeId ?? '',
     sortOrder: typeof (record.sort_order ?? record.sortOrder) === 'number'
       ? (record.sort_order ?? record.sortOrder)

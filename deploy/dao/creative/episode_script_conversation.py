@@ -6,6 +6,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from db_manager import get_db_manager
+from utils.script_patch import build_script_patch
 
 
 def _json(value: Any, fallback: Any) -> str:
@@ -184,6 +185,7 @@ class EpisodeScriptConversationDAO:
         model_name: Optional[str] = None,
         metadata: Optional[dict] = None,
         set_current: bool = True,
+        user_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
@@ -192,7 +194,8 @@ class EpisodeScriptConversationDAO:
             async with conn.transaction():
                 script = await conn.fetchrow(
                     """
-                    SELECT script_id FROM episode_scripts
+                    SELECT script_id, current_version_id, adapted_script
+                    FROM episode_scripts
                     WHERE script_id = $1 AND episode_id = $2
                     FOR UPDATE
                     """,
@@ -217,15 +220,29 @@ class EpisodeScriptConversationDAO:
                     script_id,
                 )
                 version_id = f"ver_{uuid.uuid4().hex}"
+                base_version_id = script.get("current_version_id")
+                base_content = str(script.get("adapted_script") or "")
+                if base_version_id:
+                    base_version = await conn.fetchrow(
+                        "SELECT content FROM episode_script_versions WHERE version_id = $1",
+                        base_version_id,
+                    )
+                    if base_version:
+                        base_content = str(base_version.get("content") or "")
+                patch = build_script_patch(base_content, content)
+                should_set_current = bool(set_current and status == "ready")
                 row = await conn.fetchrow(
                     """
                     INSERT INTO episode_script_versions (
                         version_id, episode_id, script_id, message_id, version_no,
                         content, storyboard_items, source, status, model_alias,
-                        provider, model_name, metadata
+                        provider, model_name, metadata,
+                        base_version_id, patch, confirmed_at, confirmed_by
                     )
                     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9,
-                            $10, $11, $12, $13::jsonb)
+                            $10, $11, $12, $13::jsonb, $14, $15::jsonb,
+                            CASE WHEN $16 THEN CURRENT_TIMESTAMP ELSE NULL END,
+                            CASE WHEN $16 THEN $17 ELSE NULL END)
                     RETURNING *
                     """,
                     version_id,
@@ -241,8 +258,12 @@ class EpisodeScriptConversationDAO:
                     provider,
                     model_name,
                     _json(metadata, {}),
+                    base_version_id,
+                    _json(patch, {}),
+                    should_set_current,
+                    user_id,
                 )
-                if set_current:
+                if should_set_current:
                     await conn.execute(
                         """
                         UPDATE episode_scripts
@@ -261,6 +282,91 @@ class EpisodeScriptConversationDAO:
                 return dict(row) if row else None
 
     @staticmethod
+    async def confirm_version(
+        script_id: str,
+        version_id: str,
+        user_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return None
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                script = await conn.fetchrow(
+                    "SELECT * FROM episode_scripts WHERE script_id = $1 FOR UPDATE",
+                    script_id,
+                )
+                if not script:
+                    return None
+                version = await conn.fetchrow(
+                    """
+                    SELECT * FROM episode_script_versions
+                    WHERE script_id = $1 AND version_id = $2
+                    FOR UPDATE
+                    """,
+                    script_id,
+                    version_id,
+                )
+                if not version or version["status"] not in {"draft", "ready"}:
+                    return None
+                previous_version_id = script.get("current_version_id")
+                row = await conn.fetchrow(
+                    """
+                    UPDATE episode_script_versions
+                    SET status = 'ready', confirmed_at = COALESCE(confirmed_at, CURRENT_TIMESTAMP),
+                        confirmed_by = COALESCE(confirmed_by, $3),
+                        rejected_at = NULL, rejected_by = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE script_id = $1 AND version_id = $2
+                    RETURNING *
+                    """,
+                    script_id,
+                    version_id,
+                    user_id,
+                )
+                await conn.execute(
+                    """
+                    UPDATE episode_scripts
+                    SET current_version_id = $2, adapted_script = $3,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE script_id = $1
+                    """,
+                    script_id,
+                    version_id,
+                    version["content"],
+                )
+                result = dict(row)
+                result["previous_version_id"] = previous_version_id
+                return result
+
+    @staticmethod
+    async def reject_version(
+        script_id: str,
+        version_id: str,
+        user_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return None
+        row = await db.fetchrow(
+            """
+            UPDATE episode_script_versions
+            SET status = 'rejected', rejected_at = CURRENT_TIMESTAMP,
+                rejected_by = $3, updated_at = CURRENT_TIMESTAMP
+            WHERE script_id = $1 AND version_id = $2 AND status = 'draft'
+              AND NOT EXISTS (
+                  SELECT 1 FROM episode_scripts es
+                  WHERE es.script_id = $1 AND es.current_version_id = $2
+              )
+            RETURNING *
+            """,
+            script_id,
+            version_id,
+            user_id,
+        )
+        return dict(row) if row else None
+
+    @staticmethod
     async def select_version(script_id: str, version_id: str) -> Optional[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
@@ -276,6 +382,8 @@ class EpisodeScriptConversationDAO:
                     version_id,
                 )
                 if not version:
+                    return None
+                if version["status"] != "ready":
                     return None
                 await conn.execute(
                     """

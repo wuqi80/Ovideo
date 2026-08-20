@@ -82,6 +82,7 @@ async def test_batch_create_transactional_writes_preserved_id_and_generated_imag
         [
             {
                 "_preserved_item_id": "sb_keep",
+                "lineage_id": "line_keep",
                 "sort_order": 0,
                 "generated_image_url": "/storage/keep.webp",
             }
@@ -92,5 +93,7 @@ async def test_batch_create_transactional_writes_preserved_id_and_generated_imag
     assert created == 1
     query, args = conn.calls[0]
     assert "generated_image_url" in query
+    assert "lineage_id" in query
     assert args[0] == "sb_keep"
+    assert args[1] == "line_keep"
     assert args[-1] == "/storage/keep.webp"

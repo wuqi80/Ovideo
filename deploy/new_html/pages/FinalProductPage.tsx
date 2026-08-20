@@ -11,6 +11,7 @@ import { Clapperboard, Download, Film, AlertCircle, Loader2, Wand2, Check, X, La
 import { listMediaItems } from '../services/mediaLibraryService';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { getVideoTakes, startCompose, getComposeStatus, type VideoShot, type ComposeStatus } from '../services/videoWorkflowService';
+import { selectContentTake } from '../services/contentWorkflowService';
 import { LazyVideo } from '../components/LazyVideo';
 import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 import {
@@ -84,7 +85,12 @@ export const FinalProductPage: React.FC = () => {
       const sh = r.shots || [];
       setShots(sh);
       const def: Record<string, string> = {};
-      sh.forEach(s => { if (s.takes?.length) def[s.item_id] = s.takes[0].segment_id; });
+      sh.forEach(s => {
+        if (!s.takes?.length) return;
+        def[s.item_id] = s.selected_segment_id
+          || s.takes.find(take => take.is_selected)?.segment_id
+          || s.takes[0].segment_id;
+      });
       setPicks(def);
     } catch (e: any) {
       alert('加载镜头失败：' + (e?.message || ''));
@@ -187,7 +193,10 @@ export const FinalProductPage: React.FC = () => {
   const additionalFinals = finals.slice(1);
 
   return (
-    <div className="layout-safe workflow-stage-canvas workflow-stage-scroll p-6">
+    <div
+      data-testid="final-product-scroll"
+      className="layout-safe workflow-stage-canvas workflow-stage-scroll h-full min-h-0 w-full overflow-y-auto p-6 custom-scrollbar"
+    >
       <header className="responsive-toolbar mb-5 flex items-center gap-2">
         <Clapperboard className="w-5 h-5 text-primary" />
         <h1 className="text-lg font-semibold text-n800">成品</h1>
@@ -414,7 +423,25 @@ export const FinalProductPage: React.FC = () => {
                       return (
                         <button
                           key={t.segment_id}
-                          onClick={() => setPicks(p => ({ ...p, [s.item_id]: t.segment_id }))}
+                          onClick={() => {
+                            setPicks(p => ({ ...p, [s.item_id]: t.segment_id }));
+                            if (t.take_id) {
+                              void selectContentTake(t.take_id, 'storyboard_item', s.item_id, 'video')
+                                .then(() => setShots(current => current.map(shot => (
+                                  shot.item_id === s.item_id
+                                    ? {
+                                      ...shot,
+                                      selected_segment_id: t.segment_id,
+                                      takes: shot.takes.map(take => ({
+                                        ...take,
+                                        is_selected: take.segment_id === t.segment_id,
+                                      })),
+                                    }
+                                    : shot
+                                ))))
+                                .catch(() => undefined);
+                            }
+                          }}
                           className={`relative shrink-0 w-28 aspect-video rounded border-2 overflow-hidden transition-all ${
                             selected ? 'border-primary ring-2 ring-primary/30' : 'border-n40 hover:border-n100'
                           }`}

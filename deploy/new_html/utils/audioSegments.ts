@@ -140,6 +140,7 @@ export function audioSegmentsToClips(
       return {
         clipId: segment.segmentId,
         itemId: item.itemId,
+        lineageId: item.lineageId,
         sortOrder: item.sortOrder,
         sequenceIndex: segment.sequenceIndex,
         type: speaker === '旁白' ? 'narration' : 'dialogue',

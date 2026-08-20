@@ -68,6 +68,8 @@ interface ScriptConversationPaneProps {
   onChangeModel: (model: AiModel) => void;
   onSend: (content: string) => Promise<void>;
   onGenerateDesign: (version: ScriptStoryboardVersion) => Promise<void> | void;
+  onConfirmVersion?: (version: ScriptStoryboardVersion) => Promise<void> | void;
+  onRejectVersion?: (version: ScriptStoryboardVersion) => Promise<void> | void;
   onEditVersion: (version: ScriptStoryboardVersion, content: string) => Promise<void>;
   onExportVersion: (version: ScriptStoryboardVersion) => void;
   onOpenStoryboard: () => void;
@@ -82,6 +84,42 @@ const formatTime = (value: number) => new Date(value).toLocaleString('zh-CN', {
   hour: '2-digit',
   minute: '2-digit',
 });
+
+const ScriptPatchPreview: React.FC<{ version: ScriptStoryboardVersion }> = ({ version }) => {
+  const patch = version.patch;
+  if (!patch) return null;
+  const operations = patch.operations || [];
+  const summary = patch.summary || { added: 0, deleted: 0, changed: 0, operationCount: 0 };
+  return (
+    <div className="mt-4 rounded-lg border border-warning/30 bg-warning-light/40 p-3" data-testid={`script-patch-${version.id}`}>
+      <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-n700">
+        <ArrowLeftRight className="h-3.5 w-3.5 text-warning" />
+        AI 修改待确认
+        <span className="font-normal text-n300">
+          新增 {summary.added} 行 · 删除 {summary.deleted} 行 · 修改 {summary.changed} 行
+        </span>
+      </div>
+      {operations.length > 0 && (
+        <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded border border-n40 bg-n0 p-2 font-mono text-[11px] leading-5">
+          {operations.slice(0, 20).map((operation, index) => (
+            <div key={`${operation.op}-${operation.baseStart}-${operation.candidateStart}-${index}`}>
+              <div className="mb-1 text-[10px] text-n100">
+                {operation.op === 'add' ? '新增' : operation.op === 'delete' ? '删除' : '修改'} · 原稿 {operation.baseStart}-{operation.baseEnd || operation.baseStart} 行
+              </div>
+              {operation.before.slice(0, 8).map((line, lineIndex) => (
+                <div key={`before-${lineIndex}`} className="break-all bg-danger-light px-2 text-danger">- {line || ' '}</div>
+              ))}
+              {operation.after.slice(0, 8).map((line, lineIndex) => (
+                <div key={`after-${lineIndex}`} className="break-all bg-success-light px-2 text-success">+ {line || ' '}</div>
+              ))}
+            </div>
+          ))}
+          {operations.length > 20 && <div className="text-n100">其余 {operations.length - 20} 处差异已折叠</div>}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export interface ConversationTurn {
   id: string;
@@ -261,6 +299,8 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   onChangeModel,
   onSend,
   onGenerateDesign,
+  onConfirmVersion = () => undefined,
+  onRejectVersion = () => undefined,
   onEditVersion,
   onExportVersion,
   onOpenStoryboard,
@@ -608,6 +648,12 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                   <Check className="h-3 w-3" /> 本集采用
                 </span>
               )}
+              {version?.status === 'draft' && (
+                <span className="rounded border border-warning/30 bg-warning-light px-1.5 py-0.5 text-[10px] font-medium text-warning">待确认</span>
+              )}
+              {version?.status === 'rejected' && (
+                <span className="rounded border border-n40 bg-n20 px-1.5 py-0.5 text-[10px] text-n300">已拒绝</span>
+              )}
               {message.status === 'streaming' && <LoaderCircle className="h-3.5 w-3.5 animate-spin text-primary" />}
               {message.status === 'failed' && <span className="text-[10px] text-danger">生成失败</span>}
               <span className="ml-auto flex items-center gap-2">
@@ -630,6 +676,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 <span className="text-[10px] text-n100">{formatTime(message.createdAt)}</span>
               </span>
             </div>
+            {version?.status === 'draft' && <ScriptPatchPreview version={version} />}
             <div
               id={`script-message-content-${message.id}`}
               data-testid={`script-message-content-${message.id}`}
@@ -672,7 +719,29 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 {isCollapsed ? '展开完整内容' : '收起内容'}
               </button>
             )}
-            {isAssistant && version && message.status === 'completed' && (
+            {isAssistant && version?.status === 'draft' && message.status === 'completed' && (
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-warning/20 pt-3">
+                <button
+                  type="button"
+                  onClick={() => onConfirmVersion(version)}
+                  disabled={isSending}
+                  className="inline-flex h-8 items-center gap-1.5 rounded bg-success px-3 text-xs font-medium text-white hover:opacity-90 disabled:opacity-60"
+                >
+                  {isSending ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  确认并采用修改
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRejectVersion(version)}
+                  disabled={isSending}
+                  className="inline-flex h-8 items-center gap-1.5 rounded border border-danger/30 bg-n0 px-3 text-xs text-danger hover:bg-danger-light disabled:opacity-60"
+                >
+                  <X className="h-3.5 w-3.5" /> 拒绝本次修改
+                </button>
+                <span className="text-[10px] text-n100">确认前不会覆盖当前正式剧本，也不会触发下游重新生成</span>
+              </div>
+            )}
+            {isAssistant && version?.status === 'ready' && message.status === 'completed' && (
               <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-n40 pt-3">
                 <button
                   type="button"

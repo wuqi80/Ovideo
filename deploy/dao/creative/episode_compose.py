@@ -23,12 +23,21 @@ class EpisodeComposeDAO:
                    vs.segment_id,
                    COALESCE(entity_video.file_url, vs.video_url) AS video_url,
                    COALESCE(entity_video.created_at, vs.created_at) AS created_at,
-                   COALESCE(entity_video.thumbnail_url, legacy_file.thumbnail_url) AS thumbnail_url
+                   COALESCE(entity_video.thumbnail_url, legacy_file.thumbnail_url) AS thumbnail_url,
+                   unified_take.take_id,
+                   (content_selection.selected_take_id = unified_take.take_id) AS is_selected
             FROM storyboard_items si
             JOIN video_segments vs
-              ON vs.storyboard_item_id = si.item_id
+              ON vs.episode_id = si.episode_id
+             AND (
+                 vs.storyboard_item_id = si.item_id
+                 OR (
+                     vs.storyboard_lineage_id IS NOT NULL
+                     AND vs.storyboard_lineage_id = si.lineage_id
+                 )
+             )
             LEFT JOIN LATERAL (
-                SELECT f.file_url, f.thumbnail_url, f.created_at
+                SELECT f.file_id, f.file_url, f.thumbnail_url, f.created_at
                 FROM files f
                 WHERE f.entity_type = 'video_segment'
                   AND f.entity_id = vs.segment_id
@@ -41,6 +50,24 @@ class EpisodeComposeDAO:
             ) entity_video ON TRUE
             LEFT JOIN files legacy_file
               ON legacy_file.file_url = split_part(vs.video_url, '?', 1)
+            LEFT JOIN LATERAL (
+                SELECT ct.take_id
+                FROM content_takes ct
+                WHERE ct.entity_type = 'storyboard_item'
+                  AND ct.entity_id = si.item_id
+                  AND ct.slot = 'video'
+                  AND ct.status = 'active'
+                  AND (
+                      ct.source_id = vs.segment_id
+                      OR (entity_video.file_url IS NOT NULL AND ct.file_id = entity_video.file_id)
+                  )
+                ORDER BY ct.created_at DESC, ct.id DESC
+                LIMIT 1
+            ) unified_take ON TRUE
+            LEFT JOIN content_selections content_selection
+              ON content_selection.entity_type = 'storyboard_item'
+             AND content_selection.entity_id = si.item_id
+             AND content_selection.slot = 'video'
             WHERE si.episode_id = $1
               AND COALESCE(entity_video.file_url, vs.video_url) IS NOT NULL
             ORDER BY si.sort_order, COALESCE(entity_video.created_at, vs.created_at) DESC

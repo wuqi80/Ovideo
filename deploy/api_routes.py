@@ -25,6 +25,7 @@ from dao_character_voice import CharacterVoiceDAO
 from dao_video_voice_reference import VideoVoiceReferenceDAO
 from dao_organization import OrganizationMemberDAO
 from dao.provider_objects import ProviderObjectDAO
+from dao.creative.content_workflow import ContentWorkflowDAO
 from audio_provider import get_audio_provider, AUDIO_UPLOAD_DIR
 
 try:
@@ -44,6 +45,7 @@ from routers.assets import create_assets_router
 from routers.audio import create_audio_router
 from routers.canvas import create_canvas_router
 from routers.content_versions import create_content_versions_router
+from routers.content_workflow import create_content_workflow_router
 from routers.entity_files import create_entity_files_router
 from routers.episode_video import create_episode_video_router
 from routers.episodes import create_episodes_router
@@ -185,6 +187,14 @@ router.include_router(
     create_episode_video_router(
         get_current_user_dependency=get_current_user,
         video_segment_dao=VideoSegmentDAO,
+        episode_dao=EpisodeDAO,
+    )
+)
+
+router.include_router(
+    create_content_workflow_router(
+        get_current_user_dependency=get_current_user,
+        content_workflow_dao=ContentWorkflowDAO,
         episode_dao=EpisodeDAO,
     )
 )

@@ -51,6 +51,7 @@ class _TTSRequest:
         self.file_role = kwargs.pop("file_role", None)
         self.project_id = kwargs.pop("project_id", "proj_1")
         self.episode_id = kwargs.pop("episode_id", "ep_1")
+        self.storyboard_lineage_id = kwargs.pop("storyboard_lineage_id", "line_1")
         self.bind_to_character_voice_id = kwargs.pop("bind_to_character_voice_id", None)
 
 
@@ -247,6 +248,10 @@ async def test_generate_minimax_tts_sync_response_saves_media_and_binds_voice():
     assert save_calls[0]["file_role"] == "dialogue_audio"
     assert save_calls[0]["project_id"] == "proj_1"
     assert save_calls[0]["original_ext"] == ".mp3"
+    assert save_calls[0]["extra_metadata"] == {
+        "storyboard_lineage_id": "line_1",
+        "requested_entity_id": "shot_1",
+    }
     assert media_calls[0]["source"] == "generated_audio_minimax"
     assert media_calls[0]["project_id"] == "proj_1"
     assert media_calls[0]["title"] == "hello world"

@@ -131,6 +131,7 @@ class StoryboardDAO:
     FIELD_SETS = {
         "audio": (
             "item_id",
+            "lineage_id",
             "episode_id",
             "script_id",
             "sort_order",
@@ -148,6 +149,7 @@ class StoryboardDAO:
         ),
         "video": (
             "item_id",
+            "lineage_id",
             "episode_id",
             "script_id",
             "sort_order",
@@ -166,6 +168,7 @@ class StoryboardDAO:
         ),
         "audio_stage": (
             "item_id",
+            "lineage_id",
             "episode_id",
             "script_id",
             "sort_order",
@@ -187,6 +190,7 @@ class StoryboardDAO:
         ),
         "materials": (
             "item_id",
+            "lineage_id",
             "episode_id",
             "script_id",
             "sort_order",
@@ -238,6 +242,7 @@ class StoryboardDAO:
         # 2026-06-16：创建时也持久化已生成的画面/时长，否则"删旧建新"会丢图（#4/#5）。
         generated_image_url: str = '',
         planned_duration_ms: Optional[int] = None,
+        lineage_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         db = get_db_manager()
         if not db:
@@ -245,18 +250,18 @@ class StoryboardDAO:
         item_id = f"sb_{uuid.uuid4().hex[:12]}"
         query = """
             INSERT INTO storyboard_items
-                (item_id, episode_id, sort_order, scene_heading, action_text,
+                (item_id, lineage_id, episode_id, sort_order, scene_heading, action_text,
                  dialogue, camera_movement, image_prompt, video_prompt, bound_assets,
                  configured_references, reference_config_initialized, script_id,
                  script_segment_id, source_video_shot_no,
                  video_script_block, shot_size, camera_angle,
                  generated_image_url, planned_duration_ms)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb,
-                    $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb,
+                    $12::jsonb, $13, $14, $15, $16, $17, $18, $19, $20, $21)
             RETURNING *
         """
         return await db.fetchrow(
-            query, item_id, episode_id, sort_order,
+            query, item_id, lineage_id, episode_id, sort_order,
             scene_heading, action_text, dialogue,
             camera_movement, image_prompt, video_prompt,
             json.dumps(bound_assets or [], ensure_ascii=False),
@@ -301,6 +306,7 @@ class StoryboardDAO:
                 camera_angle=item.get('camera_angle', ''),
                 generated_image_url=item.get('generated_image_url', ''),
                 planned_duration_ms=item.get('planned_duration_ms'),
+                lineage_id=item.get('lineage_id') or item.get('lineageId'),
             )
             if row:
                 results.append(dict(row))
@@ -473,16 +479,18 @@ class StoryboardDAO:
             sid = script_id or item.get('script_id')
             await conn.execute("""
                 INSERT INTO storyboard_items
-                    (item_id, episode_id, sort_order, scene_heading, action_text,
+                    (item_id, lineage_id, episode_id, sort_order, scene_heading, action_text,
                      dialogue, camera_movement, image_prompt, video_prompt,
                      bound_assets, configured_references, reference_config_initialized,
                      planned_duration_ms, script_id,
                      script_segment_id, source_video_shot_no, video_script_block,
                      shot_size, camera_angle, generated_image_url)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13,
-                        $14, $15, $16, $17, $18, $19, $20)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13, $14,
+                        $15, $16, $17, $18, $19, $20, $21)
             """,
-                item_id, episode_id,
+                item_id,
+                item.get('lineage_id') or item.get('lineageId'),
+                episode_id,
                 item.get('sort_order', 0),
                 item.get('scene_heading', ''),
                 item.get('action_text', ''),

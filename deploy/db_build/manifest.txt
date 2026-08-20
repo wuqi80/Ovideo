@@ -77,3 +77,6 @@ sql/db_migration_provider_remote_objects.sql # REF users; provider remote object
 sql/db_migration_admin_extra.sql            # 建 admin_audit_logs; ALTER credit_*/media_library_items
 sql/db_migration_visibility_columns.sql     # ALTER media_library_items/project_groups; REF organizations
 sql/db_migration_video_reverse.sql          # REF files, projects, users
+
+# ---- 8. 内容工作流统一层（依赖创作核心、files、assets、video_segments）----
+sql/db_migration_content_workflow_model.sql # takes/selected/stale/bindings/lineage/script patches

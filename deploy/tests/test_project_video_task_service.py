@@ -71,6 +71,27 @@ class _EntityFileDAO:
         return {"items": [{**row} for row in rows], "total": len(rows)}
 
 
+class _ContentWorkflowDAO:
+    calls = []
+
+    @classmethod
+    async def resolve_bindings(cls, project_id, item_id, tag_keys):
+        cls.calls.append((project_id, item_id, tag_keys))
+        return [
+            {
+                "binding_id": "binding_shot",
+                "binding_version": 3,
+                "tag_key": "char:小悟",
+                "scope": "shot",
+                "asset_id": "asset_new",
+                "file_id": "file_new",
+                "effective_url": "/storage/new-reference.webp",
+                "is_disabled": False,
+                "locked": True,
+            }
+        ]
+
+
 class _Logger:
     infos = []
     warnings = []
@@ -145,6 +166,7 @@ def _reset_fakes():
     _EntityFileDAO.entity_files = {}
     _EntityFileDAO.selected_calls = []
     _EntityFileDAO.entity_file_calls = []
+    _ContentWorkflowDAO.calls = []
     _Logger.infos = []
     _Logger.warnings = []
     _Logger.errors = []
@@ -278,6 +300,46 @@ async def test_export_project_to_video_response_prefers_current_selected_entity_
     assert task["scene"] == "教室"
     assert _StoryboardDAO.calls == ["shot_1"]
     assert _EntityFileDAO.selected_calls == [("storyboard_item", "shot_1", "generated_image")]
+
+
+@pytest.mark.asyncio
+async def test_export_project_to_video_resolves_latest_binding_at_task_creation():
+    _StoryboardDAO.rows = {
+        "shot_1": {
+            "item_id": "shot_1",
+            "video_prompt": "db prompt",
+            "generated_image_url": "/storage/keyframe.webp",
+            "bound_assets": ["char:小悟"],
+        }
+    }
+
+    result = await svc.export_project_to_video_response(
+        "proj_1",
+        selected_items=["shot_1"],
+        username="yuan",
+        project_dao=_ProjectDAO,
+        version_dao=_VersionDAO,
+        file_dao=_FileDAO,
+        logger=_Logger,
+        storyboard_dao=_StoryboardDAO,
+        entity_file_dao=_EntityFileDAO,
+        content_workflow_dao=_ContentWorkflowDAO,
+    )
+
+    assert _ContentWorkflowDAO.calls == [("proj_1", "shot_1", ["char:小悟"])]
+    assert result["video_tasks"][0]["resolved_bindings"] == [
+        {
+            "binding_id": "binding_shot",
+            "binding_version": 3,
+            "tag_key": "char:小悟",
+            "scope": "shot",
+            "asset_id": "asset_new",
+            "file_id": "file_new",
+            "file_url": "/storage/new-reference.webp",
+            "is_disabled": False,
+            "locked": True,
+        }
+    ]
 
 
 @pytest.mark.asyncio

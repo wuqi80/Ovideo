@@ -11,6 +11,7 @@ export type TaskState = 'idle' | 'pending' | 'running' | 'processing' | 'done' |
 
 export interface UploadedImage {
   id: string;
+  fileId?: string;
   url: string;
   filename: string;
   storageUrl?: string;

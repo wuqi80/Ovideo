@@ -11,6 +11,7 @@ import {
 } from '../utils/episodeAdapters';
 import { createAsset as apiCreateAsset } from '../services/assetMutationService';
 import { linkEntityFile } from '../services/entityFileService';
+import { putContentBinding } from '../services/contentWorkflowService';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { waitForIdle } from '../utils/idleScheduler';
 import {
@@ -333,7 +334,37 @@ export const MaterialsPage: React.FC = () => {
     return cleaned;
   }, [assets, assetNameToId]);
 
-  const persistMaterialBinding = useCallback(async (
+  const materialTagKey = useCallback((tagName: string) => {
+    const asset = assets.find(candidate => candidate.name === tagName);
+    const prefix = asset?.assetType === 'scene' ? 'scene' : asset?.assetType === 'prop' ? 'prop' : 'char';
+    return `${prefix}:${tagName}`;
+  }, [assets]);
+
+  const selectedMaterial = useCallback((tagName: string, materialId: string) => (
+    (effectiveLibrary[tagName] || []).find(material => material.id === materialId)
+  ), [effectiveLibrary]);
+
+  const persistNormalizedMaterialBinding = useCallback(async (
+    item: StoryboardItemDB,
+    tagName: string,
+    materialId: string,
+    scope: 'project' | 'shot',
+  ) => {
+    const material = selectedMaterial(tagName, materialId);
+    const assetId = material?.assetId || assetNameToId[tagName];
+    if (!projectId || !assetId) throw new Error('没有找到该素材对应的项目资产');
+    await putContentBinding(projectId, {
+      episode_id: episodeId || undefined,
+      storyboard_item_id: scope === 'shot' ? item.itemId : undefined,
+      tag_key: materialTagKey(tagName),
+      scope,
+      asset_id: assetId,
+      file_id: material?.fileId,
+      locked: true,
+    });
+  }, [assetNameToId, episodeId, materialTagKey, projectId, selectedMaterial]);
+
+  const persistLegacyMaterialBinding = useCallback(async (
     item: StoryboardItemDB,
     tagName: string,
     materialId: string,
@@ -341,6 +372,30 @@ export const MaterialsPage: React.FC = () => {
     const cleaned = buildBoundAssets(item, tagName, materialId);
     await updateMaterialsStoryboardItem(item.itemId, { bound_assets: cleaned, boundAssets: cleaned });
   }, [buildBoundAssets, updateMaterialsStoryboardItem]);
+
+  const persistMaterialBinding = useCallback(async (
+    item: StoryboardItemDB,
+    tagName: string,
+    materialId: string,
+  ) => {
+    await persistNormalizedMaterialBinding(item, tagName, materialId, 'shot');
+    await persistLegacyMaterialBinding(item, tagName, materialId);
+  }, [persistLegacyMaterialBinding, persistNormalizedMaterialBinding]);
+
+  const persistDisabledMaterialBinding = useCallback(async (
+    item: StoryboardItemDB,
+    tagName: string,
+  ) => {
+    if (!projectId) return;
+    await putContentBinding(projectId, {
+      episode_id: episodeId || undefined,
+      storyboard_item_id: item.itemId,
+      tag_key: materialTagKey(tagName),
+      scope: 'shot',
+      is_disabled: true,
+      locked: true,
+    });
+  }, [episodeId, materialTagKey, projectId]);
 
   const showMaterialToast = useCallback((message: string) => {
     setToastMsg(message);
@@ -399,10 +454,14 @@ export const MaterialsPage: React.FC = () => {
 
     let cascadeCount = 0;
     try {
-      await persistMaterialBinding(currentItem, tagName, materialId);
+      // “同步后续” establishes the project default.  Each shot can still
+      // create an explicit override via “仅当前镜头”.  Keep legacy tokens for
+      // old readers until all generation paths consume normalized bindings.
+      await persistNormalizedMaterialBinding(currentItem, tagName, materialId, 'project');
+      await persistLegacyMaterialBinding(currentItem, tagName, materialId);
       for (const target of cascadeTargets) {
         try {
-          await persistMaterialBinding(target, tagName, materialId);
+          await persistLegacyMaterialBinding(target, tagName, materialId);
           cascadeCount += 1;
         } catch (e) {
           console.error('级联绑定后续镜头失败:', e);
@@ -412,7 +471,7 @@ export const MaterialsPage: React.FC = () => {
     } catch (e) {
       console.error('绑定素材失败:', e);
     }
-  }, [bindDialog, storyboardItems, persistMaterialBinding, showMaterialToast]);
+  }, [bindDialog, storyboardItems, persistLegacyMaterialBinding, persistNormalizedMaterialBinding, showMaterialToast]);
 
   const handleBindCurrentOnly = useCallback(async () => {
     if (!bindDialog) return;
@@ -457,11 +516,12 @@ export const MaterialsPage: React.FC = () => {
     );
     filtered.push(`nosel:${tagName}`);
     try {
+      await persistDisabledMaterialBinding(item, tagName);
       await updateMaterialsStoryboardItem(shotId, { bound_assets: filtered, boundAssets: filtered });
     } catch (e) {
       console.error('解绑素材失败:', e);
     }
-  }, [storyboardItems, assetNameToId, updateMaterialsStoryboardItem]);
+  }, [storyboardItems, assetNameToId, persistDisabledMaterialBinding, updateMaterialsStoryboardItem]);
 
   const handleUnbindConfirm = useCallback(async () => {
     if (!unbindDialog) return;
@@ -469,6 +529,8 @@ export const MaterialsPage: React.FC = () => {
     setUnbindDialog(null);
 
     const unbindItem = async (itemId: string, boundAssets: string[]) => {
+      const item = storyboardItems.find(candidate => candidate.itemId === itemId);
+      if (item) await persistDisabledMaterialBinding(item, tagName);
       const assetId = assetNameToId[tagName];
       const filtered = boundAssets.filter((id: string) =>
         id !== assetId &&
@@ -494,7 +556,7 @@ export const MaterialsPage: React.FC = () => {
     } catch (e) {
       console.error('解绑素材失败:', e);
     }
-  }, [unbindDialog, storyboardItems, assetNameToId, updateMaterialsStoryboardItem]);
+  }, [unbindDialog, storyboardItems, assetNameToId, persistDisabledMaterialBinding, updateMaterialsStoryboardItem]);
 
   const handleUnbindCancel = useCallback(async () => {
     if (!unbindDialog) return;
@@ -514,11 +576,12 @@ export const MaterialsPage: React.FC = () => {
     filtered.push(`nosel:${tagName}`);
 
     try {
+      await persistDisabledMaterialBinding(currentItem, tagName);
       await updateMaterialsStoryboardItem(shotId, { bound_assets: filtered, boundAssets: filtered });
     } catch (e) {
       console.error('解绑素材失败:', e);
     }
-  }, [unbindDialog, storyboardItems, assetNameToId, updateMaterialsStoryboardItem]);
+  }, [unbindDialog, storyboardItems, assetNameToId, persistDisabledMaterialBinding, updateMaterialsStoryboardItem]);
 
   const handleNextStep = useCallback(() => {
     navigate(`/projects/${projectId}/ep/${episodeId}/workflow/audio`);

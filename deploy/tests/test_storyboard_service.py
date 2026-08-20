@@ -278,6 +278,53 @@ async def test_update_storyboard_item_preserves_zero_values():
     }
 
 
+async def test_update_storyboard_item_only_stales_content_for_real_changes():
+    class ExistingStoryboardDAO:
+        @staticmethod
+        async def get_by_id(_item_id):
+            return {"item_id": "sb_1", "episode_id": "ep_1", "image_prompt": "same"}
+
+        @staticmethod
+        async def update(item_id, **fields):
+            return {
+                "item_id": item_id,
+                "episode_id": "ep_1",
+                "updated_at": "2026-08-20T10:00:00",
+                **fields,
+            }
+
+    class WorkflowDAO:
+        calls = []
+
+        @classmethod
+        async def list_storyboard_targets(cls, **_kwargs):
+            cls.calls.append("targets")
+            return [{"item_id": "sb_1", "lineage_id": "line_1", "episode_id": "ep_1"}]
+
+        @classmethod
+        async def create_stale_event(cls, **kwargs):
+            cls.calls.append(kwargs)
+            return kwargs
+
+    unchanged = await storyboard_service.update_storyboard_item(
+        "sb_1",
+        {"image_prompt": "same"},
+        storyboard_dao=ExistingStoryboardDAO,
+        content_workflow_dao=WorkflowDAO,
+        updated_by="user_1",
+    )
+    changed = await storyboard_service.update_storyboard_item(
+        "sb_1",
+        {"image_prompt": "new"},
+        storyboard_dao=ExistingStoryboardDAO,
+        content_workflow_dao=WorkflowDAO,
+        updated_by="user_1",
+    )
+
+    assert unchanged["stale_events"] == []
+    assert [event["target_slot"] for event in changed["stale_events"]] == ["keyframe", "video"]
+
+
 async def test_update_storyboard_item_raises_when_missing():
     FakeStoryboardDAO.update_returns_none = True
 

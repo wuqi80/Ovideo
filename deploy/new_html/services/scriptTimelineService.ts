@@ -58,6 +58,10 @@ const mapVersion = (row: any): ScriptStoryboardVersion => ({
   storyboardItems: asArray<StoryboardItem>(row?.storyboard_items ?? row?.storyboardItems),
   source: row?.source || 'ai',
   status: row?.status || 'ready',
+  baseVersionId: row?.base_version_id || row?.baseVersionId || undefined,
+  patch: Object.keys(asRecord(row?.patch)).length ? asRecord(row?.patch) as ScriptStoryboardVersion['patch'] : undefined,
+  confirmedAt: row?.confirmed_at || row?.confirmedAt ? asEpoch(row?.confirmed_at || row?.confirmedAt) : undefined,
+  rejectedAt: row?.rejected_at || row?.rejectedAt ? asEpoch(row?.rejected_at || row?.rejectedAt) : undefined,
   modelAlias: row?.model_alias || row?.modelAlias || undefined,
   provider: row?.provider || undefined,
   modelName: row?.model_name || row?.modelName || undefined,
@@ -313,6 +317,32 @@ export async function selectScriptVersion(
       await waitForScriptVersionSelectRetry(delayMs);
     }
   }
+}
+
+export async function confirmScriptVersion(
+  episodeId: string,
+  scriptId: string,
+  versionId: string,
+): Promise<ScriptStoryboardVersion> {
+  const response = await apiJson<any>(
+    `/api/episodes/${episodeId}/scripts/${scriptId}/versions/${versionId}/confirm`,
+    { method: 'PUT' },
+    'confirmScriptVersion',
+  );
+  return mapVersion(response?.version);
+}
+
+export async function rejectScriptVersion(
+  episodeId: string,
+  scriptId: string,
+  versionId: string,
+): Promise<ScriptStoryboardVersion> {
+  const response = await apiJson<any>(
+    `/api/episodes/${episodeId}/scripts/${scriptId}/versions/${versionId}/reject`,
+    { method: 'PUT' },
+    'rejectScriptVersion',
+  );
+  return mapVersion(response?.version);
 }
 
 export async function updateScriptVersionMetadata(

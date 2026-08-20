@@ -60,4 +60,43 @@ describe('buildVideoTaskImport', () => {
       { storyboardId: 'sb_missing', reason: 'missing_image_url' },
     ]);
   });
+
+  it('links the latest resolved binding to the imported generation card', () => {
+    let t = 2000;
+    const result = buildVideoTaskImport([{
+      image_url: '/uploads/keyframe.png',
+      storyboard_id: 'sb_1',
+      resolved_bindings: [
+        {
+          binding_id: 'binding_1',
+          binding_version: 4,
+          tag_key: 'char:小悟',
+          scope: 'shot',
+          file_id: 'file_reference',
+          file_url: '/uploads/reference.png',
+          is_disabled: false,
+        },
+        {
+          binding_id: 'binding_disabled',
+          tag_key: 'scene:旧场景',
+          scope: 'shot',
+          file_url: '/uploads/disabled.png',
+          is_disabled: true,
+        },
+      ],
+    }], {
+      normalizeUrl: url => `secure:${url}`,
+      now: () => t++,
+      random: () => 0.25,
+    });
+
+    expect(result.groups).toHaveLength(1);
+    expect(result.images).toHaveLength(2);
+    expect(result.images[1]).toEqual(expect.objectContaining({
+      fileId: 'file_reference',
+      url: 'secure:/uploads/reference.png',
+      linkedGroupUuids: [result.groups[0].uuid],
+      tags: ['char:小悟', 'shot'],
+    }));
+  });
 });

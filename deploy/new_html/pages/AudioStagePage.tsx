@@ -424,6 +424,7 @@ export const AudioStagePage: React.FC = () => {
       const ttsArgs = {
         text: textToSpeak, voice_id: minimaxVoiceId, speed, emotion, pitch,
         entity_type: 'storyboard_item', entity_id: clip.itemId,
+        storyboard_lineage_id: clip.lineageId,
         file_role: fileRole,
         episode_id: episodeId,
       };

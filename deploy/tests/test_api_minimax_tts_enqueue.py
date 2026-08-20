@@ -58,7 +58,14 @@ async def test_post_minimax_tts_returns_task_id_immediately(client):
 
         resp = await client.post(
             "/api/minimax/tts",
-            json={"text": "你好", "voice_id": "female-shaonv"},
+            json={
+                "text": "你好",
+                "voice_id": "female-shaonv",
+                "entity_type": "storyboard_item",
+                "entity_id": "shot_1",
+                "episode_id": "ep_1",
+                "storyboard_lineage_id": "line_1",
+            },
         )
 
     assert resp.status_code == 200, resp.text
@@ -71,6 +78,7 @@ async def test_post_minimax_tts_returns_task_id_immediately(client):
     assert call_kwargs['task_type'] == 'minimax_tts'
     assert call_kwargs['task_data']['text'] == '你好'
     assert call_kwargs['task_data']['voice_id'] == 'female-shaonv'
+    assert call_kwargs['task_data']['storyboard_lineage_id'] == 'line_1'
     assert call_kwargs['prepare'] is False  # MiniMax TTS 不需要 ComfyUI workflow 预构建
     assert call_kwargs['user_id'] == 'u-test'
 

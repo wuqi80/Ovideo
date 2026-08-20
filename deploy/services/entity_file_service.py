@@ -110,6 +110,8 @@ async def select_entity_file(
     file_role: str,
     entity_file_dao: Any,
     logger: Optional[logging.Logger] = None,
+    selected_by: Optional[str] = None,
+    content_workflow_dao: Any = None,
 ) -> Dict[str, Any]:
     row = await entity_file_dao.select_file(file_id, entity_type, entity_id, file_role)
     if not row:
@@ -120,6 +122,46 @@ async def select_entity_file(
     except Exception as exc:
         if logger:
             logger.warning("同步旧URL字段失败: %s", exc)
+
+    # Keep old file selection and the new type-agnostic selection in one user
+    # action.  During a rolling migration this remains best-effort.
+    try:
+        if content_workflow_dao is None:
+            from dao.creative.content_workflow import ContentWorkflowDAO
+
+            content_workflow_dao = ContentWorkflowDAO
+        from services.content_workflow_service import (
+            list_content_takes,
+            normalize_entity_type,
+            select_content_take,
+            slot_for_file,
+        )
+
+        slot = slot_for_file(str(row.get("file_type") or ""), file_role)
+        if slot:
+            normalized_type = normalize_entity_type(entity_type)
+            takes_result = await list_content_takes(
+                entity_type=normalized_type,
+                entity_id=entity_id,
+                slot=slot,
+                workflow_dao=content_workflow_dao,
+            )
+            take = next(
+                (item for item in takes_result["items"] if item.get("file_id") == file_id),
+                None,
+            )
+            if take:
+                await select_content_take(
+                    entity_type=normalized_type,
+                    entity_id=entity_id,
+                    slot=slot,
+                    take_id=take["take_id"],
+                    selected_by=selected_by,
+                    workflow_dao=content_workflow_dao,
+                )
+    except Exception as exc:
+        if logger:
+            logger.warning("统一候选选择同步失败（旧选择已生效）: %s", exc)
     return {"success": True, "file": row}
 
 

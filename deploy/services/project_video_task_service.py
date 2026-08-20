@@ -132,6 +132,58 @@ def _bound_asset_names(raw: Any, prefix: str) -> list[str]:
     return names
 
 
+def _bound_asset_tag_keys(raw: Any) -> list[str]:
+    keys: list[str] = []
+    seen: set[str] = set()
+    for item in _parse_bound_assets(raw):
+        if not isinstance(item, str):
+            continue
+        value = item.strip()
+        if not value.startswith(("char:", "scene:", "prop:")) or value in seen:
+            continue
+        seen.add(value)
+        keys.append(value)
+    return keys
+
+
+async def _resolve_live_bindings(
+    *,
+    project_id: str,
+    item_id: str,
+    row: dict[str, Any],
+    content_workflow_dao: Any,
+    logger: Any,
+) -> list[dict[str, Any]]:
+    if not content_workflow_dao:
+        return []
+    tag_keys = _bound_asset_tag_keys(row.get("bound_assets") or row.get("boundAssets"))
+    if not tag_keys:
+        return []
+    resolver = getattr(content_workflow_dao, "resolve_bindings", None)
+    if not callable(resolver):
+        return []
+    try:
+        rows = await resolver(project_id, item_id, tag_keys)
+    except Exception as exc:
+        logger.warning("Failed to resolve live bindings for shot %s: %s", item_id, exc)
+        return []
+    return [
+        {
+            "binding_id": item.get("binding_id"),
+            "binding_version": item.get("binding_version"),
+            "tag_key": item.get("tag_key"),
+            "scope": item.get("scope"),
+            "asset_id": item.get("asset_id"),
+            "file_id": item.get("file_id"),
+            "file_url": item.get("effective_url"),
+            "is_disabled": bool(item.get("is_disabled")),
+            "locked": bool(item.get("locked")),
+        }
+        for raw in rows
+        for item in [dict(raw)]
+    ]
+
+
 async def _get_storyboard_row(
     item_id: str,
     *,
@@ -295,10 +347,18 @@ async def export_project_to_video_response(
     logger: Any,
     storyboard_dao: Any = None,
     entity_file_dao: Any = None,
+    content_workflow_dao: Any = None,
     now_provider: Callable[[], datetime] = datetime.now,
     persist_image: ImagePersister = persist_export_storyboard_base64_image,
 ) -> dict[str, Any]:
     db_project = await _get_owned_project(project_id, username=username, project_dao=project_dao)
+    if content_workflow_dao is None:
+        try:
+            from dao.creative.content_workflow import ContentWorkflowDAO
+
+            content_workflow_dao = ContentWorkflowDAO
+        except Exception:
+            content_workflow_dao = None
     version_id = await _ensure_export_version(
         project_id,
         username=username,
@@ -340,9 +400,16 @@ async def export_project_to_video_response(
         if not image_url:
             logger.warning("Shot %s has no image", item_id)
 
+        resolved_bindings = await _resolve_live_bindings(
+            project_id=project_id,
+            item_id=item_id,
+            row=db_row,
+            content_workflow_dao=content_workflow_dao,
+            logger=logger,
+        )
+
         logger.info("Exporting shot %s image=%s...", item_id, image_url[:50] if image_url else "(none)")
-        video_tasks.append(
-            {
+        video_task = {
                 "storyboard_id": item["id"],
                 "image_url": image_url or "",
                 "video_prompt": _legacy_or_db_text(item, db_row, "video_prompt", "videoPrompt"),
@@ -351,7 +418,11 @@ async def export_project_to_video_response(
                 "characters": _characters_for_task(item, db_row),
                 "scene": _scene_for_task(item, db_row),
             }
-        )
+        # Snapshot the values resolved immediately before task creation.
+        # Project defaults are overridden by shot bindings in the DAO.
+        if resolved_bindings:
+            video_task["resolved_bindings"] = resolved_bindings
+        video_tasks.append(video_task)
 
     data["video_tasks"] = video_tasks
     data["stage"] = 4
