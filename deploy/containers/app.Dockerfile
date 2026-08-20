@@ -11,6 +11,7 @@ COPY studio/package.json studio/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY studio ./
 COPY deploy/new_html /source/deploy/new_html
+COPY --from=newui-build /source/deploy/new_html/node_modules /source/deploy/new_html/node_modules
 RUN npm run build
 
 FROM docker.io/library/python:3.12-slim-bookworm AS runtime

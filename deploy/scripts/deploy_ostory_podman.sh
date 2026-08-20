@@ -29,6 +29,7 @@ IMAGE="localhost/ostory-app:${GIT_SHA}"
 RELEASED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 podman build \
+  --ulimit nofile=1048576:1048576 \
   --file "$SOURCE_DIR/deploy/containers/app.Dockerfile" \
   --build-arg "GIT_SHA=$GIT_SHA" \
   --tag "$IMAGE" \

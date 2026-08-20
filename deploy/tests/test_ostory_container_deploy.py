@@ -13,6 +13,7 @@ def test_ostory_image_builds_both_frontends_and_runs_canonical_migrations():
     assert "FROM docker.io/library/node:22-bookworm-slim AS studio-build" in dockerfile
     assert "FROM docker.io/library/python:3.12-slim-bookworm AS runtime" in dockerfile
     assert "COPY deploy/new_html /source/deploy/new_html" in dockerfile
+    assert "COPY --from=newui-build /source/deploy/new_html/node_modules /source/deploy/new_html/node_modules" in dockerfile
     assert "COPY --from=newui-build /source/deploy/dist ./dist" in dockerfile
     assert "COPY --from=studio-build /source/studio/dist /studio/dist" in dockerfile
     assert "python db_build/build_fresh_db.py" in entrypoint
@@ -24,6 +25,7 @@ def test_ostory_pod_exposes_only_https_ingress_and_persists_state():
 
     assert "--publish 80:80" in script
     assert "--publish 443:443" in script
+    assert "--ulimit nofile=1048576:1048576" in script
     assert "--publish 5432" not in script
     assert "--publish 6379" not in script
     assert "ostory-postgres:/var/lib/postgresql/data" in script
