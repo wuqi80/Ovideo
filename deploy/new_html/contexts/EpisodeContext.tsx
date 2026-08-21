@@ -366,8 +366,8 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       }
     };
 
-    window.addEventListener('drama:episode-data-changed', onEpisodeDataChanged);
-    return () => window.removeEventListener('drama:episode-data-changed', onEpisodeDataChanged);
+    window.addEventListener('ostory:episode-data-changed', onEpisodeDataChanged);
+    return () => window.removeEventListener('ostory:episode-data-changed', onEpisodeDataChanged);
   }, [episodeId, fetchSlices]);
 
   const loadSlices = useCallback(async (...slices: DataSlice[]) => {

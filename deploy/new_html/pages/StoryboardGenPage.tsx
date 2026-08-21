@@ -199,9 +199,9 @@ export const StoryboardGenPage: React.FC = () => {
       // 2. 选中图片 → 更新DB
       const dbUpdates = storyboardItemToDbUpdate(resolvedUpdates);
 
-      // 🛡️ 写入白名单：generated_image_url 必须是持久化 URL（http / 站内 /storage、/api/files），
-      // 拒绝 data:/blob:（base64 内联或临时 sandbox URL，前者会撑爆 DB 字段并触发下游 414，
-      // 后者刷新即失效）。详见 docs/faq.md 同名条目 + docs/conventions.md § Data URL Prohibition。
+      // Persistence invariant: generated_image_url accepts only durable HTTP or
+      // application paths. data:/blob: values either overload the database or
+      // expire when the browser session ends.
       const isPersistentUrl = (u: string | undefined | null): boolean => {
         if (!u) return false;
         if (u.startsWith('data:')) return false;

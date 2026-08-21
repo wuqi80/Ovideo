@@ -85,7 +85,7 @@ def test_minimax_audio_explicit_group_id_overrides_runtime_extra(monkeypatch):
 
 
 def test_minimax_audio_token_plan_key_omits_legacy_group_id(monkeypatch):
-    config = FakeConfig(api_key="sk-cp-token-plan-key")
+    config = FakeConfig(api_key="sk-cp-test-placeholder-token")
     monkeypatch.setattr(minimax_audio, "resolve_provider", lambda *_args, **_kwargs: config)
 
     client = minimax_audio.MinimaxAudioClient()
@@ -96,7 +96,7 @@ def test_minimax_audio_token_plan_key_omits_legacy_group_id(monkeypatch):
 
 def test_minimax_audio_token_plan_access_mode_omits_group_id(monkeypatch):
     config = FakeConfig(
-        api_key="runtime-minimax-key",
+        api_key="test-placeholder-credential",
         extra={"group_id": "runtime-group", "provider_access_mode": "token_plan"},
     )
     monkeypatch.setattr(minimax_audio, "resolve_provider", lambda *_args, **_kwargs: config)

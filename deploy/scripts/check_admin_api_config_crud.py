@@ -172,9 +172,10 @@ async def main() -> int:
         presets = service.get_api_config_presets()
         preset_count = len(presets.get("presets") or [])
         provider_count = len(presets.get("providers") or [])
-        if preset_count != 24:
+        # Gemini TTS has been retired; the public preset catalog now contains 23 entries.
+        if preset_count != 23:
             fail(f"preset facade count changed: {preset_count}")
-        if provider_count != 12:
+        if provider_count != 11:
             fail(f"provider facade count changed: {provider_count}")
 
         listed = await service.list_api_configs()
@@ -189,7 +190,7 @@ async def main() -> int:
             name="  New Config  ",
             provider=" deepseek ",
             endpoint=" https://api.example.test/v1 ",
-            api_key="new-secret",
+            api_key="test-placeholder-credential",
             model_name="deepseek-chat",
             request_template={"group_id": "runtime-group"},
             headers={"X-Test": "yes"},

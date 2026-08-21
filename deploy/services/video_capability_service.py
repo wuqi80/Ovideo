@@ -27,7 +27,6 @@ from services.cluster_node_service import list_agent_instances, list_agent_nodes
 logger = logging.getLogger(__name__)
 MINIMAX_H3_CAPABILITY_KEY = "minimax_h3_fl2va"
 MINIMAX_H3_PREFERRED_PORT = 8188
-GPU1_ROUTING_NAME = "GPU1"
 GPU2_ROUTING_NAME = "GPU2"
 
 
@@ -227,47 +226,10 @@ def _seedance_manifest(
     }
 
 
-def _workflow_video_manifest(
-    key: str,
-    label: str,
-    *,
-    available: bool,
-    model_name: Optional[str] = None,
-    target: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Describe the parameters that the processing-cluster workflow really accepts."""
-    target = target or {}
-    return {
-        "key": key,
-        "label": label,
-        "provider": "processing_cluster",
-        "model_name": model_name,
-        "task_types": ["i2v", "first_last_frame"],
-        "media_inputs": ["first_frame", "last_frame"],
-        "supports_original_audio": False,
-        "supports_cancel": True,
-        "requires_processing_node": True,
-        "preferred_agent_id": target.get("preferred_agent_id"),
-        "preferred_node_id": target.get("preferred_node_id"),
-        "strict_preferred_routing": bool(target.get("strict_preferred_routing")),
-        "available": available,
-        "query_mode": "queue",
-        "parameter_rules": {
-            "duration": {"type": "integer", "default": 5, "options": [5, 10, 15]},
-            "seed": {"type": "integer", "default": -1, "minimum": -1},
-            "negative_prompt": {
-                "type": "string",
-                "default": "nsfw, bad quality, worst quality",
-            },
-            "normalization_policy": "workflow_defined",
-        },
-    }
-
-
 def _minimax_h3_video_manifest(
     *,
     key: str = "MiniMaxH3",
-    label: str = "本地 MiniMax H3",
+    label: str = "一阶 · 节点标准模型",
     model_name: str = "MiniMax-H3 FL2VA",
     profile: str = "standard",
     available: bool,
@@ -334,10 +296,6 @@ def build_video_model_manifest(
     mini_seedance_model: str,
     seedance_omni: bool,
     comfyui_available: bool,
-    ltx_node1_available: bool = False,
-    ltx_node1_target: Optional[Dict[str, Any]] = None,
-    wan_node2_available: bool = False,
-    wan_node2_target: Optional[Dict[str, Any]] = None,
     minimax_h3_available: bool = False,
     minimax_h3_fast_available: bool = False,
     minimax_h3_mini_available: bool = False,
@@ -390,21 +348,21 @@ def build_video_model_manifest(
             _seedance_manifest(
                 standard_seedance_model,
                 key="Seedance2",
-                label="飞升",
+                label="四阶 · 多模态标准视频模型",
                 omni=seedance_omni and _is_seedance_omni_model(standard_seedance_model),
                 available=is_available("Seedance2"),
             ),
             _seedance_manifest(
                 fast_seedance_model,
                 key="Seedance2Fast",
-                label="渡劫",
+                label="五阶 · 多模态快速视频模型",
                 omni=seedance_omni and _is_seedance_omni_model(fast_seedance_model),
                 available=is_available("Seedance2Fast"),
             ),
             _seedance_manifest(
                 mini_seedance_model,
                 key="Seedance2Mini",
-                label="元婴",
+                label="六阶 · 多模态简化视频模型",
                 omni=seedance_omni and _is_seedance_omni_model(mini_seedance_model),
                 available=is_available("Seedance2Mini"),
                 resolutions=["480p", "720p"],
@@ -412,36 +370,9 @@ def build_video_model_manifest(
         ]
 
     return {
-        "manifest_version": "2026-08-05.1",
+        "manifest_version": "2026-08-21.1",
         "model_scope": model_scope,
         "models": [
-            *[
-                _workflow_video_manifest(key, label, available=comfyui_available)
-                for key, label in (
-                    ("Wan2", "集群视频（旧版兼容）"),
-                    ("一阶", "一阶"),
-                    ("二阶", "二阶"),
-                    ("三阶", "三阶"),
-                    ("四阶", "四阶"),
-                    ("五阶", "五阶"),
-                    ("六阶", "六阶"),
-                    ("七阶", "七阶"),
-                )
-            ],
-            _workflow_video_manifest(
-                "LTXNode1",
-                "处理节点1 · LTX",
-                available=ltx_node1_available,
-                model_name="LTX",
-                target=ltx_node1_target,
-            ),
-            _workflow_video_manifest(
-                "WanNode2",
-                "处理节点2 · Wan",
-                available=wan_node2_available,
-                model_name="Wan",
-                target=wan_node2_target,
-            ),
             *[
                 _minimax_h3_video_manifest(
                     key=key,
@@ -456,28 +387,28 @@ def build_video_model_manifest(
                     target=minimax_h3_target,
                 )
                 for key, label, model_name, profile in (
-                    ("MiniMaxH3", "本地 MiniMax H3", "MiniMax-H3 FL2VA", "standard"),
-                    ("MiniMaxH3Fast", "MiniMax H3 Fast", "MiniMax-H3 FL2VA + SageAttention", "fast"),
-                    ("MiniMaxH3Mini", "本地 MiniMax H3 Mini", "MiniMax-H3 FL2VA + Qwen3-VL-4B ClipProj", "mini"),
+                    ("MiniMaxH3", "一阶 · 节点标准模型", "MiniMax-H3 FL2VA", "standard"),
+                    ("MiniMaxH3Fast", "二阶 · 节点快速模型", "MiniMax-H3 FL2VA + SageAttention", "fast"),
+                    ("MiniMaxH3Mini", "三阶 · 节点简化模型", "MiniMax-H3 FL2VA + Qwen3-VL-4B ClipProj", "mini"),
                 )
             ],
             _fixed_api_video_manifest(
                 "Veo",
-                "筑基",
+                "八阶 · 高质量快速视频模型",
                 "veo",
                 runtime_model("Veo", VEO_DEFAULT_VIDEO_MODEL),
                 available=is_available("Veo"),
             ),
             _fixed_api_video_manifest(
                 "Sora2",
-                "化神",
+                "九阶 · 长镜头视频模型",
                 "sora2",
                 runtime_model("Sora2", SORA2_DEFAULT_VIDEO_MODEL),
                 available=is_available("Sora2"),
             ),
             {
                 "key": "大能",
-                "label": "大能",
+                "label": "十阶 · 镜头叙事视频模型",
                 "provider": "dashscope",
                 "model_name": runtime_model("大能", DASHSCOPE_DEFAULT_MODEL_MAP["wan26"]),
                 "available": is_available("大能"),
@@ -497,7 +428,7 @@ def build_video_model_manifest(
             *seedance_models,
             {
                 "key": "MINI",
-                "label": "金丹",
+                "label": "七阶 · 首尾帧标准视频模型",
                 "provider": "minimax",
                 "model_name": runtime_model("MINI", MINIMAX_DEFAULT_VIDEO_MODEL),
                 "model_options": runtime_options(
@@ -524,7 +455,7 @@ def build_video_model_manifest(
             },
             {
                 "key": "Kling",
-                "label": "合体",
+                "label": "十一阶 · 全能音画视频模型",
                 "provider": "dashscope",
                 "model_name": runtime_model("Kling"),
                 "model_options": runtime_options("Kling"),
@@ -545,7 +476,7 @@ def build_video_model_manifest(
             },
             {
                 "key": "Vidu",
-                "label": "大乘",
+                "label": "十二阶 · 多参考视频模型",
                 "provider": "dashscope",
                 "model_name": runtime_model("Vidu"),
                 "model_options": runtime_options("Vidu"),
@@ -564,7 +495,7 @@ def build_video_model_manifest(
             },
             {
                 "key": "HappyHorse",
-                "label": "炼虚",
+                "label": "十三阶 · 角色一致性视频模型",
                 "provider": "dashscope",
                 "model_name": runtime_model("HappyHorse", DASHSCOPE_DEFAULT_MODEL_MAP["happyhorse"]),
                 "available": is_available("HappyHorse"),
@@ -580,18 +511,6 @@ def build_video_model_manifest(
                     "watermark": {"type": "boolean", "default": True},
                     "normalization_policy": "reject_or_explain",
                 },
-            },
-            {
-                "key": "COMFYUI",
-                "label": "处理集群",
-                "provider": "comfyui",
-                "model_name": None,
-                "task_types": ["workflow"],
-                "media_inputs": ["workflow_defined"],
-                "requires_gpu_node": True,
-                "available": comfyui_available,
-                "query_mode": "queue",
-                "parameter_rules": {"normalization_policy": "workflow_defined"},
             },
         ],
     }
@@ -618,8 +537,6 @@ async def get_video_capabilities(
         logger.debug("video capability ComfyUI agent probe failed: %s", exc)
         agent_nodes = []
     comfyui_available = bool(agent_nodes)
-    ltx_node1_target = _find_node_target(agent_nodes, GPU1_ROUTING_NAME)
-    wan_node2_target = _find_node_target(agent_nodes, GPU2_ROUTING_NAME)
     minimax_h3_instance = await find_minimax_h3_agent_instance()
     minimax_h3_target = (
         _minimax_h3_target_from_instance(minimax_h3_instance)
@@ -727,10 +644,6 @@ async def get_video_capabilities(
             seedance_omni=seedance_omni,
             seedance_billing_mode=seedance_billing_mode,
             comfyui_available=comfyui_available,
-            ltx_node1_available=bool(ltx_node1_target.get("preferred_node_id")),
-            ltx_node1_target=ltx_node1_target,
-            wan_node2_available=bool(wan_node2_target.get("preferred_node_id")),
-            wan_node2_target=wan_node2_target,
             minimax_h3_available=minimax_h3_available,
             minimax_h3_fast_available=minimax_h3_fast_available,
             minimax_h3_mini_available=minimax_h3_mini_available,

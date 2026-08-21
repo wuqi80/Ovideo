@@ -196,7 +196,7 @@ export const SidebarDock: React.FC<SidebarDockProps> = ({
                 <>
                     <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/5">
                         <span className="text-xs font-bold uppercase tracking-widest text-white/50">
-                            我的工作流
+                            工作流模板
                         </span>
                         <button onClick={onSaveWorkflow} className="p-1.5 bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500 hover:text-white rounded-md transition-colors" title="保存当前工作流">
                             <Save size={14} />
@@ -222,10 +222,14 @@ export const SidebarDock: React.FC<SidebarDockProps> = ({
                                         e.dataTransfer.effectAllowed = 'copy';
                                     }}
                                     onClick={(e) => { e.stopPropagation(); onSelectWorkflow(wf.id); }}
-                                    onDoubleClick={(e) => { e.stopPropagation(); setEditingWorkflowId(wf.id); }}
+                                    onDoubleClick={(e) => {
+                                        e.stopPropagation();
+                                        if (!wf.isBuiltin) setEditingWorkflowId(wf.id);
+                                    }}
                                     onContextMenu={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
+                                        if (wf.isBuiltin) return;
                                         setContextMenu({visible: true, x: e.clientX, y: e.clientY, id: wf.id, type: 'workflow'});
                                     }}
                                 >
@@ -250,7 +254,10 @@ export const SidebarDock: React.FC<SidebarDockProps> = ({
                                         ) : (
                                             <span className="text-xs font-medium text-slate-300 truncate select-none group-hover:text-white transition-colors">{wf.title}</span>
                                         )}
-                                        <span className="text-[9px] text-slate-600 font-mono">{wf.nodes.length} 节点</span>
+                                        <div className="flex shrink-0 items-center gap-1.5">
+                                            {wf.isBuiltin && <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-300">内置</span>}
+                                            <span className="text-[9px] text-slate-600 font-mono">{wf.nodes.length} 节点</span>
+                                        </div>
                                     </div>
                                 </div>
                             ))

@@ -32,7 +32,7 @@ async def test_export_api_config_keys_decrypts_key_and_omits_encrypted_field(mon
     result = await service.export_api_config_keys()
 
     assert result["success"] is True
-    assert result["schema"] == "mecha.api_config_keys"
+    assert result["schema"] == "ostory.api_config_keys"
     assert result["schema_version"] == 2
     assert result["count"] == 1
     exported = result["configs"][0]

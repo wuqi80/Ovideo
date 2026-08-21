@@ -77,7 +77,7 @@ describe('MaterialPage workspace layout', () => {
     expect(source).toContain("'material_image'");
     expect(source).toContain('fileId: saved.fileId');
     expect(source).toContain('fileId: r.fileId');
-    expect(source).toContain('fileId: results[0]?.fileId');
+    expect(source).toContain('fileId: result.fileId');
     expect(source).toContain('fileId: results[0].fileId');
   });
 

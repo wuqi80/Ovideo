@@ -11,7 +11,6 @@
  *     onConfirm={(estimate) => start()}
  *   />
  *
- * 详见 docs/superpowers/plans/2026-05-26-feature-rollout/02-credits.md
  */
 
 import React, { useEffect, useState } from 'react';

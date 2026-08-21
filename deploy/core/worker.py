@@ -29,8 +29,8 @@ from cluster_manager import ClusterManager
 from task_types import is_external_api_task as shared_is_external_api_task
 from task_queue import TaskQueue, Task, TaskStatus
 
-# 2026-05-24: MiniMax TTS 异步任务依赖（worker 内完成 5-10 分钟轮询，
-# 避开 autodl 反代 idle ~5min 边界）。详见 recurring-pitfalls §Q。
+# Long-running TTS polling belongs in the worker so an HTTP proxy timeout cannot
+# orphan a provider task owned by the queue.
 from minimax_audio import get_minimax_audio_client
 from file_service import save_generated_file_to_db
 from dao_character_voice import CharacterVoiceDAO
@@ -38,13 +38,9 @@ from dao_character_voice import CharacterVoiceDAO
 logger = logging.getLogger(__name__)
 
 
-# ============================================
-# 2026-05-26 Follow-up A: AGENT_ONLY_MODE 二选一陷阱根治
-#   外部 API 任务类型集中登记到此处。Worker 在 lite 模式（cluster_manager=None）
-#   下只消费这些类型；其它 ComfyUI workflow 类型会被 Worker 重新入队让外部 agent 拿。
-#   配套：cluster_main.py AGENT_ONLY_MODE=true 分支会启动 N 个 lite Worker。
-#   详见 docs/faq.md 2026-05-26 "AGENT_ONLY_MODE 二选一陷阱" + plans/2026-05-25-minimax-tts-fastpath.md Follow-up A。
-# ============================================
+# Keep provider-backed task ownership centralized. In lite mode these exact
+# task families are consumed locally; workflow tasks are requeued for external
+# agents. Every new provider task family must extend this catalog and its tests.
 EXTERNAL_API_TASK_TYPES_EXACT = frozenset({
     'minimax_i2v', 'minimax_morph', 'minimax_tts',
     'sora2_i2v', 'sora2_morph',
@@ -321,7 +317,6 @@ class Worker:
                 return await self._process_minimax_tts_task(task)
             elif task.task_type == 'video_reverse_prompt':
                 # 2026-05-26 Slice 3: 视频反推走自己的流水线（ffmpeg + Vision LLM）
-                # 详见 docs/superpowers/plans/2026-05-26-feature-rollout/03-video-reverse.md
                 return await self._process_video_reverse_task(task)
             
             # 🆕 根据任务类型选择集群管理器
@@ -1701,7 +1696,6 @@ class Worker:
                             logger.warning(f"⚠️ legacy 字段同步失败（不致命）: {e}")
 
                     # 2026-05-26 Slice 1 收尾：同步进通用素材库（best-effort）
-                    # 详见 docs/superpowers/plans/2026-05-26-feature-rollout/01-media-library.md
                     try:
                         import media_library_service
                         # source 推断：task.task_type 已是 comfyui_video / dashscope_video / seedance_video 等
@@ -2735,7 +2729,6 @@ class Worker:
 
     async def _process_video_reverse_task(self, task) -> bool:
         """2026-05-26 Slice 3: 视频反推提示词
-        详见 docs/superpowers/plans/2026-05-26-feature-rollout/03-video-reverse.md
         """
         try:
             import video_reverse_service

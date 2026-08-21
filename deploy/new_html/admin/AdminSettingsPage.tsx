@@ -4018,7 +4018,7 @@ const ApiConfigPanel: React.FC = () => {
             const objectUrl = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = objectUrl;
-            link.download = `mecha-api-keys-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+            link.download = `ostory-api-keys-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
             document.body.appendChild(link);
             link.click();
             link.remove();

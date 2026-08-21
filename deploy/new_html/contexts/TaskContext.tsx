@@ -92,7 +92,7 @@ function inferRuntimeTaskKind(task: GlobalTask): TaskKind {
 
 function notifyEpisodeDataChanged(notification: TaskNotification) {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent('drama:episode-data-changed', {
+  window.dispatchEvent(new CustomEvent('ostory:episode-data-changed', {
     detail: {
       episodeId: notification.episodeId,
       entityType: notification.entityType,

@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-$root = "E:\MECHA-GPU"
+$root = "E:\OSTORY-GPU"
 $logFile = Join-Path $root "logs\dfs-startup-gate.log"
 $dfsHealthUrl = "http://192.168.31.121:4213/health"
 $requiredConsecutivePasses = 6
@@ -9,8 +9,8 @@ $probeIntervalSeconds = 10
 $probeTimeoutSeconds = 5
 $stabilizationSeconds = 120
 $comfyReadyTimeoutSeconds = 300
-$wanTaskName = "MECHA-GPU-ComfyUI"
-$agentTaskName = "MECHA-GPU-Agent"
+$wanTaskName = "OSTORY-GPU-ComfyUI"
+$agentTaskName = "OSTORY-GPU-Agent"
 
 function Write-GateLog {
     param([string]$Message)
@@ -37,7 +37,7 @@ function Test-DfsReady {
     }
 }
 
-function Start-MechaScheduledTask {
+function Start-OstoryScheduledTask {
     param([string]$TaskName)
 
     try {
@@ -94,17 +94,17 @@ while ($true) {
     Write-GateLog "DFS passed 6 consecutive checks; stabilizing for 120 seconds."
     Start-Sleep -Seconds $stabilizationSeconds
     if (Test-DfsReady) {
-        Write-GateLog "DFS final readiness check passed; releasing Drama GPU startup."
+        Write-GateLog "DFS final readiness check passed; releasing Ostory GPU startup."
         break
     }
     Write-GateLog "DFS final readiness check failed; returning to the readiness gate."
 }
 
-Start-MechaScheduledTask -TaskName $wanTaskName
+Start-OstoryScheduledTask -TaskName $wanTaskName
 if (-not (Wait-ComfyUIReady)) {
     throw "Wan ComfyUI did not become ready on port 8188 within $comfyReadyTimeoutSeconds seconds"
 }
 Write-GateLog "Wan ComfyUI is ready on port 8188."
 
-Start-MechaScheduledTask -TaskName $agentTaskName
-Write-GateLog "Drama GPU startup sequence completed."
+Start-OstoryScheduledTask -TaskName $agentTaskName
+Write-GateLog "Ostory GPU startup sequence completed."

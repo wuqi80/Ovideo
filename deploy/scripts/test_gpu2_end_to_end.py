@@ -50,11 +50,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=int, default=7200)
     parser.add_argument(
         "--agent-id",
-        default=os.environ.get("MECHA_GPU_AGENT_ID")
-        or os.environ.get("MECHA_GPU2_AGENT_ID", ""),
-        help="Target Agent ID; MECHA_GPU_AGENT_ID and legacy MECHA_GPU2_AGENT_ID are supported.",
+        default=os.environ.get("OSTORY_GPU_AGENT_ID")
+        or os.environ.get("OSTORY_GPU2_AGENT_ID", ""),
+        help="Target Agent ID; OSTORY_GPU_AGENT_ID and legacy OSTORY_GPU2_AGENT_ID are supported.",
     )
-    parser.add_argument("--agent-name", default=os.environ.get("MECHA_GPU_AGENT_NAME", "GPU"))
+    parser.add_argument("--agent-name", default=os.environ.get("OSTORY_GPU_AGENT_NAME", "GPU"))
     parser.add_argument("--reference-count", type=int, choices=range(1, 7), default=1)
     parser.add_argument("--output-width", type=int, default=1024)
     parser.add_argument("--output-height", type=int, default=768)
@@ -205,7 +205,7 @@ def _submit_workflow(
 
 
 def _build_smoke_video() -> bytes:
-    with tempfile.TemporaryDirectory(prefix="mecha-gpu2-e2e-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="ostory-gpu2-e2e-") as temp_dir:
         output_path = Path(temp_dir) / "gpu2-e2e-smoke.mp4"
         ffmpeg_exe = shutil.which("ffmpeg")
         if not ffmpeg_exe:
@@ -281,12 +281,12 @@ def _upload_input(
 
 def main() -> int:
     args = _parse_args()
-    base_url = os.environ.get("MECHA_BASE_URL", "https://tv.ostory.ai").rstrip("/")
+    base_url = os.environ.get("OSTORY_BASE_URL", "https://tv.ostory.ai").rstrip("/")
     password = os.environ.get("ADMIN_PASSWORD", "").strip()
     agent_id = args.agent_id.strip()
     if not password or not agent_id:
         raise RuntimeError(
-            "ADMIN_PASSWORD and --agent-id (or MECHA_GPU_AGENT_ID) are required"
+            "ADMIN_PASSWORD and --agent-id (or OSTORY_GPU_AGENT_ID) are required"
         )
 
     session = requests.Session()

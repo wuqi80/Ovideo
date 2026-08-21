@@ -12,11 +12,11 @@ from services.generation_access_service import GenerationAccessDenied
 
 @pytest.fixture(autouse=True)
 def _explicitly_enable_local_gpu_for_normal_route_tests(monkeypatch):
-    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE", "0")
+    monkeypatch.setenv("OSTORY_LOCAL_GPU_MAINTENANCE", "0")
 
 
 def test_local_gpu_maintenance_defaults_closed(monkeypatch):
-    monkeypatch.delenv("MECHA_LOCAL_GPU_MAINTENANCE", raising=False)
+    monkeypatch.delenv("OSTORY_LOCAL_GPU_MAINTENANCE", raising=False)
     assert _local_gpu_maintenance()["enabled"] is True
 
 
@@ -86,9 +86,9 @@ async def test_gpu_queue_preflight_reports_anonymous_serial_position_and_eta(mod
 
 @pytest.mark.asyncio
 async def test_gpu_queue_preflight_blocks_local_tasks_during_maintenance(monkeypatch):
-    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE", "1")
-    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE_MESSAGE", "DFS recovery in progress")
-    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE_RESUME_AT", "2026-08-17")
+    monkeypatch.setenv("OSTORY_LOCAL_GPU_MAINTENANCE", "1")
+    monkeypatch.setenv("OSTORY_LOCAL_GPU_MAINTENANCE_MESSAGE", "DFS recovery in progress")
+    monkeypatch.setenv("OSTORY_LOCAL_GPU_MAINTENANCE_RESUME_AT", "2026-08-17")
     queue = Mock()
 
     result = await _gpu_queue_snapshot(
@@ -114,7 +114,7 @@ async def test_gpu_queue_preflight_blocks_local_tasks_during_maintenance(monkeyp
 
 @pytest.mark.asyncio
 async def test_gpu_queue_preflight_keeps_external_api_available_during_local_maintenance(monkeypatch):
-    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE", "1")
+    monkeypatch.setenv("OSTORY_LOCAL_GPU_MAINTENANCE", "1")
 
     result = await _gpu_queue_snapshot(
         Mock(),
@@ -165,8 +165,8 @@ async def test_generate_route_submits_i2v_with_prepare_enabled():
 
 @pytest.mark.asyncio
 async def test_generate_route_rejects_direct_local_submit_during_maintenance(monkeypatch):
-    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE", "true")
-    monkeypatch.setenv("MECHA_LOCAL_GPU_MAINTENANCE_MESSAGE", "DFS first")
+    monkeypatch.setenv("OSTORY_LOCAL_GPU_MAINTENANCE", "true")
+    monkeypatch.setenv("OSTORY_LOCAL_GPU_MAINTENANCE_MESSAGE", "DFS first")
 
     service = Mock()
     service.submit = AsyncMock(return_value="should-not-submit")

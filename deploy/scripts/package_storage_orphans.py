@@ -142,7 +142,7 @@ def materialize(
 
 def write_readme(path: Path, summary: Dict[str, Any]) -> None:
     path.write_text(
-        f"""# MECHA Disk Orphan Export
+        f"""# OSTORY Disk Orphan Export
 
 Generated at: {summary["generated_at"]}
 

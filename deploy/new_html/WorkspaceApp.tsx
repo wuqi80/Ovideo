@@ -1140,7 +1140,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         }));
 
       const payload = {
-        format: 'mecha-project-backup',
+        format: 'ostory-project-backup',
         version: 1,
         exported_at: exportedAt.toISOString(),
         project_id: urlProjectId,
@@ -1160,7 +1160,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       const link = document.createElement('a');
       const timestamp = exportedAt.toISOString().replace(/[:.]/g, '-');
       link.href = objectUrl;
-      link.download = `mecha-project-${urlProjectId || 'unknown'}-episode-${propEpisodeId}-${timestamp}.json`;
+      link.download = `ostory-project-${urlProjectId || 'unknown'}-episode-${propEpisodeId}-${timestamp}.json`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -3261,13 +3261,11 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   // --- AI Operations ---
 
   /**
-   * 🔧 新版AI改写：直接生成分镜脚本格式并自动解析镜头卡片
-   * 流程：2 → 3 → 4 一步完成
-   * 🆕 支持分段处理：超过10个镜头时，分段调用API，结果追加到前端
+   * AI rewrite emits storyboard-shaped content and appends segmented results.
    *
    * 重要：每段独立调用 AI，AI 在每段内都从 镜头01 开始编号（因为每段最多 10 个镜头）。
    * 因此必须基于全局位置重新编号，否则跨段去重会误删第 2/3/... 段的所有镜头
-   * （详见 docs/faq.md - "AI 改写后只生成 10 个镜头" 词条）。
+   * Global renumbering is therefore an invariant, not display-only formatting.
    */
   const handleRewrite = useCallback(async (targetFileId?: string) => {
     setIsProcessing(true);

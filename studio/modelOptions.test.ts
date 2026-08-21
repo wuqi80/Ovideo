@@ -69,7 +69,7 @@ describe('Studio image model contract', () => {
       'components/Node.tsx',
       'components/SketchEditor.tsx',
       'services/videoStrategies.ts',
-      'platform/dramaRuntime.ts',
+      'platform/ostoryRuntime.ts',
     ]) {
       expect(readStudioFile(path).toLowerCase()).not.toContain('nanobanana');
     }

@@ -440,7 +440,7 @@ async def test_same_provider_and_key_cannot_create_a_second_card(monkeypatch):
         {
             "config_id": "existing-card",
             "provider": "seedance",
-            "api_key_encrypted": "enc:same-key",
+            "api_key_encrypted": "enc:test-placeholder-duplicate-key",
             "enabled": True,
         }
     ]
@@ -456,7 +456,7 @@ async def test_same_provider_and_key_cannot_create_a_second_card(monkeypatch):
             name="duplicate",
             provider="seedance",
             endpoint="https://ark.example.test/tasks",
-            api_key="same-key",
+            api_key="test-placeholder-duplicate-key",
             model_bindings=[
                 {
                     "operation": "fast",
@@ -489,7 +489,7 @@ async def test_create_agent_plan_card_persists_plan_route_and_models(monkeypatch
         name="Agent Plan",
         provider="seedance",
         endpoint="https://ark.cn-beijing.volces.com/api/plan/",
-        api_key="plan-key",
+        api_key="test-placeholder-credential",
         model_bindings=[
             {"operation": "standard", "model_name": "doubao-seedance-2-0-260128"},
             {"operation": "fast", "model_name": "doubao-seedance-2-0-fast-260128"},

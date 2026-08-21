@@ -4,7 +4,6 @@ Credit API Routes
 ==================
 /api/credits/* — 用户侧积分接口（余额 / 估算 / 流水）。
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/02-credits.md
 """
 from __future__ import annotations
 

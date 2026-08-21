@@ -286,7 +286,7 @@ export const FileColumn: React.FC<FileColumnProps> = ({
                   closeFileMenu();
                   setDraggedFileId(file.id);
                   e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setData('application/x-mecha-script-file', file.id);
+                  e.dataTransfer.setData('application/x-ostory-script-file', file.id);
                   e.dataTransfer.setDragImage(e.currentTarget, 18, 18);
                 }}
                 onDragEnd={(e) => {

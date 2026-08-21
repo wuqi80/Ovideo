@@ -5,7 +5,6 @@
  * 路由: /credits
  * 显示: 余额卡片 + 流水表格 + 筛选
  *
- * 详见 docs/superpowers/plans/2026-05-26-feature-rollout/02-credits.md
  */
 
 import React, { useCallback, useEffect, useState } from 'react';

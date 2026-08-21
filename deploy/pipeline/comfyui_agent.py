@@ -71,15 +71,15 @@ class ComfyUIAgent:
         self._heartbeat_stop = threading.Event()
         self._heartbeat_thread = None
         state_root = Path(
-            os.environ.get("MECHA_AGENT_STATE_DIR")
-            or (Path.home() / ".mecha-agent")
+            os.environ.get("OSTORY_AGENT_STATE_DIR")
+            or (Path.home() / ".ostory-agent")
         )
         self.pending_completion_dir = state_root / "pending-completions"
         self.pending_completion_dir.mkdir(parents=True, exist_ok=True)
         self.completion_retry_delays = (0, 5, 15, 30)
         self.completion_upload_timeout = (
             30,
-            int(os.environ.get("MECHA_COMPLETION_UPLOAD_TIMEOUT", "600")),
+            int(os.environ.get("OSTORY_COMPLETION_UPLOAD_TIMEOUT", "600")),
         )
         signal.signal(signal.SIGTERM, self._shutdown)
         signal.signal(signal.SIGINT, self._shutdown)
@@ -399,7 +399,7 @@ class ComfyUIAgent:
         self._heartbeat_stop.clear()
         self._heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop,
-            name="mecha-agent-heartbeat",
+            name="ostory-agent-heartbeat",
             daemon=True,
         )
         self._heartbeat_thread.start()
@@ -511,7 +511,7 @@ class ComfyUIAgent:
         final_workflow = json.loads(workflow_str)
 
         task_id = str(task.get("task_id") or "")
-        client_id = f"mecha-agent-{self.agent_id or 'unknown'}-{uuid.uuid4().hex}"
+        client_id = f"ostory-agent-{self.agent_id or 'unknown'}-{uuid.uuid4().hex}"
         prompt_ref = {}
         progress_stop, progress_thread = self._start_comfyui_progress_monitor(
             port,
@@ -757,7 +757,7 @@ class ComfyUIAgent:
         if platform.system().lower() != "windows":
             raise RuntimeError("GPU runtime tool sync is only supported on Windows agents")
 
-        root = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+        root = Path(os.environ.get("OSTORY_GPU_ROOT", r"E:\OSTORY-GPU"))
         tool_specs = (
             (
                 "windows_gpu_agent_runner.py",
@@ -790,7 +790,7 @@ class ComfyUIAgent:
         if platform.system().lower() != "windows":
             raise RuntimeError("MiniMax H3 sidecar installer is only supported on Windows GPU agents")
 
-        root = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+        root = Path(os.environ.get("OSTORY_GPU_ROOT", r"E:\OSTORY-GPU"))
         agent_dir = root / "agent"
         scripts_dir = root / "scripts"
         installed = []
@@ -814,7 +814,7 @@ class ComfyUIAgent:
             (
                 "windows_gpu_h3_setup.ps1",
                 scripts_dir / "windows_gpu_h3_setup.ps1",
-                ("MiniMax H3", "MECHA-GPU-ComfyUI-H3"),
+                ("MiniMax H3", "OSTORY-GPU-ComfyUI-H3"),
             ),
             (
                 "windows_gpu_h3_setup.cmd",
@@ -844,27 +844,27 @@ class ComfyUIAgent:
             (
                 "windows_gpu_start_h3_comfyui.cmd",
                 scripts_dir / "windows_gpu_start_h3_comfyui.cmd",
-                ("ComfyUI-H3", "MECHA_COMFYUI_PORT"),
+                ("ComfyUI-H3", "OSTORY_COMFYUI_PORT"),
             ),
             (
                 "windows_gpu_start_music3_comfyui.cmd",
                 scripts_dir / "windows_gpu_start_music3_comfyui.cmd",
-                ("windows_gpu_start_music3_comfyui.ps1", "MECHA_COMFYUI_PORT"),
+                ("windows_gpu_start_music3_comfyui.ps1", "OSTORY_COMFYUI_PORT"),
             ),
             (
                 "windows_gpu_start_music3_comfyui.ps1",
                 scripts_dir / "windows_gpu_start_music3_comfyui.ps1",
-                ("JobMemoryLimitGiB", "MECHA_MUSIC3_DISABLE_FLASH_DECODE"),
+                ("JobMemoryLimitGiB", "OSTORY_MUSIC3_DISABLE_FLASH_DECODE"),
             ),
             (
                 "windows_gpu_music3_compat_patch.py",
                 scripts_dir / "windows_gpu_music3_compat_patch.py",
-                ("MECHA_MUSIC3_DISABLE_FLASH_DECODE", "already-patched"),
+                ("OSTORY_MUSIC3_DISABLE_FLASH_DECODE", "already-patched"),
             ),
             (
                 "windows_gpu_start_agent.cmd",
                 scripts_dir / "windows_gpu_start_agent.cmd",
-                ("windows_gpu_agent_runner.py", "MECHA_COMFYUI_PORTS=8188"),
+                ("windows_gpu_agent_runner.py", "OSTORY_COMFYUI_PORTS=8188"),
             ),
         ]
 
@@ -901,7 +901,7 @@ class ComfyUIAgent:
             tail = (stdout + "\n" + stderr)[-4000:]
             raise RuntimeError(f"MiniMax H3 setup failed with exit code {completed.returncode}: {tail}")
 
-        os.environ["MECHA_COMFYUI_PORTS"] = "8188"
+        os.environ["OSTORY_COMFYUI_PORTS"] = "8188"
 
         return {
             "action": "install_h3_sidecar",

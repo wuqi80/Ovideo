@@ -26,7 +26,7 @@ def test_h3_sage_verifier_writes_only_non_inference_metadata(tmp_path, monkeypat
     )())
     root = tmp_path / "ComfyUI-KJNodes"
     root.mkdir()
-    (root / ".mecha-reviewed-commit").write_text(
+    (root / ".ostory-reviewed-commit").write_text(
         verifier.REVIEWED_KJNODES_COMMIT, encoding="utf-8"
     )
 

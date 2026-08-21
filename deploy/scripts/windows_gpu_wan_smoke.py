@@ -16,10 +16,10 @@ import requests
 from PIL import Image, ImageDraw
 
 
-ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+ROOT = Path(os.environ.get("OSTORY_GPU_ROOT", r"E:\OSTORY-GPU"))
 AGENT_DIR = ROOT / "agent"
 LOG_DIR = ROOT / "logs"
-BASE_URL = os.environ.get("MECHA_COMFYUI_URL", "http://127.0.0.1:8188")
+BASE_URL = os.environ.get("OSTORY_COMFYUI_URL", "http://127.0.0.1:8188")
 TIMEOUT_SECONDS = 6 * 60 * 60
 
 sys.path.insert(0, str(AGENT_DIR))
@@ -132,7 +132,7 @@ def _submit_and_wait(workflow: dict[str, Any]) -> dict[str, Any]:
     started_at = time.time()
     response = requests.post(
         f"{BASE_URL}/prompt",
-        json={"prompt": workflow, "client_id": f"mecha-wan-smoke-{uuid.uuid4().hex}"},
+        json={"prompt": workflow, "client_id": f"ostory-wan-smoke-{uuid.uuid4().hex}"},
         timeout=120,
     )
     response.raise_for_status()

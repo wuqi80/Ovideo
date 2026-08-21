@@ -29,7 +29,7 @@ export interface GpuTaskRoutingOptions {
   strict?: boolean;
 }
 
-const PREFERRED_GPU_NODE_KEY = 'mecha:preferred-gpu-node-id';
+const PREFERRED_GPU_NODE_KEY = 'ostory:preferred-gpu-node-id';
 export const DEFAULT_GPU_NODE_NAME = 'GPU1';
 
 interface ClusterNodesResponse {

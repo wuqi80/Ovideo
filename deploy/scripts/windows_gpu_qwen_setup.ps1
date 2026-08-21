@@ -1,5 +1,5 @@
 param(
-    [string]$InstallRoot = "E:\MECHA-GPU"
+    [string]$InstallRoot = "E:\OSTORY-GPU"
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,7 +11,7 @@ $PortableDir = Join-Path $InstallRoot "ComfyUI_windows_portable"
 $ComfyDir = Join-Path $PortableDir "ComfyUI"
 $Python = Join-Path $PortableDir "python_embeded\python.exe"
 $Curl = Join-Path $env:SystemRoot "System32\curl.exe"
-$PipIndex = if ($env:MECHA_PIP_INDEX_URL) { $env:MECHA_PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
+$PipIndex = if ($env:OSTORY_PIP_INDEX_URL) { $env:OSTORY_PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
 $LogFile = Join-Path $Logs "qwen-setup.log"
 $ServicesStopped = $false
 
@@ -26,17 +26,17 @@ function Write-Step {
 
 function Stop-GpuServices {
     Write-Step "Stopping GPU2 Agent and ComfyUI before dependency changes"
-    schtasks.exe /End /TN "MECHA-GPU-Agent" 2>$null | Out-Null
-    schtasks.exe /End /TN "MECHA-GPU-ComfyUI" 2>$null | Out-Null
+    schtasks.exe /End /TN "OSTORY-GPU-Agent" 2>$null | Out-Null
+    schtasks.exe /End /TN "OSTORY-GPU-ComfyUI" 2>$null | Out-Null
     Start-Sleep -Seconds 5
     $script:ServicesStopped = $true
 }
 
 function Start-GpuServices {
     Write-Step "Starting GPU2 ComfyUI and Agent"
-    schtasks.exe /Run /TN "MECHA-GPU-ComfyUI" | Out-Null
+    schtasks.exe /Run /TN "OSTORY-GPU-ComfyUI" | Out-Null
     Start-Sleep -Seconds 8
-    schtasks.exe /Run /TN "MECHA-GPU-Agent" | Out-Null
+    schtasks.exe /Run /TN "OSTORY-GPU-Agent" | Out-Null
     $script:ServicesStopped = $false
 }
 
@@ -134,7 +134,7 @@ $workflowDir = Join-Path $ComfyDir "user\default\workflows"
 New-Item -ItemType Directory -Force -Path $workflowDir | Out-Null
 Download-File `
     -Url "https://raw.githubusercontent.com/Comfy-Org/workflow_templates/main/templates/image_qwen_image_edit_2509.json" `
-    -Destination (Join-Path $workflowDir "MECHA-Qwen-Image-Edit-2509-GPU2-Test.json")
+    -Destination (Join-Path $workflowDir "OSTORY-Qwen-Image-Edit-2509-GPU2-Test.json")
 
 Start-GpuServices
 

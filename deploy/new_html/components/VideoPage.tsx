@@ -12,6 +12,7 @@ import {
     SELECTABLE_MODELS,
     buildVideoModelOptions,
     formatVideoModelOptionLabel,
+    getModelDisplayName,
     getVideoCreditFallbackCost,
     getVideoCreditEstimateParams,
     getVideoModelRuntimeNames,
@@ -350,7 +351,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         [videoCapabilityModels],
     );
     const allVideoModelOptions = useMemo(
-        () => buildVideoModelOptions(videoCapabilityModels, ALL_MODELS),
+        () => buildVideoModelOptions(videoCapabilityModels, SELECTABLE_MODELS),
         [videoCapabilityModels],
     );
     const videoCapabilityReady = Boolean(
@@ -409,6 +410,22 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         if (selectableVideoModelOptions.some(option => option.value === globalModel)) return;
         setGlobalModel(selectableVideoModelOptions[0].value);
     }, [globalModel, selectableVideoModelOptions, setGlobalModel, videoCapabilityReady]);
+    useEffect(() => {
+        if (!videoCapabilityReady || selectableVideoModelOptions.length === 0) return;
+        const usableModels = new Set(selectableVideoModelOptions.map(option => option.value));
+        const fallbackModel = usableModels.has(globalModel)
+            ? globalModel
+            : selectableVideoModelOptions[0].value;
+        setTaskGroups(previous => {
+            let changed = false;
+            const next = previous.map(group => {
+                if (usableModels.has(group.model)) return group;
+                changed = true;
+                return { ...group, model: fallbackModel };
+            });
+            return changed ? next : previous;
+        });
+    }, [globalModel, selectableVideoModelOptions, videoCapabilityReady]);
     
     // 拖拽状态
     const [dragSrcIndex, setDragSrcIndex] = useState<number | null>(null);
@@ -2647,11 +2664,11 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             // 校验：Vidu 不允许无图；HappyHorse 至少 1 张
             const images = (params.media_inputs || []).filter(m => m.kind === 'image');
             if (group.model === 'Vidu' && images.length === 0) {
-                showToast('大乘 (Vidu) 至少需要 1 张图，参考生 或 首尾帧');
+                showToast(`${getModelDisplayName('Vidu')}至少需要 1 张图，参考生 或 首尾帧`);
                 return null;
             }
             if (group.model === 'HappyHorse' && images.length === 0) {
-                showToast('炼虚 (HappyHorse) 至少需要 1 张参考图');
+                showToast(`${getModelDisplayName('HappyHorse')}至少需要 1 张参考图`);
                 return null;
             }
             setTasksStatus(prev => {

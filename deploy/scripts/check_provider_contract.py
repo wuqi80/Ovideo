@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify MECHA external API provider registry and resolver contract."""
+"""Verify OSTORY external API provider registry and resolver contract."""
 from __future__ import annotations
 
 import ast
@@ -1680,7 +1680,7 @@ def check_runtime_status(
     build_effective_provider_config_sources,
     preset_count: int,
 ) -> int:
-    secret = "SECRET_RUNTIME_KEY_SHOULD_NOT_LEAK"
+    secret = "test-placeholder-credential"
     custom_proxy = "http://secret-proxy.example.invalid:7890"
     provider = "gemini-text"
     env_key = registry.get_provider_env_key(provider)

@@ -6,7 +6,6 @@
  * 切换会触发 WorkspaceContext 状态更新，依赖 useCurrentOrgId() 的页面
  * （ProjectHub / MediaLibraryPage 等）会自动重新拉数据。
  *
- * 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §6.2
  */
 
 import React, { useEffect, useRef, useState } from 'react';

@@ -40,7 +40,7 @@ describe('admin compatibility service', () => {
   it('creates admin users', async () => {
     mockFetch.mockResolvedValueOnce(mockJsonResponse({ success: true, user: { id: 'u1' } }));
 
-    await createUser({ username: 'new-user', password: 'password123' });
+    await createUser({ username: 'new-user', password: 'test-placeholder-credential' });
 
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toBe('/api/admin/users/create');

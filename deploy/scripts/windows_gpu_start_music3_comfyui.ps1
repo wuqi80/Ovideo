@@ -5,12 +5,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
-$Root = "E:\MECHA-GPU\ComfyUI-Music3"
+$Root = "E:\OSTORY-GPU\ComfyUI-Music3"
 $PythonExe = Join-Path $Root "python_embeded\python.exe"
 $MainPy = Join-Path $Root "ComfyUI\main.py"
 $CleanupScript = Join-Path $PSScriptRoot "windows_gpu_cleanup_port.ps1"
-$PreferredLogRoot = "D:\MECHA-GPU-Logs"
-$FallbackLogRoot = "E:\MECHA-GPU\logs"
+$PreferredLogRoot = "D:\OSTORY-GPU-Logs"
+$FallbackLogRoot = "E:\OSTORY-GPU\logs"
 $LogRoot = if (Test-Path -LiteralPath "D:\") { $PreferredLogRoot } else { $FallbackLogRoot }
 $StdoutLog = Join-Path $LogRoot ("comfyui-music3-{0}.log" -f $Port)
 $StderrLog = Join-Path $LogRoot ("comfyui-music3-{0}.error.log" -f $Port)
@@ -20,7 +20,7 @@ if (-not (Test-Path -LiteralPath $PythonExe)) { throw "Missing Music3 Python: $P
 if (-not (Test-Path -LiteralPath $MainPy)) { throw "Missing Music3 ComfyUI: $MainPy" }
 if (-not (Test-Path -LiteralPath $CleanupScript)) { throw "Missing cleanup script: $CleanupScript" }
 New-Item -ItemType Directory -Force -Path $LogRoot | Out-Null
-if (-not (Select-String -LiteralPath $LlamaSource -SimpleMatch "MECHA_MUSIC3_DISABLE_FLASH_DECODE" -Quiet)) {
+if (-not (Select-String -LiteralPath $LlamaSource -SimpleMatch "OSTORY_MUSIC3_DISABLE_FLASH_DECODE" -Quiet)) {
     throw "Music3 Flash-Attention compatibility patch is not installed: $LlamaSource"
 }
 
@@ -28,12 +28,12 @@ if (-not (Select-String -LiteralPath $LlamaSource -SimpleMatch "MECHA_MUSIC3_DIS
     -Port $Port -PythonExe $PythonExe -CommandMatch $MainPy -LogFile $StdoutLog
 if ($LASTEXITCODE -ne 0) { throw "Port $Port cannot be prepared safely (exit $LASTEXITCODE)" }
 
-if (-not ("Mecha.JobMemory" -as [type])) {
+if (-not ("Ostory.JobMemory" -as [type])) {
     Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 
-namespace Mecha {
+namespace Ostory {
     [StructLayout(LayoutKind.Sequential)]
     public struct JOBOBJECT_BASIC_LIMIT_INFORMATION {
         public Int64 PerProcessUserTimeLimit;
@@ -119,16 +119,16 @@ $arguments = @(
     "--preview-method", "none",
     "--disable-auto-launch"
 )
-$env:MECHA_MUSIC3_DISABLE_FLASH_DECODE = "1"
+$env:OSTORY_MUSIC3_DISABLE_FLASH_DECODE = "1"
 $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 "[$stamp] Starting Music3 runtime on port=$Port with job_limit=${JobMemoryLimitGiB}GiB" |
     Out-File -FilePath $StdoutLog -Append -Encoding UTF8
 $process = Start-Process -FilePath $PythonExe -ArgumentList $arguments -WorkingDirectory $Root `
     -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog -PassThru
-$job = [Mecha.JobMemory]::CreateAndAssign($process.Handle, [UInt64]($JobMemoryLimitGiB * 1GB))
+$job = [Ostory.JobMemory]::CreateAndAssign($process.Handle, [UInt64]($JobMemoryLimitGiB * 1GB))
 try {
     $process.WaitForExit()
     exit $process.ExitCode
 } finally {
-    [Mecha.JobMemory]::Close($job)
+    [Ostory.JobMemory]::Close($job)
 }

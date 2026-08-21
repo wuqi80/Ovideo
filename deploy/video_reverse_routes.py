@@ -4,7 +4,6 @@ Video Reverse Prompt API Routes
 =================================
 /api/video-reverse/* — 视频反推提示词的预估 / 提交 / 列表 / 详情 / 取消 / 重试。
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/03-video-reverse.md
 """
 from __future__ import annotations
 

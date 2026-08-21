@@ -302,9 +302,9 @@ export function dbItemsToStoryboardData(items: StoryboardItemDB[], assets?: Asse
 }
 
 /**
- * 写入端守卫：generated_image_url 必须是持久化 URL。
- * data:/blob: 等内联或临时 URL 会撑爆 DB 字段并触发下游 414 / 视频页空白。
- * 详见 docs/conventions.md § Data URL Prohibition、docs/faq.md。
+ * Write-side invariant: generated_image_url must be durable. Inline data URLs
+ * can exceed persistence and request limits; blob URLs expire with the browser
+ * session and cannot be consumed by background workers.
  */
 function isPersistentImageUrl(u: unknown): u is string {
   if (typeof u !== 'string' || !u) return false;

@@ -32,13 +32,13 @@ describe('aiService MiniMax dispatch', () => {
     await expect(callAI(
       AiModel.MinimaxM3,
       { system: 'system', user: 'hello {name}' },
-      { name: 'Drama' },
+      { name: 'Sample Project' },
       onStream,
       taskContext,
     )).resolves.toBe('m3 result');
 
     expect(callMinimaxM3WithRetry).toHaveBeenCalledWith(
-      'hello Drama',
+      'hello Sample Project',
       'system',
       onStream,
       taskContext,

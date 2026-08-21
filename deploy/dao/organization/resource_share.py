@@ -4,7 +4,6 @@ Resource Share DAO
 ==================
 resource_shares 表 CRUD。多态映射 (resource_type, resource_id) → (share_target_type, share_target_id)。
 
-详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §4.1 / §5.3
 """
 from __future__ import annotations
 

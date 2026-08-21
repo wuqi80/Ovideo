@@ -1,12 +1,8 @@
-# Drama Agentic Testing Strategy
+# Automated testing strategy
 
 ## Decision
 
-`adelbibi/tyr_agent_tester` is useful as a reference architecture for
-exploratory testing, but it is not directly compatible with Drama and must not
-be the only release gate.
-
-Drama uses the same four phases while keeping deterministic checks authoritative:
+Ostory TV uses four explicit phases while keeping deterministic checks authoritative:
 
 1. **Discover**: inspect runtimes, dependencies, repository state, and available
    test surfaces.
@@ -25,32 +21,6 @@ Run the suite from `deploy`:
 
 Reports are written to `deploy/logs/` and are intentionally ignored by Git.
 
-## How the Tyr reference works
-
-The reference project is an Anthropic-driven MCP loop specialized for the Tyr
-product:
-
-- Its exploration prompt asks an LLM to inspect Tyr through read-only MCP calls.
-- A second LLM call converts the transcript into a JSON test plan.
-- The executor sends one natural-language test instruction at a time to Tyr's
-  assistant MCP endpoint, polls asynchronous operation IDs, and asks for human
-  approval before selected mutations.
-- A final LLM call classifies the transcript and writes a Markdown report while
-  the loop retains raw JSONL evidence.
-
-The implementation is coupled to Tyr's OAuth token and four Tyr-specific MCP
-tools (`tyr_assistant_query`, `tyr_assistant_request`,
-`tyr_operation_status`, and `tyr_approval_resolve`). Drama exposes a browser SPA
-and REST APIs instead, so the reference executor cannot call Drama without a
-new adapter.
-
-Primary reference:
-
-- https://github.com/adelbibi/tyr_agent_tester
-- https://github.com/adelbibi/tyr_agent_tester/blob/main/agent_loop.py
-- https://github.com/adelbibi/tyr_agent_tester/blob/main/mcp_client.py
-- https://github.com/adelbibi/tyr_agent_tester/blob/main/prompts.py
-
 ## Why deterministic checks remain authoritative
 
 An LLM tester can discover unexpected workflow or security defects, but its
@@ -59,7 +29,7 @@ pixel alignment, database transaction correctness, or exact request contracts
 without purpose-built adapters and assertions. It may consume paid model calls
 or mutate production data if approvals are too broad.
 
-Drama therefore uses three layers:
+Ostory TV therefore uses three layers:
 
 1. **Release gate**: Vitest, Pytest, route contracts, architecture contracts,
    production build, whitespace checks, and non-mutating public smoke tests.
@@ -83,6 +53,6 @@ Drama therefore uses three layers:
 - `NOT_ATTEMPTED`: a required executable, dependency, credential, or test surface
   was unavailable before execution.
 
-Set `DRAMA_REQUIRE_TEST_DB=true` in CI to turn an unavailable PostgreSQL test
+Set `OSTORY_REQUIRE_TEST_DB=true` in CI to turn an unavailable PostgreSQL test
 database into a hard failure. Authenticated live workflow checks should use a
 dedicated test account and must not reuse an administrator's production data.

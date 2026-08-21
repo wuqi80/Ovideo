@@ -9,7 +9,6 @@ Media Library DAO
 - 列表查询统一 JOIN files 表，前端拿到 file_url / thumbnail_url / size 等真实文件元数据。
 - permission_scope='private' 仅 owner 可见；'project' 项目所有成员可见。
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/01-media-library.md
 """
 from __future__ import annotations
 

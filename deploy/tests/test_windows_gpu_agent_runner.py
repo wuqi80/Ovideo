@@ -105,10 +105,10 @@ def test_gpu2_minimax_music3_uses_fixed_int8_models_and_shared_runtime():
 
 
 def test_gpu2_agent_maintenance_gate_defaults_closed(monkeypatch):
-    monkeypatch.delenv("MECHA_GPU_AGENT_MAINTENANCE", raising=False)
+    monkeypatch.delenv("OSTORY_GPU_AGENT_MAINTENANCE", raising=False)
     assert gpu2_agent_maintenance_enabled() is True
 
-    monkeypatch.setenv("MECHA_GPU_AGENT_MAINTENANCE", "0")
+    monkeypatch.setenv("OSTORY_GPU_AGENT_MAINTENANCE", "0")
     assert gpu2_agent_maintenance_enabled() is False
 
 
@@ -410,7 +410,7 @@ def test_gpu2_minimax_h3_sageattention_preserves_data_payload_on_prepare():
 
 def test_gpu2_h3_sageattention_requires_marker_and_live_nodes(tmp_path, monkeypatch):
     marker = tmp_path / "h3-sageattention-ready.json"
-    monkeypatch.setenv("MECHA_GPU_H3_SAGE_ATTENTION", "1")
+    monkeypatch.setenv("OSTORY_GPU_H3_SAGE_ATTENTION", "1")
 
     ready, reason = gpu2_h3_sage_attention_ready(
         marker_path=marker, object_info_reader=lambda: {}
@@ -445,7 +445,7 @@ def test_gpu2_h3_fast_profile_does_not_require_legacy_toggle(tmp_path, monkeypat
         "kjnodes_commit": GPU2_H3_KJNODES_COMMIT,
         "inference_executed": False,
     }), encoding="utf-8")
-    monkeypatch.setenv("MECHA_GPU_H3_SAGE_ATTENTION", "0")
+    monkeypatch.setenv("OSTORY_GPU_H3_SAGE_ATTENTION", "0")
 
     assert gpu2_h3_sage_attention_ready(
         marker_path=marker,
@@ -507,7 +507,7 @@ def test_gpu2_h3_long_video_requires_exact_marker_nodes_and_no_conflicting_pack(
     tmp_path, monkeypatch
 ):
     marker = tmp_path / "h3-long-video-ready.json"
-    monkeypatch.setenv("MECHA_GPU_H3_LONG_VIDEO", "1")
+    monkeypatch.setenv("OSTORY_GPU_H3_LONG_VIDEO", "1")
     marker.write_text(json.dumps({
         "verified": True,
         "director_commit": GPU2_H3_DIRECTOR_COMMIT,
@@ -614,7 +614,7 @@ def test_gpu2_runtime_manager_reports_managed_listener_stop_timeout(tmp_path):
 
 
 def test_gpu2_runtime_profile_matches_only_reviewed_executable_and_main_paths(tmp_path):
-    root = tmp_path / "MECHA-GPU"
+    root = tmp_path / "OSTORY-GPU"
     h3_python = root / "ComfyUI-H3" / "python_embeded" / "python.exe"
     h3_main = root / "ComfyUI-H3" / "ComfyUI" / "main.py"
 

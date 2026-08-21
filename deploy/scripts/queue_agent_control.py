@@ -63,7 +63,7 @@ def _load_service_env() -> dict[str, str]:
 
     try:
         output = subprocess.check_output(
-            ["systemctl", "show", "drama.service", "-p", "Environment", "--value"],
+            ["systemctl", "show", "ostory.service", "-p", "Environment", "--value"],
             text=True,
             stderr=subprocess.DEVNULL,
             timeout=5,
@@ -86,8 +86,8 @@ async def fetch_online_agents() -> list[dict[str, Any]]:
     conn = await asyncpg.connect(
         host=env.get("DB_HOST", "localhost"),
         port=int(env.get("DB_PORT", "5432")),
-        database=env.get("DB_NAME", "my2_db"),
-        user=env.get("DB_USER", "my2_user"),
+        database=env.get("DB_NAME", "ostory_db"),
+        user=env.get("DB_USER", "ostory_user"),
         password=env.get("DB_PASSWORD", ""),
     )
     try:

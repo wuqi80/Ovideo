@@ -2,6 +2,7 @@ import { enqueueComfyUITask } from './comfyuiTaskQueue';
 import { apiFetch, apiJson, buildAuthHeaders, handleUnauthorized } from './httpClient';
 import {
     getMiniMaxVideoParamsError,
+    getModelDisplayName,
     inferDashScopeTaskType,
     inferSeedanceTaskType,
     isComfyUIModel,
@@ -256,7 +257,7 @@ export async function submitTask(
         // 2026-05-24 大乘 — Vidu (DashScope 共享 API)
         // 简化分支：双图=首尾帧；单图=单参考；无图禁止（Vidu 不支持纯文生）
         if (!imageFilename && !imageFilenameEnd) {
-            throw new Error('大乘 (Vidu) 不支持纯文生视频，请至少提供 1 张参考图');
+            throw new Error(`${getModelDisplayName('Vidu')}不支持纯文生视频，请至少提供 1 张参考图`);
         }
         if (imageFilenameEnd) {
             taskType = 'vidu_morph';
@@ -277,10 +278,10 @@ export async function submitTask(
         // 2026-05-24 炼虚 — HappyHorse (DashScope 共享 API)
         // 简化分支：仅多图参考生；首尾帧不支持；多图走 submitDashScopeVideoTask
         if (!imageFilename) {
-            throw new Error('炼虚 (HappyHorse) 至少需要 1 张参考图');
+            throw new Error(`${getModelDisplayName('HappyHorse')}至少需要 1 张参考图`);
         }
         if (imageFilenameEnd) {
-            throw new Error('炼虚 (HappyHorse) 不支持首尾帧模式（仅多图参考）');
+            throw new Error(`${getModelDisplayName('HappyHorse')}不支持首尾帧模式（仅多图参考）`);
         }
         taskType = 'happyhorse_r2v';
         requestData = {

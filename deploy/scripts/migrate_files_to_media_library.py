@@ -2,7 +2,6 @@
 """
 One-off: 将历史 files 表中的内容回填到 media_library_items（幂等）。
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/06-history-migration.md
 
 Usage
 -----

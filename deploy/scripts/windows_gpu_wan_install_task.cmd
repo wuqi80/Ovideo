@@ -1,8 +1,8 @@
 @echo off
 setlocal
 
-set "TASK_NAME=MECHA-GPU-WanSetup"
-set "SETUP_CMD=E:\MECHA-GPU\windows_gpu_wan_setup.cmd"
+set "TASK_NAME=OSTORY-GPU-WanSetup"
+set "SETUP_CMD=E:\OSTORY-GPU\windows_gpu_wan_setup.cmd"
 
 schtasks /End /TN "%TASK_NAME%" >nul 2>&1
 taskkill /F /IM aria2c.exe >nul 2>&1

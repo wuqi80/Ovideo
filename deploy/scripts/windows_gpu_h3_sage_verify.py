@@ -50,7 +50,7 @@ def verify(port: int, kjnodes_root: Path) -> dict:
     if not callable(getattr(sageattention, "sageattn", None)):
         raise RuntimeError("sageattention.sageattn is unavailable")
 
-    commit_file = kjnodes_root / ".mecha-reviewed-commit"
+    commit_file = kjnodes_root / ".ostory-reviewed-commit"
     try:
         kjnodes_commit = commit_file.read_text(encoding="utf-8").strip()
     except OSError as exc:
@@ -82,7 +82,7 @@ def verify(port: int, kjnodes_root: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8188)
-    parser.add_argument("--install-root", default=r"E:\MECHA-GPU")
+    parser.add_argument("--install-root", default=r"E:\OSTORY-GPU")
     parser.add_argument("--output", default="")
     args = parser.parse_args()
     install_root = Path(args.install_root)

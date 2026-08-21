@@ -1,14 +1,12 @@
 // new_html/services/taskRegistry.ts
 //
-// 2026-05-20 (Task System Overhaul M0)：全局任务注册中心。
-//
-// 设计层次：
+// Global task registry. Ownership layers:
 //   - globalTaskManager.ts  ← SSE / 轮询的传输层（已有，不动）
 //   - taskRegistry.ts       ← 业务任务状态机（本文件）
 //   - TaskContext.tsx       ← React 适配层
 //   - 各页面                ← register / onComplete callback
 //
-// 关键能力：
+// Core behavior:
 //   - register: 页面提交任务时注册到 store，立即进入 'pending' / 'queued'
 //   - update: 全局 poller 或 SSE 收到状态时调用，更新 status / progress / queuePosition
 //   - complete / fail: 终态，触发 callback 并广播 listeners
@@ -18,13 +16,12 @@
 
 import type { RegisteredTask, GlobalTaskStatus, SourcePage, TaskKind } from '../types';
 
-const STORAGE_KEY_PREFIX = 'h-my2:task-registry:v1';
+const STORAGE_KEY_PREFIX = 'ostory:task-registry:v1';
 const ANONYMOUS_USER_SCOPE = 'anonymous';
 // 已完成/失败任务在 sessionStorage 里保留 30 分钟（用于 reload 后能看到刚完成的任务）
 const COMPLETED_RETAIN_MS = 30 * 60 * 1000;
-// 2026-06-14：active（pending/queued/running）任务超过此时长仍未完成，视为僵尸/超时，
-// rehydrate 时自动判失败清出「运行中」。否则卡死的任务（如无 GPU agent 的 qwen 出图）
-// 会永远显示「运行中 0%」幽灵在通知面板里。
+// Rehydrated active tasks expire so a browser cannot display abandoned local
+// queue state forever after a worker or page session disappears.
 const STALE_ACTIVE_MS = 60 * 60 * 1000;
 // listTasks 默认排序时，已完成 / 失败保留前 N 条（避免 store 无限增长）
 const MAX_COMPLETED_KEEP = 50;

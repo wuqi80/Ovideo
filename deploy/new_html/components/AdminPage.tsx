@@ -21,7 +21,7 @@ interface AdminPageProps {
     // 2026-05-26：embedded 模式 — 在 AdminLayout 内渲染时为 true，
     // 隐藏自身的左 sidebar（由 AdminLayout 接管），改用顶部横向 tab 条。
     embedded?: boolean;
-    // refactor/v2：统一后台壳通过 embedTab 直接驱动当前面板（菜单点哪个就显示哪个），
+    // 当前架构：统一后台壳通过 embedTab 直接驱动当前面板（菜单点哪个就显示哪个），
     // 同时隐藏 AdminPage 自带的侧栏与页头——避免「后台里又套一个后台」的割裂感。
     embedTab?: 'users' | 'stats' | 'results' | 'system' | 'features';
 }
@@ -233,7 +233,7 @@ const normalizeUserRow = (raw: any): UserAccount => {
 
 export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrary = {} as MaterialLibrary, embedded = false, embedTab }) => {
     const [activeTab, setActiveTab] = useState<'users' | 'stats' | 'results' | 'system' | 'features'>(embedTab ?? 'users');
-    // refactor/v2：统一壳的菜单切换会改变 embedTab（同一路由不卸载），此处同步到内部 activeTab。
+    // 当前架构：统一壳的菜单切换会改变 embedTab（同一路由不卸载），此处同步到内部 activeTab。
     useEffect(() => { if (embedTab) setActiveTab(embedTab); }, [embedTab]);
     const [users, setUsers] = useState<UserAccount[]>([]);
     const [logs, setLogs] = useState<GenerationLog[]>([]);
@@ -781,16 +781,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
         );
     }
 
-    // 2026-05-26：embedded prop 当前作为路由形参占位，不引入二级布局重写以避免大重构。
-    // /admin/operations 由 App.tsx 直接全屏渲染 <AdminPage />（不嵌入 AdminLayout），
-    // 浮层提供"返回 Hub"角标。详见 docs/vertical-slices.md "Admin Shell（2026-05-26）"。
+    // `embedded` is retained as a compatibility argument. The operations route
+    // owns the full viewport and supplies its own navigation back to Admin Hub.
     void embedded;
 
     return (
-        // 2026-05-26 修复：min-h-screen → h-screen
-        //   旧实现 min-h-screen 让容器最少 100vh 但允许撑大；内部 flex-1 子在 "无明确高度的父容器"下
-        //   不会形成滚动区域（overflow-y-auto 失效）→ "生成统计分析" / "新功能管理" 等长内容看不全也滚不动。
-        //   h-screen 固定为精确 100vh，配合 overflow-hidden + flex-1 + overflow-y-auto 三件套才正确触发滚动。
+        // A definite viewport height is required for nested flex children to
+        // establish their own overflow region. min-height would let the parent
+        // expand and silently disable scrolling on long administration pages.
         <div className={`flex ${embedded ? 'h-full w-full' : 'h-screen w-screen'} bg-n0 text-n800 overflow-hidden font-sans relative`}>
             {/* 🆕 创建用户Loading遮罩 */}
             {isCreatingUser && (

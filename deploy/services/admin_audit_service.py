@@ -4,7 +4,6 @@ Admin Audit Service
 ====================
 封装 admin_audit_logs 写入：自动抽取 request.client.host / headers['user-agent']。
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/05-admin-media-credit-audit.md
 """
 from __future__ import annotations
 

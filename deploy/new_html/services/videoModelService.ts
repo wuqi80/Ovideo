@@ -156,7 +156,7 @@ export function normalizeSeedanceMediaForSubmission(
 
 /**
  * 2026-07-11：Seedance 1.5-pro 仅支持单图或首尾帧，禁止多模态多输入。
- * Drama 后端（seedance.py）会在 Agent Plan endpoint 上强制覆盖 model=1.5-pro，
+ * The compatibility endpoint forces model=1.5-pro for historical agent-plan requests.
  * 1.5-pro 拒绝 video/audio kind 与 3+ 张图。前端拦截避免用户点了提交才报错、浪费扣费。
  *
  * 返回 null 表示可通过；返回 string 是禁用原因（同时也是按钮 tooltip）。
@@ -315,30 +315,30 @@ export function inferDashScopeTaskType(
 
 export function getModelDisplayName(model: VideoModel): string {
   const modelNameMap: Record<VideoModel, string> = {
-    Wan2: '集群视频（旧版兼容）',
-    LTXNode1: '处理节点1 · LTX',
-    WanNode2: '处理节点2 · Wan',
-    '一阶': '一阶',
-    '二阶': '二阶',
-    '三阶': '三阶',
-    '四阶': '四阶',
-    '五阶': '五阶',
-    '六阶': '六阶',
-    '七阶': '七阶',
-    MiniMaxH3: '本地 MiniMax H3',
-    MiniMaxH3Fast: 'MiniMax H3 Fast',
-    MiniMaxH3Mini: '本地 MiniMax H3 Mini',
-    Veo: '筑基',
-    MINI: '金丹',
-    Sora2: '化神',
-    '大能': '大能',
+    Wan2: '历史视频模型',
+    LTXNode1: '历史视频模型',
+    WanNode2: '历史视频模型',
+    '一阶': '历史视频模型',
+    '二阶': '历史视频模型',
+    '三阶': '历史视频模型',
+    '四阶': '历史视频模型',
+    '五阶': '历史视频模型',
+    '六阶': '历史视频模型',
+    '七阶': '历史视频模型',
+    MiniMaxH3: '一阶 · 节点标准模型',
+    MiniMaxH3Fast: '二阶 · 节点快速模型',
+    MiniMaxH3Mini: '三阶 · 节点简化模型',
+    Veo: '八阶 · 高质量快速视频模型',
+    MINI: '七阶 · 首尾帧标准视频模型',
+    Sora2: '九阶 · 长镜头视频模型',
+    '大能': '十阶 · 镜头叙事视频模型',
     Seedance15: 'Seedance 1.5',
-    Seedance2: '飞升',
-    Seedance2Fast: '渡劫',
-    Seedance2Mini: '元婴',
-    Kling: '合体',
-    Vidu: '大乘',
-    HappyHorse: '炼虚',
+    Seedance2: '四阶 · 多模态标准视频模型',
+    Seedance2Fast: '五阶 · 多模态快速视频模型',
+    Seedance2Mini: '六阶 · 多模态简化视频模型',
+    Kling: '十一阶 · 全能音画视频模型',
+    Vidu: '十二阶 · 多参考视频模型',
+    HappyHorse: '十三阶 · 角色一致性视频模型',
   };
   return modelNameMap[model] || model;
 }
@@ -351,10 +351,9 @@ export const ALL_MODELS: VideoModel[] = [
 ];
 
 export const SELECTABLE_MODELS: VideoModel[] = [
-  'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini', 'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶',
-  'LTXNode1', 'WanNode2',
-  'Veo', 'Sora2', 'MINI', '大能',
+  'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini',
   'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
+  'MINI', 'Veo', 'Sora2', '大能',
   'Kling', 'Vidu', 'HappyHorse',
 ];
 
@@ -466,11 +465,12 @@ export function formatVideoModelRuntimeLabel(capability?: VideoCapabilityModelLi
 
 export function formatVideoModelOptionLabel(
   model: VideoModel,
-  capability?: VideoCapabilityModelLike | null,
+  _capability?: VideoCapabilityModelLike | null,
 ): string {
-  const base = getModelDisplayName(model);
-  const runtimeLabel = formatVideoModelRuntimeLabel(capability);
-  return runtimeLabel ? `${base} · ${runtimeLabel}` : base;
+  // Runtime provider/model names stay in the capability object for dispatch,
+  // diagnostics and billing. The creator-facing selector only exposes the
+  // stable product tier name, matching the script model catalogue.
+  return getModelDisplayName(model);
 }
 
 export function buildVideoModelOptions(
@@ -478,22 +478,22 @@ export function buildVideoModelOptions(
   fallbackModels: readonly VideoModel[] = SELECTABLE_MODELS,
 ): VideoModelOption[] {
   const hasManifest = Array.isArray(capabilities) && capabilities.length > 0;
+  if (!hasManifest) return [];
   const capabilityByKey = new Map<string, VideoCapabilityModelLike>();
-  if (hasManifest) {
-    for (const capability of capabilities || []) {
-      const key = String(capability.key || '').trim();
-      if (isVideoModelKey(key)) capabilityByKey.set(key, capability);
-    }
+  for (const capability of capabilities || []) {
+    const key = String(capability.key || '').trim();
+    if (isVideoModelKey(key)) capabilityByKey.set(key, capability);
   }
 
   return fallbackModels.flatMap((model) => {
     const capability = capabilityByKey.get(model);
-    const available = capability ? capability.available !== false : false;
+    const available = capability?.available === true;
+    if (!available) return [];
     const runtimeLabel = formatVideoModelRuntimeLabel(capability);
     const label = formatVideoModelOptionLabel(model, capability);
     return [{
       value: model,
-      label: available ? label : `${label}（当前不可用）`,
+      label,
       baseLabel: getModelDisplayName(model),
       runtimeLabel,
       available,
@@ -505,23 +505,11 @@ export function buildVideoModelOptions(
 
 export function withCurrentVideoModelOption(
   options: readonly VideoModelOption[],
-  currentModel: VideoModel,
-  capabilities: readonly VideoCapabilityModelLike[] | null | undefined,
+  _currentModel: VideoModel,
+  _capabilities: readonly VideoCapabilityModelLike[] | null | undefined,
 ): VideoModelOption[] {
-  if (options.some(option => option.value === currentModel)) return [...options];
-  const capability = Array.isArray(capabilities)
-    ? capabilities.find(item => item.key === currentModel)
-    : undefined;
-  return [
-    {
-      value: currentModel,
-      label: `${formatVideoModelOptionLabel(currentModel, capability)}（当前不可用）`,
-      baseLabel: getModelDisplayName(currentModel),
-      runtimeLabel: formatVideoModelRuntimeLabel(capability),
-      available: false,
-      provider: capability?.provider,
-      capability,
-    },
-    ...options,
-  ];
+  // Do not resurrect retired or unavailable models just because an older card
+  // still stores their internal key. VideoPage normalizes the active selection
+  // to the first usable option while preserving historical result metadata.
+  return [...options];
 }

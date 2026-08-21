@@ -93,7 +93,7 @@ def test_background_heartbeat_continues_independently_of_task_loop(monkeypatch):
 
 
 def test_sync_runtime_tools_updates_only_runner_and_cleanup(tmp_path, monkeypatch):
-    monkeypatch.setenv("MECHA_GPU_ROOT", str(tmp_path))
+    monkeypatch.setenv("OSTORY_GPU_ROOT", str(tmp_path))
     monkeypatch.setattr(comfyui_agent_module.platform, "system", lambda: "Windows")
     agent = _agent(monkeypatch)
     sources = {

@@ -27,12 +27,9 @@ def test_workflow_node_count_rejects_empty_and_non_node_json() -> None:
     assert workflow_node_count('{"1":{"class_type":"LoadImage","inputs":{}}}') == 1
 
 
-def test_live_deploy_runs_verified_repair_after_migrations() -> None:
-    script = (DEPLOY_DIR / "scripts" / "live_deploy_mvc2.sh").read_text(encoding="utf-8")
-    migration_call = script.index("scripts/apply_migrations.py")
-    repair_call = script.index(
-        "'$REMOTE_DIR'/.venv/bin/python scripts/repair_verified_workflow_templates.py"
-    )
+def test_container_entrypoint_runs_verified_repair_after_migrations() -> None:
+    script = (DEPLOY_DIR / "containers" / "entrypoint.sh").read_text(encoding="utf-8")
+    migration_call = script.index("python db_build/build_fresh_db.py")
+    repair_call = script.index("python scripts/repair_verified_workflow_templates.py")
 
     assert migration_call < repair_call
-    assert '"scripts/repair_verified_workflow_templates.py"' in script

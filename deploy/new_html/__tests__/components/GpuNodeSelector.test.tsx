@@ -46,11 +46,11 @@ describe('GpuNodeSelector', () => {
       preferredAgentId: 'agent_gpu2',
       preferredNodeId: 'node_gpu2',
     }));
-    expect(localStorage.getItem('mecha:preferred-gpu-node-id')).toBe('agent_gpu2');
+    expect(localStorage.getItem('ostory:preferred-gpu-node-id')).toBe('agent_gpu2');
   });
 
   it('marks an explicitly selected offline processing node as unavailable', async () => {
-    localStorage.setItem('mecha:preferred-gpu-node-id', 'GPU2');
+    localStorage.setItem('ostory:preferred-gpu-node-id', 'GPU2');
     mockFetch.mockResolvedValueOnce(response({
       success: true,
       nodes: [

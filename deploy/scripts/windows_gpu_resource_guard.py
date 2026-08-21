@@ -1,6 +1,6 @@
 """Low-overhead Windows resource telemetry and fail-closed GPU task guard.
 
-The guard is deliberately scoped to the local MECHA process tree.  It never
+The guard is deliberately scoped to the local OSTORY process tree.  It never
 changes the pagefile, VMware, DFS, or host services.  Production activation is
 separate from deploying this module.
 """
@@ -50,17 +50,17 @@ class ResourcePolicy:
     def from_env(cls) -> "ResourcePolicy":
         gib = lambda name, default: _env_int(name, default) * GIB
         return cls(
-            min_free_for_load_bytes=gib("MECHA_GPU_MIN_FREE_FOR_LOAD_GIB", 96),
-            pause_free_bytes=gib("MECHA_GPU_PAUSE_FREE_GIB", 64),
-            unload_free_bytes=gib("MECHA_GPU_UNLOAD_FREE_GIB", 48),
-            emergency_free_bytes=gib("MECHA_GPU_EMERGENCY_FREE_GIB", 32),
-            min_commit_headroom_for_load_bytes=gib("MECHA_GPU_MIN_COMMIT_HEADROOM_GIB", 64),
-            emergency_commit_headroom_bytes=gib("MECHA_GPU_EMERGENCY_COMMIT_HEADROOM_GIB", 16),
-            normal_ai_private_bytes=gib("MECHA_GPU_NORMAL_AI_PRIVATE_GIB", 96),
-            warning_ai_private_bytes=gib("MECHA_GPU_WARNING_AI_PRIVATE_GIB", 112),
-            hard_ai_private_bytes=gib("MECHA_GPU_HARD_AI_PRIVATE_GIB", 128),
-            active_interval_seconds=_env_int("MECHA_GPU_TELEMETRY_ACTIVE_SECONDS", 2, minimum=1),
-            idle_interval_seconds=_env_int("MECHA_GPU_TELEMETRY_IDLE_SECONDS", 10, minimum=2),
+            min_free_for_load_bytes=gib("OSTORY_GPU_MIN_FREE_FOR_LOAD_GIB", 96),
+            pause_free_bytes=gib("OSTORY_GPU_PAUSE_FREE_GIB", 64),
+            unload_free_bytes=gib("OSTORY_GPU_UNLOAD_FREE_GIB", 48),
+            emergency_free_bytes=gib("OSTORY_GPU_EMERGENCY_FREE_GIB", 32),
+            min_commit_headroom_for_load_bytes=gib("OSTORY_GPU_MIN_COMMIT_HEADROOM_GIB", 64),
+            emergency_commit_headroom_bytes=gib("OSTORY_GPU_EMERGENCY_COMMIT_HEADROOM_GIB", 16),
+            normal_ai_private_bytes=gib("OSTORY_GPU_NORMAL_AI_PRIVATE_GIB", 96),
+            warning_ai_private_bytes=gib("OSTORY_GPU_WARNING_AI_PRIVATE_GIB", 112),
+            hard_ai_private_bytes=gib("OSTORY_GPU_HARD_AI_PRIVATE_GIB", 128),
+            active_interval_seconds=_env_int("OSTORY_GPU_TELEMETRY_ACTIVE_SECONDS", 2, minimum=1),
+            idle_interval_seconds=_env_int("OSTORY_GPU_TELEMETRY_IDLE_SECONDS", 10, minimum=2),
         )
 
 
@@ -191,8 +191,8 @@ def _windows_process_image_and_memory(pid: int) -> tuple[str, int, int] | None:
         kernel32.CloseHandle(process)
 
 
-def read_mecha_process_memory(root: Path) -> Dict[str, Any] | None:
-    """Aggregate MECHA executables and all descendants, including child FFmpeg."""
+def read_ostory_process_memory(root: Path) -> Dict[str, Any] | None:
+    """Aggregate OSTORY executables and all descendants, including child FFmpeg."""
     if os.name != "nt":
         return None
     rows = _windows_process_rows()
@@ -251,10 +251,10 @@ class BoundedJsonlTelemetry:
         retention_days: int | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
-        self.root = Path(root or os.environ.get("MECHA_GPU_TELEMETRY_DIR", r"D:\MECHA-GPU-Telemetry"))
-        self.max_file_bytes = max_file_bytes or _env_int("MECHA_GPU_TELEMETRY_FILE_MIB", 64, minimum=1) * MIB
-        self.max_total_bytes = max_total_bytes or _env_int("MECHA_GPU_TELEMETRY_TOTAL_MIB", 512, minimum=16) * MIB
-        self.retention_days = retention_days or _env_int("MECHA_GPU_TELEMETRY_RETENTION_DAYS", 30, minimum=1)
+        self.root = Path(root or os.environ.get("OSTORY_GPU_TELEMETRY_DIR", r"D:\OSTORY-GPU-Telemetry"))
+        self.max_file_bytes = max_file_bytes or _env_int("OSTORY_GPU_TELEMETRY_FILE_MIB", 64, minimum=1) * MIB
+        self.max_total_bytes = max_total_bytes or _env_int("OSTORY_GPU_TELEMETRY_TOTAL_MIB", 512, minimum=16) * MIB
+        self.retention_days = retention_days or _env_int("OSTORY_GPU_TELEMETRY_RETENTION_DAYS", 30, minimum=1)
         self.clock = clock
         self.healthy = True
         self.last_error = ""
@@ -374,7 +374,7 @@ class Gpu2ResourceController:
         policy: ResourcePolicy | None = None,
         writer: BoundedJsonlTelemetry | None = None,
         host_reader: Callable[[], Dict[str, int] | None] = read_windows_host_memory,
-        process_reader: Callable[[Path], Dict[str, Any] | None] = read_mecha_process_memory,
+        process_reader: Callable[[Path], Dict[str, Any] | None] = read_ostory_process_memory,
         comfy_reader: Callable[[], Dict[str, int] | None] | None = None,
         emergency_stop: Callable[[], bool] | None = None,
     ) -> None:
@@ -416,10 +416,10 @@ class Gpu2ResourceController:
             alerts.append("host commit headroom crossed emergency reserve")
             emergency = True
         if ai_private >= self.policy.hard_ai_private_bytes:
-            alerts.append("MECHA process tree crossed hard private-memory ceiling")
+            alerts.append("OSTORY process tree crossed hard private-memory ceiling")
             emergency = True
         elif ai_private >= self.policy.warning_ai_private_bytes:
-            alerts.append("MECHA process tree crossed warning private-memory level")
+            alerts.append("OSTORY process tree crossed warning private-memory level")
 
         ready = (
             self.writer.healthy
@@ -435,7 +435,7 @@ class Gpu2ResourceController:
         ai = self.process_reader(self.root)
         if host is None or ai is None:
             with self._lock:
-                self._last_error = "resource telemetry could not read Windows host or MECHA process memory"
+                self._last_error = "resource telemetry could not read Windows host or OSTORY process memory"
             self.writer.write({"event": "telemetry_error", "reason": self._last_error})
             return None
         try:
@@ -564,7 +564,7 @@ class Gpu2ResourceController:
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run, name="mecha-resource-telemetry", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="ostory-resource-telemetry", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:

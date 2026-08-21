@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify MECHA FastAPI route contract after refactor increments.
+"""Verify OSTORY FastAPI route contract after refactor increments.
 
 The script intentionally imports cluster_main without starting uvicorn. Use it
 after moving handlers between modules to make sure the public API surface stays
@@ -5026,11 +5026,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (video_model_service, "export function getModelDisplayName("),
         (video_model_service, "export const ALL_MODELS: VideoModel[]"),
         (video_model_service, "export const SELECTABLE_MODELS: VideoModel[]"),
-        (video_model_service, "'LTXNode1', 'WanNode2'"),
-        (video_model_service, "'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini', 'Wan2', '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶'"),
-        (video_model_service, "'LTXNode1', 'WanNode2'"),
-        (video_model_service, "'Veo', 'Sora2', 'MINI', '大能'"),
         (video_model_service, "'Seedance2', 'Seedance2Fast', 'Seedance2Mini'"),
+        (video_model_service, "'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini'"),
+        (video_model_service, "'MINI', 'Veo', 'Sora2', '大能'"),
         (video_model_service, "'Kling', 'Vidu', 'HappyHorse'"),
         (video_task_types, "export interface UploadedImage"),
         (video_task_types, "export interface TaskGroup"),
@@ -5258,11 +5256,9 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (generation_page, "from '../services/comfyuiGenerationService'"),
         (generation_page, "from '../services/comfyuiTaskWaitService'"),
         (generation_page, "from '../services/geminiImageGenerationService'"),
-        (material_page, "from '../services/comfyuiGenerationService'"),
-        (material_page, "from '../services/comfyuiTaskWaitService'"),
+        (material_page, "from '../services/onlineImageOperationService'"),
         (material_page, "from '../services/geminiImageGenerationService'"),
-        (design_page, "from '../services/comfyuiGenerationService'"),
-        (design_page, "from '../services/comfyuiTaskWaitService'"),
+        (design_page, "from '../services/onlineImageOperationService'"),
         (design_page, "from '../services/geminiImageGenerationService'"),
         (generation_page, "function normalizeImageDownloadUrl("),
         (generation_page, "downloadImageBlob(imageUrl, '加载完整图片')"),
@@ -6178,7 +6174,7 @@ def check_frontend_flow_chunk_contract(root: Path) -> int:
     redirect_page = root / "new_html" / "pages" / "StudioRedirectPage.tsx"
     studio_root = root.parent / "studio"
     studio_app = studio_root / "App.tsx"
-    studio_runtime = studio_root / "platform" / "dramaRuntime.ts"
+    studio_runtime = studio_root / "platform" / "ostoryRuntime.ts"
     config_text = vite_config.read_text(encoding="utf-8")
     package_text = package_json.read_text(encoding="utf-8")
     app_text = app_path.read_text(encoding="utf-8")
@@ -6188,7 +6184,7 @@ def check_frontend_flow_chunk_contract(root: Path) -> int:
     required_snippets = [
         (app_text, "StudioRedirectPage", "Main app keeps the canvas route through StudioRedirectPage"),
         (redirect_text, "window.location.replace(buildStudioUrl(projectId, episodeId))", "Canvas route redirects with episode scope"),
-        (studio_text, "useStudioRuntime", "Studio UI uses the Drama runtime boundary"),
+        (studio_text, "useStudioRuntime", "Studio UI uses the Ostory runtime boundary"),
         (runtime_text, "submitSeedanceTask", "Studio video generation reuses the workflow model service"),
         (runtime_text, "minimaxTTSSync", "Studio audio generation reuses the workflow TTS service"),
         (runtime_text, "generateGeminiImageVariant", "Studio image generation reuses the workflow image service"),
@@ -6468,106 +6464,44 @@ def check_frontend_app_shell_chunk_contract(root: Path) -> int:
     return checks
 
 
-def check_live_deploy_frontend_contract(root: Path) -> int:
-    """Production deploy script must ship and build the Vite frontend."""
-    script_path = root / "scripts" / "live_deploy_mvc2.sh"
-    text = script_path.read_text(encoding="utf-8")
+def check_container_release_contract(root: Path) -> int:
+    """Container release path must build both UIs and preserve application state."""
+    dockerfile_path = root / "containers" / "app.Dockerfile"
+    entrypoint_path = root / "containers" / "entrypoint.sh"
+    script_path = root / "scripts" / "deploy_ostory_podman.sh"
+    dockerfile = dockerfile_path.read_text(encoding="utf-8")
+    entrypoint = entrypoint_path.read_text(encoding="utf-8")
+    script = script_path.read_text(encoding="utf-8")
+
     required_snippets = [
-        '"dao"',
-        '"cluster_config.py"',
-        '"cluster_config_generated.py"',
-        '"config.py"',
-        '"auto_deploy_cluster.py"',
-        '"agent_routes.py"',
-        '"compose_service.py"',
-        '"ARCHITECTURE.md"',
-        '"Agent.md"',
-        '"login.html"',
-        '"admin"',
-        '"docs"',
-        '"routers"',
-        '"schemas"',
-        '"scripts/live_deploy_mvc2.sh"',
-        '"services"',
-        '"utils"',
-        '"external_api/video/base.py"',
-        "scripts/check_*.py",
-        "tests/test_api_provider_runtime_model_env.py",
-        "tests/test_asset_service.py",
-        "tests/test_audio_provider.py",
-        "tests/test_canvas_service.py",
-        "tests/test_content_version_service.py",
-        "tests/test_storyboard_service.py",
-        "tests/test_storyboard_stale_script_fallback.py",
-        "tests/test_comfyui_file_service.py",
-        "tests/test_dao_api_config_category.py",
-        "tests/test_episode_compose_service.py",
-        "tests/test_episode_service.py",
-        "tests/test_episode_video_service.py",
-        "tests/test_entity_file_service.py",
-        "tests/test_minimax_tts_sync.py",
-        "tests/test_prompt_service.py",
-        "tests/test_project_admin_service.py",
-        "tests/test_project_core_service.py",
-        "tests/test_script_timeline_service.py",
-        "tests/test_task_notification_service.py",
-        "tests/test_video_client_base.py",
-        "tests/test_video_capability_service.py",
-        '"new_html/.env.example"',
-        '"new_html/README.md"',
-        '"new_html/GEMINI_API_CONFIG.md"',
-        "FRONTEND_HASH_REMOTE",
-        ".new_html_build_source.sha256",
-        "FORCE_FRONTEND_BUILD",
-        "frontend_source_hash",
-        "! -path 'new_html/*.md'",
-        "sed -E 's/^([0-9a-f]+)[[:space:]]+\\*?(.+)$/\\1  \\2/'",
-        "REMOTE_DIST_PRESENT",
-        "Skipping frontend build: new_html source hash unchanged",
-        "new_html-src.tgz",
-        "--exclude='new_html/node_modules'",
-        "--exclude='new_html/.env'",
-        "dist.bak.",
-        "npm run build",
-        "tar -xzf '$FRONTEND_TAR_REMOTE' -C '$REMOTE_DIR'",
-        "rm -f '$REMOTE_DIR'/api_router.py",
-        "RUN_REMOTE_CONTRACTS",
-        "RUN_REMOTE_SMOKE",
-        "REQUIRE_REMOTE_SMOKE",
-        "SMOKE_BASE_URL",
-        "run_remote_architecture_contracts",
-        "run_remote_smoke_test",
-        "scripts/check_architecture_contracts.py",
-        "ADMIN_PASSWORD",
-        "/tmp/smoke_test.py",
-        "✅ 部署成功",
-        "⚠️ 部署失败，已回滚",
+        (dockerfile, "AS web-build", dockerfile_path),
+        (dockerfile, "AS studio-build", dockerfile_path),
+        (dockerfile, "COPY --from=web-build /source/deploy/dist ./dist", dockerfile_path),
+        (dockerfile, "COPY --from=studio-build /source/studio/dist /studio/dist", dockerfile_path),
+        (entrypoint, "python db_build/build_fresh_db.py", entrypoint_path),
+        (entrypoint, "exec python cluster_main.py", entrypoint_path),
+        (script, "podman build", script_path),
+        (script, "GIT_SHA=", script_path),
+        (script, "release_metadata.json", script_path),
+        (script, "ostory-postgres:/var/lib/postgresql/data", script_path),
+        (script, "ostory-storage:/app/persistent_storage", script_path),
+        (script, "systemctl enable --now", script_path),
+        (script, "curl -fsS http://127.0.0.1:6006/health", script_path),
     ]
     forbidden_snippets = [
-        "new_html/node_modules\"",
-        "new_html/.env\"",
-        "workflows/",
-        "services/ai_proxy_service.py",
-        "services/admin_audit_service.py",
-        "services/audio_provider.py",
-        "services/api_config_health_service.py",
-        "services/api_provider_runtime.py",
-        "services/credit_service.py",
-        "services/file_service.py",
-        "services/image_webp_service.py",
-        "services/media_library_service.py",
-        "services/video_reverse_service.py",
-        "utils/config_helpers.py",
-        "pipeline/",
+        (dockerfile, ".env", dockerfile_path),
+        (script, "--privileged", script_path),
+        (script, "--publish 5432", script_path),
+        (script, "--publish 6379", script_path),
     ]
     checks = 0
-    for snippet in required_snippets:
+    for text, snippet, path in required_snippets:
         if snippet not in text:
-            fail(f"Missing frontend deploy contract snippet in {script_path.relative_to(root)}: {snippet}")
+            fail(f"Missing container deploy contract snippet in {path.relative_to(root)}: {snippet}")
         checks += 1
-    for snippet in forbidden_snippets:
+    for text, snippet, path in forbidden_snippets:
         if snippet in text:
-            fail(f"Forbidden frontend deploy secret/dependency upload in {script_path.relative_to(root)}: {snippet}")
+            fail(f"Forbidden container deploy behavior in {path.relative_to(root)}: {snippet}")
         checks += 1
     return checks
 
@@ -6934,27 +6868,25 @@ def check_admin_api_config_ui_contract(root: Path) -> int:
 
 
 def check_current_architecture_docs_contract(root: Path) -> int:
-    """Current architecture docs must describe the active API provider path."""
+    """Public architecture docs must describe the active layering contract."""
+    public_docs_root = root.parent / "docs" / "architecture"
     docs = {
         "ARCHITECTURE.md": (root / "ARCHITECTURE.md").read_text(encoding="utf-8"),
-        "docs/安全加固清单.md": (root / "docs" / "安全加固清单.md").read_text(encoding="utf-8"),
-        "docs/架构审计与重构计划.md": (root / "docs" / "架构审计与重构计划.md").read_text(encoding="utf-8"),
+        "docs/architecture/overview.md": (public_docs_root / "overview.md").read_text(encoding="utf-8"),
+        "docs/architecture/compatibility.md": (public_docs_root / "compatibility.md").read_text(encoding="utf-8"),
     }
     required = [
         ("ARCHITECTURE.md", "routers/                    # MVC 增量拆出的领域路由"),
-        ("docs/安全加固清单.md", "旧 `SmartApiRouter custom proxy` 死代码已删除"),
-        ("docs/架构审计与重构计划.md", "DB `api_configs.endpoint` 已变活"),
-        ("docs/架构审计与重构计划.md", "Provider runtime 已落地"),
-        ("docs/架构审计与重构计划.md", "旧 `api_router.py` / `SmartApiRouter` 已删除"),
-        ("docs/架构审计与重构计划.md", "自建 API provider adapter 接入"),
+        ("docs/architecture/overview.md", "Routers must not implement billing or provider selection."),
+        ("docs/architecture/overview.md", "not mutate project state."),
+        ("docs/architecture/overview.md", "provider identifiers remain diagnostic metadata"),
+        ("docs/architecture/compatibility.md", "A compatibility module may only re-export a canonical implementation."),
+        ("docs/architecture/compatibility.md", "They must not appear in current capability manifests or selectable UI lists."),
     ]
     forbidden = [
         ("ARCHITECTURE.md", "api_router.py / config.py"),
-        ("docs/安全加固清单.md", "api_router.py:55,68"),
-        ("docs/架构审计与重构计划.md", "DB endpoint 列是死配置"),
-        ("docs/架构审计与重构计划.md", "可作为抽象层骨架"),
-        ("docs/架构审计与重构计划.md", "api_router.py:87-89"),
-        ("docs/架构审计与重构计划.md", "ProviderConfig 解析器（DB endpoint 变活）"),
+        ("docs/architecture/overview.md", "SmartApiRouter"),
+        ("docs/architecture/compatibility.md", "SmartApiRouter"),
     ]
     checks = 0
     for rel, snippet in required:
@@ -7007,7 +6939,7 @@ def format_duplicates(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Check MECHA FastAPI route contract.")
+    parser = argparse.ArgumentParser(description="Check OSTORY FastAPI route contract.")
     parser.add_argument("--expected-paths", type=int, default=DEFAULT_EXPECTED_PATHS)
     parser.add_argument("--expected-operations", type=int, default=DEFAULT_EXPECTED_OPERATIONS)
     parser.add_argument("--show-routes", action="store_true", help="Print checked route endpoints.")
@@ -7050,7 +6982,7 @@ def main() -> int:
     frontend_utility_vendor_chunk_checks = check_frontend_utility_vendor_chunk_contract(root)
     frontend_dependency_checks = check_frontend_dependency_contract(root)
     frontend_app_shell_chunk_checks = check_frontend_app_shell_chunk_contract(root)
-    live_deploy_frontend_checks = check_live_deploy_frontend_contract(root)
+    container_release_checks = check_container_release_contract(root)
     comfyui_file_service_checks = check_comfyui_file_service_contract(root)
     video_client_base_checks = check_video_client_base_contract(root)
     admin_api_config_ui_checks = check_admin_api_config_ui_contract(root)
@@ -7124,7 +7056,7 @@ def main() -> int:
     print(f"  frontend_utility_vendor_chunk_checks={frontend_utility_vendor_chunk_checks}")
     print(f"  frontend_dependency_checks={frontend_dependency_checks}")
     print(f"  frontend_app_shell_chunk_checks={frontend_app_shell_chunk_checks}")
-    print(f"  live_deploy_frontend_checks={live_deploy_frontend_checks}")
+    print(f"  container_release_checks={container_release_checks}")
     print(f"  comfyui_file_service_checks={comfyui_file_service_checks}")
     print(f"  video_client_base_checks={video_client_base_checks}")
     print(f"  admin_api_config_ui_checks={admin_api_config_ui_checks}")

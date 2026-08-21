@@ -3,7 +3,6 @@
  * 2026-05-26 组织管理 MVP — Slice 2: admin 组织管理 tab
  *
  * 列表 + 「+ 创建」+ 行展开成员管理。挂在 AdminFeatureTabs（项目分组旁边）。
- * 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §6.1
  */
 
 import React, { useCallback, useEffect, useState } from 'react';

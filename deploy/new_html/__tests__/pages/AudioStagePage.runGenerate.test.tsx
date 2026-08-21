@@ -17,7 +17,7 @@
  *   - 这里的 it.todo 用作 future work breadcrumb；不引入 AudioStagePage 以避免
  *     fixture 缺失导致整个测试文件无法 compile
  *
- * 真实端到端覆盖请见 docs/superpowers/plans/minimax-tts-smoke-test.md（手测剧本）。
+ * Provider end-to-end coverage belongs in an explicitly configured smoke environment.
  */
 import { describe, it } from 'vitest';
 

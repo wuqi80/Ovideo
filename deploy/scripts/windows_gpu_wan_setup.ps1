@@ -1,5 +1,5 @@
 param(
-    [string]$InstallRoot = "E:\MECHA-GPU",
+    [string]$InstallRoot = "E:\OSTORY-GPU",
     [switch]$SkipModelDownloads
 )
 
@@ -15,7 +15,7 @@ $LogFile = Join-Path $Logs "wan-setup.log"
 $ReportFile = Join-Path $InstallRoot "wan-readiness-report.json"
 $Curl = Join-Path $env:SystemRoot "System32\curl.exe"
 $Aria2 = Join-Path $InstallRoot "tools\aria2c.exe"
-$PipIndex = if ($env:MECHA_PIP_INDEX_URL) { $env:MECHA_PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
+$PipIndex = if ($env:OSTORY_PIP_INDEX_URL) { $env:OSTORY_PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
 $WanCommit = "088128b224242e110d3906c6750e9a3a348a659b"
 $WanPlugin = Join-Path $ComfyRoot "custom_nodes\ComfyUI-WanVideoWrapper"
 $ServicesStopped = $false
@@ -31,17 +31,17 @@ function Write-Step {
 
 function Stop-GpuServices {
     Write-Step "Stopping GPU2 Agent and ComfyUI"
-    schtasks.exe /End /TN "MECHA-GPU-Agent" 2>$null | Out-Null
-    schtasks.exe /End /TN "MECHA-GPU-ComfyUI" 2>$null | Out-Null
+    schtasks.exe /End /TN "OSTORY-GPU-Agent" 2>$null | Out-Null
+    schtasks.exe /End /TN "OSTORY-GPU-ComfyUI" 2>$null | Out-Null
     Start-Sleep -Seconds 5
     $script:ServicesStopped = $true
 }
 
 function Start-GpuServices {
     Write-Step "Starting GPU2 ComfyUI and Agent"
-    schtasks.exe /Run /TN "MECHA-GPU-ComfyUI" | Out-Null
+    schtasks.exe /Run /TN "OSTORY-GPU-ComfyUI" | Out-Null
     Start-Sleep -Seconds 10
-    schtasks.exe /Run /TN "MECHA-GPU-Agent" | Out-Null
+    schtasks.exe /Run /TN "OSTORY-GPU-Agent" | Out-Null
     $script:ServicesStopped = $false
 }
 
@@ -205,7 +205,7 @@ function Download-VerifiedFile {
 }
 
 function Install-WanPlugin {
-    $versionFile = Join-Path $WanPlugin ".mecha-version"
+    $versionFile = Join-Path $WanPlugin ".ostory-version"
     if ((Test-Path -LiteralPath $versionFile) -and ((Get-Content -LiteralPath $versionFile -Raw).Trim() -eq $WanCommit)) {
         Write-Step "WanVideoWrapper is already pinned to $WanCommit"
         return

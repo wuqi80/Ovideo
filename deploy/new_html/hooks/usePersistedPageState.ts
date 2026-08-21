@@ -1,5 +1,5 @@
 // new_html/hooks/usePersistedPageState.ts
-// 2026-05-20 (Bug #3)：页面级 transient state 持久化 — 切换页面 / 刷新都不丢。
+// Page-scoped transient state that survives navigation and reload.
 //
 // 用法：
 //   const [draft, setDraft] = usePersistedPageState({
@@ -30,7 +30,7 @@ export interface PersistedPageStateOptions<T> {
     storage?: Storage | null;
 }
 
-const STORAGE_KEY_PREFIX = 'h-my2:page-state';
+const STORAGE_KEY_PREFIX = 'ostory:page-state';
 
 export function buildStorageKey(page: string, episodeId: string | null | undefined, version: number): string {
     const epi = episodeId == null || episodeId === '' ? 'global' : episodeId;

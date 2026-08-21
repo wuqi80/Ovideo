@@ -8,6 +8,7 @@ const outDir = process.env.VERIFY_OUT_DIR || path.resolve('logs');
 const profileDir = path.join(outDir, 'edge-cdp-profile');
 const screenshotPath = path.join(outDir, 'projects-auth-page.png');
 const cdpPort = Number(process.env.CDP_PORT || (9300 + Math.floor(Math.random() * 500)));
+const adminPassword = process.env.ADMIN_PASSWORD;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -93,6 +94,9 @@ function connect(wsUrl) {
 }
 
 async function main() {
+  if (!adminPassword) {
+    throw new Error('ADMIN_PASSWORD must be set for authenticated browser verification');
+  }
   await rm(profileDir, { recursive: true, force: true });
 
   const edge = spawn(edgePath, [
@@ -118,7 +122,7 @@ async function main() {
       loginRes = await fetch(`${baseUrl}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+        body: JSON.stringify({ username: 'admin', password: adminPassword }),
       });
     } catch (err) {
       throw new Error(`Login fetch failed for ${baseUrl}: ${describeError(err)}`);

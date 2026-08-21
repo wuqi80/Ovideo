@@ -1,13 +1,13 @@
 $ErrorActionPreference = "Stop"
 
-$Root = if ($env:MECHA_GPU_ROOT) { $env:MECHA_GPU_ROOT } else { "E:\MECHA-GPU" }
+$Root = if ($env:OSTORY_GPU_ROOT) { $env:OSTORY_GPU_ROOT } else { "E:\OSTORY-GPU" }
 $PortableRoot = Join-Path $Root "ComfyUI_windows_portable"
 $ComfyRoot = Join-Path $PortableRoot "ComfyUI"
 $Python = Join-Path $PortableRoot "python_embeded\python.exe"
 $Plugin = Join-Path $ComfyRoot "custom_nodes\ComfyUI-VideoHelperSuite"
 $ReportPath = Join-Path $Root "video-helper-report.json"
 $RequiredNodes = @("VHS_LoadVideo", "VHS_VideoCombine")
-$PipIndex = if ($env:MECHA_PIP_INDEX_URL) { $env:MECHA_PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
+$PipIndex = if ($env:OSTORY_PIP_INDEX_URL) { $env:OSTORY_PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
 
 if (-not (Test-Path -LiteralPath $Python)) {
     throw "Portable Python not found: $Python"
@@ -29,9 +29,9 @@ if (-not $BundledFfmpeg) {
 $Ffmpeg = Join-Path $PortableRoot "ffmpeg.exe"
 Copy-Item -LiteralPath $BundledFfmpeg.FullName -Destination $Ffmpeg -Force
 
-schtasks.exe /End /TN "MECHA-GPU-ComfyUI" 2>$null | Out-Null
+schtasks.exe /End /TN "OSTORY-GPU-ComfyUI" 2>$null | Out-Null
 Start-Sleep -Seconds 5
-schtasks.exe /Run /TN "MECHA-GPU-ComfyUI" | Out-Null
+schtasks.exe /Run /TN "OSTORY-GPU-ComfyUI" | Out-Null
 
 $ObjectInfo = $null
 for ($Attempt = 0; $Attempt -lt 60; $Attempt++) {

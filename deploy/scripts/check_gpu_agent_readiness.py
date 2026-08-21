@@ -88,8 +88,8 @@ async def fetch_last_seen_agents(limit: int = 5) -> list[dict[str, Any]]:
     conn = await asyncpg.connect(
         host=env.get("DB_HOST", "localhost"),
         port=int(env.get("DB_PORT", "5432")),
-        database=env.get("DB_NAME", "my2_db"),
-        user=env.get("DB_USER", "my2_user"),
+        database=env.get("DB_NAME", "ostory_db"),
+        user=env.get("DB_USER", "ostory_user"),
         password=env.get("DB_PASSWORD", ""),
     )
     try:

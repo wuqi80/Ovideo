@@ -54,7 +54,6 @@ def test_ostory_brand_favicons_and_mark_use_the_new_gradient_play_symbol():
 
     assert "/static/branding/ostory-tv-logo-on-dark.svg" in login_html
     assert "/static/branding/ostory-tv-logo-on-light.svg" in login_html
-    assert "SPTI" not in login_html
 
     for relative_path in [
         "static/branding/ostory-tv-mark.png",

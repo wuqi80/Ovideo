@@ -4,7 +4,6 @@ Organization DAO
 ================
 organizations + organization_members 表 CRUD。
 
-详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §4-5
 """
 from __future__ import annotations
 

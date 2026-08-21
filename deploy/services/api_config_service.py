@@ -478,7 +478,7 @@ async def export_api_config_keys() -> Dict[str, Any]:
     configs = [_export_api_config_item(row) for row in rows]
     return {
         "success": True,
-        "schema": "mecha.api_config_keys",
+        "schema": "ostory.api_config_keys",
         "schema_version": 2,
         "exported_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "count": len(configs),

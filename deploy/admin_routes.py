@@ -53,7 +53,6 @@ logger = logging.getLogger(__name__)
 
 # ============================================
 # 2026-05-26 Slice 4/5 收尾：管理员鉴权依赖
-# 详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md §Permission
 # ============================================
 async def require_admin(request: Request) -> str:
     """
@@ -79,13 +78,11 @@ async def require_admin(request: Request) -> str:
     # 兼容旧库未 ALTER：默认 'user'
     role = (user.get('role') if isinstance(user, dict) else None) or 'user'
     if role not in ('admin', 'super_admin'):
-        # 初次部署兜底：用户行是首次登录时懒创建的，role 列默认 'user'。
-        # 内置管理员账号（admin / 超级管理员 lllsdhr）即便 role 尚未提升，也允许进入后台，
-        # 保证开箱即用（登录密码本身才是安全边界）。可用 MY2_ADMIN_USERNAMES 追加白名单。
-        # 详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md
+        # Bootstrap access is explicit and environment-owned. It exists only so
+        # the first administrator can promote persisted roles after installation.
         import os as _os
         allowed = {'admin'}
-        boot = (_os.environ.get('MY2_ADMIN_USERNAMES') or '').strip()
+        boot = (_os.environ.get('OSTORY_ADMIN_USERNAMES') or '').strip()
         if boot:
             allowed |= {s.strip() for s in boot.split(',') if s.strip()}
         if username in allowed:
@@ -1235,7 +1232,6 @@ async def cleanup_stale_tasks(hours: int = 24):
 
 # ============================================
 # 2026-05-26 Slice 2: 积分规则 CRUD
-# 详见 docs/superpowers/plans/2026-05-26-feature-rollout/02-credits.md
 # ============================================
 from dao_credit import CreditRuleDAO  # noqa: E402
 
@@ -1335,7 +1331,6 @@ async def admin_delete_credit_rule(rule_id: str, request: Request):
 
 # ============================================
 # 2026-05-26 Slice 4: 用户管理 + 项目分组
-# 详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md
 # ============================================
 from dao_user import UserDAO  # noqa: E402
 from dao_project_group import ProjectGroupDAO  # noqa: E402
@@ -1634,7 +1629,6 @@ async def admin_move_project(project_id: str, body: ProjectMoveBody, request: Re
 
 # ============================================
 # 2026-05-26 Slice 5: 管理员素材库 / 积分账户 / 积分流水 / 审计日志
-# 详见 docs/superpowers/plans/2026-05-26-feature-rollout/05-admin-media-credit-audit.md
 # ============================================
 from dao_media_library import MediaLibraryDAO  # noqa: E402
 from dao_credit import CreditAccountDAO, CreditTransactionDAO  # noqa: E402
@@ -1812,7 +1806,6 @@ async def admin_list_audit_logs(
 
 # ============================================
 # 2026-05-26 组织管理 MVP — Slice 2: Admin Org CRUD + Members
-# 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5.1
 # ============================================
 from dao_organization import OrganizationDAO, OrganizationMemberDAO  # noqa: E402
 

@@ -1,4 +1,5 @@
 import type { TaskKind } from '../types';
+import { getModelDisplayName } from '../services/videoModelService';
 
 const PUBLIC_SCRIPT_LABELS = {
   tier1: '一阶 · 连续写作模型',
@@ -57,15 +58,18 @@ export function formatPublicTaskText(value: unknown, kind?: TaskKind): string {
   }
 
   text = text
-    .replace(/seedance[\s_-]*2[\s_-]*fast/gi, '渡劫')
-    .replace(/seedance[\s_-]*2[\s_-]*mini/gi, '元婴')
-    .replace(/seedance(?:[\s_-]*2(?:\.0)?)?/gi, '飞升')
-    .replace(/wan[\s_-]*2(?:\.\d+)?/gi, '集群视频')
-    .replace(/happy[\s_-]*horse/gi, '炼虚')
-    .replace(/kling/gi, '合体')
-    .replace(/vidu/gi, '大乘')
-    .replace(/sora[\s_-]*2/gi, '化神')
-    .replace(/veo(?:[\s_-]*3(?:\.1)?)?/gi, '筑基');
+    .replace(/minimax[\s_-]*h3[\s_-]*(?:fl2va[\s_-]*)?fast/gi, getModelDisplayName('MiniMaxH3Fast'))
+    .replace(/minimax[\s_-]*h3[\s_-]*(?:fl2va[\s_-]*)?(?:mini|1b)/gi, getModelDisplayName('MiniMaxH3Mini'))
+    .replace(/minimax[\s_-]*h3(?:[\s_-]*fl2va)?/gi, getModelDisplayName('MiniMaxH3'))
+    .replace(/seedance[\s_-]*2(?:\.0)?[\s_-]*fast/gi, getModelDisplayName('Seedance2Fast'))
+    .replace(/seedance[\s_-]*2(?:\.0)?[\s_-]*mini/gi, getModelDisplayName('Seedance2Mini'))
+    .replace(/seedance(?:[\s_-]*2(?:\.0)?)?/gi, getModelDisplayName('Seedance2'))
+    .replace(/wan[\s_-]*2(?:\.\d+)?/gi, getModelDisplayName('Wan2'))
+    .replace(/happy[\s_-]*horse/gi, getModelDisplayName('HappyHorse'))
+    .replace(/kling/gi, getModelDisplayName('Kling'))
+    .replace(/vidu/gi, getModelDisplayName('Vidu'))
+    .replace(/sora[\s_-]*2/gi, getModelDisplayName('Sora2'))
+    .replace(/veo(?:[\s_-]*3(?:\.1)?)?/gi, getModelDisplayName('Veo'));
 
   return text
     .replace(/\s*API\b/gi, '')

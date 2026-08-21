@@ -10,7 +10,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@drama': path.resolve(__dirname, '../deploy/new_html'),
+      '@app': path.resolve(__dirname, '../deploy/new_html'),
     },
     dedupe: ['react', 'react-dom', '@tanstack/react-query'],
   },

@@ -139,7 +139,7 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 
 function notifyStoryboardImageChanged(episodeId: string | undefined, shotId: string | undefined) {
   if (typeof window === 'undefined' || !shotId) return;
-  window.dispatchEvent(new CustomEvent('drama:episode-data-changed', {
+  window.dispatchEvent(new CustomEvent('ostory:episode-data-changed', {
     detail: {
       episodeId,
       entityType: 'storyboard_item',
@@ -1221,9 +1221,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               return;
           }
           console.log(`📤 拖拽上传到生成结果: ${file.name}`);
-          // 🛡️ 必须走 uploadEntityFile 上传到服务器，拿到持久化 URL
-          // 不能用 FileReader.readAsDataURL（base64 会撑爆 storyboard_items.generated_image_url
-          // 字段，并被下游 VideoGenPage 拒收 → 视频页空白）。详见 docs/faq.md。
+          // Upload first so the storyboard stores a durable server URL. A data
+          // URL can exceed field/request limits and is unusable by later workers.
           (async () => {
               try {
                   const { uploadEntityFile } = await import('../services/entityFileService');

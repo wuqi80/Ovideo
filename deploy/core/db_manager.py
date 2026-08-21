@@ -18,9 +18,9 @@ class DatabaseConfig:
     def __init__(self):
         self.HOST = get_db_config_value("DB_HOST", "localhost")
         self.PORT = int(get_db_config_value("DB_PORT", "5432"))
-        self.DATABASE = get_db_config_value("DB_NAME", "my2_db")
-        self.USER = get_db_config_value("DB_USER", "my2_user")
-        self.PASSWORD = get_db_config_value("DB_PASSWORD", "changeme")
+        self.DATABASE = get_db_config_value("DB_NAME", "ostory_db")
+        self.USER = get_db_config_value("DB_USER", "ostory_user")
+        self.PASSWORD = get_db_config_value("DB_PASSWORD", "")
         self.MIN_SIZE = int(get_db_config_value("DB_POOL_MIN_SIZE", "10"))
         self.MAX_SIZE = int(get_db_config_value("DB_POOL_MAX_SIZE", "50"))
         self.MAX_QUERIES = int(get_db_config_value("DB_MAX_QUERIES", "50000"))

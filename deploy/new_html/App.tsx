@@ -81,7 +81,7 @@ const RouteFallback: React.FC = () => (
 //  - /admin/operations       → AdminPage 全屏（5 tab 不变，浮层"返回 Hub"）
 // Admin token 走 sessionStorage（adminAuth.ts），与主站 localStorage.auth_token 隔离。
 
-// refactor/v2：操作面板/功能面板已并入统一壳（AdminLayout 提供层级菜单 + 鉴权门）。
+// 当前架构：操作面板/功能面板已并入统一壳（AdminLayout 提供层级菜单 + 鉴权门）。
 // 这两个轻包装只负责把 ?tab 透传给被内嵌的组件，组件不卸载 → 切 tab 不重复拉数。
 const AdminOperationsPanel: React.FC = () => {
     const [sp] = useSearchParams();
@@ -174,7 +174,7 @@ const App: React.FC = () => {
                     <Route path="/credits" element={<CreditsPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
 
-                    {/* 统一 Admin Shell（refactor/v2）— 一个台子、一套层级菜单，与主站 token 隔离 */}
+                    {/* 统一 Admin Shell（当前架构）— 一个台子、一套层级菜单，与主站 token 隔离 */}
                     <Route path="/admin/login" element={<AdminLoginPage />} />
                     <Route path="/admin" element={<AdminLayout />}>
                         <Route index element={<AdminHubPage />} />

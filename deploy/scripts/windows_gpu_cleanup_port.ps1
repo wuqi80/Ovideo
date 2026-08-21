@@ -14,7 +14,7 @@ param(
     [ValidateRange(100, 5000)]
     [int]$PollMilliseconds = 500,
 
-    [string]$LogFile = "E:\MECHA-GPU\logs\agent-port-cleanup.log"
+    [string]$LogFile = "E:\OSTORY-GPU\logs\agent-port-cleanup.log"
 )
 
 $ErrorActionPreference = "Stop"

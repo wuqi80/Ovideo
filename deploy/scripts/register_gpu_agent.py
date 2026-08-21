@@ -23,8 +23,8 @@ async def register(name: str, token_file: Path) -> tuple[str, bool]:
     conn = await asyncpg.connect(
         host=env.get("DB_HOST", "localhost"),
         port=int(env.get("DB_PORT", "5432")),
-        database=env.get("DB_NAME", "my2_db"),
-        user=env.get("DB_USER", "my2_user"),
+        database=env.get("DB_NAME", "ostory_db"),
+        user=env.get("DB_USER", "ostory_user"),
         password=env.get("DB_PASSWORD", ""),
     )
     try:
@@ -64,7 +64,7 @@ async def register(name: str, token_file: Path) -> tuple[str, bool]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Register a MECHA GPU Agent")
+    parser = argparse.ArgumentParser(description="Register a OSTORY GPU Agent")
     parser.add_argument("--name", required=True)
     parser.add_argument("--token-file", required=True, type=Path)
     args = parser.parse_args()

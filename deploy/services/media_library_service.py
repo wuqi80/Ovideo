@@ -11,7 +11,6 @@ Media Library Service
 - create_from_file 失败是 best-effort，不应使生成主流程报错。
 - list_items 已在 DAO 层处理 project_members 可见性。
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/01-media-library.md
 """
 from __future__ import annotations
 

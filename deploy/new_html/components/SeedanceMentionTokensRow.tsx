@@ -1,13 +1,8 @@
 // new_html/components/SeedanceMentionTokensRow.tsx
 //
-// 2026-05-20 (Bug 4)：@-mention 文字块预览侧栏。
-//
-// 设计：textarea 内 token 仍是纯文本（图片1 / 视频1 / 音频1），无法 hover 预览。
-// 在 textarea 下方/外侧加一行胶囊清单：每个 media_inputs 一格小卡，
-// hover 弹大图、点击调用 onPreview（外层 lightbox），X 调用 removeMediaInput。
-//
-// 这样 textarea 完全不动（IME / 复制粘贴 / Backspace 块删行为不变），
-// 视觉锚点交给独立组件，是改造代价最小的方案（参见 docs/conventions.md）。
+// Mentions stay plain text so IME, clipboard, and deletion semantics remain
+// native. This companion row owns visual previews without coupling rich media
+// behavior to textarea editing.
 import React, { useState } from 'react';
 import { ImageIcon, Music, Video as VideoIcon, X } from 'lucide-react';
 import type { SeedanceParams, SeedanceMediaInput } from '../services/videoModelService';
@@ -21,7 +16,7 @@ export interface SeedanceMentionTokensRowProps {
     disabled?: boolean;
     /** Hide row entirely when no media (default true). */
     hideWhenEmpty?: boolean;
-    /** 2026-06-05：hover 大图预览向上弹出（放大编辑弹窗里 chips 贴底，向下会被裁切）。 */
+    /** Open previews upward when the row is near a clipped dialog boundary. */
     openUpward?: boolean;
 }
 

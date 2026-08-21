@@ -165,10 +165,8 @@ class MonitorConfig:
 
 class SystemConfig:
     AGENT_ONLY_MODE = os.environ.get("AGENT_ONLY_MODE", "true").lower() == "true"
-    # 2026-05-26 Follow-up A：AGENT_ONLY_MODE=true 时启动的 lite Worker 数量。
-    # lite Worker 只消费外部 API 任务（minimax/seedance/kling/vidu/happyhorse/sora2/veo/wan26/video_reverse_prompt 等），
-    # ComfyUI workflow 任务会被丢回队列由外部 agent 通过 /api/agent/poll 取走。
-    # 详见 docs/faq.md 2026-05-26 "AGENT_ONLY_MODE 二选一陷阱"。
+    # Lite workers consume provider-backed HTTP tasks when local ComfyUI is not
+    # owned by this process. Workflow tasks remain available for external agents.
     LITE_WORKERS_COUNT = int(os.environ.get("LITE_WORKERS_COUNT", "2"))
 
     HOST = "0.0.0.0"

@@ -234,7 +234,7 @@ async def test_complete_text_task_writes_notification_and_publishes_event():
         text_content="answer",
         logger=_Logger,
         task_dao=_TaskDAO,
-        user_id="wuqi80",
+        user_id="user_alpha",
         task_type="deepseek_text",
         task_context={
             "operation": "script_rewrite",
@@ -249,7 +249,7 @@ async def test_complete_text_task_writes_notification_and_publishes_event():
     )
 
     assert ok is True
-    assert _Redis.published[0][0] == "task_complete:wuqi80"
+    assert _Redis.published[0][0] == "task_complete:user_alpha"
     event = json.loads(_Redis.published[0][1])
     assert event["type"] == "task_complete"
     assert event["display_name"] == "剧本修改"
@@ -266,7 +266,7 @@ async def test_internal_text_repair_keeps_task_audit_without_user_notification()
         text_content="repaired answer",
         logger=_Logger,
         task_dao=_TaskDAO,
-        user_id="wuqi80",
+        user_id="user_alpha",
         task_type="deepseek_text",
         task_context={
             "operation": "script_rewrite",
@@ -288,7 +288,7 @@ async def test_internal_text_repair_keeps_task_audit_without_user_notification()
         error_message="internal repair failed",
         logger=_Logger,
         task_dao=_TaskDAO,
-        user_id="wuqi80",
+        user_id="user_alpha",
         task_type="deepseek_text",
         task_context={
             "operation": "script_rewrite",
@@ -401,7 +401,7 @@ async def test_failed_text_task_writes_notification_and_publishes_event():
         error_message="upstream failed",
         logger=_Logger,
         task_dao=_TaskDAO,
-        user_id="wuqi80",
+        user_id="user_alpha",
         task_type="gemini_text",
         task_context={
             "operation": "storyboard_script_generate",
@@ -413,7 +413,7 @@ async def test_failed_text_task_writes_notification_and_publishes_event():
     )
 
     assert ok is True
-    assert _Redis.published[0][0] == "task_failed:wuqi80"
+    assert _Redis.published[0][0] == "task_failed:user_alpha"
     event = json.loads(_Redis.published[0][1])
     assert event["status"] == "failed"
     assert event["display_name"] == "分镜脚本生成"

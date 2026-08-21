@@ -408,8 +408,8 @@ def normalize_model_usage_scope(scope: Optional[str]) -> str:
         "free-creation": MODEL_USAGE_SCOPE_STUDIO,
         "free_creation": MODEL_USAGE_SCOPE_STUDIO,
         "canvas": MODEL_USAGE_SCOPE_STUDIO,
-        "mecha-studio": MODEL_USAGE_SCOPE_STUDIO,
-        "mecha_studio": MODEL_USAGE_SCOPE_STUDIO,
+        "ostory-studio": MODEL_USAGE_SCOPE_STUDIO,
+        "ostory_studio": MODEL_USAGE_SCOPE_STUDIO,
     }
     normalized = aliases.get(normalized, normalized)
     return normalized if normalized in MODEL_USAGE_SCOPES else MODEL_USAGE_SCOPE_WORKFLOW

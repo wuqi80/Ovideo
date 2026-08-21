@@ -7,7 +7,6 @@ Media Library API Routes
 挂载方式：cluster_main.py 中 `from media_library_routes import router as media_library_router`,
 然后 `app.include_router(media_library_router)`。
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/01-media-library.md
 """
 from __future__ import annotations
 

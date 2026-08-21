@@ -8,6 +8,7 @@ export const DESIGN_CREDIT_FEATURES = {
 
 export const DESIGN_CREDIT_DEFAULTS = {
   imageGenerationPerImage: 40,
+  onlineImageOperation: 60,
   promptRefinement: 1,
   angleAdjustment: 5,
   multiAngleGeneration: 60,

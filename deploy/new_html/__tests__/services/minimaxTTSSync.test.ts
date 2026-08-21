@@ -6,7 +6,6 @@
 //   2) text 过长 413：handleResponse 抛带 detail 的 Error，调用方应能 fallback 到 worker
 //   3) AbortSignal：组件 unmount / 切换语音时能取消请求
 //
-// Plan: docs/superpowers/plans/2026-05-25-minimax-tts-fastpath.md (Task 2)
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { minimaxTTSSync } from '../../services/audioGenerationService';

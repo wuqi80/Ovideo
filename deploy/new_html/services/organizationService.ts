@@ -1,7 +1,6 @@
 /**
  * organizationService.ts
  * 2026-05-26 组织管理 MVP — Slice 2 (admin) + Slice 3 (user self-service)
- * 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5
  */
 
 import { apiJson } from './httpClient';

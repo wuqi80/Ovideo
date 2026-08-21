@@ -16,7 +16,7 @@ def _object_info_response(nodes):
 def test_long_video_verifier_is_non_inference_and_rejects_conflicting_pack(tmp_path, monkeypatch):
     root = tmp_path / "ComfyUI_MiniMaxH3_Director"
     root.mkdir()
-    (root / ".mecha-reviewed-commit").write_text(
+    (root / ".ostory-reviewed-commit").write_text(
         verifier.REVIEWED_DIRECTOR_COMMIT, encoding="utf-8"
     )
     monkeypatch.setattr(

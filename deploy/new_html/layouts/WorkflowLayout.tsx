@@ -9,7 +9,9 @@ import { getCreditBalance } from '../services/creditService';
 import { apiJson } from '../services/httpClient';
 import AppSidebar, { type AppSidebarItem } from '../components/AppSidebar';
 
-// NewUI 默认使用面向非专业用户的四步描述；原有制作子页、路由和业务逻辑保持不变。
+// The four-stage shell is the stable beginner-facing navigation contract.
+// Feature pages may evolve independently, but their stage ownership must remain
+// explicit so deep links, task notifications, and return navigation stay valid.
 interface StageSub {
   path: string;
   label: string;

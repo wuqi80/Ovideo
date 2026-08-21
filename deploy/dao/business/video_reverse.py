@@ -4,7 +4,6 @@ Video Reverse DAO
 ==================
 video_reverse_tasks / video_reverse_segments 表的 CRUD。
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/03-video-reverse.md
 """
 from __future__ import annotations
 

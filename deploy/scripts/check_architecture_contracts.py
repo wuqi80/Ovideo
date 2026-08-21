@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the MECHA architecture/API-management contract suite.
+"""Run the OSTORY architecture/API-management contract suite.
 
 This is the single pre-refactor gate for work that touches routing, API
 provider configuration, provider runtime resolution, health monitoring, or

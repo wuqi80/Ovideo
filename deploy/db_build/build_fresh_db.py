@@ -2,9 +2,9 @@
 """
 全新空库建库 runner —— 按 db_build/manifest.txt 的依赖顺序执行 schema + 全部迁移。
 
-解决的问题：原本三个部署脚本（deploy_database.sh / db_tool.py / auto_deploy.sh）要么只跑
-schema 不跑迁移，要么按文件名字母序跑导致 FK/ALTER 目标表尚未创建而失败。本 runner 用
-经过拓扑排序的 manifest，保证全新空库一次跑通。所有迁移均 IF NOT EXISTS，幂等可重复执行。
+The manifest is the ordering authority. It prevents a fresh installation from
+running migrations alphabetically before their FK or ALTER dependencies exist.
+Migrations must remain idempotent so startup retries are safe.
 
 用法：
     # 连接信息优先从环境变量读，未设置时读取 configs/database.env（与应用一致）
@@ -59,8 +59,8 @@ def db_connection_config() -> dict:
     return {
         "host": get_db_config_value("DB_HOST", "localhost"),
         "port": int(get_db_config_value("DB_PORT", "5432")),
-        "database": get_db_config_value("DB_NAME", "my2_db"),
-        "user": get_db_config_value("DB_USER", "my2_user"),
+        "database": get_db_config_value("DB_NAME", "ostory_db"),
+        "user": get_db_config_value("DB_USER", "ostory_user"),
         "password": get_db_config_value("DB_PASSWORD", ""),
     }
 

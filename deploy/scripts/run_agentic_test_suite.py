@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Run Drama's complete deterministic test suite with Tyr-style orchestration.
+"""Run Ostory TV's deterministic release checks in explicit phases.
 
-The Tyr loop tester uses four phases: discover, plan, execute, and report.
-Drama keeps those phases but uses deterministic commands as the release gate.
-This makes the runner repeatable in CI while preserving raw evidence for a
-future LLM/browser exploration layer.
+The runner discovers local capabilities, builds a fixed plan, executes bounded
+commands, and reports raw evidence. Deterministic assertions remain the release
+gate; exploratory automation may add evidence but cannot override a failure.
 """
 
 from __future__ import annotations
@@ -255,8 +254,8 @@ def _output_excerpt(output: str, max_lines: int = 40) -> str:
 def write_reports(report_dir: Path, environment: dict, results: Sequence[TestResult]) -> tuple[Path, Path]:
     report_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    jsonl_path = report_dir / f"drama_agent_test_{timestamp}.jsonl"
-    markdown_path = report_dir / f"drama_agent_test_report_{timestamp}.md"
+    jsonl_path = report_dir / f"ostory_agent_test_{timestamp}.jsonl"
+    markdown_path = report_dir / f"ostory_agent_test_report_{timestamp}.md"
 
     with jsonl_path.open("w", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps({"phase": "discover", "environment": environment}, ensure_ascii=False) + "\n")
@@ -266,7 +265,7 @@ def write_reports(report_dir: Path, environment: dict, results: Sequence[TestRes
     statuses = (PASS, PARTIAL, FAIL, NOT_ATTEMPTED)
     counts = {status: sum(result.status == status for result in results) for status in statuses}
     lines = [
-        "# Drama Automated Test Report",
+        "# Ostory TV Automated Test Report",
         "",
         "Legend: PASS | PARTIAL | FAIL | NOT ATTEMPTED",
         "",

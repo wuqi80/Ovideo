@@ -1,7 +1,6 @@
 /**
  * creditService.ts
  * 2026-05-26 Slice 2 — 用户侧积分 API
- * 详见 docs/superpowers/plans/2026-05-26-feature-rollout/02-credits.md
  */
 
 import { apiJson } from './httpClient';

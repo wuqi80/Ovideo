@@ -49,15 +49,12 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
         {"duration": 6, "resolution": ["768P", "1080P"]},
         {"duration": 10, "resolution": ["768P"]},
     ]
-    gpu = next(model for model in result["models"] if model["key"] == "COMFYUI")
-    assert gpu["available"] is True
-    cluster_model = next(model for model in result["models"] if model["key"] == "一阶")
-    assert cluster_model["available"] is True
-    assert cluster_model["parameter_rules"]["duration"]["options"] == [5, 10, 15]
-    ltx_node1 = next(model for model in result["models"] if model["key"] == "LTXNode1")
-    wan_node2 = next(model for model in result["models"] if model["key"] == "WanNode2")
-    assert ltx_node1["available"] is False
-    assert wan_node2["available"] is False
+    model_keys = {model["key"] for model in result["models"]}
+    assert "COMFYUI" not in model_keys
+    assert model_keys.isdisjoint({
+        "Wan2", "LTXNode1", "WanNode2",
+        "一阶", "二阶", "三阶", "四阶", "五阶", "六阶", "七阶",
+    })
     h3 = next(model for model in result["models"] if model["key"] == "MiniMaxH3")
     assert h3["available"] is False
     wan26 = next(model for model in result["models"] if model["key"] == "大能")
@@ -118,7 +115,7 @@ async def test_video_capabilities_degrade_safely(monkeypatch):
     assert "reference_audio" not in seedance["media_inputs"]
 
 
-async def test_video_capabilities_expose_split_processing_node_models(monkeypatch):
+async def test_video_capabilities_expose_only_h3_processing_node_models(monkeypatch):
     async def fake_list_agent_nodes():
         return [
             {
@@ -169,18 +166,13 @@ async def test_video_capabilities_expose_split_processing_node_models(monkeypatc
 
     result = await video_capability_service.get_video_capabilities()
 
-    ltx_node1 = next(model for model in result["models"] if model["key"] == "LTXNode1")
-    wan_node2 = next(model for model in result["models"] if model["key"] == "WanNode2")
-    assert ltx_node1["available"] is True
-    assert ltx_node1["model_name"] == "LTX"
-    assert ltx_node1["preferred_agent_id"] == "agent_gpu1"
-    assert ltx_node1["preferred_node_id"] == "agent_gpu1"
-    assert ltx_node1["strict_preferred_routing"] is True
-    assert wan_node2["available"] is True
-    assert wan_node2["model_name"] == "Wan"
-    assert wan_node2["preferred_agent_id"] == "agent_gpu2"
-    assert wan_node2["preferred_node_id"] == "agent_gpu2"
-    assert wan_node2["strict_preferred_routing"] is True
+    model_keys = {model["key"] for model in result["models"]}
+    assert model_keys.isdisjoint({"Wan2", "LTXNode1", "WanNode2"})
+    h3 = next(model for model in result["models"] if model["key"] == "MiniMaxH3")
+    assert h3["available"] is True
+    assert h3["preferred_agent_id"] == "agent_gpu2"
+    assert h3["preferred_node_id"] == "agent_gpu2"
+    assert h3["label"] == "一阶 · 节点标准模型"
 
 
 async def test_video_capabilities_hide_seedance_model_marked_error_in_health_cache(monkeypatch):

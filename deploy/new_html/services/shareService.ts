@@ -1,7 +1,6 @@
 /**
  * shareService.ts
  * 2026-05-26 组织管理 MVP — Slice 4: 资源共享 client
- * 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5.3
  */
 
 import { apiJson } from './httpClient';

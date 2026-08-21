@@ -14,7 +14,7 @@ Ostory TV 是面向普通创作者的 AI 视频创作平台，对外主域名为
 
 ## 视觉识别
 
-标志由圆角方形、字母 O 的圆环、播放三角和右上角灵感点组成。紫罗兰到暖橙的渐变延续 NewUI 的创作氛围，圆环代表一个故事从想法到成片的完整闭环。
+标志由圆角方形、字母 O 的圆环、播放三角和右上角灵感点组成。紫罗兰到暖橙的渐变体现创作氛围，圆环代表一个故事从想法到成片的完整闭环。
 
 - 浅色界面：`deploy/static/branding/ostory-tv-logo-on-light.svg`
 - 深色界面：`deploy/static/branding/ostory-tv-logo-on-dark.svg`

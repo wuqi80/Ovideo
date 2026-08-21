@@ -4,7 +4,6 @@
  *
  * 路由: /projects/:projectId/video-reverse
  *
- * 详见 docs/superpowers/plans/2026-05-26-feature-rollout/03-video-reverse.md
  */
 
 import React, { useCallback, useEffect, useState, useRef } from 'react';

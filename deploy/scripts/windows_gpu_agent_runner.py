@@ -1,4 +1,4 @@
-"""Run the MECHA ComfyUI Agent without exposing its token in process arguments."""
+"""Run the OSTORY ComfyUI Agent without exposing its token in process arguments."""
 from __future__ import annotations
 
 import json
@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict
 
 # The Windows embeddable Python runtime ignores the script directory in isolated
 # mode. Bootstrap the two reviewed local module roots before importing the guard.
-_BOOTSTRAP_ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+_BOOTSTRAP_ROOT = Path(os.environ.get("OSTORY_GPU_ROOT", r"E:\OSTORY-GPU"))
 for _module_root in (_BOOTSTRAP_ROOT / "agent", _BOOTSTRAP_ROOT / "scripts"):
     _module_root_text = str(_module_root)
     if _module_root_text not in sys.path:
@@ -170,13 +170,13 @@ sys.path.insert(0, str(AGENT_DIR))
 
 def gpu2_agent_maintenance_enabled() -> bool:
     """Fail closed unless production activation explicitly enables task claims."""
-    return str(os.environ.get("MECHA_GPU_AGENT_MAINTENANCE", "1")).strip().lower() not in {
+    return str(os.environ.get("OSTORY_GPU_AGENT_MAINTENANCE", "1")).strip().lower() not in {
         "0", "false", "no", "off",
     }
 
 
 def gpu2_h3_sage_attention_allowed() -> bool:
-    return str(os.environ.get("MECHA_GPU_H3_SAGE_ATTENTION", "0")).strip().lower() in {
+    return str(os.environ.get("OSTORY_GPU_H3_SAGE_ATTENTION", "0")).strip().lower() in {
         "1", "true", "yes", "on",
     }
 
@@ -276,7 +276,7 @@ def gpu2_h3_mini_installed(
 
 
 def gpu2_h3_long_video_allowed() -> bool:
-    return str(os.environ.get("MECHA_GPU_H3_LONG_VIDEO", "0")).strip().lower() in {
+    return str(os.environ.get("OSTORY_GPU_H3_LONG_VIDEO", "0")).strip().lower() in {
         "1", "true", "yes", "on",
     }
 
@@ -465,7 +465,7 @@ class ComfyUIPortRecovery:
             if not command.is_file():
                 self.last_launch_at[port] = now
                 print(
-                    f"[MECHA] ComfyUI:{port} recovery command is missing: {command}",
+                    f"[OSTORY] ComfyUI:{port} recovery command is missing: {command}",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -477,7 +477,7 @@ class ComfyUIPortRecovery:
             except Exception as exc:
                 self.failures[port] = 0
                 print(
-                    f"[MECHA] Failed to restart ComfyUI:{port}: {exc}",
+                    f"[OSTORY] Failed to restart ComfyUI:{port}: {exc}",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -486,7 +486,7 @@ class ComfyUIPortRecovery:
             if launched:
                 self.failures[port] = 0
                 print(
-                    f"[MECHA] Restarted ComfyUI:{port} after sustained TCP outage",
+                    f"[OSTORY] Restarted ComfyUI:{port} after sustained TCP outage",
                     flush=True,
                 )
 
@@ -499,7 +499,7 @@ def gpu2_runtime_profile(task: Dict[str, Any]) -> str:
 
 
 def _stop_gpu2_runtime(profile: str) -> bool:
-    """Stop only a known Drama ComfyUI listener; never match a generic python.exe."""
+    """Stop only a registered Ostory ComfyUI listener; never match generic Python processes."""
     if os.name != "nt":
         return False
     cleanup = ROOT / "scripts" / "windows_gpu_cleanup_port.ps1"
@@ -534,7 +534,7 @@ def _runtime_profile_from_process(
     *,
     root: Path = ROOT,
 ) -> str | None:
-    """Identify only reviewed Drama ComfyUI runtimes from exact process paths."""
+    """Identify only registered Ostory ComfyUI runtimes from exact process paths."""
     executable = str(executable_path or "").replace("/", "\\").casefold().strip('" ')
     command = str(command_line or "").replace("/", "\\").casefold()
     profile_paths = {
@@ -913,7 +913,7 @@ def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
         },
         "5": {
             "class_type": "SaveImage",
-            "inputs": {"images": ["4", 0], "filename_prefix": "MECHA_GPU2_upscale"},
+            "inputs": {"images": ["4", 0], "filename_prefix": "OSTORY_GPU2_upscale"},
         },
     }
 
@@ -1040,7 +1040,7 @@ def build_gpu2_video_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
                 "images": ["4", 0],
                 "frame_rate": 25,
                 "loop_count": 0,
-                "filename_prefix": "MECHA_GPU2_video_upscale",
+                "filename_prefix": "OSTORY_GPU2_video_upscale",
                 "format": "video/h264-mp4",
                 "pix_fmt": "yuv420p",
                 "crf": 21,
@@ -1180,7 +1180,7 @@ def build_gpu2_matting_workflow(task: Dict[str, Any], *, split: bool) -> Dict[st
         },
         "5": {
             "class_type": "SaveImage",
-            "inputs": {"images": ["4", 0], "filename_prefix": "MECHA_GPU2_matting_subject"},
+            "inputs": {"images": ["4", 0], "filename_prefix": "OSTORY_GPU2_matting_subject"},
         },
     }
     if split:
@@ -1193,7 +1193,7 @@ def build_gpu2_matting_workflow(task: Dict[str, Any], *, split: bool) -> Dict[st
                 },
                 "8": {
                     "class_type": "SaveImage",
-                    "inputs": {"images": ["7", 0], "filename_prefix": "MECHA_GPU2_matting_background"},
+                    "inputs": {"images": ["7", 0], "filename_prefix": "OSTORY_GPU2_matting_background"},
                 },
             }
         )
@@ -1260,7 +1260,7 @@ def build_gpu2_qwen_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
         "39": {"class_type": "VAELoader", "inputs": {"vae_name": GPU2_QWEN_MODEL_FILES["vae"]}},
         "60": {
             "class_type": "SaveImage",
-            "inputs": {"filename_prefix": f"MECHA_GPU2_{task_type}", "images": ["8", 0]},
+            "inputs": {"filename_prefix": f"OSTORY_GPU2_{task_type}", "images": ["8", 0]},
         },
         "66": {"class_type": "ModelSamplingAuraFlow", "inputs": {"shift": 3, "model": ["89", 0]}},
         "75": {"class_type": "CFGNorm", "inputs": {"strength": 1, "model": ["66", 0]}},
@@ -1368,7 +1368,7 @@ def build_gpu2_qwen_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
             workflow[prompt_id]["inputs"]["prompt"] = angle_prompt
             workflow[sampler_id]["inputs"]["seed"] = base_seed + index
             workflow[save_id]["inputs"]["filename_prefix"] = (
-                f"MECHA_GPU2_i2i_human_{index + 1:02d}"
+                f"OSTORY_GPU2_i2i_human_{index + 1:02d}"
             )
 
     return workflow
@@ -1561,7 +1561,7 @@ def build_gpu2_minimax_music3_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
             "class_type": "SaveAudioAdvanced",
             "inputs": {
                 "audio": ["8", 0],
-                "filename_prefix": "audio/MECHA_GPU2_minimax_music3",
+                "filename_prefix": "audio/OSTORY_GPU2_minimax_music3",
                 "format": "mp3",
                 "format.quality": "V0",
             },
@@ -1690,7 +1690,7 @@ def build_gpu2_minimax_h3_fl2va_workflow(
             "class_type": "SaveVideo",
             "inputs": {
                 "video": ["91", 0],
-                "filename_prefix": "MECHA_GPU2_minimax_h3",
+                "filename_prefix": "OSTORY_GPU2_minimax_h3",
                 "format": "auto",
                 "codec": "auto",
             },
@@ -1721,7 +1721,7 @@ def build_gpu2_minimax_h3_fl2va_workflow(
             },
         }
         workflow["104"]["inputs"]["last_frame"] = ["4", 0]
-        workflow["92"]["inputs"]["filename_prefix"] = "MECHA_GPU2_minimax_h3_fl2va"
+        workflow["92"]["inputs"]["filename_prefix"] = "OSTORY_GPU2_minimax_h3_fl2va"
     if use_mini_clip:
         workflow["13"]["inputs"] = {
             "clip_name": GPU2_H3_MINI_MODEL_FILES["text_encoder"],
@@ -1984,7 +1984,7 @@ def build_gpu2_minimax_h3_long_video_workflow(
         "class_type": "SaveVideo",
         "inputs": {
             "video": ["91", 0],
-            "filename_prefix": "MECHA_GPU2_minimax_h3_long",
+            "filename_prefix": "OSTORY_GPU2_minimax_h3_long",
             "format": "auto",
             "codec": "auto",
         },
@@ -2270,7 +2270,7 @@ def build_gpu2_wan_i2v_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
                     "images": ["24", 0],
                     "frame_rate": GPU2_WAN_FPS,
                     "loop_count": 0,
-                    "filename_prefix": "MECHA_GPU2_wan_i2v",
+                    "filename_prefix": "OSTORY_GPU2_wan_i2v",
                     "format": "video/h264-mp4",
                     "pix_fmt": "yuv420p",
                     "crf": 23,
@@ -2294,7 +2294,7 @@ def build_gpu2_wan_i2v_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
                 "crop": "center",
             },
         }
-        workflow["25"]["inputs"]["filename_prefix"] = "MECHA_GPU2_wan_morph"
+        workflow["25"]["inputs"]["filename_prefix"] = "OSTORY_GPU2_wan_morph"
 
     combined_images: list[Any] = ["24", 0]
     combined_frame_count = chunk_frames[0]
@@ -2514,7 +2514,7 @@ def build_gpu2_infinitetalk_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
                     "audio": ["31", 0],
                     "frame_rate": GPU2_WAN_FPS,
                     "loop_count": 0,
-                    "filename_prefix": "MECHA_GPU2_infinitetalk",
+                    "filename_prefix": "OSTORY_GPU2_infinitetalk",
                     "format": "video/h264-mp4",
                     "pix_fmt": "yuv420p",
                     "crf": 23,
@@ -2602,7 +2602,7 @@ def main() -> None:
 
     ports = [
         int(value.strip())
-        for value in os.environ.get("MECHA_COMFYUI_PORTS", "8188").split(",")
+        for value in os.environ.get("OSTORY_COMFYUI_PORTS", "8188").split(",")
         if value.strip()
     ]
     runtime_manager = Gpu2RuntimeManager()
@@ -2632,14 +2632,14 @@ def main() -> None:
         def poll(self):
             if gpu2_agent_maintenance_enabled():
                 print(
-                    "[MECHA] Local GPU maintenance gate is closed; no queued task will be claimed",
+                    "[OSTORY] Local GPU maintenance gate is closed; no queued task will be claimed",
                     file=sys.stderr,
                     flush=True,
                 )
                 return None
             if not resource_controller.ready_for_new_task():
                 print(
-                    "[MECHA] New task claim blocked by host resource guard: "
+                    "[OSTORY] New task claim blocked by host resource guard: "
                     f"{resource_controller.last_error}",
                     file=sys.stderr,
                     flush=True,
@@ -2647,7 +2647,7 @@ def main() -> None:
                 return None
             if not runtime_manager.ready_for_next_task():
                 print(
-                    "[MECHA] New task claim blocked until the previous model is released: "
+                    "[OSTORY] New task claim blocked until the previous model is released: "
                     f"{runtime_manager.model_gate.last_error}",
                     file=sys.stderr,
                     flush=True,
@@ -2704,7 +2704,7 @@ def main() -> None:
                                 "H3 Fast is unavailable: " + acceleration_reason
                             )
                         print(
-                            "[MECHA] H3 SageAttention requested but not verified; using baseline: "
+                            "[OSTORY] H3 SageAttention requested but not verified; using baseline: "
                             f"{acceleration_reason}",
                             file=sys.stderr,
                             flush=True,
@@ -2770,7 +2770,7 @@ def main() -> None:
                 models_released = runtime_manager.release_models()
                 if not models_released:
                     print(
-                        "[MECHA] Model release gate is closed; queued tasks will remain unclaimed: "
+                        "[OSTORY] Model release gate is closed; queued tasks will remain unclaimed: "
                         f"{runtime_manager.model_gate.last_error}",
                         file=sys.stderr,
                         flush=True,
@@ -2788,7 +2788,7 @@ def main() -> None:
     if not token:
         raise RuntimeError(f"Agent token is empty: {TOKEN_FILE}")
 
-    server_url = os.environ.get("MECHA_SERVER_URL", "https://tv.ostory.ai")
+    server_url = os.environ.get("OSTORY_SERVER_URL", "https://tv.ostory.ai")
     resource_controller.start()
     try:
         Gpu2ComfyUIAgent(server_url, token, ports).run()

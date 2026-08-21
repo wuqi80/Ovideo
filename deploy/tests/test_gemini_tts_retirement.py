@@ -57,7 +57,7 @@ async def test_generic_speech_route_uses_minimax(monkeypatch):
         return_value={"audio_url": "/storage/audio/speech.mp3", "duration_ms": 1000}
     )
     get_audio_provider = Mock(return_value=provider)
-    require_minimax_client = Mock(return_value=Mock(api_key="configured"))
+    require_minimax_client = Mock(return_value=Mock(api_key="test-placeholder-credential"))
     persist = AsyncMock(
         return_value={"audio_url": "/storage/audio/speech.mp3", "duration_ms": 1000}
     )

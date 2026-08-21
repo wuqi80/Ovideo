@@ -1,5 +1,5 @@
 param(
-    [string]$InstallRoot = "E:\MECHA-GPU",
+    [string]$InstallRoot = "E:\OSTORY-GPU",
     [string]$ServerUrl = "https://192.168.31.134"
 )
 

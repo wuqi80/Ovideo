@@ -38,7 +38,7 @@ podman build \
 systemctl disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
 podman pod rm --force "$POD_NAME" >/dev/null 2>&1 || true
 
-for volume in ostory-postgres ostory-redis ostory-storage ostory-temp ostory-uploads ostory-outputs ostory-logs ostory-history ostory-caddy-data ostory-caddy-config; do
+for volume in ostory-postgres ostory-redis ostory-storage ostory-workflows ostory-temp ostory-uploads ostory-outputs ostory-logs ostory-history ostory-caddy-data ostory-caddy-config; do
   podman volume exists "$volume" || podman volume create "$volume" >/dev/null
 done
 
@@ -76,6 +76,7 @@ podman run --detach \
   --env "GIT_SHA=$GIT_SHA" \
   --env "RELEASED_AT=$RELEASED_AT" \
   --volume ostory-storage:/app/persistent_storage:Z \
+  --volume ostory-workflows:/app/workflows:Z \
   --volume ostory-temp:/app/temp:Z \
   --volume ostory-uploads:/app/uploads:Z \
   --volume ostory-outputs:/app/outputs:Z \

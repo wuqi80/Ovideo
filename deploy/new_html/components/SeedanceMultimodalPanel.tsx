@@ -2,7 +2,12 @@ import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import ReactDOM from 'react-dom';
 import { Upload, X, AlertCircle, Info, Plus, Maximize2, Volume2, Loader2 } from 'lucide-react';
 import { uploadAudio, uploadImage, uploadVideoFile } from '../services/videoMediaService';
-import type { SeedanceMediaInput, SeedanceMediaRole, SeedanceParams } from '../services/videoModelService';
+import {
+    getModelDisplayName,
+    type SeedanceMediaInput,
+    type SeedanceMediaRole,
+    type SeedanceParams,
+} from '../services/videoModelService';
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
 import { SeedanceMentionPromptEditor } from './SeedanceMentionPromptEditor';
 import { SeedanceAssetPickerModal } from './SeedanceAssetPickerModal';
@@ -36,6 +41,12 @@ const ROLE_OPTIONS_FIRST_LAST: { value: SeedanceMediaRole | ''; label: string }[
 
 const RATIO_OPTIONS = ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9'] as const;
 const RESOLUTION_OPTIONS = ['480p', '720p', '1080p'] as const;
+
+const SEEDANCE_TIER_LABELS: Record<SeedanceParams['sub_model'], string> = {
+    standard: getModelDisplayName('Seedance2'),
+    fast: getModelDisplayName('Seedance2Fast'),
+    mini: getModelDisplayName('Seedance2Mini'),
+};
 
 export const SeedanceMultimodalPanel: React.FC<Props> = ({
     value,
@@ -106,7 +117,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
             return { ok: false, msg: '兼容通道最多支持 2 张图片（单图或首尾帧）' };
         }
         if ((value.sub_model === 'fast' || value.sub_model === 'mini') && value.resolution === '1080p') {
-            return { ok: false, msg: `${value.sub_model === 'mini' ? '元婴（mini）' : '渡劫（fast）'}不支持 1080p` };
+            return { ok: false, msg: `${SEEDANCE_TIER_LABELS[value.sub_model]}不支持 1080p` };
         }
         if (images.length > 9) return { ok: false, msg: '图片最多 9 张' };
         if (videos.length > 3) return { ok: false, msg: '参考视频最多 3 个' };
@@ -188,7 +199,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                     </div>
                 </div>
                 <span className="text-[9px] px-1.5 py-0.5 rounded border border-primary text-primary bg-primary-light">
-                    {value.sub_model === 'mini' ? '元婴 Mini' : (value.sub_model === 'fast' ? '渡劫 Fast' : '飞升 Standard')}
+                    {SEEDANCE_TIER_LABELS[value.sub_model]}
                 </span>
             </div>
 
@@ -419,7 +430,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                                 const disabledResolution = r === '1080p' && (value.sub_model === 'fast' || value.sub_model === 'mini');
                                 return (
                                 <option key={r} value={r} disabled={disabledResolution}>
-                                    {r}{disabledResolution ? `（${value.sub_model === 'mini' ? '元婴' : '渡劫'}不支持）` : ''}
+                                    {r}{disabledResolution ? `（${SEEDANCE_TIER_LABELS[value.sub_model]}不支持）` : ''}
                                 </option>
                                 );
                             })}

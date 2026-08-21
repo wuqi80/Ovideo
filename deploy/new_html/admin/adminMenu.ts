@@ -1,7 +1,7 @@
 /**
  * adminMenu.ts — 统一后台的一级 / 二级 / 三级菜单配置（单一事实来源）
  *
- * refactor/v2：把原本散落在 4 个台子（/admin Hub、/admin/operations 的 5 tab、
+ * 当前架构：把原本散落在 4 个台子（/admin Hub、/admin/operations 的 5 tab、
  * AdminFeatureTabs 的 8 子 tab、/admin-legacy 的 4 页）的全部功能，
  * 收拢进一棵层级菜单树，由 AdminSidebar 渲染、AdminLayout 持久承载。
  *

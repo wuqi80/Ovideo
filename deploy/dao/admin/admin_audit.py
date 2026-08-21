@@ -4,7 +4,6 @@ Admin Audit DAO
 ================
 admin_audit_logs 表的 append-only 写入与查询。
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/05-admin-media-credit-audit.md
 """
 from __future__ import annotations
 

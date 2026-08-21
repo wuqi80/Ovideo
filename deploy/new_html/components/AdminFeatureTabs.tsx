@@ -94,7 +94,7 @@ const SUB_TABS: { key: SubTab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export const AdminFeatureTabs: React.FC<{ embedTab?: SubTab }> = ({ embedTab }) => {
-  // refactor/v2：统一后台壳传入 embedTab → 只渲染对应面板、隐藏自带横向 tab 条
+  // 当前架构：统一后台壳传入 embedTab → 只渲染对应面板、隐藏自带横向 tab 条
   // （8 个面板已被提升为壳层级菜单的二级项，不再需要内部二次导航）。
   const [tab, setTab] = useState<SubTab>(embedTab ?? 'accounts');
   useEffect(() => { if (embedTab) setTab(embedTab); }, [embedTab]);

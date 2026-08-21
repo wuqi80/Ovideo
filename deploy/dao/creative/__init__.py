@@ -1,1 +1,1 @@
-"""creative 域 DAO（refactor/v2 P3）。"""
+"""creative 域 DAO（当前分层架构）。"""

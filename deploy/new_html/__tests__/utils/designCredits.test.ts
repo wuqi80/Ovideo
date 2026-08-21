@@ -20,6 +20,7 @@ describe('designCredits', () => {
     });
     expect(DESIGN_CREDIT_DEFAULTS).toEqual({
       imageGenerationPerImage: 40,
+      onlineImageOperation: 60,
       promptRefinement: 1,
       angleAdjustment: 5,
       multiAngleGeneration: 60,

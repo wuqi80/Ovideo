@@ -1,5 +1,5 @@
 param(
-    [string]$InstallRoot = "E:\MECHA-GPU",
+    [string]$InstallRoot = "E:\OSTORY-GPU",
     [int]$Port = 8188,
     [switch]$SkipModelDownloads,
     [switch]$ForceRefreshComfyUI,
@@ -27,7 +27,7 @@ $StartCmd = Join-Path $ScriptsRoot "windows_gpu_start_h3_comfyui.cmd"
 $AgentStartCmd = Join-Path $ScriptsRoot "windows_gpu_start_agent.cmd"
 $LegacyAgentStartCmd = Join-Path $InstallRoot "start_agent.cmd"
 $Curl = Join-Path $env:SystemRoot "System32\curl.exe"
-$PipIndex = if ($env:MECHA_PIP_INDEX_URL) { $env:MECHA_PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
+$PipIndex = if ($env:OSTORY_PIP_INDEX_URL) { $env:OSTORY_PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
 $RequiredNodes = @(
     "MiniMaxH3ImageToVideo",
     "UNETLoader",
@@ -141,7 +141,7 @@ function Install-PythonRequirements {
 }
 
 function Install-H3MiniClipProj {
-    $commitMarker = Join-Path $ClipProjRoot ".mecha-pinned-commit"
+    $commitMarker = Join-Path $ClipProjRoot ".ostory-pinned-commit"
     if ((Test-Path -LiteralPath $commitMarker) -and
         ((Get-Content -LiteralPath $commitMarker -Raw -Encoding UTF8).Trim() -eq $ClipProjCommit)) {
         Write-Step "Pinned ClipProj node already present: $ClipProjCommit"
@@ -236,7 +236,7 @@ def download_once(url, target, partial, expected_size, token, log_path, relative
     offset = size_of(partial_path)
     headers = {
         "Accept-Encoding": "identity",
-        "User-Agent": "MECHA-GPU-H3-downloader/1.0",
+        "User-Agent": "OSTORY-GPU-H3-downloader/1.0",
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -481,7 +481,7 @@ function Write-H3MiniReadiness {
             ([Int64](Get-Item -LiteralPath $path).Length -eq [Int64]$asset.Size)
         )
     }
-    $commitMarker = Join-Path $ClipProjRoot ".mecha-pinned-commit"
+    $commitMarker = Join-Path $ClipProjRoot ".ostory-pinned-commit"
     $nodeReady = (Test-Path -LiteralPath (Join-Path $ClipProjRoot "__init__.py")) -and
         (Test-Path -LiteralPath $commitMarker) -and
         ((Get-Content -LiteralPath $commitMarker -Raw -Encoding UTF8).Trim() -eq $ClipProjCommit)
@@ -516,7 +516,7 @@ setlocal
 chcp 65001 >nul
 set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
-set "MECHA_GPU_ROOT=$InstallRoot"
+set "OSTORY_GPU_ROOT=$InstallRoot"
 set "COMFYUI_ROOT=$ComfyRoot"
 set "PYTHON_EXE=$H3Python"
 if not exist "$Logs" mkdir "$Logs"
@@ -527,13 +527,13 @@ endlocal
 }
 
 function Update-AgentPortList {
-    [Environment]::SetEnvironmentVariable("MECHA_COMFYUI_PORTS", "8188", "Machine")
+    [Environment]::SetEnvironmentVariable("OSTORY_COMFYUI_PORTS", "8188", "Machine")
     foreach ($candidate in @($AgentStartCmd, $LegacyAgentStartCmd)) {
         if (-not (Test-Path -LiteralPath $candidate)) {
             continue
         }
         $source = Get-Content -LiteralPath $candidate -Raw -Encoding UTF8
-        $updated = $source -replace "set MECHA_COMFYUI_PORTS=.*", "set MECHA_COMFYUI_PORTS=8188"
+        $updated = $source -replace "set OSTORY_COMFYUI_PORTS=.*", "set OSTORY_COMFYUI_PORTS=8188"
         if ($updated -ne $source) {
             Write-Step "Updating Agent startup command to the single managed port: $candidate"
             Set-Content -LiteralPath $candidate -Value $updated -Encoding UTF8
@@ -543,17 +543,17 @@ function Update-AgentPortList {
 
 function Disable-LegacyH3Startup {
     Write-Step "Disabling the legacy independently-started H3 task and firewall rule"
-    Get-NetFirewallRule -DisplayName "MECHA GPU ComfyUI H3 LAN" -ErrorAction SilentlyContinue |
+    Get-NetFirewallRule -DisplayName "OSTORY GPU ComfyUI H3 LAN" -ErrorAction SilentlyContinue |
         Remove-NetFirewallRule -ErrorAction SilentlyContinue
-    $legacyTask = Get-ScheduledTask -TaskName "MECHA-GPU-ComfyUI-H3" -ErrorAction SilentlyContinue
+    $legacyTask = Get-ScheduledTask -TaskName "OSTORY-GPU-ComfyUI-H3" -ErrorAction SilentlyContinue
     if ($legacyTask) {
-        Disable-ScheduledTask -TaskName "MECHA-GPU-ComfyUI-H3" | Out-Null
+        Disable-ScheduledTask -TaskName "OSTORY-GPU-ComfyUI-H3" | Out-Null
     }
 }
 
 function Test-H3Readiness {
     Write-Step "Starting H3 ComfyUI on port $Port"
-    schtasks.exe /Run /TN "MECHA-GPU-ComfyUI-H3" | Out-Null
+    schtasks.exe /Run /TN "OSTORY-GPU-ComfyUI-H3" | Out-Null
     $baseUrl = "http://127.0.0.1:$Port"
     $deadline = (Get-Date).AddMinutes(10)
     $systemStatsOk = $false
@@ -583,7 +583,7 @@ function Test-H3Readiness {
     $report = @{
         success = -not ($nodeResults.Values -contains $false) -and -not ($modelResults.Values -contains $false)
         port = $Port
-        service = "MECHA-GPU-ComfyUI-H3"
+        service = "OSTORY-GPU-ComfyUI-H3"
         base_url = $baseUrl
         comfyui_root = $ComfyRoot
         python = $H3Python
@@ -612,9 +612,9 @@ Write-Step "H3 installed for Agent-managed on-demand switching; no runtime smoke
 
 if ($RestartAgent) {
     Write-Step "Restarting Agent with the single managed port"
-    schtasks.exe /End /TN "MECHA-GPU-Agent" 2>$null | Out-Null
+    schtasks.exe /End /TN "OSTORY-GPU-Agent" 2>$null | Out-Null
     Start-Sleep -Seconds 3
-    schtasks.exe /Run /TN "MECHA-GPU-Agent" | Out-Null
+    schtasks.exe /Run /TN "OSTORY-GPU-Agent" | Out-Null
 } else {
     Write-Step "Agent restart was not requested; installed files remain inactive"
 }

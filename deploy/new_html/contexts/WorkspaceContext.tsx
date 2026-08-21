@@ -5,7 +5,6 @@
  * 当前活动 workspace（'personal' | org_id）+ 我加入的组织列表。
  *
  * 状态持久化：sessionStorage（tab 级隔离，admin 也用同 key 不互通因为不同窗口/tab）。
- * 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §6.2
  */
 
 import React, {

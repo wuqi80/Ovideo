@@ -45,7 +45,7 @@ def main() -> int:
     def fake_minimax_resolve_provider(provider: str, model_name: str | None = None) -> FakeConfig:
         minimax_calls.append((provider, model_name or ""))
         return FakeConfig(
-            api_key="minimax-runtime-key",
+            api_key="test-placeholder-credential",
             endpoint="https://runtime.example.test/minimax/v1",
             model_name="MiniMax-Hailuo-02",
             proxy="http://minimax-proxy.example.test:8080",
@@ -65,7 +65,7 @@ def main() -> int:
         ("minimax", minimax_audio.MINIMAX_DEFAULT_PROVIDER_MODEL),
     ]:
         fail(f"MinimaxAudioClient did not resolve minimax runtime config: {minimax_calls}")
-    if minimax_client.api_key != "minimax-runtime-key":
+    if minimax_client.api_key != "test-placeholder-credential":
         fail("MinimaxAudioClient did not pick up resolved key")
     if minimax_client.base_url != "https://runtime.example.test/minimax/v1":
         fail("MinimaxAudioClient did not pick up resolved endpoint")

@@ -1,1 +1,1 @@
-"""business 域 DAO（refactor/v2 P3）。"""
+"""business 域 DAO（当前分层架构）。"""

@@ -5,12 +5,15 @@ import { ProjectFile, StoryboardItem, MaterialLibrary, Material, FileVersion, Ai
 import { LayoutDashboard, Users, MapPin, Plus, Image as ImageIcon, Sparkles, Trash2, ChevronRight, ChevronDown, ChevronUp, Upload, AlertCircle, Film, Check, Lock, CheckCircle, Save, History, RefreshCw, X, Clock, Database, GripVertical, Camera, ZoomIn, Layers, Box, ShieldCheck, Maximize, Scissors, Loader, Wand2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
-import { adjustImageAngle } from '../services/comfyuiGenerationService';
-import { waitForComfyUITaskAllImages } from '../services/comfyuiTaskWaitService';
 import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoService';
+import {
+  ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+  ONLINE_IMAGE_OPERATION_LABEL,
+  onlineImageOperationResolution,
+  runOnlineImageOperation,
+} from '../services/onlineImageOperationService';
 import { generateThumbnail } from '../utils/imageOptimization';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
-import { GpuNodeSelector, type GpuNodeSelection } from './GpuNodeSelector';
 import {
   standardTurnaroundAspectRatio,
   standardTurnaroundLabel,
@@ -80,8 +83,6 @@ type CameraGenerationPayload = {
   vertical: number;
   wideAngle: boolean;
   customPrompt?: string;
-  seed: number;
-  gpu: GpuNodeSelection;
 };
 
 type CameraModalConfig = {
@@ -139,7 +140,6 @@ type ThreeViewModalConfig = {
   selectedMaterialId: string;
 };
 
-const randomSeed = () => Math.floor(Math.random() * 900000000000000) + 100000000000000;
 const MATERIAL_INITIAL_SHOT_COUNT = 20;
 const MATERIAL_SHOT_PAGE_SIZE = 20;
 
@@ -670,7 +670,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     });
   };
 
-  const handleProcessMaterial = async (materialId: string, gpu: GpuNodeSelection) => {
+  const handleProcessMaterial = async (materialId: string) => {
     if (!processModalConfig) return;
     
     const { tagName, materials, workflow } = processModalConfig;
@@ -681,49 +681,45 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         return;
     }
 
-    setProcessModalConfig(null); // 关闭弹窗
+    const resolution = onlineImageOperationResolution(workflow);
+    const creditParams = designImageCreditParams({
+        imageCount: 1,
+        model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+        resolution,
+        aspectRatio: 'auto',
+    });
+    try {
+        await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, creditParams);
+    } catch (error: any) {
+        crmMessage.error(error?.message || '积分校验失败');
+        return;
+    }
+
+    setProcessModalConfig(null);
 
     try {
         setCameraGeneratingTag(tagName);
-        
+
         const targetAssetId = assetNameToId?.[tagName];
-        const { processMaterialImage } = await import('../services/comfyuiGenerationService');
-        const { taskId } = await processMaterialImage(
-            targetMaterial.url,
-            workflow,
-            {
-                entityType: targetAssetId ? 'asset' : undefined,
-                entityId: targetAssetId,
-                fileRole: targetAssetId ? 'material_image' : undefined,
-                episodeId: selectedFileId || undefined,
-                preferredAgentId: gpu.preferredAgentId,
-                preferredNodeId: gpu.preferredNodeId,
-            },
-        );
-        const results = await waitForComfyUITaskAllImages(taskId, undefined, {
-            title: `${workflow === 'upscale_hd' ? '高清放大' : '去水印'} · ${tagName}`,
-            kind: workflow === 'upscale_hd' ? 'video-upscale' : 'matting',
-            targetPage: 'materials',
-            targetEntityType: targetAssetId ? 'asset' : undefined,
-            targetEntityId: targetAssetId,
-            targetItemId: targetAssetId,
-            episodeId: selectedFileId || undefined,
+        const result = await runOnlineImageOperation({
+            operation: workflow,
+            sourceImage: targetMaterial.url,
+            entityType: targetAssetId ? 'asset' : undefined,
+            entityId: targetAssetId,
             fileRole: targetAssetId ? 'material_image' : undefined,
+            projectId: projectId || undefined,
+            episodeId: selectedFileId || undefined,
         });
-        const resultUrl = results[0]?.url;
-        if (!resultUrl) {
-            throw new Error('处理完成但未返回图片');
-        }
 
         const existing = materialLibrary[tagName] || [];
-        const newMaterialId = getNextMaterialId(tagName, 0, results[0]?.fileId);
+        const newMaterialId = getNextMaterialId(tagName, 0, result.fileId);
         const newMaterial: Material = {
             id: newMaterialId,
-            url: resultUrl,
+            url: result.url,
             type: 'image',
             source: 'ai',
             timestamp: Date.now(),
-            fileId: results[0]?.fileId,
+            fileId: result.fileId,
         };
 
         await onUpdateLibrary({
@@ -731,12 +727,27 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             [tagName]: [...existing, newMaterial]
         });
 
-        const workflowNames = {
-            'upscale_hd': '高清放大',
-            'remove_watermark': '去水印'
-        };
-        
-        alert(`${workflowNames[workflow]}完成！`);
+        const workflowName = workflow === 'upscale_hd' ? '高清放大' : '去水印';
+        try {
+            const settlement = await consumeCredits({
+                featureKey: DESIGN_CREDIT_FEATURES.imageGeneration,
+                taskId: newDesignCreditUsageId(`material-${workflow}-online`),
+                params: creditParams,
+                projectId,
+                metadata: {
+                    episode_id: selectedFileId || null,
+                    asset_id: targetAssetId || null,
+                    tag_name: tagName,
+                    workflow,
+                    provider_model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+                    file_id: result.fileId || null,
+                },
+            });
+            crmMessage.success(`${workflowName}完成，已扣除 ${settlement.charged_credits} 积分`);
+        } catch (error: any) {
+            console.error('Online image operation credit settlement failed', error);
+            crmMessage.warning(`图片已保存，但积分结算失败：${error?.message || String(error)}`);
+        }
     } catch (error: any) {
         console.error('Material processing failed', error);
         alert(error?.message || '处理失败，请稍后再试。');
@@ -821,6 +832,20 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
 
   const handleCameraGenerate = async (payload: CameraGenerationPayload) => {
     if (!selectedShot) return;
+    const resolution = onlineImageOperationResolution('angle_adjustment');
+    const creditParams = designImageCreditParams({
+        imageCount: 1,
+        model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+        resolution,
+        aspectRatio: 'auto',
+    });
+    try {
+        await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, creditParams);
+    } catch (error: any) {
+        crmMessage.error(error?.message || '积分校验失败');
+        return;
+    }
+
     setCameraModalConfig(null);
     setCameraGeneratingTag(payload.tagName);
     try {
@@ -829,43 +854,26 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             : buildCameraPrompt(payload, selectedShot, payload.tagName);
 
         const targetAssetId = assetNameToId?.[payload.tagName];
-        const { taskId } = await adjustImageAngle(
-            payload.imageUrl,
-            prompt,
-            payload.seed,
-            {
-                entityType: 'asset',
-                entityId: targetAssetId,
-                fileRole: 'material_image',
-                episodeId: selectedFileId || undefined,
-                preferredAgentId: payload.gpu.preferredAgentId,
-                preferredNodeId: payload.gpu.preferredNodeId,
-            }
-        );
-        const results = await waitForComfyUITaskAllImages(taskId, undefined, {
-            title: `角度调整 · ${payload.tagName}`,
-            kind: 'angle-adjust',
-            targetPage: 'materials',
-            targetEntityType: 'asset',
-            targetEntityId: targetAssetId,
-            targetItemId: targetAssetId,
+        const result = await runOnlineImageOperation({
+            operation: 'angle_adjustment',
+            sourceImage: payload.imageUrl,
+            instruction: prompt,
+            entityType: targetAssetId ? 'asset' : undefined,
+            entityId: targetAssetId,
+            fileRole: targetAssetId ? 'material_image' : undefined,
+            projectId: projectId || undefined,
             episodeId: selectedFileId || undefined,
-            fileRole: 'material_image',
         });
-        const resultUrl = results[0]?.url;
-        if (!resultUrl) {
-            throw new Error('角度调整未返回图片');
-        }
 
         const existing = materialLibrary[payload.tagName] || [];
-        const newMaterialId = getNextMaterialId(payload.tagName, 0, results[0]?.fileId);
+        const newMaterialId = getNextMaterialId(payload.tagName, 0, result.fileId);
         const newMaterial: Material = {
             id: newMaterialId,
-            url: resultUrl,
+            url: result.url,
             type: 'image',
             source: 'ai',
             timestamp: Date.now(),
-            fileId: results[0]?.fileId,
+            fileId: result.fileId,
         };
 
         await onUpdateLibrary({
@@ -873,7 +881,26 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             [payload.tagName]: [...existing, newMaterial]
         });
         onBindMaterial(selectedShot.id, payload.tagName, newMaterialId);
-
+        try {
+            const settlement = await consumeCredits({
+                featureKey: DESIGN_CREDIT_FEATURES.imageGeneration,
+                taskId: newDesignCreditUsageId('material-angle-online'),
+                params: creditParams,
+                projectId,
+                metadata: {
+                    episode_id: selectedFileId || null,
+                    asset_id: targetAssetId || null,
+                    tag_name: payload.tagName,
+                    workflow: 'angle_adjustment',
+                    provider_model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+                    file_id: result.fileId || null,
+                },
+            });
+            crmMessage.success(`角度调整完成，已扣除 ${settlement.charged_credits} 积分`);
+        } catch (error: any) {
+            console.error('Online angle credit settlement failed', error);
+            crmMessage.warning(`图片已保存，但积分结算失败：${error?.message || String(error)}`);
+        }
     } catch (error:any) {
         console.error('Camera adjust failed', error);
         alert(error?.message || '角度调整失败，请重试。');
@@ -2471,8 +2498,12 @@ const CameraModal: React.FC<{
     const [vertical, setVertical] = useState(0);
     const [wideAngle, setWideAngle] = useState(false);
     const [customPrompt, setCustomPrompt] = useState('');
-    const [seed, setSeed] = useState(randomSeed());
-    const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
+    const creditParams = useMemo(() => designImageCreditParams({
+        imageCount: 1,
+        model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+        resolution: onlineImageOperationResolution('angle_adjustment'),
+        aspectRatio: 'auto',
+    }), []);
 
     const promptExamples = [
         "将镜头向前移动（Move the camera forward.）",
@@ -2491,8 +2522,8 @@ const CameraModal: React.FC<{
     }, [config]);
 
     const handleSubmit = () => {
-        if (!currentMaterial || !gpuSelection?.usable) {
-            alert(currentMaterial ? '请选择一个可用处理节点' : '请选择一张素材图片');
+        if (!currentMaterial) {
+            alert('请选择一张素材图片');
             return;
         }
         onSubmit({
@@ -2503,8 +2534,6 @@ const CameraModal: React.FC<{
             vertical,
             wideAngle,
             customPrompt: customPrompt.trim() || undefined,
-            seed,
-            gpu: gpuSelection,
         });
     };
 
@@ -2576,7 +2605,9 @@ const CameraModal: React.FC<{
                                 </button>
                             ))}
                         </div>
-                        <GpuNodeSelector onSelectionChange={setGpuSelection} />
+                        <div className="rounded-lg border border-primary/20 bg-primary-light px-3 py-2 text-xs leading-5 text-primary">
+                            由{ONLINE_IMAGE_OPERATION_LABEL}在线处理，无需选择本地节点。
+                        </div>
                     </div>
 
                     <div className="space-y-5">
@@ -2628,31 +2659,24 @@ const CameraModal: React.FC<{
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-3 text-xs text-n700">
-                            <div className="flex items-center gap-2">
-                                <span>随机种子</span>
-                                <input
-                                    type="number"
-                                    value={seed}
-                                    onChange={(e) => setSeed(Number(e.target.value))}
-                                    className="w-32 bg-n0 border border-n40 rounded px-2 py-1 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                                />
-                            </div>
-                            <button onClick={() => setSeed(randomSeed())} className="px-2 py-1 rounded border border-n40 hover:border-primary hover:text-n800 transition-colors">
-                                随机
-                            </button>
-                        </div>
+                        <p className="text-[11px] leading-5 text-n100">在线模型会保留主体身份、画面风格和未指定变化的内容，并把结果保存为新的候选图片。</p>
                     </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-n40">
+                    <InlineCreditEstimate
+                        featureKey={DESIGN_CREDIT_FEATURES.imageGeneration}
+                        params={creditParams}
+                        fallbackCost={DESIGN_CREDIT_DEFAULTS.onlineImageOperation}
+                    />
+                    <div className="flex items-center gap-3">
                     <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
                     <button
                         onClick={handleSubmit}
-                        disabled={!currentMaterial || !gpuSelection?.usable}
-                        title={!gpuSelection?.usable ? '请先选择一个可用处理节点' : undefined}
+                        disabled={!currentMaterial}
                         className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg shadow-emerald-900/30 hover:shadow-emerald-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >生成新角度</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2662,10 +2686,9 @@ const CameraModal: React.FC<{
 const ProcessModal: React.FC<{
     config: ProcessModalConfig;
     onClose: () => void;
-    onSubmit: (materialId: string, gpu: GpuNodeSelection) => void;
+    onSubmit: (materialId: string) => void;
 }> = ({ config, onClose, onSubmit }) => {
     const [selectedMaterialId, setSelectedMaterialId] = useState<string>(config.selectedMaterialId);
-    const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
 
     const currentMaterial = config.materials.find(m => m.id === selectedMaterialId) || config.materials[0];
 
@@ -2674,11 +2697,11 @@ const ProcessModal: React.FC<{
     }, [config]);
 
     const handleSubmit = () => {
-        if (!currentMaterial || !gpuSelection?.usable) {
-            alert(currentMaterial ? '请选择一个可用处理节点' : '请选择一张素材图片');
+        if (!currentMaterial) {
+            alert('请选择一张素材图片');
             return;
         }
-        onSubmit(selectedMaterialId, gpuSelection);
+        onSubmit(selectedMaterialId);
     };
 
     const workflowNames = {
@@ -2687,6 +2710,12 @@ const ProcessModal: React.FC<{
     };
 
     const workflowInfo = workflowNames[config.workflow];
+    const creditParams = useMemo(() => designImageCreditParams({
+        imageCount: 1,
+        model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+        resolution: onlineImageOperationResolution(config.workflow),
+        aspectRatio: 'auto',
+    }), [config.workflow]);
 
     return (
         <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
@@ -2744,15 +2773,25 @@ const ProcessModal: React.FC<{
                     </div>
                 </div>
 
-                <GpuNodeSelector onSelectionChange={setGpuSelection} />
+                <div className="rounded-lg border border-primary/20 bg-primary-light px-3 py-2 text-xs leading-5 text-primary">
+                    <p>由{ONLINE_IMAGE_OPERATION_LABEL}在线处理，无需选择本地节点。</p>
+                    {config.workflow === 'remove_watermark' && (
+                        <p className="mt-1 text-n700">请仅处理您拥有或已经获得编辑授权的图片。</p>
+                    )}
+                </div>
 
                 {/* 底部按钮 */}
-                <div className="flex items-center justify-end gap-3 pt-4 border-t border-n40">
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-n40">
+                    <InlineCreditEstimate
+                        featureKey={DESIGN_CREDIT_FEATURES.imageGeneration}
+                        params={creditParams}
+                        fallbackCost={DESIGN_CREDIT_DEFAULTS.onlineImageOperation}
+                    />
+                    <div className="flex items-center gap-3">
                     <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
                     <button
                       onClick={handleSubmit}
-                      disabled={!currentMaterial || !gpuSelection?.usable}
-                      title={!gpuSelection?.usable ? '请先选择一个可用处理节点' : undefined}
+                      disabled={!currentMaterial}
                       className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${
                         config.workflow === 'upscale_hd'
                             ? 'bg-b400 hover:bg-b500 shadow-blue-900/30 hover:shadow-blue-900/50'
@@ -2760,6 +2799,7 @@ const ProcessModal: React.FC<{
                     }`}>
                         开始处理
                     </button>
+                    </div>
                 </div>
             </div>
         </div>

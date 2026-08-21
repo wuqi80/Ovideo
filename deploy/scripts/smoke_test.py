@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drama 冒烟测试：登录 + 安全项 + 核心流程。参数化 base URL，可跑本地或线上。
+"""Ostory TV 冒烟测试：登录、安全项与核心流程。base URL 必须显式配置。
 
 用法： python smoke_test.py [BASE_URL] [ADMIN_PASSWORD]
   BASE_URL 默认 http://127.0.0.1:6006
@@ -65,7 +65,7 @@ def check(name, cond, detail=""):
     return cond
 
 def forged_token():
-    OLD = "mecha-default-jwt-secret-2026"
+    OLD = "ostory-default-jwt-secret-2026"
     now = int(time.time())
     pb = base64.urlsafe_b64encode(json.dumps({"u": "admin", "exp": now + 3600, "iat": now}, separators=(',', ':')).encode()).decode().rstrip('=')
     return f"{pb}.{hmac.new(OLD.encode(), pb.encode(), hashlib.sha256).hexdigest()}"

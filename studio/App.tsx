@@ -12,6 +12,10 @@ import { AppNode, NodeType, NodeStatus, Connection, ContextMenuState, Group, Wor
 import { getGenerationStrategy } from './services/videoStrategies';
 import { useStudioRuntime } from './services/runtime';
 import {
+    resolveStudioWorkspace,
+    STANDARD_TEXT_IMAGE_VIDEO_WORKFLOW_ID,
+} from './defaultWorkflows';
+import {
     STUDIO_AUDIO_MODEL_SPEECH_HD,
     STUDIO_IMAGE_MODEL_CONFIGURED,
     STUDIO_TEXT_MODEL_CONFIGURED,
@@ -279,12 +283,14 @@ export const App = () => {
       const loadData = async () => {
           try {
             const snapshot = await runtime.loadSnapshot();
-            if (snapshot) {
-              setAssetHistory(snapshot.assets || []);
-              setWorkflows(snapshot.workflows || []);
-              setNodes(snapshot.nodes || []);
-              setConnections(snapshot.connections || []);
-              setGroups(snapshot.groups || []);
+            const workspace = resolveStudioWorkspace(snapshot);
+            setAssetHistory(workspace.assets || []);
+            setWorkflows(workspace.workflows);
+            setNodes(workspace.nodes);
+            setConnections(workspace.connections);
+            setGroups(workspace.groups);
+            if (!snapshot) {
+              setSelectedWorkflowId(STANDARD_TEXT_IMAGE_VIDEO_WORKFLOW_ID);
             }
           } catch (e) {
             console.error('[studio] failed to load episode canvas', e);
@@ -913,8 +919,15 @@ export const App = () => {
       if (wf) { saveHistory(); setNodes(JSON.parse(JSON.stringify(wf.nodes))); setConnections(JSON.parse(JSON.stringify(wf.connections))); setGroups(JSON.parse(JSON.stringify(wf.groups))); setSelectedWorkflowId(id); }
   };
 
-  const deleteWorkflow = (id: string) => { setWorkflows(prev => prev.filter(w => w.id !== id)); if (selectedWorkflowId === id) setSelectedWorkflowId(null); };
-  const renameWorkflow = (id: string, newTitle: string) => { setWorkflows(prev => prev.map(w => w.id === id ? { ...w, title: newTitle } : w)); };
+  const deleteWorkflow = (id: string) => {
+      if (id === STANDARD_TEXT_IMAGE_VIDEO_WORKFLOW_ID) return;
+      setWorkflows(prev => prev.filter(w => w.id !== id));
+      if (selectedWorkflowId === id) setSelectedWorkflowId(null);
+  };
+  const renameWorkflow = (id: string, newTitle: string) => {
+      if (id === STANDARD_TEXT_IMAGE_VIDEO_WORKFLOW_ID) return;
+      setWorkflows(prev => prev.map(w => w.id === id ? { ...w, title: newTitle } : w));
+  };
 
   // Keyboard Shortcuts
   useEffect(() => {

@@ -36,7 +36,7 @@ def _controller(tmp_path, *, host_reader=None, process_reader=None, emergency_st
         retention_days=7,
     )
     return Gpu2ResourceController(
-        Path(r"E:\MECHA-GPU"),
+        Path(r"E:\OSTORY-GPU"),
         writer=writer,
         host_reader=host_reader or (lambda: _host()),
         process_reader=process_reader or (lambda _root: _ai()),
@@ -149,7 +149,7 @@ def test_telemetry_write_failure_closes_new_task_gate(tmp_path):
     blocked_root = tmp_path / "not-a-directory"
     blocked_root.write_text("occupied", encoding="utf-8")
     controller = Gpu2ResourceController(
-        Path(r"E:\MECHA-GPU"),
+        Path(r"E:\OSTORY-GPU"),
         writer=BoundedJsonlTelemetry(blocked_root),
         host_reader=lambda: _host(),
         process_reader=lambda _root: _ai(),
@@ -160,8 +160,8 @@ def test_telemetry_write_failure_closes_new_task_gate(tmp_path):
 
 
 def test_resource_policy_environment_defaults_are_conservative(monkeypatch):
-    monkeypatch.delenv("MECHA_GPU_MIN_FREE_FOR_LOAD_GIB", raising=False)
-    monkeypatch.delenv("MECHA_GPU_HARD_AI_PRIVATE_GIB", raising=False)
+    monkeypatch.delenv("OSTORY_GPU_MIN_FREE_FOR_LOAD_GIB", raising=False)
+    monkeypatch.delenv("OSTORY_GPU_HARD_AI_PRIVATE_GIB", raising=False)
 
     policy = ResourcePolicy.from_env()
 

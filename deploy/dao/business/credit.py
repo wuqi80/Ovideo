@@ -4,7 +4,6 @@ Credit System DAO
 ==================
 积分账户、规则、冻结、流水四张表的 CRUD。
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/02-credits.md
 """
 from __future__ import annotations
 

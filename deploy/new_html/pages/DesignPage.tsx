@@ -16,9 +16,13 @@ import {
   type SyncExistingAssetCandidate,
 } from '../services/assetMutationService';
 import { generateGeminiImageVariant } from '../services/geminiImageGenerationService';
-import { adjustImageAngle, processMaterialImage, generateHumanMultiAngleQueued } from '../services/comfyuiGenerationService';
-import { waitForComfyUITask } from '../services/comfyuiTaskWaitService';
 import { generateDoubaoImages, GeneratedFileResult } from '../services/doubaoService';
+import {
+  ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+  ONLINE_IMAGE_OPERATION_LABEL,
+  onlineImageOperationResolution,
+  runOnlineImageOperation,
+} from '../services/onlineImageOperationService';
 import { callAI } from '../services/aiService';
 import { crmMessage } from '../admin/crmUI';
 import { AiModel } from '../types';
@@ -38,7 +42,6 @@ import {
   isMaterialStageAssetImageFileRole,
 } from '../utils/assetImageRoles';
 import { filterAssetsForDesignScope } from '../utils/assetScope';
-import { GpuNodeSelector, type GpuNodeSelection } from '../components/GpuNodeSelector';
 import {
   standardTurnaroundAspectRatio,
   standardTurnaroundLabel,
@@ -68,7 +71,6 @@ import {
   DESIGN_CREDIT_DEFAULTS,
   DESIGN_CREDIT_FEATURES,
   designImageCreditParams,
-  designOperationCreditParams,
   designPromptRefinementCreditParams,
   designPromptRefinementFallbackCost,
   newDesignCreditUsageId,
@@ -195,8 +197,6 @@ async function ensureDataUrl(input: string): Promise<string> {
   });
   return new Promise((resolve, reject) => { const r = new FileReader(); r.onloadend = () => resolve(r.result as string); r.onerror = reject; r.readAsDataURL(blob); });
 }
-
-const randomSeed = () => Math.floor(Math.random() * 900000000000000) + 100000000000000;
 
 function assetToMaterials(asset: AssetItem): ModalMaterial[] {
   return collectAssetImages(asset.assetId, asset.entityFiles, getLegacyAssetImageUrls(asset))
@@ -629,10 +629,16 @@ export const DesignPage: React.FC = () => {
   }, [episodeId, projectId, forceReloadSlices]);
 
   /* ---- Camera ---- */
-  const handleCameraGenerate = useCallback(async (payload: { assetId: string; imageUrl: string; rotate: number; move: number; vertical: number; wideAngle: boolean; customPrompt?: string; seed: number; gpu: GpuNodeSelection }) => {
-    const creditParams = designOperationCreditParams('angle_adjustment');
+  const handleCameraGenerate = useCallback(async (payload: { assetId: string; imageUrl: string; rotate: number; move: number; vertical: number; wideAngle: boolean; customPrompt?: string }) => {
+    const resolution = onlineImageOperationResolution('angle_adjustment');
+    const creditParams = designImageCreditParams({
+      imageCount: 1,
+      model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+      resolution,
+      aspectRatio: 'auto',
+    });
     try {
-      await assertEnoughCredits(DESIGN_CREDIT_FEATURES.angleAdjustment, creditParams);
+      await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, creditParams);
     } catch (err: any) {
       crmMessage.error(err?.message || '积分校验失败');
       return;
@@ -648,89 +654,90 @@ export const DesignPage: React.FC = () => {
       else if (payload.vertical === -1) prompts.push("Turn the camera to a bird's-eye view.");
       if (payload.wideAngle) prompts.push("Switch to a wide-angle lens.");
       const finalPrompt = payload.customPrompt?.trim() || prompts.join(' ') || 'Adjust the camera angle slightly.';
-      const { taskId } = await adjustImageAngle(payload.imageUrl, finalPrompt, payload.seed, {
-        entityType: 'asset', entityId: payload.assetId, fileRole: 'reference_image', episodeId: episodeId || undefined,
-        preferredAgentId: payload.gpu.preferredAgentId,
-        preferredNodeId: payload.gpu.preferredNodeId,
-      });
-      // 2026-05-20 (M3)：接入 taskRegistry，让铃铛能看到设计页的 ComfyUI 任务
-      await waitForComfyUITask(taskId, undefined, {
-        title: `角度调整 · 资产 ${String(payload.assetId).slice(0, 6)}`,
-        kind: 'angle-adjust',
-        targetPage: 'design',
-        targetEntityType: 'asset',
-        targetEntityId: payload.assetId,
-        targetItemId: payload.assetId,
-        targetProjectId: projectId || undefined,
-        episodeId: episodeId || undefined,
+      const result = await runOnlineImageOperation({
+        operation: 'angle_adjustment',
+        sourceImage: payload.imageUrl,
+        instruction: finalPrompt,
+        entityType: 'asset',
+        entityId: payload.assetId,
         fileRole: 'reference_image',
-      });
-      const settlement = await consumeCredits({
-        featureKey: DESIGN_CREDIT_FEATURES.angleAdjustment,
-        taskId: `design-angle:${taskId}`,
-        params: creditParams,
-        projectId,
-        metadata: {
-          episode_id: episodeId || null,
-          asset_id: payload.assetId,
-          workflow: 'angle_adjustment',
-        },
+        projectId: projectId || undefined,
+        episodeId: episodeId || undefined,
       });
       await forceReloadSlices('assets');
-      crmMessage.success(`角度调整完成，已扣除 ${settlement.charged_credits} 积分`);
+      try {
+        const settlement = await consumeCredits({
+          featureKey: DESIGN_CREDIT_FEATURES.imageGeneration,
+          taskId: newDesignCreditUsageId('design-angle-online'),
+          params: creditParams,
+          projectId,
+          metadata: {
+            episode_id: episodeId || null,
+            asset_id: payload.assetId,
+            workflow: 'angle_adjustment',
+            provider_model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+            file_id: result.fileId || null,
+          },
+        });
+        crmMessage.success(`角度调整完成，已扣除 ${settlement.charged_credits} 积分`);
+      } catch (err: any) {
+        console.error('Online angle credit settlement failed', err);
+        crmMessage.warning(`图片已保存，但积分结算失败：${err?.message || String(err)}`);
+      }
     } catch (err: any) { console.error('角度调整失败:', err); crmMessage.error(err?.message || '角度调整失败'); }
     finally { setBusyAssetId(null); }
   }, [episodeId, projectId, forceReloadSlices]);
 
   /* ---- Process (upscale/watermark) ---- */
-  const handleProcessSubmit = useCallback(async (payload: { materialUrl: string; gpu: GpuNodeSelection }) => {
+  const handleProcessSubmit = useCallback(async (payload: { materialUrl: string }) => {
     if (!processModal) return;
-    const isUpscale = processModal.workflow === 'upscale_hd';
-    const creditParams = designOperationCreditParams('upscale_hd');
-    if (isUpscale) {
-      try {
-        await assertEnoughCredits(DESIGN_CREDIT_FEATURES.upscaleHd, creditParams);
-      } catch (err: any) {
-        crmMessage.error(err?.message || '积分校验失败');
-        return;
-      }
+    const workflow = processModal.workflow;
+    const resolution = onlineImageOperationResolution(workflow);
+    const creditParams = designImageCreditParams({
+      imageCount: 1,
+      model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+      resolution,
+      aspectRatio: 'auto',
+    });
+    try {
+      await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, creditParams);
+    } catch (err: any) {
+      crmMessage.error(err?.message || '积分校验失败');
+      return;
     }
 
     setProcessModal(null);
-    setBusyAssetId(processModal.asset.assetId); setBusyLabel(processModal.workflow === 'upscale_hd' ? '高清放大中...' : '去水印中...');
+    setBusyAssetId(processModal.asset.assetId); setBusyLabel(workflow === 'upscale_hd' ? '高清放大中...' : '去水印中...');
     try {
-      const { taskId } = await processMaterialImage(payload.materialUrl, processModal.workflow, {
-        entityType: 'asset', entityId: processModal.asset.assetId, fileRole: 'reference_image', episodeId: episodeId || undefined,
-        preferredAgentId: payload.gpu.preferredAgentId,
-        preferredNodeId: payload.gpu.preferredNodeId,
-      });
-      // 2026-05-20 (M3)：接入 taskRegistry
-      await waitForComfyUITask(taskId, undefined, {
-        title: `${processModal.workflow === 'upscale_hd' ? '高清放大' : '去水印'} · ${String(processModal.asset.assetId).slice(0, 6)}`,
-        kind: processModal.workflow === 'upscale_hd' ? 'video-upscale' : 'matting',
-        targetPage: 'design',
-        targetEntityType: 'asset',
-        targetEntityId: processModal.asset.assetId,
-        targetItemId: processModal.asset.assetId,
-        targetProjectId: projectId || undefined,
-        episodeId: episodeId || undefined,
+      const result = await runOnlineImageOperation({
+        operation: workflow,
+        sourceImage: payload.materialUrl,
+        entityType: 'asset',
+        entityId: processModal.asset.assetId,
         fileRole: 'reference_image',
+        projectId: projectId || undefined,
+        episodeId: episodeId || undefined,
       });
-      if (isUpscale) {
+      await forceReloadSlices('assets');
+      try {
         const settlement = await consumeCredits({
-          featureKey: DESIGN_CREDIT_FEATURES.upscaleHd,
-          taskId: `design-upscale:${taskId}`,
+          featureKey: DESIGN_CREDIT_FEATURES.imageGeneration,
+          taskId: newDesignCreditUsageId(`design-${workflow}-online`),
           params: creditParams,
           projectId,
           metadata: {
             episode_id: episodeId || null,
             asset_id: processModal.asset.assetId,
-            workflow: 'upscale_hd',
+            workflow,
+            provider_model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+            file_id: result.fileId || null,
           },
         });
-        crmMessage.success(`高清放大完成，已扣除 ${settlement.charged_credits} 积分`);
+        crmMessage.success(`${workflow === 'upscale_hd' ? '高清放大' : '去水印'}完成，已扣除 ${settlement.charged_credits} 积分`);
+      } catch (err: any) {
+        console.error('Online image operation credit settlement failed', err);
+        crmMessage.warning(`图片已保存，但积分结算失败：${err?.message || String(err)}`);
       }
-      await forceReloadSlices('assets');
     } catch (err: any) { console.error('处理失败:', err); crmMessage.error(err?.message || '处理失败'); }
     finally { setBusyAssetId(null); }
   }, [processModal, episodeId, projectId, forceReloadSlices]);
@@ -1964,7 +1971,7 @@ const DiscreteChoiceControl: React.FC<{
 /* ======================== CameraModal ======================== */
 const CameraModal: React.FC<{
   asset: AssetItem; materials: ModalMaterial[]; onClose: () => void;
-  onSubmit: (p: { imageUrl: string; rotate: number; move: number; vertical: number; wideAngle: boolean; customPrompt?: string; seed: number; gpu: GpuNodeSelection }) => void;
+  onSubmit: (p: { imageUrl: string; rotate: number; move: number; vertical: number; wideAngle: boolean; customPrompt?: string }) => void;
 }> = ({ asset, materials, onClose, onSubmit }) => {
   const [selId, setSelId] = useState(materials[0]?.id);
   const [rotate, setRotate] = useState(0);
@@ -1972,10 +1979,13 @@ const CameraModal: React.FC<{
   const [vertical, setVertical] = useState(0);
   const [wideAngle, setWideAngle] = useState(false);
   const [customPrompt, setCustomPrompt] = useState('');
-  const [seed, setSeed] = useState(randomSeed());
-  const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
   const cur = materials.find(m => m.id === selId) || materials[0];
-  const creditParams = useMemo(() => designOperationCreditParams('angle_adjustment'), []);
+  const creditParams = useMemo(() => designImageCreditParams({
+    imageCount: 1,
+    model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+    resolution: onlineImageOperationResolution('angle_adjustment'),
+    aspectRatio: 'auto',
+  }), []);
   const promptExamples = ["镜头向前移动", "镜头向左移动", "转为俯视", "转为广角", "转为特写"];
   return (
     <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
@@ -1984,7 +1994,9 @@ const CameraModal: React.FC<{
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-4">
             <OperationMaterialPicker materials={materials} selectedId={cur?.id} onSelect={setSelId} />
-            <GpuNodeSelector onSelectionChange={setGpuSelection} />
+            <div className="rounded-lg border border-primary/20 bg-primary-light px-3 py-2 text-xs leading-5 text-primary">
+              由{ONLINE_IMAGE_OPERATION_LABEL}在线处理，无需选择本地节点。
+            </div>
           </div>
           <div className="space-y-4">
             <div className="bg-n30 border border-n40 rounded-lg p-4 space-y-4">
@@ -2027,26 +2039,20 @@ const CameraModal: React.FC<{
             </div>
             <textarea rows={2} value={customPrompt} onChange={e => setCustomPrompt(e.target.value)} className="w-full bg-n0 border border-n40 rounded-lg text-sm text-n800 p-3 resize-none" placeholder="自定义提示词..." />
             <div className="flex flex-wrap gap-1">{promptExamples.map((ex, i) => (<button key={i} onClick={() => setCustomPrompt(ex)} className="text-[10px] px-2 py-1 bg-n0 text-n300 rounded border border-n40 hover:bg-primary hover:text-white">{ex}</button>))}</div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-n700">
-              <span className="font-semibold">种子</span>
-              <input type="number" value={seed} onChange={e => setSeed(+e.target.value)} className="w-32 bg-n0 border border-n40 rounded-lg px-2 py-1.5" />
-              <button type="button" onClick={() => setSeed(randomSeed())} className="px-3 py-1.5 rounded-lg border border-n40 hover:bg-n20 hover:text-n800">随机</button>
-              <span className="min-w-52 flex-1 text-[11px] leading-5 text-n100">相同种子配合相同参数，更容易得到构图相近的结果；随机种子用于探索新的构图。</span>
-            </div>
+            <p className="text-[11px] leading-5 text-n100">在线模型会保留主体身份、画面风格和未指定变化的内容，并把结果保存为新的候选图片。</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-n40">
           <InlineCreditEstimate
-            featureKey={DESIGN_CREDIT_FEATURES.angleAdjustment}
+            featureKey={DESIGN_CREDIT_FEATURES.imageGeneration}
             params={creditParams}
-            fallbackCost={DESIGN_CREDIT_DEFAULTS.angleAdjustment}
+            fallbackCost={DESIGN_CREDIT_DEFAULTS.onlineImageOperation}
           />
           <div className="flex items-center gap-3">
             <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
             <button
-              onClick={() => { if (!cur || !gpuSelection?.usable) return; onSubmit({ imageUrl: cur.url, rotate, move, vertical, wideAngle, customPrompt: customPrompt.trim() || undefined, seed, gpu: gpuSelection }); }}
-              disabled={!cur || !gpuSelection?.usable}
-              title={!gpuSelection?.usable ? '请先选择一个可用处理节点' : undefined}
+              onClick={() => { if (!cur) return; onSubmit({ imageUrl: cur.url, rotate, move, vertical, wideAngle, customPrompt: customPrompt.trim() || undefined }); }}
+              disabled={!cur}
               className="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >生成新角度</button>
           </div>
@@ -2058,13 +2064,19 @@ const CameraModal: React.FC<{
 
 /* ======================== ProcessModal ======================== */
 const ProcessModal: React.FC<{
-  asset: AssetItem; materials: ModalMaterial[]; workflow: 'upscale_hd' | 'remove_watermark'; onClose: () => void; onSubmit: (payload: { materialUrl: string; gpu: GpuNodeSelection }) => void;
+  asset: AssetItem; materials: ModalMaterial[]; workflow: 'upscale_hd' | 'remove_watermark'; onClose: () => void; onSubmit: (payload: { materialUrl: string }) => void;
 }> = ({ asset, materials, workflow, onClose, onSubmit }) => {
   const [selId, setSelId] = useState(materials[0]?.id);
-  const [gpuSelection, setGpuSelection] = useState<GpuNodeSelection | null>(null);
   const cur = materials.find(m => m.id === selId) || materials[0];
-  const info = workflow === 'upscale_hd' ? { title: '高清放大', desc: 'AI放大到4K' } : { title: '去水印', desc: '智能移除水印' };
-  const creditParams = useMemo(() => designOperationCreditParams('upscale_hd'), []);
+  const info = workflow === 'upscale_hd'
+    ? { title: '高清放大', desc: '在线参考图模型重建为 4K 画面' }
+    : { title: '去水印', desc: '在线参考图模型重绘遮挡区域' };
+  const creditParams = useMemo(() => designImageCreditParams({
+    imageCount: 1,
+    model: ONLINE_IMAGE_OPERATION_BILLING_MODEL,
+    resolution: onlineImageOperationResolution(workflow),
+    aspectRatio: 'auto',
+  }), [workflow]);
   return (
     <div className="fixed inset-0 bg-n900/50 backdrop-blur flex items-center justify-center z-[130]" onClick={onClose}>
       <div className="w-full max-w-5xl bg-n0 border border-n40 rounded-2xl shadow-bottom p-6 space-y-5 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
@@ -2077,26 +2089,25 @@ const ProcessModal: React.FC<{
               <p className="mt-2 text-xs leading-5 text-n300">
                 {workflow === 'upscale_hd'
                   ? '对左侧选中的素材进行高清重建和细节增强，输出结果将作为新的素材版本保存。'
-                  : '对左侧选中的素材执行水印清理，输出结果将作为新的素材版本保存。'}
+                  : '仅处理您拥有或已获授权的图片。模型会重绘水印覆盖区域，输出结果将作为新的素材版本保存。'}
               </p>
             </div>
-            <GpuNodeSelector onSelectionChange={setGpuSelection} />
+            <div className="rounded-lg border border-primary/20 bg-primary-light px-3 py-2 text-xs leading-5 text-primary">
+              由{ONLINE_IMAGE_OPERATION_LABEL}在线处理，无需选择本地节点。
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-n40">
-          {workflow === 'upscale_hd' ? (
-            <InlineCreditEstimate
-              featureKey={DESIGN_CREDIT_FEATURES.upscaleHd}
-              params={creditParams}
-              fallbackCost={DESIGN_CREDIT_DEFAULTS.upscaleHd}
-            />
-          ) : <span />}
+          <InlineCreditEstimate
+            featureKey={DESIGN_CREDIT_FEATURES.imageGeneration}
+            params={creditParams}
+            fallbackCost={DESIGN_CREDIT_DEFAULTS.onlineImageOperation}
+          />
           <div className="flex items-center gap-3">
             <button onClick={onClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
             <button
-              onClick={() => { if (!cur || !gpuSelection?.usable) return; onSubmit({ materialUrl: cur.url, gpu: gpuSelection }); }}
-              disabled={!cur || !gpuSelection?.usable}
-              title={!gpuSelection?.usable ? '请先选择一个可用处理节点' : undefined}
+              onClick={() => { if (!cur) return; onSubmit({ materialUrl: cur.url }); }}
+              disabled={!cur}
               className={`px-5 py-2 rounded-lg text-xs font-bold text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ${workflow === 'upscale_hd' ? 'bg-primary hover:bg-primary-hover' : 'bg-primary hover:bg-primary-hover'}`}
             >开始处理</button>
           </div>

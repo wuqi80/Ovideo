@@ -586,7 +586,7 @@
         0
       ],
       "format": "auto",
-      "filename_prefix": "MECHA_ltx_morph"
+      "filename_prefix": "ostory_ltx_morph"
     },
     "class_type": "SaveVideo"
   },

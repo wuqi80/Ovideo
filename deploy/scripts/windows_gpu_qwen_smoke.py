@@ -14,8 +14,8 @@ from PIL import Image
 from windows_gpu_agent_runner import build_gpu2_qwen_workflow
 
 
-ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
-COMFYUI_URL = os.environ.get("MECHA_COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
+ROOT = Path(os.environ.get("OSTORY_GPU_ROOT", r"E:\OSTORY-GPU"))
+COMFYUI_URL = os.environ.get("OSTORY_COMFYUI_URL", "http://127.0.0.1:8188").rstrip("/")
 
 
 def build_probe_png() -> bytes:
@@ -27,7 +27,7 @@ def build_probe_png() -> bytes:
 def upload_probe_image(session: requests.Session) -> str:
     response = session.post(
         f"{COMFYUI_URL}/upload/image",
-        files={"image": ("mecha-gpu2-qwen-smoke.png", build_probe_png(), "image/png")},
+        files={"image": ("ostory-gpu2-qwen-smoke.png", build_probe_png(), "image/png")},
         data={"overwrite": "true"},
         timeout=30,
     )

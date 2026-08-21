@@ -269,7 +269,7 @@ def materialize_files(
 
 
 def write_readme(path: Path, summary: Dict[str, Any]) -> None:
-    content = f"""# MECHA Clean Storage Migration Package
+    content = f"""# OSTORY Clean Storage Migration Package
 
 Generated at: {summary['generated_at']}
 

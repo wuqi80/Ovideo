@@ -18,7 +18,7 @@
     "types": ["vite/client", "vitest/globals"],
     "baseUrl": ".",
     "paths": {
-      "@drama/*": ["../deploy/new_html/*"]
+      "@app/*": ["../deploy/new_html/*"]
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],

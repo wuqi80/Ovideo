@@ -13,9 +13,10 @@ describe('DesignPage image operation modals', () => {
     expect(source).not.toContain('type="range"');
   });
 
-  it('explains how the generation seed affects results', () => {
-    expect(source).toContain('相同种子配合相同参数，更容易得到构图相近的结果');
-    expect(source).toContain('随机种子用于探索新的构图');
+  it('explains online reference-image consistency and candidate persistence', () => {
+    expect(source).toContain('在线模型会保留主体身份、画面风格和未指定变化的内容');
+    expect(source).toContain('保存为新的候选图片');
+    expect(source).not.toContain('随机种子用于探索新的构图');
   });
 
   it('shares the green-border material picker across all image operations', () => {
@@ -28,7 +29,8 @@ describe('DesignPage image operation modals', () => {
     expect(source).toContain('max-w-5xl');
     expect(source).toContain("workflow === 'upscale_hd'");
     expect(source).toContain('对左侧选中的素材进行高清重建和细节增强');
-    expect(source).toContain('对左侧选中的素材执行水印清理');
+    expect(source).toContain('仅处理您拥有或已获授权的图片');
+    expect(source).toContain('模型会重绘水印覆盖区域');
   });
 
   it('does not read downstream material-stage images back into design', () => {

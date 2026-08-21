@@ -1,7 +1,7 @@
 /**
  * crmUI.tsx — Java 版 CRM（Element UI）操作范式的轻量复刻
  *
- * 目的：把 Drama 后台的「操作方式」对齐团队最熟悉的 wk_crm（Element UI）那套，
+ * 目的：为后台页面提供统一、可复用的管理端交互组件，
  * 仅改交互/视觉，不动任何业务功能。提供两部分：
  *
  *  1) 命令式消息/对话服务（替代浏览器原生 alert/confirm/prompt）：

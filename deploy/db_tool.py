@@ -310,7 +310,10 @@ async def reset_database(db):
     # 删除所有表
     await db.execute("DROP SCHEMA public CASCADE")
     await db.execute("CREATE SCHEMA public")
-    await db.execute("GRANT ALL ON SCHEMA public TO my2_user")
+    # Quote the configured role as an identifier; database ownership is a
+    # deployment concern and must not be coupled to a product-era username.
+    configured_role = db.config.USER.replace('"', '""')
+    await db.execute(f'GRANT ALL ON SCHEMA public TO "{configured_role}"')
     
     # 重新创建表
     schema_file = Path(__file__).parent / "database_schema.sql"

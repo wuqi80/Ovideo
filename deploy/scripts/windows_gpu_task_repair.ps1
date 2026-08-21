@@ -5,13 +5,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$root = "E:\MECHA-GPU"
+$root = "E:\OSTORY-GPU"
 $logDir = Join-Path $root "logs"
 $logFile = Join-Path $logDir "task-repair.log"
 $startAgentPath = Join-Path $root "start_agent.cmd"
 $startAgentScriptPath = Join-Path $root "scripts\windows_gpu_start_agent.cmd"
-$legacyH3TaskName = "MECHA-GPU-ComfyUI-H3"
-$startupGateTaskName = "MECHA-GPU-After-DFS"
+$legacyH3TaskName = "OSTORY-GPU-ComfyUI-H3"
+$startupGateTaskName = "OSTORY-GPU-After-DFS"
 
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
@@ -22,7 +22,7 @@ function Write-RepairLog {
         Out-File -FilePath $logFile -Append -Encoding utf8
 }
 
-function Register-MechaTaskCom {
+function Register-OstoryTaskCom {
     param(
         [string]$TaskName,
         [string]$CommandPath,
@@ -36,7 +36,7 @@ function Register-MechaTaskCom {
     $folder = $scheduler.GetFolder("\")
     $definition = $scheduler.NewTask(0)
 
-    $definition.RegistrationInfo.Description = "MECHA GPU startup task: $TaskName"
+    $definition.RegistrationInfo.Description = "OSTORY GPU startup task: $TaskName"
     $definition.Principal.UserId = "SYSTEM"
     $definition.Principal.LogonType = 5 # TASK_LOGON_SERVICE_ACCOUNT
     $definition.Principal.RunLevel = 1 # TASK_RUNLEVEL_HIGHEST
@@ -76,7 +76,7 @@ function Register-MechaTaskCom {
     )
 }
 
-function Register-MechaTask {
+function Register-OstoryTask {
     param(
         [string]$TaskName,
         [string]$CommandPath,
@@ -129,7 +129,7 @@ function Register-MechaTask {
                 $TaskName,
             $_.Exception.Message
         )
-        Register-MechaTaskCom `
+        Register-OstoryTaskCom `
             -TaskName $TaskName `
             -CommandPath $CommandPath `
             -StartupDelay $StartupDelay `
@@ -148,20 +148,20 @@ function Ensure-AgentServerAddress {
     }
 
     $content = Get-Content -Path $Path -Raw -Encoding UTF8
-    if ($content -match 'MECHA_SERVER_URL=') {
-        $replacement = ('set "MECHA_SERVER_URL={0}"' -f $ServerUrl)
+    if ($content -match 'OSTORY_SERVER_URL=') {
+        $replacement = ('set "OSTORY_SERVER_URL={0}"' -f $ServerUrl)
         $content = [regex]::Replace(
             $content,
-            'set\s+"?MECHA_SERVER_URL=.*',
+            'set\s+"?OSTORY_SERVER_URL=.*',
             $replacement
         )
     } else {
-        $content = "$content`r`nset MECHA_SERVER_URL=$ServerUrl"
+        $content = "$content`r`nset OSTORY_SERVER_URL=$ServerUrl"
     }
 
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $content, $utf8NoBom)
-    Write-RepairLog "Ensured MECHA_SERVER_URL=$ServerUrl in $Path"
+    Write-RepairLog "Ensured OSTORY_SERVER_URL=$ServerUrl in $Path"
 }
 
 function Ensure-AgentComfyUIPorts {
@@ -172,11 +172,11 @@ function Ensure-AgentComfyUIPorts {
     }
 
     $content = Get-Content -Path $Path -Raw -Encoding UTF8
-    $replacement = 'set MECHA_COMFYUI_PORTS=8188'
-    if ($content -match 'MECHA_COMFYUI_PORTS=') {
+    $replacement = 'set OSTORY_COMFYUI_PORTS=8188'
+    if ($content -match 'OSTORY_COMFYUI_PORTS=') {
         $content = [regex]::Replace(
             $content,
-            '(?im)^set\s+"?MECHA_COMFYUI_PORTS=.*$',
+            '(?im)^set\s+"?OSTORY_COMFYUI_PORTS=.*$',
             $replacement
         )
     } else {
@@ -185,11 +185,11 @@ function Ensure-AgentComfyUIPorts {
 
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $content, $utf8NoBom)
-    Write-RepairLog "Ensured MECHA_COMFYUI_PORTS=8188 in $Path"
+    Write-RepairLog "Ensured OSTORY_COMFYUI_PORTS=8188 in $Path"
 }
 
 Set-Content -Path $logFile -Value "" -Encoding utf8
-Write-RepairLog "Rebuilding MECHA GPU startup tasks without stopping running processes."
+Write-RepairLog "Rebuilding OSTORY GPU startup tasks without stopping running processes."
 
 Ensure-AgentServerAddress -Path $startAgentPath
 Ensure-AgentServerAddress -Path $startAgentScriptPath
@@ -198,14 +198,14 @@ Ensure-AgentComfyUIPorts -Path $startAgentScriptPath
 
 $taskDefinitions = @(
     @{
-        Name = "MECHA-GPU-ComfyUI"
+        Name = "OSTORY-GPU-ComfyUI"
         Command = Join-Path $root "start_comfyui.cmd"
         Delay = "PT0S"
         AtStartup = $false
         RestartCount = 0
     },
     @{
-        Name = "MECHA-GPU-Agent"
+        Name = "OSTORY-GPU-Agent"
         Command = Join-Path $root "start_agent.cmd"
         Delay = "PT0S"
         AtStartup = $false
@@ -224,7 +224,7 @@ foreach ($taskDefinition in $taskDefinitions) {
     if (-not (Test-Path $taskDefinition.Command)) {
         throw "Missing startup command: $($taskDefinition.Command)"
     }
-    Register-MechaTask `
+    Register-OstoryTask `
         -TaskName $taskDefinition.Name `
         -CommandPath $taskDefinition.Command `
         -StartupDelay $taskDefinition.Delay `

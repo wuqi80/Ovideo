@@ -30,7 +30,7 @@ async def test_create_api_config(test_db):
 async def test_get_api_key_decrypts(test_db):
     from dao_api_config import ApiConfigDAO
 
-    secret = "my-api-key-xyz"
+    secret = "test-placeholder-credential"
     created = await ApiConfigDAO.create(
         name="cfg-decrypt",
         provider="x",

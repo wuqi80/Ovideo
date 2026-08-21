@@ -40,7 +40,7 @@ def _atomic_write_json(path: Path, payload: dict) -> None:
 
 
 def verify(port: int, director_root: Path) -> dict:
-    commit_file = director_root / ".mecha-reviewed-commit"
+    commit_file = director_root / ".ostory-reviewed-commit"
     try:
         director_commit = commit_file.read_text(encoding="utf-8").strip()
     except OSError as exc:
@@ -78,7 +78,7 @@ def verify(port: int, director_root: Path) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8188)
-    parser.add_argument("--install-root", default=r"E:\MECHA-GPU")
+    parser.add_argument("--install-root", default=r"E:\OSTORY-GPU")
     parser.add_argument("--output", default="")
     args = parser.parse_args()
     install_root = Path(args.install_root)

@@ -44,7 +44,7 @@ describe('WorkspaceApp script workflow persistence', () => {
   });
 
   it('downloads a complete JSON workspace backup from the file column', () => {
-    expect(source).toContain("format: 'mecha-project-backup'");
+    expect(source).toContain("format: 'ostory-project-backup'");
     expect(source).toContain('const BACKUP_STORYBOARD_PAGE_SIZE = 200');
     expect(source).toContain('offset: storyboardRows.length');
     expect(source).toContain('mapWorkspaceStoryboardRowsToItems(persistedRows)');

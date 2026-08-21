@@ -25,9 +25,9 @@ class DatabaseConfig:
         return {
             'host': get_db_config_value('DB_HOST', 'localhost'),
             'port': int(get_db_config_value('DB_PORT', '5432')),
-            'database': get_db_config_value('DB_NAME', 'my2_db'),
-            'user': get_db_config_value('DB_USER', 'my2_user'),
-            'password': get_db_config_value('DB_PASSWORD', 'changeme'),
+            'database': get_db_config_value('DB_NAME', 'ostory_db'),
+            'user': get_db_config_value('DB_USER', 'ostory_user'),
+            'password': get_db_config_value('DB_PASSWORD', ''),
             'min_size': int(get_db_config_value('DB_POOL_MIN_SIZE', '10')),
             'max_size': int(get_db_config_value('DB_POOL_MAX_SIZE', '50')),
         }

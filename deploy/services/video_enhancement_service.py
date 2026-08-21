@@ -112,7 +112,7 @@ def build_video_upscale_workflow(
                 "audio": ["1", 2],
                 "frame_rate": 25,
                 "loop_count": 0,
-                "filename_prefix": "MECHA_video_upscale",
+                "filename_prefix": "OSTORY_video_upscale",
                 "format": "video/h264-mp4",
                 "pix_fmt": "yuv420p",
                 "crf": 20,

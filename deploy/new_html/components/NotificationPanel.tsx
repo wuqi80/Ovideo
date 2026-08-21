@@ -19,6 +19,7 @@ import { useTaskManager } from '../contexts/TaskContext';
 import type { RegisteredTask, SourcePage, TaskKind } from '../types';
 import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 import { formatPublicTaskText } from '../utils/publicTaskTerminology';
+import { getModelDisplayName } from '../services/videoModelService';
 
 // ===== 状态色板（窄域、克制） =====
 const STATUS_THEME = {
@@ -54,11 +55,17 @@ function getKindIcon(kind: TaskKind): React.FC<{ size?: number; className?: stri
 
 // ===== Kind label 中文 =====
 const KIND_LABEL: Record<string, string> = {
-    seedance: '飞升', 'seedance-fast': '渡劫', 'seedance-mini': '元婴', 'seedance-1.5': '视频生成',
-    wan2: '集群视频', 'wan2-fast': '集群视频 Fast',
-    kling: '合体', vidu: '大乘', happyhorse: '炼虚',
-    sora2: '化神', veo: '筑基',
-    'video-i2v': '图生视频', 'video-comfy': '集群视频',
+    seedance: getModelDisplayName('Seedance2'),
+    'seedance-fast': getModelDisplayName('Seedance2Fast'),
+    'seedance-mini': getModelDisplayName('Seedance2Mini'),
+    'seedance-1.5': '历史视频模型',
+    wan2: '历史视频模型', 'wan2-fast': '历史视频模型',
+    kling: getModelDisplayName('Kling'),
+    vidu: getModelDisplayName('Vidu'),
+    happyhorse: getModelDisplayName('HappyHorse'),
+    sora2: getModelDisplayName('Sora2'),
+    veo: getModelDisplayName('Veo'),
+    'video-i2v': '图生视频', 'video-comfy': '节点视频任务',
     'comfyui-image': '集群图片', 'gemini-image': 'AI 生图', 'doubao-image': '三阶 · 参考图',
     nanobanana: '一阶 · 快速', 'qwen-image': '二阶 · 多参考', 'qwen-lora': '二阶 · 风格', kontext: '三阶 · 高质量',
     matting: '抠图', 'angle-adjust': '角度调整',

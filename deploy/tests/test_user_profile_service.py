@@ -69,7 +69,7 @@ class _UserDAO:
         return {
             "user_id": user_id,
             "username": row["username"],
-            "password_hash": hashlib.sha256("old-secret".encode()).hexdigest(),
+            "password_hash": hashlib.sha256("test-placeholder-current".encode()).hexdigest(),
         }
 
     @classmethod
@@ -178,16 +178,16 @@ async def test_change_password_checks_current_hash_before_resetting():
         await svc.change_password(
             "user_1",
             current_password="wrong",
-            new_password="new-secret",
+            new_password="test-placeholder-replacement",
             user_dao=_UserDAO,
         )
 
     result = await svc.change_password(
         "user_1",
-        current_password="old-secret",
-        new_password="new-secret",
+        current_password="test-placeholder-current",
+        new_password="test-placeholder-replacement",
         user_dao=_UserDAO,
     )
 
     assert result == {"success": True}
-    assert _UserDAO.reset_calls == [{"user_id": "user_1", "new_password": "new-secret"}]
+    assert _UserDAO.reset_calls == [{"user_id": "user_1", "new_password": "test-placeholder-replacement"}]

@@ -11,7 +11,7 @@ from pathlib import Path
 import requests
 
 
-ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+ROOT = Path(os.environ.get("OSTORY_GPU_ROOT", r"E:\OSTORY-GPU"))
 LOG_DIR = ROOT / "logs"
 AGENT_DIR = ROOT / "agent"
 BASE_URL = "http://127.0.0.1:8188"
@@ -26,19 +26,19 @@ def main() -> None:
     workflow = build_gpu2_upscale_workflow(
         {"params": {"image_path": "example.png", "seed_0": 42}, "files": []}
     )
-    resolution = int(os.environ.get("MECHA_GPU_SMOKE_RESOLUTION", "64"))
+    resolution = int(os.environ.get("OSTORY_GPU_SMOKE_RESOLUTION", "64"))
     blocks_to_swap = int(
-        os.environ.get("MECHA_GPU_SMOKE_BLOCKS_TO_SWAP", workflow["2"]["inputs"]["blocks_to_swap"])
+        os.environ.get("OSTORY_GPU_SMOKE_BLOCKS_TO_SWAP", workflow["2"]["inputs"]["blocks_to_swap"])
     )
     workflow["2"]["inputs"]["blocks_to_swap"] = blocks_to_swap
     workflow["4"]["inputs"]["resolution"] = resolution
     workflow["4"]["inputs"]["max_resolution"] = max(128, resolution * 2)
-    workflow["5"]["inputs"]["filename_prefix"] = "MECHA_GPU2_smoke"
+    workflow["5"]["inputs"]["filename_prefix"] = "OSTORY_GPU2_smoke"
 
     started_at = time.time()
     response = requests.post(
         f"{BASE_URL}/prompt",
-        json={"prompt": workflow, "client_id": f"mecha-gpu2-smoke-{uuid.uuid4().hex}"},
+        json={"prompt": workflow, "client_id": f"ostory-gpu2-smoke-{uuid.uuid4().hex}"},
         timeout=60,
     )
     response.raise_for_status()

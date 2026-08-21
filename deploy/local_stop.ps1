@@ -12,7 +12,7 @@ foreach ($line in $listeners) {
 }
 
 if ($StopInfra) {
-    foreach ($name in @("drama-postgres", "drama-redis")) {
+    foreach ($name in @("ostory-postgres", "ostory-redis")) {
         $exists = docker ps -a --format "{{.Names}}" | Select-String "^$name$"
         if ($exists) {
             docker stop $name | Out-Null

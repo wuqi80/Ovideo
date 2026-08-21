@@ -48,7 +48,7 @@ describe('notificationMapping', () => {
 
         it('strips "已完成" suffix from title', () => {
             const t = mapNotificationToTask(row({ title: 'Seedance 视频生成 已完成' }));
-            expect(t!.title).toBe('飞升 视频生成');
+            expect(t!.title).toBe('四阶 · 多模态标准视频模型 视频生成');
         });
 
         it('translates legacy provider titles to current public model labels', () => {

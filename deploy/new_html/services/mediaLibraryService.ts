@@ -1,7 +1,6 @@
 /**
  * mediaLibraryService.ts
  * 2026-05-26 Slice 1 — 通用素材库前端 API 客户端
- * 详见 docs/superpowers/plans/2026-05-26-feature-rollout/01-media-library.md
  */
 
 import { apiBlob, apiJson } from './httpClient';

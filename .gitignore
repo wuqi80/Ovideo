@@ -11,7 +11,6 @@ deploy/new_html/ENV_SETUP_GUIDE.md
 # 生成《API密钥配置清单》的脚本，硬编码全部真实 key
 gen_api_doc.py
 # 上述脚本产出的密钥清单文档
-Drama系统-API密钥配置清单.docx
 # 密钥清单（markdown 版）
 API密钥清单.md
 # 注：server_setup.sh 是脱敏模板（key 用 __FILL_ME__ 占位），故【已入库】，不在此排除。

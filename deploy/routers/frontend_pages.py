@@ -55,7 +55,7 @@ def _serve_studio_spa():
     return HTMLResponse(
         """
         <html><body style="font-family: sans-serif; padding: 40px; text-align: center;">
-        <h1>MECHA Studio is not built</h1>
+        <h1>OSTORY Studio is not built</h1>
         <pre>cd ../studio &amp;&amp; npm run build</pre>
         </body></html>
         """,

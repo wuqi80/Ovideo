@@ -10,7 +10,6 @@
  *  - 主区: 网格 / 列表
  *  - 右侧详情面板（选中时）
  *
- * 详见 docs/superpowers/plans/2026-05-26-feature-rollout/01-media-library.md
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';

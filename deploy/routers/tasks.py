@@ -66,16 +66,16 @@ def _runtime_profile(request: GenerateRequest) -> str:
 
 
 def _local_gpu_maintenance() -> dict[str, Any]:
-    enabled = str(os.environ.get("MECHA_LOCAL_GPU_MAINTENANCE", "1")).strip().lower() in {
+    enabled = str(os.environ.get("OSTORY_LOCAL_GPU_MAINTENANCE", "1")).strip().lower() in {
         "1", "true", "yes", "on",
     }
     message = str(
         os.environ.get(
-            "MECHA_LOCAL_GPU_MAINTENANCE_MESSAGE",
+            "OSTORY_LOCAL_GPU_MAINTENANCE_MESSAGE",
             "本地 GPU 正在维护，当前不会接收新任务；外部 API 模型不受影响。",
         )
     ).strip()
-    resume_at = str(os.environ.get("MECHA_LOCAL_GPU_MAINTENANCE_RESUME_AT", "")).strip()
+    resume_at = str(os.environ.get("OSTORY_LOCAL_GPU_MAINTENANCE_RESUME_AT", "")).strip()
     return {
         "enabled": enabled,
         "message": message,

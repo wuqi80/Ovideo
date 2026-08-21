@@ -20,16 +20,16 @@ def test_windows_gpu_task_repair_registers_all_startup_services_safely():
     launcher = (SCRIPTS_DIR / "windows_gpu_task_repair.cmd").read_text(encoding="utf-8")
 
     assert repair_script.lstrip().startswith("param(")
-    assert repair_script.count("function Register-MechaTaskCom") == 1
+    assert repair_script.count("function Register-OstoryTaskCom") == 1
     assert repair_script.count("function Ensure-AgentComfyUIPorts") == 1
     assert "-LogonType ServiceAccount" in repair_script
-    assert 'Name = "MECHA-GPU-ComfyUI"' in repair_script
-    assert '\n        Name = "MECHA-GPU-ComfyUI-H3"' not in repair_script
-    assert 'Name = "MECHA-GPU-Agent"' in repair_script
+    assert 'Name = "OSTORY-GPU-ComfyUI"' in repair_script
+    assert '\n        Name = "OSTORY-GPU-ComfyUI-H3"' not in repair_script
+    assert 'Name = "OSTORY-GPU-Agent"' in repair_script
     assert 'Disable-ScheduledTask -TaskName $legacyH3TaskName' in repair_script
     assert 'Ensure-AgentComfyUIPorts -Path $startAgentPath' in repair_script
     assert 'Ensure-AgentComfyUIPorts -Path $startAgentScriptPath' in repair_script
-    assert '$startupGateTaskName = "MECHA-GPU-After-DFS"' in repair_script
+    assert '$startupGateTaskName = "OSTORY-GPU-After-DFS"' in repair_script
     assert repair_script.count('\n        AtStartup = $false') == 2
     assert repair_script.count('\n        AtStartup = $true') == 1
     assert 'Triggered DFS-gated startup task $startupGateTaskName' in repair_script
@@ -44,10 +44,10 @@ def test_windows_gpu_task_repair_registers_all_startup_services_safely():
 def test_windows_gpu_agent_start_defaults_to_public_backend_and_both_gpu2_ports():
     launcher = (SCRIPTS_DIR / "windows_gpu_start_agent.cmd").read_text(encoding="utf-8")
 
-    assert 'MECHA_SERVER_URL=https://tv.ostory.ai' in launcher
-    assert 'MECHA_COMFYUI_PORTS=8188' in launcher
-    assert 'set MECHA_COMFYUI_PORTS=8188' in launcher
-    assert 'MECHA_GPU_AGENT_MAINTENANCE=1' in launcher
+    assert 'OSTORY_SERVER_URL=https://tv.ostory.ai' in launcher
+    assert 'OSTORY_COMFYUI_PORTS=8188' in launcher
+    assert 'set OSTORY_COMFYUI_PORTS=8188' in launcher
+    assert 'OSTORY_GPU_AGENT_MAINTENANCE=1' in launcher
 
 
 def test_windows_gpu_dfs_gate_uses_only_the_fixed_http_readiness_contract():
@@ -63,8 +63,8 @@ def test_windows_gpu_dfs_gate_uses_only_the_fixed_http_readiness_contract():
     assert "$payload.ready -eq $true" in gate
     assert "Start-Sleep -Seconds $stabilizationSeconds" in gate
     assert 'http://127.0.0.1:8188/system_stats' in gate
-    assert "Start-MechaScheduledTask -TaskName $wanTaskName" in gate
-    assert "Start-MechaScheduledTask -TaskName $agentTaskName" in gate
+    assert "Start-OstoryScheduledTask -TaskName $wanTaskName" in gate
+    assert "Start-OstoryScheduledTask -TaskName $agentTaskName" in gate
     assert "vmware-vmx" not in gate.lower()
     assert "4210" not in gate
     assert "Test-NetConnection" not in gate

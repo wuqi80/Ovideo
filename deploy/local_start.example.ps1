@@ -25,19 +25,19 @@ function Ensure-Container($Name, $Image, $RunArgs) {
     docker run -d --name $Name @RunArgs $Image | Out-Null
 }
 
-Ensure-Container "drama-postgres" "postgres:17-alpine" @(
-    "-e", "POSTGRES_USER=my2_user",
+Ensure-Container "ostory-postgres" "postgres:17-alpine" @(
+    "-e", "POSTGRES_USER=ostory_user",
     "-e", "POSTGRES_PASSWORD=<FILL_ME_DB_PASSWORD>",
-    "-e", "POSTGRES_DB=my2_db",
+    "-e", "POSTGRES_DB=ostory_db",
     "-p", "5432:5432"
 )
 
-Ensure-Container "drama-redis" "redis:7.0-alpine" @(
+Ensure-Container "ostory-redis" "redis:7.0-alpine" @(
     "-p", "6379:6379"
 )
 
 for ($i = 0; $i -lt 60; $i++) {
-    docker exec drama-postgres pg_isready -U my2_user -d my2_db | Out-Null
+    docker exec ostory-postgres pg_isready -U ostory_user -d ostory_db | Out-Null
     if ($LASTEXITCODE -eq 0) { break }
     Start-Sleep -Seconds 1
 }
@@ -53,8 +53,7 @@ foreach ($dir in @(
     New-Item -ItemType Directory -Force -Path (Join-Path $Root $dir) | Out-Null
 }
 
-$SeedPython = "C:\Users\Administrator\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-if (-not (Test-Path $SeedPython)) { $SeedPython = "python" }
+$SeedPython = if ($env:OSTORY_PYTHON_BIN) { $env:OSTORY_PYTHON_BIN } else { "python" }
 if (-not (Test-Path ".\.venv\Scripts\python.exe")) { & $SeedPython -m venv .venv }
 
 $DepsOk = $false
@@ -91,8 +90,8 @@ if (-not $Listening) {
         "PYTHONIOENCODING"     = "utf-8"
         "DB_HOST"              = "localhost"
         "DB_PORT"              = "5432"
-        "DB_NAME"              = "my2_db"
-        "DB_USER"              = "my2_user"
+        "DB_NAME"              = "ostory_db"
+        "DB_USER"              = "ostory_user"
         "DB_PASSWORD"          = "<FILL_ME_DB_PASSWORD>"
         "REDIS_HOST"           = "localhost"
         "REDIS_PORT"           = "6379"

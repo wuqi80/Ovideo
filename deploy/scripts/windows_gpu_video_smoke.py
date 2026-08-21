@@ -13,7 +13,7 @@ import imageio_ffmpeg
 import requests
 
 
-ROOT = Path(os.environ.get("MECHA_GPU_ROOT", r"E:\MECHA-GPU"))
+ROOT = Path(os.environ.get("OSTORY_GPU_ROOT", r"E:\OSTORY-GPU"))
 LOG_DIR = ROOT / "logs"
 AGENT_DIR = ROOT / "agent"
 BASE_URL = "http://127.0.0.1:8188"
@@ -75,12 +75,12 @@ def main() -> None:
     workflow["4"]["inputs"]["resolution"] = 64
     workflow["4"]["inputs"]["max_resolution"] = 128
     workflow["5"]["inputs"].pop("audio", None)
-    workflow["5"]["inputs"]["filename_prefix"] = "MECHA_GPU2_video_smoke"
+    workflow["5"]["inputs"]["filename_prefix"] = "OSTORY_GPU2_video_smoke"
 
     started_at = time.time()
     response = requests.post(
         f"{BASE_URL}/prompt",
-        json={"prompt": workflow, "client_id": f"mecha-video-smoke-{uuid.uuid4().hex}"},
+        json={"prompt": workflow, "client_id": f"ostory-video-smoke-{uuid.uuid4().hex}"},
         timeout=60,
     )
     response.raise_for_status()

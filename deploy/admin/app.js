@@ -1025,15 +1025,14 @@ async function fetchApiConfigs() {
 }
 
 function guessApiCategory(config) {
-  // 2026-05-24：优先用 DB 持久化的 category 字段。
-  // 历史背景：早期 schema 没这一列、import-presets 也没透传，
-  //   所以老配置可能 category='' → 退回到关键词推断。
-  // 详见 docs/faq.md 2026-05-24 条目 + recurring-pitfalls.md §S。
+  // Persisted category is authoritative. Keyword inference is only a read-time
+  // compatibility path for rows created before category became required.
   const cat = (config.category || '').toLowerCase();
   if (cat === 'text' || cat === 'image' || cat === 'video' || cat === 'audio') {
     return cat;
   }
-  // 兜底：关键词推断（model_name 也参与，处理 "doubao-seedance-2-0" 这种被 'doubao' 误抓到 image 的情况）
+  // Check model_name as well as provider; a provider family may expose more than
+  // one media capability.
   const p = (config.provider || '').toLowerCase();
   const m = (config.model_name || '').toLowerCase();
   // video 优先（覆盖 doubao-seedance 等组合命名）
@@ -1356,7 +1355,7 @@ async function saveGlobalSettings() {
 }
 
 /* ────────────────── Init ────────────────── */
-// refactor/v2：支持被统一后台壳以 <iframe> 内嵌。
+// 当前架构：支持被统一后台壳以 <iframe> 内嵌。
 //  - URL hash 深链：/admin-legacy/#cluster 直接打开对应页（dashboard/cluster/workflows/apiconfig）
 //  - ?embed=1：隐藏旧版自带侧栏（导航交给壳的层级菜单），只显示内容区，营造「一个后台」体验
 const VALID_PAGES = ['dashboard', 'cluster', 'workflows', 'apiconfig'];

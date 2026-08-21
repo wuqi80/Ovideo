@@ -68,7 +68,6 @@ class ProjectDAO:
         权限前提（user 是否 org_id 成员）由调用方校验。
 
         2026-05-26 组织管理 MVP — Slice 3
-        详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5.4
         """
         db = get_db_manager()
         columns = ("p.id, p.project_id, p.user_id, p.project_name, p.description, p.cover_url, p.tags, "

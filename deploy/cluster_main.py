@@ -447,14 +447,9 @@ async def lifespan(app: FastAPI):
         logger.info(f"Workers: {WorkerConfig.NUM_WORKERS}")
         logger.info("=" * 60)
     else:
-        # ============================================
-        # 2026-05-26 Follow-up A：lite Worker 模式
-        #   原行为：AGENT_ONLY_MODE=true 完全不起 Worker → minimax_tts/seedance/kling/vidu/
-        #   happyhorse/sora2/veo/wan26/video_reverse_prompt 等外部 API 任务全部死在 Redis 队列。
-        #   现行为：起 N 个 lite Worker（cluster_manager=None），只消费外部 API 任务；
-        #   ComfyUI workflow 任务会被 worker._process_task 顶部守卫丢回队列让外部 agent 拿。
-        #   详见 docs/faq.md 2026-05-26 "AGENT_ONLY_MODE 二选一陷阱" + worker.py is_external_api_task()。
-        # ============================================
+        # Lite workers keep provider-backed HTTP tasks moving without claiming
+        # ComfyUI workflow ownership. The worker guard requeues workflow tasks so
+        # external agents can poll them.
         lite_count = max(0, int(SystemConfig.LITE_WORKERS_COUNT))
         if lite_count > 0:
             logger.info(f"启动 {lite_count} 个 lite Worker（只消费外部 API 任务，ComfyUI 任务交给 agent）...")
@@ -739,13 +734,10 @@ try:
 except Exception as e:
     logger.warning(f"无法挂载storage目录: {e}")
 
-# 🆕 挂载旧版管理后台前端（Cluster Admin 静态控制台：仪表盘 / 集群管理 / 工作流管理 / API 密钥）
-# 2026-05-26：mount path 从 /admin → /admin-legacy，把 /admin/* 完全让给新的 React Admin Shell。
-#  - 历史问题：原来 mount("/admin", StaticFiles, html=True) 会拦截 /admin/login、/admin/operations 等，
-#    使新版独立后台 React 路由永远 404（详见 docs/faq.md 2026-05-26 "/admin/login 404"）。
-#  - 旧版 admin/index.html 用相对路径加载 style.css / app.js / 调用绝对路径 /api/admin/*，
-#    搬到 /admin-legacy/ 后所有内部链接仍正常工作（相对路径自动变 /admin-legacy/style.css）。
-#  - 新版 React Admin Shell 的外链由 AdminLayout / AdminHubPage / AdminSettingsPage 直接指向 /admin-legacy/。
+# Mount the compatibility console under a disjoint prefix. `/admin/*` belongs to
+# the React shell; mounting static HTML there would intercept client-side routes.
+# Relative assets keep working under `/admin-legacy/`, while API calls remain on
+# their absolute `/api/admin/*` paths.
 admin_dir = os.path.join(os.path.dirname(__file__), "admin")
 if os.path.exists(admin_dir):
     try:
@@ -1022,7 +1014,6 @@ app.include_router(api_router, prefix="", tags=["V2 API - Database"])
 logger.info("✅ 数据库API路由已注册")
 
 # 2026-05-26 Slice 1: Media Library 路由
-# 详见 docs/superpowers/plans/2026-05-26-feature-rollout/01-media-library.md
 app.include_router(media_library_router)
 logger.info("✅ Media Library API 路由已注册 (/api/media-library)")
 
@@ -1031,7 +1022,6 @@ app.include_router(create_final_product_share_router(get_current_user_dependency
 logger.info("✅ Final Product Share API 路由已注册 (/api/final-products, /api/public/final-products)")
 
 # 2026-05-26 组织管理 MVP Slice 4: 资源共享路由
-# 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5.3
 try:
     from share_routes import router as share_router
     app.include_router(share_router)
@@ -1040,12 +1030,10 @@ except Exception as e:
     logger.warning(f"⚠️ Resource Share 路由注册失败（不阻塞启动）: {e}")
 
 # 2026-05-26 Slice 2: 积分系统路由
-# 详见 docs/superpowers/plans/2026-05-26-feature-rollout/02-credits.md
 app.include_router(credit_router)
 logger.info("✅ Credits API 路由已注册 (/api/credits)")
 
 # 2026-05-26 Slice 3: 视频反推提示词路由
-# 详见 docs/superpowers/plans/2026-05-26-feature-rollout/03-video-reverse.md
 app.include_router(video_reverse_router)
 logger.info("✅ Video Reverse API 路由已注册 (/api/video-reverse)")
 

@@ -4,32 +4,27 @@ from pathlib import Path
 DEPLOY_DIR = Path(__file__).resolve().parents[1]
 
 
-def test_live_deploy_publishes_gpu_agent_for_self_update():
+def test_container_entrypoint_publishes_gpu_agent_for_self_update():
     script = (
-        DEPLOY_DIR / "scripts" / "live_deploy_mvc2.sh"
+        DEPLOY_DIR / "containers" / "entrypoint.sh"
     ).read_text(encoding="utf-8")
 
-    assert 'GPU_AGENT_SOURCE_DIR="pipeline"' in script
-    assert 'GPU_AGENT_SOURCE_NAME="comfyui_agent.py"' in script
-    assert 'GPU_AGENT_REMOTE_REL="persistent_storage/tools/$GPU_AGENT_SOURCE_NAME"' in script
-    assert 'cp "$GPU_AGENT_SOURCE_DIR/$GPU_AGENT_SOURCE_NAME"' in script
-    assert '"$STAGING_DIR/$GPU_AGENT_REMOTE_REL"' in script
-    assert 'PROCESSING_AGENT_PUBLIC_NAME="processing_agent.py"' in script
-    assert '"$STAGING_DIR/$PROCESSING_AGENT_REMOTE_REL"' in script
-    assert 'GPU_AGENT_PUBLIC_TOOL_FILES=(' in script
-    assert '"scripts/windows_gpu_agent_runner.py"' in script
-    assert '"scripts/windows_gpu_resource_guard.py"' in script
-    assert '"scripts/windows_gpu_cleanup_port.ps1"' in script
-    assert '"scripts/windows_gpu_wait_for_dfs.ps1"' in script
-    assert '"scripts/windows_gpu_wait_for_dfs.cmd"' in script
-    assert '"scripts/windows_gpu_h3_setup.ps1"' in script
-    assert '"scripts/windows_gpu_h3_smoke.py"' in script
-    assert '"scripts/windows_gpu_h3_sage_verify.py"' in script
-    assert '"scripts/windows_gpu_h3_long_video_verify.py"' in script
-    assert '"scripts/windows_gpu_start_music3_comfyui.cmd"' in script
-    assert '"scripts/windows_gpu_start_music3_comfyui.ps1"' in script
-    assert '"scripts/windows_gpu_music3_compat_patch.py"' in script
-    assert 'persistent_storage/tools/$tool_name' in script
+    assert "cp pipeline/comfyui_agent.py persistent_storage/tools/processing_agent.py" in script
+    assert "for tool_name in" in script
+    assert "windows_gpu_agent_runner.py" in script
+    assert "windows_gpu_resource_guard.py" in script
+    assert "windows_gpu_cleanup_port.ps1" in script
+    assert "windows_gpu_wait_for_dfs.ps1" in script
+    assert "windows_gpu_wait_for_dfs.cmd" in script
+    assert "windows_gpu_h3_setup.ps1" in script
+    assert "windows_gpu_h3_smoke.py" in script
+    assert "windows_gpu_h3_sage_verify.py" in script
+    assert "windows_gpu_h3_long_video_verify.py" in script
+    assert "windows_gpu_start_music3_comfyui.cmd" in script
+    assert "windows_gpu_start_music3_comfyui.ps1" in script
+    assert "windows_gpu_music3_compat_patch.py" in script
+    assert 'cp "scripts/$tool_name"' in script
+    assert '"persistent_storage/tools/$tool_name"' in script
 
 
 def test_gpu_agent_version_keeps_control_capability_marker():
@@ -96,7 +91,7 @@ def test_gpu_agent_heartbeats_on_a_background_thread_during_long_tasks():
 
     assert "def _heartbeat_loop(self):" in source
     assert "self._start_heartbeat_thread()" in source
-    assert 'name="mecha-agent-heartbeat"' in source
+    assert 'name="ostory-agent-heartbeat"' in source
     assert "self._heartbeat_stop.wait(HEARTBEAT_INTERVAL)" in source
 
 
@@ -107,7 +102,7 @@ def test_h3_setup_updates_legacy_and_public_agent_start_commands():
 
     assert "$LegacyAgentStartCmd" in source
     assert 'foreach ($candidate in @($AgentStartCmd, $LegacyAgentStartCmd))' in source
-    assert "MECHA GPU ComfyUI H3 LAN" in source
+    assert "OSTORY GPU ComfyUI H3 LAN" in source
     assert "RestartAgent" in source
     assert "-c $pythonScript" not in source
     assert "HuggingFaceEndpoint" in source
@@ -159,8 +154,8 @@ def test_windows_gpu_install_defaults_agent_task_claims_to_maintenance():
         DEPLOY_DIR / "scripts" / "windows_gpu_node_install.ps1"
     ).read_text(encoding="utf-8")
 
-    assert "set MECHA_GPU_AGENT_MAINTENANCE=1" in installer
+    assert "set OSTORY_GPU_AGENT_MAINTENANCE=1" in installer
     assert (
-        '"E:\\MECHA-GPU\\ComfyUI_windows_portable\\python_embeded\\python.exe" '
-        '-s "E:\\MECHA-GPU\\ComfyUI_windows_portable\\ComfyUI\\main.py"'
+        '"E:\\OSTORY-GPU\\ComfyUI_windows_portable\\python_embeded\\python.exe" '
+        '-s "E:\\OSTORY-GPU\\ComfyUI_windows_portable\\ComfyUI\\main.py"'
     ) in installer

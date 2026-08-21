@@ -14,7 +14,7 @@ class _Response:
 
 
 def _agent(tmp_path, monkeypatch):
-    monkeypatch.setenv("MECHA_AGENT_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("OSTORY_AGENT_STATE_DIR", str(tmp_path))
     return ComfyUIAgent("https://tv.ostory.ai", "token", [8188])
 
 

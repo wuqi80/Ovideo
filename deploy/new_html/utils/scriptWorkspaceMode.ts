@@ -1,7 +1,7 @@
 export type ScriptWorkspaceMode = 'writing' | 'quick' | 'reverse';
 
 export const DEFAULT_SCRIPT_WORKSPACE_MODE: ScriptWorkspaceMode = 'writing';
-export const SCRIPT_WORKSPACE_MODE_STORAGE_PREFIX = 'mecha:script-workspace-mode:v1';
+export const SCRIPT_WORKSPACE_MODE_STORAGE_PREFIX = 'ostory:script-workspace-mode:v1';
 
 type ScriptWorkspaceModeStorage = Pick<Storage, 'getItem' | 'setItem'>;
 

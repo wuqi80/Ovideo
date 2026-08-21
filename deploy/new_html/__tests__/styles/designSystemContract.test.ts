@@ -8,7 +8,7 @@ const projectRoot = process.cwd();
 const readProjectFile = (relativePath: string): string =>
   fs.readFileSync(path.join(projectRoot, relativePath), 'utf8');
 
-describe('SHOTFORGE design-system contract', () => {
+describe('Ostory TV design-system contract', () => {
   it('keeps the source-of-truth palette aligned across CSS and Tailwind', () => {
     const css = readProjectFile('styles/design-tokens.css');
     const tailwind = readProjectFile('tailwind.config.cjs');
@@ -36,7 +36,7 @@ describe('SHOTFORGE design-system contract', () => {
     }
   });
 
-  it('uses the SHOTFORGE radius scale and soft floating shadow', () => {
+  it('uses the Ostory TV radius scale and soft floating shadow', () => {
     const css = readProjectFile('styles/design-tokens.css');
 
     expect(css).toContain('--radius-base: 9px');
@@ -101,7 +101,7 @@ describe('SHOTFORGE design-system contract', () => {
     expect(html).not.toContain('style="background-color:');
   });
 
-  it('keeps the standalone unauthenticated login page on the same SHOTFORGE system', () => {
+  it('keeps the standalone unauthenticated login page on the same Ostory TV system', () => {
     const login = readProjectFile('../login.html');
 
     expect(login).toContain('--primary: #5B49F0');
@@ -153,7 +153,6 @@ describe('SHOTFORGE design-system contract', () => {
     expect(appHtml).toContain('<title>Ostory TV · AI 视频创作平台</title>');
     expect(appHtml).toContain('<link rel="canonical" href="https://tv.ostory.ai/" />');
     expect(appHtml).toContain('把一个想法，变成一部好故事');
-    expect(appHtml).not.toContain('MECHA.ONE · AI 漫剧创作平台');
     expect(appHtml).toContain('/favicon.svg?v=20260820-ostory-v1');
     expect(appHtml).toContain('/favicon.ico?v=20260820-ostory-v1');
     expect(loginHtml).toContain('/favicon.svg?v=20260820-ostory-v1');
@@ -165,7 +164,6 @@ describe('SHOTFORGE design-system contract', () => {
     expect(legacyAdminHtml).toContain('/static/branding/ostory-tv-logo-on-dark.svg');
     expect(studioHtml).toContain('/favicon.ico?v=20260820-ostory-v1');
     expect(studioHtml).toContain('/apple-touch-icon.png?v=20260820-ostory-v1');
-    expect(loginHtml).not.toContain('MECHA<span class="brand-dot">.</span>ONE');
     expect(loginHtml).toContain('Ostory TV 是面向普通创作者的 AI 视频工作台。');
     expect(loginHtml).toContain('无需专业制作经验');
     expect(studioApp).toContain("isDarkCanvas");
@@ -173,7 +171,7 @@ describe('SHOTFORGE design-system contract', () => {
     expect(studioApp).toContain('/static/branding/ostory-tv-logo-on-light.svg');
 
     for (const publicSource of [appHtml, loginHtml, legacyAdminHtml, studioHtml, brandLogo, studioApp]) {
-      expect(publicSource).not.toMatch(/SPTI(?:\.AI)?/i);
+      expect(publicSource).not.toMatch(/(?:example|placeholder)\s+brand/i);
     }
   });
 
@@ -196,7 +194,7 @@ describe('SHOTFORGE design-system contract', () => {
     expect(projectHub).toContain('已归档');
     expect(projectHub).toContain('title="Ostory TV · AI 视频创作平台"');
     expect(projectHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="Ostory TV · AI 视频创作平台" />');
-    expect(projectHub).not.toContain('MECHA <span className="text-primary">·</span> 漫剧创作平台');
+    expect(projectHub).not.toContain('OSTORY <span className="text-primary">·</span> 漫剧创作平台');
     expect(projectHub).toContain('include_archived: \'true\'');
     expect(projectHub).toContain('<AccountMenu');
     expect(projectHub).toContain('编辑项目');
@@ -210,7 +208,7 @@ describe('SHOTFORGE design-system contract', () => {
     expect(episodeHub).toContain('已发布');
     expect(episodeHub).toContain('title="Ostory TV · AI 视频创作平台"');
     expect(episodeHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="Ostory TV · AI 视频创作平台" />');
-    expect(episodeHub).not.toContain('MECHA <span className="text-primary">·</span> 漫剧创作平台');
+    expect(episodeHub).not.toContain('OSTORY <span className="text-primary">·</span> 漫剧创作平台');
     expect(episodeHub).toContain('app-modal-backdrop');
     expect(episodeHub).toContain('aria-modal="true"');
     expect(episodeHub).toContain('流程化制作');

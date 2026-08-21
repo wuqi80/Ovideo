@@ -8,7 +8,6 @@ Share Routes — `/api/shares`
 挂载方式：cluster_main.py 中 `from share_routes import router as share_router`，
 然后 `app.include_router(share_router)`。
 
-详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §5.3
 """
 from __future__ import annotations
 

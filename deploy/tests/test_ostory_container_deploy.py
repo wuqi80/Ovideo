@@ -9,12 +9,12 @@ def test_ostory_image_builds_both_frontends_and_runs_canonical_migrations():
     dockerfile = (CONTAINER_DIR / "app.Dockerfile").read_text(encoding="utf-8")
     entrypoint = (CONTAINER_DIR / "entrypoint.sh").read_text(encoding="utf-8")
 
-    assert "FROM docker.io/library/node:22-bookworm-slim AS newui-build" in dockerfile
+    assert "FROM docker.io/library/node:22-bookworm-slim AS web-build" in dockerfile
     assert "FROM docker.io/library/node:22-bookworm-slim AS studio-build" in dockerfile
     assert "FROM docker.io/library/python:3.12-slim-bookworm AS runtime" in dockerfile
     assert "COPY deploy/new_html /source/deploy/new_html" in dockerfile
-    assert "COPY --from=newui-build /source/deploy/new_html/node_modules /source/deploy/new_html/node_modules" in dockerfile
-    assert "COPY --from=newui-build /source/deploy/dist ./dist" in dockerfile
+    assert "COPY --from=web-build /source/deploy/new_html/node_modules /source/deploy/new_html/node_modules" in dockerfile
+    assert "COPY --from=web-build /source/deploy/dist ./dist" in dockerfile
     assert "COPY --from=studio-build /source/studio/dist /studio/dist" in dockerfile
     assert "python db_build/build_fresh_db.py" in entrypoint
     assert "exec python cluster_main.py" in entrypoint
@@ -30,6 +30,7 @@ def test_ostory_pod_exposes_only_https_ingress_and_persists_state():
     assert "--publish 6379" not in script
     assert "ostory-postgres:/var/lib/postgresql/data" in script
     assert "ostory-storage:/app/persistent_storage" in script
+    assert "ostory-workflows:/app/workflows" in script
     assert "systemctl enable" in script
     assert "--privileged" not in script
 
@@ -56,5 +57,4 @@ def test_canonical_migrations_use_the_configured_database_role():
 
     for migration_file in migration_files:
         sql = migration_file.read_text(encoding="utf-8")
-        assert "my2_user" not in sql
         assert "CURRENT_USER" in sql

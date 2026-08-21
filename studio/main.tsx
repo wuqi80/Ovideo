@@ -2,10 +2,10 @@ import React, { useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layers3 } from 'lucide-react';
-import { TaskProvider } from '@drama/contexts/TaskContext';
-import { getAuthToken } from '@drama/services/httpClient';
+import { TaskProvider } from '@app/contexts/TaskContext';
+import { getAuthToken } from '@app/services/httpClient';
 import { App } from './App';
-import { createDramaRuntime } from './platform/dramaRuntime';
+import { createOstoryRuntime } from './platform/ostoryRuntime';
 import { StudioRuntimeProvider } from './services/runtime';
 // 品牌字体（构建期打包，不依赖外网 CDN）：Sora 标题 / Space Mono 编号标签；中文回退系统字体
 import '@fontsource/sora/600.css';
@@ -37,7 +37,7 @@ function StudioEntry() {
 
   const runtime = useMemo(() => (
     projectId && episodeId
-      ? createDramaRuntime({ projectId, episodeId, returnTo })
+      ? createOstoryRuntime({ projectId, episodeId, returnTo })
       : null
   ), [episodeId, projectId, returnTo]);
 

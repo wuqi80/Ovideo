@@ -9,8 +9,9 @@
 #
 # 手动跑：bash ~/deploy/scripts/backfill_media_library.sh
 set -e
+DB_NAME="${DB_NAME:-ostory_db}"
 
-sudo -u postgres psql my2_db <<'SQL'
+sudo -u postgres psql "$DB_NAME" <<'SQL'
 INSERT INTO media_library_items
   (library_item_id, file_id, user_id, item_type, source, title,
    project_id, episode_id, source_entity_type, source_entity_id, created_at)

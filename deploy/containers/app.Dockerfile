@@ -1,4 +1,4 @@
-FROM docker.io/library/node:22-bookworm-slim AS newui-build
+FROM docker.io/library/node:22-bookworm-slim AS web-build
 WORKDIR /source/deploy/new_html
 COPY deploy/new_html/package.json deploy/new_html/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -11,7 +11,7 @@ COPY studio/package.json studio/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY studio ./
 COPY deploy/new_html /source/deploy/new_html
-COPY --from=newui-build /source/deploy/new_html/node_modules /source/deploy/new_html/node_modules
+COPY --from=web-build /source/deploy/new_html/node_modules /source/deploy/new_html/node_modules
 RUN npm run build
 
 FROM docker.io/library/python:3.12-slim-bookworm AS runtime
@@ -29,7 +29,7 @@ COPY deploy/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY deploy ./
-COPY --from=newui-build /source/deploy/dist ./dist
+COPY --from=web-build /source/deploy/dist ./dist
 COPY --from=studio-build /source/studio/dist /studio/dist
 RUN chmod 0755 ./containers/entrypoint.sh \
     && mkdir -p persistent_storage temp/uploads uploads outputs logs history

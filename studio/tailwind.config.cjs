@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-// 分镜工坊 / SHOTFORGE 色板（与 deploy/new_html 同一 DESIGN.md 契约）：
+// Ostory TV palette shared with deploy/new_html through the DESIGN.md contract.
 // 覆盖默认 Tailwind 色阶——cyan/sky/blue=品牌紫罗兰、slate/zinc=暖中性、
 // emerald/green=成功绿、pink/orange=品牌橙、teal=信息蓝、red/rose=错误红、amber/yellow=琥珀。
 const violet = {

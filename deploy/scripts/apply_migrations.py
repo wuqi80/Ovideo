@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
     git_sha TEXT
 )
 """
-LOCK_NAME = "mecha:schema_migrations"
+LOCK_NAME = "ostory:schema_migrations"
 TRANSACTION_CONTROL = re.compile(r"^\s*(BEGIN|COMMIT|ROLLBACK)\s*;\s*$", re.IGNORECASE | re.MULTILINE)
 
 # These two migrations were first applied from a pre-commit production build.
@@ -262,8 +262,8 @@ async def async_main(args: argparse.Namespace) -> int:
     conn = await asyncpg.connect(
         host=os.getenv("DB_HOST", "localhost"),
         port=int(os.getenv("DB_PORT", "5432")),
-        database=os.getenv("DB_NAME", "my2_db"),
-        user=os.getenv("DB_USER", "my2_user"),
+        database=os.getenv("DB_NAME", "ostory_db"),
+        user=os.getenv("DB_USER", "ostory_user"),
         password=os.getenv("DB_PASSWORD", ""),
     )
     try:

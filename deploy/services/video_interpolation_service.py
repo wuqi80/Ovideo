@@ -53,7 +53,7 @@ def build_video_interpolation_workflow(
                 "audio": ["1", 2],
                 "frame_rate": output_fps,
                 "loop_count": 0,
-                "filename_prefix": "MECHA_interpolate",
+                "filename_prefix": "OSTORY_interpolate",
                 "format": "video/h264-mp4",
                 "pix_fmt": "yuv420p",
                 "crf": 20,

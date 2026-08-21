@@ -1,6 +1,6 @@
 export type StudioCanvasTheme = 'light' | 'dark';
 
-export const STUDIO_CANVAS_THEME_STORAGE_KEY = 'mecha.studio.canvas-theme';
+export const STUDIO_CANVAS_THEME_STORAGE_KEY = 'ostory.studio.canvas-theme';
 
 type ThemeStorage = Pick<Storage, 'getItem' | 'setItem'>;
 

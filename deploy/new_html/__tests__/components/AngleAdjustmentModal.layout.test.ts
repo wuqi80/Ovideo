@@ -41,23 +41,25 @@ describe('angle adjustment modal responsive layout', () => {
     expect(modal).toContain('isProcessing || !gpuSelection?.usable');
   });
 
-  it('keeps the design-page GPU selector with the left material preview', () => {
+  it('uses the online image model in the design-page angle modal', () => {
     const source = readSource('../../pages/DesignPage.tsx');
     const modal = componentSlice(source, 'const CameraModal', 'const ProcessModal');
 
-    expect(modal).toContain(
-      '<OperationMaterialPicker materials={materials} selectedId={cur?.id} onSelect={setSelId} />\n            <GpuNodeSelector onSelectionChange={setGpuSelection} />',
-    );
-    expect(modal.indexOf('<GpuNodeSelector')).toBeLessThan(modal.indexOf('水平旋转'));
+    expect(modal).toContain('<OperationMaterialPicker materials={materials} selectedId={cur?.id} onSelect={setSelId} />');
+    expect(modal).toContain('ONLINE_IMAGE_OPERATION_LABEL');
+    expect(modal).toContain('无需选择本地节点');
+    expect(modal).not.toContain('<GpuNodeSelector');
+    expect(modal).toContain('DESIGN_CREDIT_FEATURES.imageGeneration');
   });
 
-  it('keeps the material-page GPU selector below the left thumbnail rail', () => {
+  it('uses the online image model in the material-page angle modal', () => {
     const source = readSource('../../components/MaterialPage.tsx');
     const modal = componentSlice(source, 'const CameraModal', 'const ProcessModal');
 
     expect(modal).toContain('max-h-[calc(100vh-2rem)]');
-    expect(modal.indexOf('<GpuNodeSelector')).toBeGreaterThan(modal.indexOf('grid grid-cols-5'));
-    expect(modal.indexOf('<GpuNodeSelector')).toBeLessThan(modal.indexOf('<div className="space-y-5">'));
-    expect(modal.indexOf('<GpuNodeSelector')).toBeLessThan(modal.indexOf('生成新角度'));
+    expect(modal).toContain('ONLINE_IMAGE_OPERATION_LABEL');
+    expect(modal).toContain('无需选择本地节点');
+    expect(modal).not.toContain('<GpuNodeSelector');
+    expect(modal).toContain('DESIGN_CREDIT_FEATURES.imageGeneration');
   });
 });

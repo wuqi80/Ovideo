@@ -1,6 +1,6 @@
 import type { GeneratedImage, StoryboardItem } from '../types';
 
-export const STORYBOARD_IMAGE_DRAG_MIME = 'application/x-drama-storyboard-image';
+export const STORYBOARD_IMAGE_DRAG_MIME = 'application/x-ostory-storyboard-image';
 
 interface StoryboardImageDragPayload {
   sourceShotId: string;

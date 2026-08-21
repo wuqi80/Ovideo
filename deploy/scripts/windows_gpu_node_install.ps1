@@ -1,5 +1,5 @@
 param(
-    [string]$InstallRoot = "E:\MECHA-GPU",
+    [string]$InstallRoot = "E:\OSTORY-GPU",
     [string]$ServerUrl = "https://192.168.31.134"
 )
 
@@ -14,7 +14,7 @@ $PortableDir = Join-Path $InstallRoot "ComfyUI_windows_portable"
 $ComfyDir = Join-Path $PortableDir "ComfyUI"
 $Python = Join-Path $PortableDir "python_embeded\python.exe"
 $Curl = Join-Path $env:SystemRoot "System32\curl.exe"
-$PipIndex = if ($env:MECHA_PIP_INDEX_URL) { $env:MECHA_PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
+$PipIndex = if ($env:OSTORY_PIP_INDEX_URL) { $env:OSTORY_PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
 
 New-Item -ItemType Directory -Force -Path $InstallRoot, $Downloads, $Logs, $Config, $AgentDir | Out-Null
 
@@ -71,7 +71,7 @@ function Install-ZipNode {
     Move-Item $source.FullName $target
 }
 
-Write-Step "Starting MECHA GPU node installation"
+Write-Step "Starting OSTORY GPU node installation"
 
 $archive = Join-Path $Downloads "ComfyUI_windows_portable_nvidia_cu126.7z"
 $sevenZip = Join-Path $Downloads "7zr.exe"
@@ -156,17 +156,17 @@ set OMP_NUM_THREADS=16
 set MKL_NUM_THREADS=16
 set OPENBLAS_NUM_THREADS=16
 set NUMEXPR_MAX_THREADS=16
-cd /d E:\MECHA-GPU\ComfyUI_windows_portable
-"E:\MECHA-GPU\ComfyUI_windows_portable\python_embeded\python.exe" -s "E:\MECHA-GPU\ComfyUI_windows_portable\ComfyUI\main.py" --listen 0.0.0.0 --port 8188 --lowvram --preview-method none --disable-auto-launch >> E:\MECHA-GPU\logs\comfyui.log 2>&1
+cd /d E:\OSTORY-GPU\ComfyUI_windows_portable
+"E:\OSTORY-GPU\ComfyUI_windows_portable\python_embeded\python.exe" -s "E:\OSTORY-GPU\ComfyUI_windows_portable\ComfyUI\main.py" --listen 0.0.0.0 --port 8188 --lowvram --preview-method none --disable-auto-launch >> E:\OSTORY-GPU\logs\comfyui.log 2>&1
 endlocal
 '@
 Set-Content -Path (Join-Path $InstallRoot "start_comfyui.cmd") -Value $startComfy -Encoding ASCII
 
 Write-Step "Allowing ComfyUI UI from the local subnet only"
-Get-NetFirewallRule -DisplayName "MECHA GPU ComfyUI LAN" -ErrorAction SilentlyContinue |
+Get-NetFirewallRule -DisplayName "OSTORY GPU ComfyUI LAN" -ErrorAction SilentlyContinue |
     Remove-NetFirewallRule -ErrorAction SilentlyContinue
 New-NetFirewallRule `
-    -DisplayName "MECHA GPU ComfyUI LAN" `
+    -DisplayName "OSTORY GPU ComfyUI LAN" `
     -Direction Inbound `
     -Action Allow `
     -Protocol TCP `
@@ -180,12 +180,12 @@ setlocal
 chcp 65001 >nul
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
-set MECHA_GPU_ROOT=E:\MECHA-GPU
-set MECHA_SERVER_URL=__SERVER_URL__
-set MECHA_GPU_TELEMETRY_DIR=D:\MECHA-GPU-Telemetry
-set MECHA_GPU_AGENT_MAINTENANCE=1
-set MECHA_COMFYUI_PORTS=8188
-E:\MECHA-GPU\ComfyUI_windows_portable\python_embeded\python.exe -s E:\MECHA-GPU\agent\windows_gpu_agent_runner.py >> E:\MECHA-GPU\logs\agent.log 2>&1
+set OSTORY_GPU_ROOT=E:\OSTORY-GPU
+set OSTORY_SERVER_URL=__SERVER_URL__
+set OSTORY_GPU_TELEMETRY_DIR=D:\OSTORY-GPU-Telemetry
+set OSTORY_GPU_AGENT_MAINTENANCE=1
+set OSTORY_COMFYUI_PORTS=8188
+E:\OSTORY-GPU\ComfyUI_windows_portable\python_embeded\python.exe -s E:\OSTORY-GPU\agent\windows_gpu_agent_runner.py >> E:\OSTORY-GPU\logs\agent.log 2>&1
 endlocal
 '@
 $startAgent = $startAgent -replace "__SERVER_URL__", $ServerUrl
@@ -193,7 +193,7 @@ Set-Content -Path (Join-Path $InstallRoot "start_agent.cmd") -Value $startAgent 
 
 $setupTasks = @'
 @echo off
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "E:\MECHA-GPU\scripts\windows_gpu_task_repair.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "E:\OSTORY-GPU\scripts\windows_gpu_task_repair.ps1"
 '@
 Set-Content -Path (Join-Path $InstallRoot "register_startup_tasks.cmd") -Value $setupTasks -Encoding ASCII
 

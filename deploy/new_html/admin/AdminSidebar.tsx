@@ -1,7 +1,7 @@
 /**
  * AdminSidebar.tsx — 统一后台的层级菜单（一级 / 二级 / 三级）
  *
- * 设计参考 wk_crm 后台「系统设置」的 WkContainer 折叠菜单：
+ * Sidebar owns the collapsible administration navigation contract:
  *  - 顶部 header cell（图标 + 标题 + 副标题）
  *  - 一级分组：可折叠，带图标 + 右侧箭头
  *  - 二级项：缩进；若含三级则可二次展开，否则直接跳转

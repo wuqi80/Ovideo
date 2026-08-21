@@ -121,7 +121,7 @@ async def test_db(monkeypatch):
         )
     except (OSError, asyncpg.PostgresError) as exc:
         reason = f"PostgreSQL integration tests unavailable: {exc}"
-        if os.environ.get("DRAMA_REQUIRE_TEST_DB", "").lower() == "true":
+        if os.environ.get("OSTORY_REQUIRE_TEST_DB", "").lower() == "true":
             raise RuntimeError(reason) from exc
         _test_db_unavailable_reason = reason
         pytest.skip(reason)

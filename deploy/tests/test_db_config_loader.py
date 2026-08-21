@@ -10,13 +10,13 @@ def test_database_env_file_value_is_used(tmp_path):
     config_file.write_text(
         "DB_HOST=file-host\n"
         "DB_PORT=15432\n"
-        "DB_PASSWORD='secret value'\n",
+        "DB_PASSWORD='test-placeholder-credential'\n",
         encoding="utf-8",
     )
 
     assert get_db_config_value("DB_HOST", "localhost", config_file=config_file, environ={}) == "file-host"
     assert get_db_config_value("DB_PORT", "5432", config_file=config_file, environ={}) == "15432"
-    assert get_db_config_value("DB_PASSWORD", "changeme", config_file=config_file, environ={}) == "secret value"
+    assert get_db_config_value("DB_PASSWORD", "changeme", config_file=config_file, environ={}) == "test-placeholder-credential"
 
 
 def test_process_environment_overrides_database_env_file(tmp_path):

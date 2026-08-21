@@ -17,11 +17,16 @@ import {
   withCurrentVideoModelOption,
 } from '../../services/videoModelService';
 
-describe('processing cluster model label', () => {
-  it('shows node-specific processing model labels and keeps Wan2 as a legacy ID', () => {
-    expect(getModelDisplayName('LTXNode1')).toBe('处理节点1 · LTX');
-    expect(getModelDisplayName('WanNode2')).toBe('处理节点2 · Wan');
-    expect(getModelDisplayName('Wan2')).toBe('集群视频（旧版兼容）');
+describe('public video model labels', () => {
+  it('uses stable tier names without exposing runtime providers', () => {
+    expect(getModelDisplayName('MiniMaxH3')).toBe('一阶 · 节点标准模型');
+    expect(getModelDisplayName('MiniMaxH3Fast')).toBe('二阶 · 节点快速模型');
+    expect(getModelDisplayName('MiniMaxH3Mini')).toBe('三阶 · 节点简化模型');
+    expect(getModelDisplayName('Seedance2')).toBe('四阶 · 多模态标准视频模型');
+    expect(getModelDisplayName('Seedance2Fast')).toBe('五阶 · 多模态快速视频模型');
+    expect(getModelDisplayName('Seedance2Mini')).toBe('六阶 · 多模态简化视频模型');
+    expect(getModelDisplayName('Wan2')).toBe('历史视频模型');
+    expect(getModelDisplayName('一阶')).toBe('历史视频模型');
   });
 });
 
@@ -195,23 +200,29 @@ describe('Seedance model mapping', () => {
 });
 
 describe('buildVideoModelOptions', () => {
-  it('keeps the local and legacy workflow entries visible at the top of the selector', () => {
-    expect(SELECTABLE_MODELS.slice(0, 11)).toEqual([
+  it('keeps only H3 nodes and supported provider-backed models selectable', () => {
+    expect(SELECTABLE_MODELS).toEqual([
       'MiniMaxH3',
       'MiniMaxH3Fast',
       'MiniMaxH3Mini',
-      'Wan2',
-      '一阶',
-      '二阶',
-      '三阶',
-      '四阶',
-      '五阶',
-      '六阶',
-      '七阶',
+      'Seedance2',
+      'Seedance2Fast',
+      'Seedance2Mini',
+      'MINI',
+      'Veo',
+      'Sora2',
+      '大能',
+      'Kling',
+      'Vidu',
+      'HappyHorse',
     ]);
+    expect(SELECTABLE_MODELS).not.toContain('Wan2');
+    expect(SELECTABLE_MODELS).not.toContain('LTXNode1');
+    expect(SELECTABLE_MODELS).not.toContain('WanNode2');
+    expect(SELECTABLE_MODELS).not.toContain('一阶');
   });
 
-  it('keeps all selectable models and marks unavailable ones with runtime labels', () => {
+  it('keeps only available models and hides runtime labels', () => {
     const options = buildVideoModelOptions([
       {
         key: 'LTXNode1',
@@ -278,16 +289,22 @@ describe('buildVideoModelOptions', () => {
       },
     ]);
 
-    expect(options.map(option => option.value)).toEqual(SELECTABLE_MODELS);
-    expect(options.find(option => option.value === 'LTXNode1')?.available).toBe(false);
-    expect(options.find(option => option.value === 'LTXNode1')?.label).toContain('当前不可用');
-    expect(options.find(option => option.value === 'WanNode2')?.available).toBe(true);
-    expect(options.find(option => option.value === 'HappyHorse')?.label).toContain('happyhorse-1.0-r2v');
-    expect(options.find(option => option.value === 'Seedance2Mini')?.label).toContain('doubao-seedance-2-0-mini-260615');
-    expect(options.find(option => option.value === 'MiniMaxH3')?.label).toContain('MiniMax-H3 FL2VA');
-    expect(options.find(option => option.value === 'MiniMaxH3Fast')?.label).toContain('SageAttention');
-    expect(options.find(option => option.value === 'MiniMaxH3Mini')?.label).toContain('Qwen3-VL-4B ClipProj');
-    expect(options.find(option => option.value === 'MINI')?.label).toContain('MiniMax-Hailuo-2.3');
+    expect(options.map(option => option.value)).toEqual([
+      'MiniMaxH3',
+      'MiniMaxH3Fast',
+      'MiniMaxH3Mini',
+      'Seedance2Mini',
+      'MINI',
+      'HappyHorse',
+    ]);
+    expect(options.every(option => option.available)).toBe(true);
+    expect(options.some(option => option.label.includes('当前不可用'))).toBe(false);
+    expect(options.some(option => option.label.includes('MiniMax-H3'))).toBe(false);
+    expect(options.some(option => option.label.includes('doubao-seedance'))).toBe(false);
+    expect(options.some(option => option.label.includes('happyhorse-1.0'))).toBe(false);
+    expect(options.find(option => option.value === 'MiniMaxH3')?.label).toBe('一阶 · 节点标准模型');
+    expect(options.find(option => option.value === 'Seedance2Mini')?.label).toBe('六阶 · 多模态简化视频模型');
+    expect(options.find(option => option.value === 'MINI')?.runtimeLabel).toContain('MiniMax-Hailuo-2.3');
   });
 
   it('uses backend Plan-mode manifest to expose only Seedance 1.5', () => {
@@ -302,10 +319,11 @@ describe('buildVideoModelOptions', () => {
     ], ['Seedance15']);
 
     expect(options.map(option => option.value)).toEqual(['Seedance15']);
-    expect(options[0].label).toContain('doubao-seedance-1.5-pro');
+    expect(options[0].label).toBe('Seedance 1.5');
+    expect(options[0].runtimeLabel).toBe('doubao-seedance-1.5-pro');
   });
 
-  it('keeps the current legacy model visible as unavailable', () => {
+  it('does not resurrect the current legacy or unavailable model', () => {
     const options = buildVideoModelOptions([
       {
         key: 'HappyHorse',
@@ -314,7 +332,7 @@ describe('buildVideoModelOptions', () => {
         model_name: 'happyhorse-1.0-r2v',
         available: true,
       },
-    ], ['MiniMaxH3']);
+    ], ['HappyHorse']);
 
     const withCurrent = withCurrentVideoModelOption(options, 'Seedance2', [
       {
@@ -326,10 +344,6 @@ describe('buildVideoModelOptions', () => {
       },
     ]);
 
-    expect(withCurrent[0]).toMatchObject({
-      value: 'Seedance2',
-      available: false,
-    });
-    expect(withCurrent[0].label).toContain('当前不可用');
+    expect(withCurrent.map(option => option.value)).toEqual(['HappyHorse']);
   });
 });

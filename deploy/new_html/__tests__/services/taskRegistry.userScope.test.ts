@@ -47,7 +47,7 @@ describe('TaskRegistry user scope', () => {
     registerCompletedTask(yuanRegistry, 'yuan-task');
 
     const wuqiRegistry = new TaskRegistry(storage);
-    wuqiRegistry.setUserScope('wuqi80');
+    wuqiRegistry.setUserScope('user_alpha');
     expect(wuqiRegistry.rehydrate()).toEqual([]);
 
     const restoredYuanRegistry = new TaskRegistry(storage);
@@ -57,16 +57,16 @@ describe('TaskRegistry user scope', () => {
 
   it('ignores and removes the legacy cache without an account namespace', () => {
     const storage = new MemoryStorage();
-    storage.setItem('h-my2:task-registry:v1', JSON.stringify({
+    storage.setItem('ostory:task-registry:v1', JSON.stringify({
       active: [],
       done: [{ taskId: 'legacy-other-user-task' }],
     }));
 
     const registry = new TaskRegistry(storage);
-    registry.setUserScope('wuqi80');
+    registry.setUserScope('user_alpha');
 
     expect(registry.rehydrate()).toEqual([]);
-    expect(storage.getItem('h-my2:task-registry:v1')).toBeNull();
+    expect(storage.getItem('ostory:task-registry:v1')).toBeNull();
   });
 
   it('lets an authoritative server terminal state close a locally running task', () => {

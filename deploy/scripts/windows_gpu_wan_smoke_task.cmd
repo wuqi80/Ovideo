@@ -8,8 +8,8 @@ if /I not "%MODE%"=="readiness" if /I not "%MODE%"=="i2v" if /I not "%MODE%"=="i
   exit /b 2
 )
 
-set "TASK_NAME=MECHA-GPU-WanSmoke"
-set "SMOKE_CMD=E:\MECHA-GPU\windows_gpu_wan_smoke.cmd"
+set "TASK_NAME=OSTORY-GPU-WanSmoke"
+set "SMOKE_CMD=E:\OSTORY-GPU\windows_gpu_wan_smoke.cmd"
 
 schtasks /End /TN "%TASK_NAME%" >nul 2>&1
 schtasks /Delete /TN "%TASK_NAME%" /F >nul 2>&1

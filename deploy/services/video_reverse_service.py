@@ -9,7 +9,6 @@ Video Reverse Prompt Service
 - ffmpeg 命令行（系统 PATH，或环境变量 FFMPEG_BIN 指定）
 - provider=gemini-text 的运行时配置（用于视觉理解；缺失时回退为只生成结构化骨架，不调用大模型）
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/03-video-reverse.md
 """
 from __future__ import annotations
 
@@ -24,6 +23,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from dao_video_reverse import VideoReverseSegmentDAO, VideoReverseTaskDAO
 from services.ai_proxy_service import generate_gemini_chat_result
 
 logger = logging.getLogger(__name__)
@@ -351,7 +351,6 @@ async def run_pipeline(task) -> Dict[str, Any]:
     返回 worker 期望的 result dict（同时已经把所有结果落库）。
     """
     from dao_content import FileDAO
-    from dao_video_reverse import VideoReverseSegmentDAO, VideoReverseTaskDAO
     from file_service import save_generated_file_to_db
     import credit_service
     import media_library_service

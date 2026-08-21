@@ -38,7 +38,6 @@ from file_optimization import FileOptimizationService, FileDeduplicationService
 # 2026-05-25：MiniMax TTS 短文本试听 fast-path 需要在模块顶部 import
 # save_generated_file_to_db，使其成为 api_routes 命名空间属性，
 # 让 tests 可以 patch('api_routes.save_generated_file_to_db', ...)。
-# 详见 docs/superpowers/plans/2026-05-25-minimax-tts-fastpath.md
 from file_service import save_generated_file_to_db
 from routers.auth_legacy import create_auth_legacy_router
 from routers.assets import create_assets_router

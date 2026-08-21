@@ -27,16 +27,18 @@ def test_credit_onboarding_is_one_time_and_audited():
     assert "credit_onboarding_backfill" in sql
 
 
-def test_live_deploy_runs_credit_prerequisites_before_onboarding():
-    script = (DEPLOY_DIR / "scripts" / "live_deploy_mvc2.sh").read_text(encoding="utf-8")
+def test_canonical_manifest_runs_credit_prerequisites_before_onboarding():
+    entrypoint = (DEPLOY_DIR / "containers" / "entrypoint.sh").read_text(encoding="utf-8")
+    runner = (DEPLOY_DIR / "db_build" / "build_fresh_db.py").read_text(encoding="utf-8")
     manifest = (DEPLOY_DIR / "db_build" / "manifest.txt").read_text(encoding="utf-8")
     credits = manifest.index("sql/db_migration_credits.sql")
     onboarding = manifest.index("sql/db_migration_credit_onboarding.sql")
 
     assert credits < onboarding
     assert "sql/db_migration_files_project_episode_source.sql" in manifest
-    assert '"scripts/apply_migrations.py"' in script
-    assert "--manifest db_build/manifest.txt" in script
+    assert "python db_build/build_fresh_db.py" in entrypoint
+    assert "MANIFEST" in runner
+    assert "apply_migrations" in runner
 
 
 def test_auto_deploy_does_not_ignore_required_migration_failures():

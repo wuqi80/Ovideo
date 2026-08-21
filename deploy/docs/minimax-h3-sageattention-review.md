@@ -39,7 +39,7 @@ audio/video timing changes.
 
 ## Safe activation gate
 
-- Default remains off: `MECHA_GPU_H3_SAGE_ATTENTION=0`.
+- Default remains off: `OSTORY_GPU_H3_SAGE_ATTENTION=0`.
 - The Agent requires `h3-sageattention-ready.json`, exact SageAttention 2.2.0,
   RTX 3060 `sm86`, the reviewed KJNodes commit, and live discovery of both node
   types. Any failure automatically keeps the baseline graph.

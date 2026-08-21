@@ -102,15 +102,16 @@ def test_manifest_paths_are_resolved_from_root(tmp_path):
     ]
 
 
-def test_deploy_scripts_use_the_ledger_runner():
+def test_deploy_entrypoints_use_the_ledger_runner():
     deploy_dir = Path(__file__).resolve().parents[1]
     auto_deploy = (deploy_dir / "auto_deploy.sh").read_text(encoding="utf-8")
-    live_deploy = (deploy_dir / "scripts" / "live_deploy_mvc2.sh").read_text(encoding="utf-8")
+    container_entrypoint = (deploy_dir / "containers" / "entrypoint.sh").read_text(encoding="utf-8")
+    fresh_runner = (deploy_dir / "db_build" / "build_fresh_db.py").read_text(encoding="utf-8")
 
     assert "scripts/apply_migrations.py" in auto_deploy
-    assert "scripts/apply_migrations.py" in live_deploy
     assert "--manifest db_build/manifest.txt" in auto_deploy
-    assert "--manifest db_build/manifest.txt" in live_deploy
+    assert "python db_build/build_fresh_db.py" in container_entrypoint
+    assert "apply_migrations" in fresh_runner
 
 
 @pytest.mark.asyncio

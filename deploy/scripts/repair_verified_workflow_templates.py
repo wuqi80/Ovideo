@@ -55,7 +55,7 @@ async def repair_verified_workflow_templates() -> tuple[int, int]:
     conn = await asyncpg.connect(
         host=os.getenv("DB_HOST", "/tmp"),
         port=int(os.getenv("DB_PORT", "5432")),
-        database=os.getenv("DB_NAME", "my2_db"),
+        database=os.getenv("DB_NAME", "ostory_db"),
         user=os.getenv("DB_USER", "postgres"),
         password=os.getenv("DB_PASSWORD", ""),
     )

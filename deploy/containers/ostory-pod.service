@@ -1,5 +1,5 @@
 [Unit]
-Description=Ostory NewUI Podman pod
+Description=Ostory TV application pod
 Wants=network-online.target
 After=network-online.target
 

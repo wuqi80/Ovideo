@@ -3,7 +3,6 @@
  * 2026-05-26 组织管理 MVP — Slice 4
  *
  * 通用资源共享对话框。复用在项目详情 / 素材详情 / 分组详情。
- * 详见 docs/superpowers/specs/2026-05-26-organization-management-design.md §6.3
  */
 
 import React, { useEffect, useState, useCallback } from 'react';

@@ -18,7 +18,7 @@ Only Director is allowed. Director already contains the Motion Context implement
 
 Defaults and hard limits:
 
-- off by default (`MECHA_GPU_H3_LONG_VIDEO=0`);
+- off by default (`OSTORY_GPU_H3_LONG_VIDEO=0`);
 - 2–8 segments, each 4–15 seconds, total no more than 120 seconds;
 - 768×416 at 24 fps;
 - 22 video context frames (about 0.92 seconds at 24 fps); the reviewed Motion Context recommendation uses 24 audio context frames internally;

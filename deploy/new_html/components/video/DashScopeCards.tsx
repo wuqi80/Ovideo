@@ -28,12 +28,13 @@ import type {
     ViduSubModel, DashScopeResolution, DashScopeAspectRatio, HappyHorseRatio,
     ViduResolution, HhResolution, HhRatio,
 } from '../../services/videoModelService';
+import { getModelDisplayName } from '../../services/videoModelService';
 import { secureApiUrl } from '../../services/httpClient';
 
 // ─── 主题色板（对应修真境界视觉气质） ─────────────────────────────────────────
 
 type Theme = {
-    name: '合体' | '大乘' | '炼虚';
+    name: string;
     accent: string;         // 主色 hex（按钮/边框 hover）
     accentText: string;     // 主色文字 tailwind class
     accentBorder: string;   // 主色边框 tailwind class
@@ -45,7 +46,7 @@ type Theme = {
 
 const THEMES: Record<DashScopeVideoModel, Theme> = {
     Kling: {
-        name: '合体',
+        name: getModelDisplayName('Kling'),
         accent: '#3B7BE5',
         accentText: 'text-sky-300',
         accentBorder: 'border-sky-500/40',
@@ -55,7 +56,7 @@ const THEMES: Record<DashScopeVideoModel, Theme> = {
         badge: 'bg-sky-500/20 text-sky-200 border-sky-500/30',
     },
     Vidu: {
-        name: '大乘',
+        name: getModelDisplayName('Vidu'),
         accent: '#8B6BFF',
         accentText: 'text-purple-300',
         accentBorder: 'border-purple-500/40',
@@ -65,7 +66,7 @@ const THEMES: Record<DashScopeVideoModel, Theme> = {
         badge: 'bg-purple-500/20 text-purple-200 border-purple-500/30',
     },
     HappyHorse: {
-        name: '炼虚',
+        name: getModelDisplayName('HappyHorse'),
         accent: '#FF6A3D',
         accentText: 'text-orange-300',
         accentBorder: 'border-orange-500/40',

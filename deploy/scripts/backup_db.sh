@@ -1,12 +1,13 @@
 #!/bin/bash
-# 每日数据库备份：pg_dump（peer auth，免密码）→ ~/backups，保留最近 14 天。
-# 由 cron 每天 03:00 调用（见 crontab）。手动跑：bash ~/deploy/scripts/backup_db.sh
+# Database backup using peer authentication. DB_NAME and BACKUP_DIR are
+# deployment-owned so this script remains portable.
 set -e
-BACKUP_DIR="/home/Administrator/backups"
+DB_NAME="${DB_NAME:-ostory_db}"
+BACKUP_DIR="${BACKUP_DIR:-$HOME/backups}"
 mkdir -p "$BACKUP_DIR"
 TS=$(date -u +%Y%m%d_%H%M%S)
-OUT="$BACKUP_DIR/my2_db_${TS}.sql.gz"
-sudo -u postgres pg_dump my2_db | gzip > "$OUT"
+OUT="$BACKUP_DIR/${DB_NAME}_${TS}.sql.gz"
+sudo -u postgres pg_dump "$DB_NAME" | gzip > "$OUT"
 # 只保留最近 14 天
-find "$BACKUP_DIR" -name "my2_db_*.sql.gz" -mtime +14 -delete 2>/dev/null || true
+find "$BACKUP_DIR" -name "${DB_NAME}_*.sql.gz" -mtime +14 -delete 2>/dev/null || true
 echo "$(date -u) backup -> $OUT ($(du -h "$OUT" | cut -f1))"

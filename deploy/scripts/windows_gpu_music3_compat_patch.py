@@ -14,7 +14,7 @@ LINE_NEEDLE = (
 LINE_REPLACEMENT = (
     "        fixed_kv = (\n"
     "            self.fixed_kv\n"
-    "            and os.environ.get(\"MECHA_MUSIC3_DISABLE_FLASH_DECODE\") != \"1\"\n"
+    "            and os.environ.get(\"OSTORY_MUSIC3_DISABLE_FLASH_DECODE\") != \"1\"\n"
     "            and comfy_kitchen.flash_attention_decode_is_available(device)\n"
     "        )\n"
 )
@@ -22,11 +22,11 @@ LINE_REPLACEMENT = (
 
 def patch(path: Path) -> str:
     text = path.read_text(encoding="utf-8")
-    if "MECHA_MUSIC3_DISABLE_FLASH_DECODE" in text:
+    if "OSTORY_MUSIC3_DISABLE_FLASH_DECODE" in text:
         return "already-patched"
     if IMPORT_NEEDLE not in text or LINE_NEEDLE not in text:
         raise RuntimeError("reviewed MiniMax Music3 compatibility anchors are missing")
-    backup = path.with_suffix(path.suffix + ".mecha-original")
+    backup = path.with_suffix(path.suffix + ".ostory-original")
     if not backup.exists():
         backup.write_text(text, encoding="utf-8", newline="\n")
     patched = text.replace(IMPORT_NEEDLE, IMPORT_REPLACEMENT, 1).replace(

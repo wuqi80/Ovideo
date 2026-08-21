@@ -9,8 +9,7 @@ if ($health.status -ne "healthy") {
 
 $AdminPassword = $env:ADMIN_PASSWORD
 if (-not $AdminPassword) {
-    $AdminPassword = "admin123"
-    Write-Host "ADMIN_PASSWORD is not set; using local development password. The server must set ALLOW_DEV_ADMIN_PASSWORD=true."
+    throw "ADMIN_PASSWORD must be set for authenticated local verification."
 }
 
 $loginBody = @{ username = "admin"; password = $AdminPassword } | ConvertTo-Json
@@ -25,14 +24,18 @@ if ($projects.success -ne $true) {
     throw "Project list check failed"
 }
 
-$Node = "C:\Users\Administrator\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
-if (Test-Path $Node) {
-    & $Node ".\scripts\verify_local_browser.mjs"
+$NodeCommand = if ($env:OSTORY_NODE_BIN) {
+    Get-Item -LiteralPath $env:OSTORY_NODE_BIN -ErrorAction Stop
+} else {
+    Get-Command node -ErrorAction SilentlyContinue
+}
+if ($NodeCommand) {
+    & $NodeCommand.Source ".\scripts\verify_local_browser.mjs"
     if ($LASTEXITCODE -ne 0) {
         throw "Browser verification failed"
     }
 } else {
-    Write-Host "Node runtime not found; skipped browser screenshot verification."
+    Write-Host "Node runtime not found; set OSTORY_NODE_BIN to enable browser verification."
 }
 
 Write-Host "Local deployment verification passed."

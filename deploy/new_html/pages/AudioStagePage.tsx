@@ -362,7 +362,6 @@ export const AudioStagePage: React.FC = () => {
     //   - 失败仍可在「我的任务」面板查到
     //
     // 试听场景见 VoiceSidebar.handlePreview，用 minimaxTTSSync 一次拿结果。
-    // Plan: docs/superpowers/plans/2026-05-25-minimax-tts-fastpath.md
     // 子陷阱见 recurring-pitfalls.md §R 子陷阱 4「sync/async 双轨设计」。
     const key = clipKey(clip);
     const override = localOverrides[key] || {};

@@ -1,7 +1,6 @@
 /**
  * videoReverseService.ts
  * 2026-05-26 Slice 3 — 视频反推前端 API 客户端
- * 详见 docs/superpowers/plans/2026-05-26-feature-rollout/03-video-reverse.md
  */
 
 import { apiJson } from './httpClient';

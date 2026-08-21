@@ -4,7 +4,6 @@ Project Group DAO
 ==================
 project_groups 表 CRUD。
 
-详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md
 """
 from __future__ import annotations
 

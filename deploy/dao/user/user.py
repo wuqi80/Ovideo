@@ -355,7 +355,6 @@ class UserDAO:
 
     # ============================================
     # 2026-05-26 Slice 4: 管理员侧扩展
-    # 详见 docs/superpowers/plans/2026-05-26-feature-rollout/04-admin-users-project-groups.md
     # ============================================
 
     @staticmethod

@@ -94,7 +94,7 @@ describe('FileColumn workflow script control', () => {
 
   it('separates upload drops from live file reordering', () => {
     expect(source).toContain("includes('Files')");
-    expect(source).toContain("setData('application/x-mecha-script-file', file.id)");
+    expect(source).toContain("setData('application/x-ostory-script-file', file.id)");
     expect(source).toContain('setDragImage(e.currentTarget, 18, 18)');
     expect(source).toContain('draggable={Boolean(onReorderFiles)}');
     expect(source).toContain("closest('button')");

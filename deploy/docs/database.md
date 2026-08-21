@@ -7,7 +7,7 @@
 ## Migration execution
 
 - `db_build/manifest.txt` is the only ordered migration source of truth.
-- `auto_deploy.sh`, `scripts/live_deploy_mvc2.sh`, and `db_build/build_fresh_db.py` all execute that manifest through `scripts/apply_migrations.py`.
+- `auto_deploy.sh` and the container entrypoint execute the canonical manifest through the migration ledger runner in `db_build/build_fresh_db.py`.
 - The runner records checksums in `schema_migrations`, holds a PostgreSQL advisory lock, and applies each pending file in a transaction.
 - New migrations must be mirrored under `deploy/` and `deploy/sql/`, then added once to the manifest. Do not add per-script migration lists to deployment scripts.
 - Generated script candidates use `episode_scripts.source_type` and `source_id`; the partial unique index on `(episode_id, source_type, source_id)` keeps one canonical candidate per external source without deleting user-created drafts.
@@ -618,7 +618,7 @@ files ──1:N──> file_shares
 
 ## 11. 2026-05-26 新增模块（Slice 1–5）
 
-> 这批表是 `2026-05-26-feature-rollout` 实施计划的产物，请在调试 / 编辑相关功能前同时打开本节与 `docs/vertical-slices.md` 中对应页面段。
+> 修改这些表前，同时核对对应 DAO、服务、路由和前端数据适配器，避免只更新单一层的字段契约。
 
 ### 11.1 媒体素材库（Slice 1）— `media_library_items`, `media_library_usages`
 
@@ -733,7 +733,6 @@ files ──1:N──> file_shares
 > **`project_groups.team_id`**（旧 Slice 4 预留列，从未使用）保留 backward-compat；新功能走 `organization_id`。
 
 **DAO**：`dao_organization.py`（`OrganizationDAO` / `OrganizationMemberDAO`） + `dao_resource_share.py`（`ResourceShareDAO`）。
-**Spec**：`docs/superpowers/specs/2026-05-26-organization-management-design.md`。
 
 ### 11.6 SQL 文件入口
 

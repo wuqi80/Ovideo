@@ -1,5 +1,6 @@
-// 分镜工坊 / SHOTFORGE 色板（DESIGN.md 是视觉契约；历史令牌名保留，值已重映射）
-const shotforgeColors = {
+// Ostory TV palette. DESIGN.md is the visual contract; historical token names
+// remain aliases until their component consumers are migrated.
+const ostoryColors = {
   n0: '#FFFFFF',
   n10: '#FBFBF9',
   n20: '#F4F4F1',
@@ -89,7 +90,7 @@ const shotforgeColors = {
     600: '#204893',
   },
 };
-const webflowColors = shotforgeColors;
+const semanticColors = ostoryColors;
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -144,7 +145,7 @@ module.exports = {
         ],
       },
       colors: {
-        ...webflowColors,
+        ...semanticColors,
         blue: {
           50: '#ECE9FF',
           100: '#E3DEFF',

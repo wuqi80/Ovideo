@@ -9,6 +9,7 @@
 set -e
 EPISODE_ID="$1"
 LIMIT="${2:-100000}"
+DB_NAME="${DB_NAME:-ostory_db}"
 [ -z "$EPISODE_ID" ] && { echo "need episode_id"; exit 1; }
 
 WORK="/tmp/compose_${EPISODE_ID}"
@@ -16,10 +17,10 @@ rm -rf "$WORK"; mkdir -p "$WORK"
 LIST="$WORK/list.txt"; : > "$LIST"
 
 # 存储根目录（app 的 persistent_storage 在此）。/storage/x → $BASE/persistent_storage/x。
-BASE="/home/Administrator/deploy"
+BASE="${OSTORY_APP_ROOT:-/opt/ostory}"
 # 直接在 SQL 里把 file_url(/storage/..) 解析成绝对本地路径，bash 不再做字符串处理（避免转义坑）。
 # split_part 去掉 ?token；substr(..,9) 去掉开头的 "/storage"（8字符）。
-ROWS=$(sudo -u postgres psql my2_db -tA -F$'\t' -c "
+ROWS=$(sudo -u postgres psql "$DB_NAME" -tA -F$'\t' -c "
 SELECT '${BASE}/persistent_storage' || substr(split_part(v.video_url,'?',1), 9),
        CASE WHEN COALESCE(si.mixed_audio_url,'')='' THEN ''
             ELSE '${BASE}/persistent_storage' || substr(split_part(si.mixed_audio_url,'?',1), 9) END,

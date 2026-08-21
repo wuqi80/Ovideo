@@ -1,5 +1,5 @@
 /**
- * AdminLayout.tsx — 统一后台 Shell（refactor/v2）
+ * AdminLayout.tsx — 统一后台 Shell（当前架构）
  *
  * 一个台子、一套层级菜单。左侧 AdminSidebar 提供 一级/二级/三级 折叠菜单（始终在场），
  * 右侧只换内容区——彻底消除「在多个后台之间跳动」的割裂感。

@@ -82,6 +82,8 @@ export interface Workflow {
   id: string;
   title: string;
   thumbnail: string;
+  /** Built-in templates are replaced by the canonical definition on load. */
+  isBuiltin?: boolean;
   nodes: AppNode[];
   connections: Connection[];
   groups: Group[];
