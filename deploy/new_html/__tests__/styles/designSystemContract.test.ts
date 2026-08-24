@@ -160,7 +160,7 @@ describe('创剧 design-system contract', () => {
     expect(app).toContain('path="/profile"');
     expect(appHtml).toContain('<title>创剧 · AI 视频创作平台</title>');
     expect(appHtml).toContain('<link rel="canonical" href="https://tv.ostory.ai/" />');
-    expect(appHtml).toContain('把一个想法，变成一部好漫剧');
+    expect(appHtml).toContain('把一个好想法，变成一部好漫剧');
     expect(appHtml).not.toContain('把一个想法，变成一部好故事');
     expect(appHtml).toContain('/favicon.svg?v=20260824-chuangju-v1');
     expect(appHtml).toContain('/favicon.ico?v=20260824-chuangju-v1');
@@ -183,6 +183,25 @@ describe('创剧 design-system contract', () => {
       expect(publicSource).not.toMatch(/(?:example|placeholder)\s+brand/i);
       const copyWithoutDeploymentOrigin = publicSource.replaceAll('https://tv.ostory.ai', '');
       expect(copyWithoutDeploymentOrigin).not.toMatch(/Ostory(?:\s+TV|\s+Studio)?/i);
+    }
+  });
+
+  it('keeps the admin login on the 创剧 two-panel identity', () => {
+    const adminLogin = readProjectFile('admin/AdminLoginPage.tsx');
+    const adminSidebar = readProjectFile('admin/AdminSidebar.tsx');
+    const loginHtml = readProjectFile('../login.html');
+
+    expect(adminLogin).toContain('w-[44%]');
+    expect(adminLogin).toContain('<BrandLogo tone="dark"');
+    expect(adminLogin).toContain('<span className="block">把一个好想法，</span>');
+    expect(adminLogin).toContain('<span className="block">变成一部好漫剧</span>');
+    expect(adminLogin.match(/<WorkflowPreview /g)).toHaveLength(3);
+    expect(adminLogin).toContain('创剧管理后台');
+    expect(adminSidebar).toContain('创剧管理后台');
+    expect(loginHtml).toContain('<h1><span>把一个好想法，</span><span>变成一部好漫剧</span></h1>');
+
+    for (const legacyCopy of ['ADMIN CONSOLE', 'Restricted', 'ACCOUNT', 'PASSPHRASE', 'SESSION · SANDBOXED']) {
+      expect(adminLogin).not.toContain(legacyCopy);
     }
   });
 
