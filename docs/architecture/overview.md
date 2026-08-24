@@ -1,6 +1,6 @@
 # Architecture overview
 
-Ostory TV separates transport, application rules, persistence, provider clients,
+创剧 separates transport, application rules, persistence, provider clients,
 and user interface state so that each layer can evolve without exposing provider
 or deployment details to end users.
 

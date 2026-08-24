@@ -12,7 +12,7 @@ import { apiFetch, apiJson } from '../services/httpClient';
 import { getCreditBalance } from '../services/creditService';
 import { clearAccountIdentity, getStoredUsername } from '../services/accountStorage';
 import BrandLogo from './BrandLogo';
-import { BRAND_PRODUCT_NAME } from '../config/brand';
+import { BRAND_NAME, BRAND_PRODUCT_NAME } from '../config/brand';
 
 export interface AppSidebarItem {
   key: string;
@@ -136,7 +136,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools = [], cr
           <BrandLogo variant="mark" className="h-6 w-6" />
         </span>
         <span className="min-w-0 leading-tight">
-          <span className="block truncate font-display text-[15px] font-bold tracking-tight text-n0">Ostory TV</span>
+          <span className="block truncate font-display text-[15px] font-bold tracking-tight text-n0">{BRAND_NAME}</span>
           <span className="block truncate font-mono text-[10px] uppercase tracking-[0.12em] text-n200">AI 视频创作平台</span>
         </span>
       </button>

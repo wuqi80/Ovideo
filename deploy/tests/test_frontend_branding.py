@@ -16,7 +16,7 @@ def _route_endpoint(path: str):
     return next(route.endpoint for route in router.routes if route.path == path)
 
 
-def test_favicon_routes_serve_the_ostory_tv_assets(monkeypatch):
+def test_favicon_routes_serve_the_chuangju_assets(monkeypatch):
     monkeypatch.chdir(DEPLOY_DIR)
 
     ico_response = asyncio.run(_route_endpoint("/favicon.ico")())
@@ -43,20 +43,20 @@ def test_favicon_routes_serve_the_ostory_tv_assets(monkeypatch):
         assert response.headers["expires"] == "0"
 
 
-def test_ostory_tv_favicon_files_have_valid_signatures():
+def test_chuangju_favicon_files_have_valid_signatures():
     assert (DEPLOY_DIR / "static/favicon.ico").read_bytes()[:4] == b"\x00\x00\x01\x00"
     assert (DEPLOY_DIR / "static/favicon-32x32.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     assert (DEPLOY_DIR / "static/apple-touch-icon.png").read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_ostory_brand_favicons_and_mark_use_the_new_gradient_play_symbol():
+def test_chuangju_favicons_and_mark_use_the_clapperboard_play_symbol():
     login_html = (DEPLOY_DIR / "login.html").read_text(encoding="utf-8")
 
-    assert "/static/branding/ostory-tv-logo-on-dark.svg" in login_html
-    assert "/static/branding/ostory-tv-logo-on-light.svg" in login_html
+    assert "/static/branding/chuangju-logo-on-dark.svg" in login_html
+    assert "/static/branding/chuangju-logo-on-light.svg" in login_html
 
     for relative_path in [
-        "static/branding/ostory-tv-mark.png",
+        "static/branding/chuangju-mark.png",
         "static/favicon-32x32.png",
     ]:
         image = Image.open(DEPLOY_DIR / relative_path).convert("RGBA")
@@ -64,22 +64,22 @@ def test_ostory_brand_favicons_and_mark_use_the_new_gradient_play_symbol():
         visible_pixels = sum(1 for _, _, _, alpha in pixels if alpha > 128)
         assert visible_pixels > 0
 
-    mark = Image.open(DEPLOY_DIR / "static/branding/ostory-tv-mark.png").convert("RGBA")
-    purple = mark.getpixel((80, 184))
-    play = mark.getpixel((184, 184))
-    accent = mark.getpixel((292, 78))
+    mark = Image.open(DEPLOY_DIR / "static/branding/chuangju-mark.png").convert("RGBA")
+    gradient = mark.getpixel((80, 184))
+    board = mark.getpixel((184, 184))
+    play = mark.getpixel((205, 250))
 
-    assert purple[3] == 255 and purple[2] > purple[0]
-    assert play == (255, 255, 255, 255)
-    assert accent[0] > accent[1] > accent[2] and accent[3] == 255
+    assert gradient[3] == 255 and gradient[2] > gradient[0]
+    assert board == (255, 255, 255, 255)
+    assert play[3] == 255 and play[2] > play[0]
     assert mark.getpixel((0, 0))[3] == 0
 
 
-def test_ostory_logo_assets_are_theme_ready_and_reproducible():
+def test_chuangju_logo_assets_are_theme_ready_and_reproducible():
     image_expectations = {
-        DEPLOY_DIR / "static/branding/ostory-tv-logo-on-light.png": (1327, 368),
-        DEPLOY_DIR / "static/branding/ostory-tv-logo-on-dark.png": (1327, 368),
-        DEPLOY_DIR / "static/branding/ostory-tv-mark.png": (368, 368),
+        DEPLOY_DIR / "static/branding/chuangju-logo-on-light.png": (820, 368),
+        DEPLOY_DIR / "static/branding/chuangju-logo-on-dark.png": (820, 368),
+        DEPLOY_DIR / "static/branding/chuangju-mark.png": (368, 368),
     }
 
     for image_path, expected_size in image_expectations.items():

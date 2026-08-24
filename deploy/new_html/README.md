@@ -1,6 +1,6 @@
-# Ostory TV Frontend
+# 创剧 Frontend
 
-This directory contains the Vite/React frontend for Ostory TV. It is served by the
+This directory contains the Vite/React frontend for 创剧. It is served by the
 FastAPI backend after `npm run build` writes assets to `deploy/dist`.
 
 ## Local Development

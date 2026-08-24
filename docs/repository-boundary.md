@@ -1,6 +1,6 @@
 # Repository boundary
 
-Ostory TV is developed as an independent product. This repository owns its
+创剧 is developed as an independent product. This repository owns its
 branding, navigation, persistence schema, model catalog, billing rules, worker
 protocol, test fixtures, release metadata, and deployment examples.
 
@@ -14,5 +14,5 @@ with the chosen project license. A port must be reviewed as a new implementation
    assumptions;
 5. record third-party attribution when the license requires it.
 
-Sibling repositories and private production worktrees are not part of an Ostory
-TV task. Repository tools must not scan or mutate them.
+Sibling repositories and private production worktrees are not part of a 创剧
+task. Repository tools must not scan or mutate them.

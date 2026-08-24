@@ -1,4 +1,4 @@
-# Ostory TV Engineering Rules
+# 创剧 Engineering Rules
 
 ## Mandatory impact assessment
 
@@ -18,7 +18,7 @@ Do not report a task as complete, commit it, push it, or deploy it while a relev
 
 ## Repository boundary
 
-This repository is the authoritative source for Ostory TV. Sibling repositories,
+This repository is the authoritative source for 创剧. Sibling repositories,
 private deployment worktrees, and code from other products are outside its scope.
 Do not inspect, merge, mirror, or modify them while working here.
 

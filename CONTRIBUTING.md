@@ -1,4 +1,4 @@
-# Contributing to Ostory TV
+# Contributing to 创剧
 
 ## Before coding
 

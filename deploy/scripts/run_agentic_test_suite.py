@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Ostory TV's deterministic release checks in explicit phases.
+"""Run 创剧's deterministic release checks in explicit phases.
 
 The runner discovers local capabilities, builds a fixed plan, executes bounded
 commands, and reports raw evidence. Deterministic assertions remain the release
@@ -265,7 +265,7 @@ def write_reports(report_dir: Path, environment: dict, results: Sequence[TestRes
     statuses = (PASS, PARTIAL, FAIL, NOT_ATTEMPTED)
     counts = {status: sum(result.status == status for result in results) for status in statuses}
     lines = [
-        "# Ostory TV Automated Test Report",
+        "# 创剧 Automated Test Report",
         "",
         "Legend: PASS | PARTIAL | FAIL | NOT ATTEMPTED",
         "",

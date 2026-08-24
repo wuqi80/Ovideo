@@ -7,7 +7,7 @@ import {
   stripEmbeddedMedia,
 } from './ostoryRuntime';
 
-describe('Ostory Studio runtime helpers', () => {
+describe('创剧 Studio runtime helpers', () => {
   it('maps first/last frame references without duplicating the input image', () => {
     expect(buildSeedanceMediaInputs('FIRST_LAST_FRAME', 'first.png', ['first.png', 'last.png', 'ref.png']))
       .toEqual([

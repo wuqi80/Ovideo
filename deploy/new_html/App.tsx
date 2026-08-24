@@ -12,7 +12,7 @@
  *   /projects/:projectId/ep/:episodeId/workflow/generation → 流程化: 视频生成
  *   /projects/:projectId/ep/:episodeId/workflow/enhance   → 流程化: 视频增强
  *   /projects/:projectId/ep/:episodeId/workflow/history   → 流程化: 历史记录
- *   /projects/:projectId/ep/:episodeId/canvas            → 自由创作: Ostory Studio
+ *   /projects/:projectId/ep/:episodeId/canvas            → 创剧自由画布
  *
  * 兼容旧路由 (向后兼容):
  *   /projects/:projectId/editor → redirect to ep/default/workflow/script
@@ -163,7 +163,7 @@ const App: React.FC = () => {
                                 <Route path="history" element={<HistoryPage />} />
                             </Route>
 
-                            {/* 自由创作 - 独立 Ostory Studio */}
+                            {/* 自由创作 - 独立创剧画布 */}
                             <Route path="canvas" element={<StudioRedirectPage />} />
                         </Route>
 

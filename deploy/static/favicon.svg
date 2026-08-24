@@ -1,15 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
-  <title id="title">Ostory TV</title>
-  <desc id="desc">Ostory TV 的 O 字播放标志</desc>
+  <title id="title">创剧</title>
+  <desc id="desc">创剧的场记板播放标志</desc>
   <defs>
     <linearGradient id="brand" x1="8" y1="6" x2="58" y2="60" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#5B49F0"/>
-      <stop offset=".55" stop-color="#7A5BFF"/>
-      <stop offset="1" stop-color="#FF6A3D"/>
+      <stop stop-color="#539FF3"/>
+      <stop offset=".5" stop-color="#505EF5"/>
+      <stop offset="1" stop-color="#A642F5"/>
     </linearGradient>
   </defs>
   <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#brand)"/>
-  <circle cx="32" cy="32" r="15.8" fill="none" stroke="#FFFFFF" stroke-width="6"/>
-  <path d="m29 23.8 12.4 8.2L29 40.2Z" fill="#FFFFFF"/>
-  <circle cx="50.8" cy="13.6" r="3.8" fill="#FFB38F" stroke="#FFFFFF" stroke-width="1.8"/>
+  <path d="m15 23 32-9c2.4-.7 4.9.8 5.6 3.2L54 22l-37 10Z" fill="#FFFFFF"/>
+  <path d="m23 21 5-1.4 5.4 7.4-5.2 1.4Zm13-3.6 5-1.4 5.4 7.4-5.2 1.4Z" fill="url(#brand)"/>
+  <rect x="15" y="28" width="39" height="24" rx="5" fill="#FFFFFF"/>
+  <path d="m31 34 12 7-12 7Z" fill="url(#brand)"/>
 </svg>

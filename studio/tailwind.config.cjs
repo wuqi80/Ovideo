@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-// Ostory TV palette shared with deploy/new_html through the DESIGN.md contract.
+// 创剧 palette shared with deploy/new_html through the DESIGN.md contract.
 // 覆盖默认 Tailwind 色阶——cyan/sky/blue=品牌紫罗兰、slate/zinc=暖中性、
 // emerald/green=成功绿、pink/orange=品牌橙、teal=信息蓝、red/rose=错误红、amber/yellow=琥珀。
 const violet = {

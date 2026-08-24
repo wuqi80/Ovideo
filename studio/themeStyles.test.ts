@@ -41,8 +41,8 @@ describe('Studio light canvas element theme styles', () => {
     const app = readStudioFile('App.tsx');
 
     expect(app).toContain("const isDarkCanvas = canvasTheme === 'dark'");
-    expect(app).toContain("'/static/branding/ostory-tv-logo-on-dark.svg?v=20260820-ostory-v1'");
-    expect(app).toContain("'/static/branding/ostory-tv-logo-on-light.svg?v=20260820-ostory-v1'");
-    expect(app).toContain('alt="Ostory TV"');
+    expect(app).toContain("'/static/branding/chuangju-logo-on-dark.svg?v=20260824-chuangju-v1'");
+    expect(app).toContain("'/static/branding/chuangju-logo-on-light.svg?v=20260824-chuangju-v1'");
+    expect(app).toContain('alt="创剧"');
   });
 });

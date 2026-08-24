@@ -249,7 +249,7 @@ export const AssistantPanel: React.FC<AssistantPanelProps> = ({ isOpen, onClose 
 
                 {/* Role Label */}
                 <div className="flex items-center gap-2 px-1">
-                    {m.role === 'model' && <span className="text-[10px] font-bold text-cyan-500/80 uppercase tracking-wider">OSTORY AI</span>}
+                    {m.role === 'model' && <span className="text-[10px] font-bold text-cyan-500/80 uppercase tracking-wider">创剧 AI</span>}
                     {m.role === 'user' && <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">You</span>}
                 </div>
 

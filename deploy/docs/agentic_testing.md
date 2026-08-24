@@ -2,7 +2,7 @@
 
 ## Decision
 
-Ostory TV uses four explicit phases while keeping deterministic checks authoritative:
+创剧 uses four explicit phases while keeping deterministic checks authoritative:
 
 1. **Discover**: inspect runtimes, dependencies, repository state, and available
    test surfaces.
@@ -29,7 +29,7 @@ pixel alignment, database transaction correctness, or exact request contracts
 without purpose-built adapters and assertions. It may consume paid model calls
 or mutate production data if approvals are too broad.
 
-Ostory TV therefore uses three layers:
+创剧 therefore uses three layers:
 
 1. **Release gate**: Vitest, Pytest, route contracts, architecture contracts,
    production build, whitespace checks, and non-mutating public smoke tests.

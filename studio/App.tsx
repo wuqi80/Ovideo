@@ -1076,9 +1076,9 @@ export const App = () => {
                         <div className="relative z-10 flex items-center gap-4 px-4 pb-2">
                             <img
                               src={isDarkCanvas
-                                ? '/static/branding/ostory-tv-logo-on-dark.svg?v=20260820-ostory-v1'
-                                : '/static/branding/ostory-tv-logo-on-light.svg?v=20260820-ostory-v1'}
-                              alt="Ostory TV"
+                                ? '/static/branding/chuangju-logo-on-dark.svg?v=20260824-chuangju-v1'
+                                : '/static/branding/chuangju-logo-on-light.svg?v=20260824-chuangju-v1'}
+                              alt="创剧"
                               className="h-20 w-auto max-w-[68vw] object-contain drop-shadow-sm md:h-28"
                               draggable={false}
                             />

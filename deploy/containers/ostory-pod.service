@@ -1,5 +1,5 @@
 [Unit]
-Description=Ostory TV application pod
+Description=创剧 application pod
 Wants=network-online.target
 After=network-online.target
 

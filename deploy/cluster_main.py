@@ -764,9 +764,9 @@ if studio_assets_dir.exists():
             StaticFiles(directory=str(studio_assets_dir)),
             name="studio-assets",
         )
-        logger.info("✅ 已挂载 Ostory Studio 前端资源: %s", studio_dist_dir)
+        logger.info("✅ 已挂载创剧自由画布前端资源: %s", studio_dist_dir)
     except Exception as e:
-        logger.warning("无法挂载 Ostory Studio 目录: %s", e)
+        logger.warning("无法挂载创剧自由画布目录: %s", e)
 
 # 全局变量
 redis_client: Optional[redis.Redis] = None

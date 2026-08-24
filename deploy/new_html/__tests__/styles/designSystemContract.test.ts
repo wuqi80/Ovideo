@@ -8,7 +8,7 @@ const projectRoot = process.cwd();
 const readProjectFile = (relativePath: string): string =>
   fs.readFileSync(path.join(projectRoot, relativePath), 'utf8');
 
-describe('Ostory TV design-system contract', () => {
+describe('创剧 design-system contract', () => {
   it('keeps the source-of-truth palette aligned across CSS and Tailwind', () => {
     const css = readProjectFile('styles/design-tokens.css');
     const tailwind = readProjectFile('tailwind.config.cjs');
@@ -36,7 +36,7 @@ describe('Ostory TV design-system contract', () => {
     }
   });
 
-  it('uses the Ostory TV radius scale and soft floating shadow', () => {
+  it('uses the 创剧 radius scale and soft floating shadow', () => {
     const css = readProjectFile('styles/design-tokens.css');
 
     expect(css).toContain('--radius-base: 9px');
@@ -101,7 +101,7 @@ describe('Ostory TV design-system contract', () => {
     expect(html).not.toContain('style="background-color:');
   });
 
-  it('keeps the standalone unauthenticated login page on the same Ostory TV system', () => {
+  it('keeps the standalone unauthenticated login page on the same 创剧 system', () => {
     const login = readProjectFile('../login.html');
 
     expect(login).toContain('--primary: #5B49F0');
@@ -118,7 +118,7 @@ describe('Ostory TV design-system contract', () => {
     expect(login).not.toMatch(/#0052CC|#0065FF|#0747A6|#172B4D|#146EF5/i);
   });
 
-  it('uses one Ostory TV identity and favicon set across public shells', () => {
+  it('uses one 创剧 identity and favicon set across public shells', () => {
     const appHtml = readProjectFile('index.html');
     const loginHtml = readProjectFile('../login.html');
     const legacyAdminHtml = readProjectFile('../admin/index.html');
@@ -130,9 +130,9 @@ describe('Ostory TV design-system contract', () => {
     const studioApp = readProjectFile('../../studio/App.tsx');
 
     for (const assetPath of [
-      '../static/branding/ostory-tv-logo-on-light.svg',
-      '../static/branding/ostory-tv-logo-on-dark.svg',
-      '../static/branding/ostory-tv-mark.svg',
+      '../static/branding/chuangju-logo-on-light.svg',
+      '../static/branding/chuangju-logo-on-dark.svg',
+      '../static/branding/chuangju-mark.svg',
       '../static/favicon.ico',
       '../static/favicon-32x32.png',
       '../static/apple-touch-icon.png',
@@ -140,9 +140,9 @@ describe('Ostory TV design-system contract', () => {
       expect(fs.statSync(path.join(projectRoot, assetPath)).size, assetPath).toBeGreaterThan(0);
     }
 
-    expect(brandLogo).toContain('/static/branding/ostory-tv-logo-on-light.svg');
-    expect(brandLogo).toContain('/static/branding/ostory-tv-logo-on-dark.svg');
-    expect(brandLogo).toContain('/static/branding/ostory-tv-mark.svg');
+    expect(brandLogo).toContain('/static/branding/chuangju-logo-on-light.svg');
+    expect(brandLogo).toContain('/static/branding/chuangju-logo-on-dark.svg');
+    expect(brandLogo).toContain('/static/branding/chuangju-mark.svg');
     expect(brandLogo).toContain("tone = 'light'");
     expect(header).toContain('<BrandLogo');
     expect(header).not.toContain('<text x="14"');
@@ -150,28 +150,30 @@ describe('Ostory TV design-system contract', () => {
     expect(accountMenu).toContain("window.location.href = '/profile'");
     expect(app).toContain("const ProfilePage");
     expect(app).toContain('path="/profile"');
-    expect(appHtml).toContain('<title>Ostory TV · AI 视频创作平台</title>');
+    expect(appHtml).toContain('<title>创剧 · AI 视频创作平台</title>');
     expect(appHtml).toContain('<link rel="canonical" href="https://tv.ostory.ai/" />');
     expect(appHtml).toContain('把一个想法，变成一部好故事');
-    expect(appHtml).toContain('/favicon.svg?v=20260820-ostory-v1');
-    expect(appHtml).toContain('/favicon.ico?v=20260820-ostory-v1');
-    expect(loginHtml).toContain('/favicon.svg?v=20260820-ostory-v1');
-    expect(loginHtml).toContain('/favicon.ico?v=20260820-ostory-v1');
-    expect(loginHtml).toContain('/static/branding/ostory-tv-logo-on-dark.svg');
-    expect(loginHtml).toContain('/static/branding/ostory-tv-logo-on-light.svg');
+    expect(appHtml).toContain('/favicon.svg?v=20260824-chuangju-v1');
+    expect(appHtml).toContain('/favicon.ico?v=20260824-chuangju-v1');
+    expect(loginHtml).toContain('/favicon.svg?v=20260824-chuangju-v1');
+    expect(loginHtml).toContain('/favicon.ico?v=20260824-chuangju-v1');
+    expect(loginHtml).toContain('/static/branding/chuangju-logo-on-dark.svg');
+    expect(loginHtml).toContain('/static/branding/chuangju-logo-on-light.svg');
     expect(loginHtml).not.toContain('drop-shadow(2px 0 0 rgba(255,255,255,0.98))');
-    expect(legacyAdminHtml).toContain('/favicon.ico?v=20260820-ostory-v1');
-    expect(legacyAdminHtml).toContain('/static/branding/ostory-tv-logo-on-dark.svg');
-    expect(studioHtml).toContain('/favicon.ico?v=20260820-ostory-v1');
-    expect(studioHtml).toContain('/apple-touch-icon.png?v=20260820-ostory-v1');
-    expect(loginHtml).toContain('Ostory TV 是面向普通创作者的 AI 视频工作台。');
+    expect(legacyAdminHtml).toContain('/favicon.ico?v=20260824-chuangju-v1');
+    expect(legacyAdminHtml).toContain('/static/branding/chuangju-logo-on-dark.svg');
+    expect(studioHtml).toContain('/favicon.ico?v=20260824-chuangju-v1');
+    expect(studioHtml).toContain('/apple-touch-icon.png?v=20260824-chuangju-v1');
+    expect(loginHtml).toContain('创剧是面向普通创作者的 AI 视频工作台。');
     expect(loginHtml).toContain('无需专业制作经验');
     expect(studioApp).toContain("isDarkCanvas");
-    expect(studioApp).toContain('/static/branding/ostory-tv-logo-on-dark.svg');
-    expect(studioApp).toContain('/static/branding/ostory-tv-logo-on-light.svg');
+    expect(studioApp).toContain('/static/branding/chuangju-logo-on-dark.svg');
+    expect(studioApp).toContain('/static/branding/chuangju-logo-on-light.svg');
 
     for (const publicSource of [appHtml, loginHtml, legacyAdminHtml, studioHtml, brandLogo, studioApp]) {
       expect(publicSource).not.toMatch(/(?:example|placeholder)\s+brand/i);
+      const copyWithoutDeploymentOrigin = publicSource.replaceAll('https://tv.ostory.ai', '');
+      expect(copyWithoutDeploymentOrigin).not.toMatch(/Ostory(?:\s+TV|\s+Studio)?/i);
     }
   });
 
@@ -192,8 +194,8 @@ describe('Ostory TV design-system contract', () => {
 
     expect(projectHub).toContain('全部项目');
     expect(projectHub).toContain('已归档');
-    expect(projectHub).toContain('title="Ostory TV · AI 视频创作平台"');
-    expect(projectHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="Ostory TV · AI 视频创作平台" />');
+    expect(projectHub).toContain('title="创剧 · AI 视频创作平台"');
+    expect(projectHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="创剧 · AI 视频创作平台" />');
     expect(projectHub).not.toContain('OSTORY <span className="text-primary">·</span> 漫剧创作平台');
     expect(projectHub).toContain('include_archived: \'true\'');
     expect(projectHub).toContain('<AccountMenu');
@@ -206,8 +208,8 @@ describe('Ostory TV design-system contract', () => {
     expect(episodeHub).toContain('制作中');
     expect(episodeHub).toContain('已完成');
     expect(episodeHub).toContain('已发布');
-    expect(episodeHub).toContain('title="Ostory TV · AI 视频创作平台"');
-    expect(episodeHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="Ostory TV · AI 视频创作平台" />');
+    expect(episodeHub).toContain('title="创剧 · AI 视频创作平台"');
+    expect(episodeHub).toContain('<BrandLogo className="h-8 w-auto max-w-[170px]" alt="创剧 · AI 视频创作平台" />');
     expect(episodeHub).not.toContain('OSTORY <span className="text-primary">·</span> 漫剧创作平台');
     expect(episodeHub).toContain('app-modal-backdrop');
     expect(episodeHub).toContain('aria-modal="true"');

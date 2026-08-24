@@ -1,6 +1,6 @@
-# Ostory TV
+# 创剧
 
-Ostory TV is an AI-assisted video production workspace. It organizes a project
+创剧 is an AI-assisted video production workspace. It organizes a project
 from script and visual design through storyboard, audio, video generation, and
 final delivery while preserving user choices and generation history.
 

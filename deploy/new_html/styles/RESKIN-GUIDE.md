@@ -1,4 +1,4 @@
-# Ostory TV frontend visual system
+# 创剧 frontend visual system
 
 仓库根 `DESIGN.md`（暖白 + 紫罗兰标准）是视觉来源，`design-tokens.css` 与
 `tailwind.config.cjs` 是实现契约。创作端、后台和弹窗必须复用同一套令牌，

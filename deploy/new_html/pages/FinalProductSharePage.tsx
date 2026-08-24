@@ -63,7 +63,7 @@ export const FinalProductSharePage: React.FC = () => {
       <header className="h-16 bg-n0 border-b border-n40 flex items-center px-6 md:px-10 gap-3">
         <span className="w-9 h-9 rounded-lg bg-primary text-white flex items-center justify-center"><Clapperboard size={19} /></span>
         <div>
-          <div className="text-sm font-semibold">Ostory TV 成品审阅</div>
+          <div className="text-sm font-semibold">创剧成品审阅</div>
           <div className="text-[11px] text-n100">通过分享链接查看并提出修改意见</div>
         </div>
       </header>

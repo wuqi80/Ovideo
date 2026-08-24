@@ -509,9 +509,9 @@ export const EpisodeHubPage: React.FC = () => {
                 type="button"
                 onClick={() => navigate('/projects')}
                 className="flex shrink-0 items-center gap-2 rounded focus:outline-none focus:ring-2 focus:ring-primary/25"
-                title="Ostory TV · AI 视频创作平台"
+                title="创剧 · AI 视频创作平台"
               >
-                <BrandLogo className="h-8 w-auto max-w-[170px]" alt="Ostory TV · AI 视频创作平台" />
+                <BrandLogo className="h-8 w-auto max-w-[170px]" alt="创剧 · AI 视频创作平台" />
               </button>
               <div className="h-8 w-px shrink-0 bg-n40" />
               <div className="min-w-0">

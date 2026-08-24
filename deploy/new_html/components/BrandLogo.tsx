@@ -13,12 +13,12 @@ interface BrandLogoProps {
 
 const BRAND_ASSETS: Record<BrandLogoTone, Record<BrandLogoVariant, string>> = {
   light: {
-    lockup: '/static/branding/ostory-tv-logo-on-light.svg?v=20260820-ostory-v1',
-    mark: '/static/branding/ostory-tv-mark.svg?v=20260820-ostory-v1',
+    lockup: '/static/branding/chuangju-logo-on-light.svg?v=20260824-chuangju-v1',
+    mark: '/static/branding/chuangju-mark.svg?v=20260824-chuangju-v1',
   },
   dark: {
-    lockup: '/static/branding/ostory-tv-logo-on-dark.svg?v=20260820-ostory-v1',
-    mark: '/static/branding/ostory-tv-mark.svg?v=20260820-ostory-v1',
+    lockup: '/static/branding/chuangju-logo-on-dark.svg?v=20260824-chuangju-v1',
+    mark: '/static/branding/chuangju-mark.svg?v=20260824-chuangju-v1',
   },
 };
 

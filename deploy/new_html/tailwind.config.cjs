@@ -1,4 +1,4 @@
-// Ostory TV palette. DESIGN.md is the visual contract; historical token names
+// 创剧 palette. DESIGN.md is the visual contract; historical token names
 // remain aliases until their component consumers are migrated.
 const ostoryColors = {
   n0: '#FFFFFF',

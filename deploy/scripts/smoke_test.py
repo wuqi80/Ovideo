@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ostory TV 冒烟测试：登录、安全项与核心流程。base URL 必须显式配置。
+"""创剧冒烟测试：登录、安全项与核心流程。base URL 必须显式配置。
 
 用法： python smoke_test.py [BASE_URL] [ADMIN_PASSWORD]
   BASE_URL 默认 http://127.0.0.1:6006
