@@ -115,7 +115,8 @@ describe('创剧 design-system contract', () => {
     expect(login).toContain('input:-webkit-autofill + label');
     expect(login).toContain('box-shadow: 0 0 0 1000px var(--n0) inset');
     expect(login).toContain('width: 44%');
-    expect(login).toContain('width: min(184px, 40vw)');
+    expect(login).toContain('width: min(156px, 40vw)');
+    expect(login).toContain('width: 136px');
     expect(login).toContain('linear-gradient(145deg, #0C1628 0%, #09111F 54%, #070D18 100%)');
     expect(login.match(/class="workflow-card"/g)).toHaveLength(3);
     expect(login).toContain('写剧本');
@@ -159,7 +160,8 @@ describe('创剧 design-system contract', () => {
     expect(app).toContain('path="/profile"');
     expect(appHtml).toContain('<title>创剧 · AI 视频创作平台</title>');
     expect(appHtml).toContain('<link rel="canonical" href="https://tv.ostory.ai/" />');
-    expect(appHtml).toContain('把一个想法，变成一部好故事');
+    expect(appHtml).toContain('把一个想法，变成一部好漫剧');
+    expect(appHtml).not.toContain('把一个想法，变成一部好故事');
     expect(appHtml).toContain('/favicon.svg?v=20260824-chuangju-v1');
     expect(appHtml).toContain('/favicon.ico?v=20260824-chuangju-v1');
     expect(loginHtml).toContain('/favicon.svg?v=20260824-chuangju-v1');
