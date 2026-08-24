@@ -10,8 +10,9 @@ STATIC_DIR = DEPLOY_DIR / "static"
 BRAND_DIR = STATIC_DIR / "branding"
 
 BLUE = (83, 159, 243, 255)
-INDIGO = (80, 94, 245, 255)
-PURPLE = (166, 66, 245, 255)
+INDIGO = (8, 121, 232, 255)
+PURPLE = (0, 191, 239, 255)
+DEEP_BLUE = (23, 79, 209, 255)
 INK = (23, 23, 28, 255)
 WHITE = (255, 255, 255, 255)
 
@@ -19,6 +20,7 @@ WHITE = (255, 255, 255, 255)
 def _font(size: int, *, bold: bool = True) -> ImageFont.FreeTypeFont:
     fonts = Path("C:/Windows/Fonts")
     candidates = [
+        fonts / "NotoSansSC-VF.ttf",
         fonts / ("msyhbd.ttc" if bold else "msyh.ttc"),
         fonts / ("simhei.ttf" if bold else "simsun.ttc"),
         fonts / ("segoeuib.ttf" if bold else "segoeui.ttf"),
@@ -27,41 +29,61 @@ def _font(size: int, *, bold: bool = True) -> ImageFont.FreeTypeFont:
     ]
     for candidate in candidates:
         if candidate.exists():
-            return ImageFont.truetype(str(candidate), size=size)
+            font = ImageFont.truetype(str(candidate), size=size)
+            if bold and candidate.name == "NotoSansSC-VF.ttf":
+                font.set_variation_by_name("Black")
+            return font
     return ImageFont.load_default(size=size)
 
 
-def _gradient_square(size: int) -> Image.Image:
+def _gradient_layer(size: int) -> Image.Image:
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     pixels = image.load()
     for y in range(size):
         for x in range(size):
-            t = min(1.0, max(0.0, (x + y) / (2 * max(1, size - 1))))
-            if t < 0.56:
-                p = t / 0.56
-                a, b = BLUE, INDIGO
+            t = min(1.0, max(0.0, x / max(1, size - 1)))
+            if t < 0.52:
+                p = t / 0.52
+                a, b = DEEP_BLUE, INDIGO
             else:
-                p = (t - 0.56) / 0.44
+                p = (t - 0.52) / 0.48
                 a, b = INDIGO, PURPLE
             pixels[x, y] = tuple(round(a[i] * (1 - p) + b[i] * p) for i in range(4))
-    mask = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, size - 1, size - 1), radius=round(size * 0.29), fill=255)
-    image.putalpha(mask)
     return image
 
 
 def make_mark(size: int) -> Image.Image:
     image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    pad = round(size * 0.065)
-    square_size = size - pad * 2
-    image.alpha_composite(_gradient_square(square_size), (pad, pad))
     draw = ImageDraw.Draw(image)
     scale = size / 368
-    draw.polygon([(87 * scale, 130 * scale), (275 * scale, 80 * scale), (317 * scale, 133 * scale), (100 * scale, 191 * scale)], fill=WHITE)
-    draw.polygon([(132 * scale, 118 * scale), (162 * scale, 110 * scale), (193 * scale, 153 * scale), (163 * scale, 161 * scale)], fill=INDIGO)
-    draw.polygon([(208 * scale, 98 * scale), (238 * scale, 90 * scale), (269 * scale, 133 * scale), (239 * scale, 141 * scale)], fill=PURPLE)
-    draw.rounded_rectangle((87 * scale, 166 * scale, 317 * scale, 308 * scale), radius=30 * scale, fill=WHITE)
-    draw.polygon([(176 * scale, 203 * scale), (254 * scale, 250 * scale), (176 * scale, 297 * scale)], fill=INDIGO)
+    draw.rounded_rectangle((44 * scale, 152 * scale, 264 * scale, 322 * scale), radius=30 * scale, fill=DEEP_BLUE)
+    draw.rounded_rectangle((74 * scale, 132 * scale, 294 * scale, 302 * scale), radius=30 * scale, fill=INDIGO)
+
+    gradient = _gradient_layer(size)
+    front_mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(front_mask).rounded_rectangle(
+        (104 * scale, 128 * scale, 324 * scale, 298 * scale),
+        radius=30 * scale,
+        fill=255,
+    )
+    image.paste(gradient, (0, 0), front_mask)
+
+    clapper_mask = Image.new("L", (size, size), 0)
+    clapper_draw = ImageDraw.Draw(clapper_mask)
+    clapper_draw.polygon(
+        [(96 * scale, 118 * scale), (278 * scale, 70 * scale), (323 * scale, 132 * scale), (108 * scale, 189 * scale)],
+        fill=255,
+    )
+    clapper_draw.polygon([(142 * scale, 106 * scale), (171 * scale, 98 * scale), (202 * scale, 141 * scale), (173 * scale, 149 * scale)], fill=0)
+    clapper_draw.polygon([(218 * scale, 86 * scale), (247 * scale, 78 * scale), (278 * scale, 121 * scale), (249 * scale, 129 * scale)], fill=0)
+    image.paste(gradient, (0, 0), clapper_mask)
+
+    alpha = image.getchannel("A")
+    ImageDraw.Draw(alpha).polygon(
+        [(162 * scale, 170 * scale), (262 * scale, 228 * scale), (162 * scale, 286 * scale)],
+        fill=0,
+    )
+    image.putalpha(alpha)
     return image
 
 
@@ -70,7 +92,7 @@ def make_lockup(on_dark: bool) -> Image.Image:
     image.alpha_composite(make_mark(368), (0, 0))
     draw = ImageDraw.Draw(image)
     word_font = _font(176)
-    draw.text((390, 68), "创剧", font=word_font, fill=WHITE if on_dark else INK, spacing=12)
+    draw.text((390, 68), "创剧", font=word_font, fill=WHITE if on_dark else INK)
     return image
 
 

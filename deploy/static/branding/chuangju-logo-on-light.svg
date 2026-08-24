@@ -2,16 +2,25 @@
   <title id="title">创剧</title>
   <desc id="desc">适用于浅色背景的创剧标志</desc>
   <defs>
-    <linearGradient id="brand-gradient" x1="48" y1="44" x2="320" y2="326" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#539FF3"/>
-      <stop offset="0.5" stop-color="#505EF5"/>
-      <stop offset="1" stop-color="#A642F5"/>
+    <linearGradient id="brand-gradient" x1="44" y1="184" x2="324" y2="184" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#174FD1"/>
+      <stop offset="0.52" stop-color="#0879E8"/>
+      <stop offset="1" stop-color="#00BFEF"/>
     </linearGradient>
+    <mask id="play-cutout">
+      <rect width="368" height="368" fill="#FFFFFF"/>
+      <path d="m162 170 100 58-100 58Z" fill="#000000"/>
+    </mask>
+    <mask id="clapper-cutout">
+      <path d="M96 118 278 70c15-4 30 5 34 20l11 42-215 57Z" fill="#FFFFFF"/>
+      <path d="m142 106 29-8 31 43-29 8Zm76-20 29-8 31 43-29 8Z" fill="#000000"/>
+    </mask>
   </defs>
-  <rect x="24" y="24" width="320" height="320" rx="92" fill="url(#brand-gradient)"/>
-  <path d="M87 130 275 80c14-4 29 5 33 19l9 34-217 58Z" fill="#FFFFFF"/>
-  <path d="m132 118 30-8 31 43-30 8Zm76-20 30-8 31 43-30 8Z" fill="url(#brand-gradient)"/>
-  <rect x="87" y="166" width="230" height="142" rx="30" fill="#FFFFFF"/>
-  <path d="m176 203 78 47-78 47Z" fill="url(#brand-gradient)"/>
-  <text x="390" y="245" fill="#17171C" font-family="Noto Sans SC, Microsoft YaHei, sans-serif" font-size="176" font-weight="800" letter-spacing="12">创剧</text>
+  <g mask="url(#play-cutout)">
+    <rect x="44" y="152" width="220" height="170" rx="30" fill="#174FD1"/>
+    <rect x="74" y="132" width="220" height="170" rx="30" fill="#0879E8"/>
+    <rect x="104" y="128" width="220" height="170" rx="30" fill="url(#brand-gradient)"/>
+    <rect width="368" height="368" fill="url(#brand-gradient)" mask="url(#clapper-cutout)"/>
+  </g>
+  <text x="390" y="245" fill="#17171C" font-family="Noto Sans SC, sans-serif" font-size="176" font-weight="900">创剧</text>
 </svg>

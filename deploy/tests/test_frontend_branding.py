@@ -65,13 +65,13 @@ def test_chuangju_favicons_and_mark_use_the_clapperboard_play_symbol():
         assert visible_pixels > 0
 
     mark = Image.open(DEPLOY_DIR / "static/branding/chuangju-mark.png").convert("RGBA")
-    gradient = mark.getpixel((80, 184))
-    board = mark.getpixel((184, 184))
-    play = mark.getpixel((205, 250))
+    gradient = mark.getpixel((52, 230))
+    front = mark.getpixel((300, 230))
+    play_cutout = mark.getpixel((190, 228))
 
     assert gradient[3] == 255 and gradient[2] > gradient[0]
-    assert board == (255, 255, 255, 255)
-    assert play[3] == 255 and play[2] > play[0]
+    assert front[3] == 255 and front[2] > front[0]
+    assert play_cutout[3] == 0
     assert mark.getpixel((0, 0))[3] == 0
 
 
@@ -90,6 +90,14 @@ def test_chuangju_logo_assets_are_theme_ready_and_reproducible():
 
     generator = DEPLOY_DIR / "scripts/generate_ostory_brand_assets.py"
     assert generator.is_file()
+
+    for relative_path in [
+        "static/branding/chuangju-logo-on-light.svg",
+        "static/branding/chuangju-logo-on-dark.svg",
+    ]:
+        source = (DEPLOY_DIR / relative_path).read_text(encoding="utf-8")
+        assert 'font-family="Noto Sans SC, sans-serif"' in source
+        assert 'font-weight="900"' in source
 
 
 def test_studio_routes_serve_the_sibling_build_directory():
