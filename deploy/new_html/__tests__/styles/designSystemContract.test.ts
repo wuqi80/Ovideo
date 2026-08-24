@@ -114,6 +114,13 @@ describe('创剧 design-system contract', () => {
     expect(login).toContain('background: transparent');
     expect(login).toContain('input:-webkit-autofill + label');
     expect(login).toContain('box-shadow: 0 0 0 1000px var(--n0) inset');
+    expect(login).toContain('width: 44%');
+    expect(login).toContain('width: min(184px, 40vw)');
+    expect(login).toContain('linear-gradient(145deg, #0C1628 0%, #09111F 54%, #070D18 100%)');
+    expect(login.match(/class="workflow-card"/g)).toHaveLength(3);
+    expect(login).toContain('写剧本');
+    expect(login).toContain('做分镜');
+    expect(login).toContain('出成片');
     expect(login).toContain('@media (max-width: 479px)');
     expect(login).not.toMatch(/#0052CC|#0065FF|#0747A6|#172B4D|#146EF5/i);
   });

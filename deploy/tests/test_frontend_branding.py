@@ -100,6 +100,19 @@ def test_chuangju_logo_assets_are_theme_ready_and_reproducible():
         assert 'font-weight="900"' in source
 
 
+def test_login_page_uses_the_compact_easy_style_split_and_three_step_preview():
+    login_html = (DEPLOY_DIR / "login.html").read_text(encoding="utf-8")
+
+    assert "width: 44%;" in login_html
+    assert "width: min(184px, 40vw);" in login_html
+    assert "linear-gradient(145deg, #0C1628 0%, #09111F 54%, #070D18 100%)" in login_html
+    assert 'class="workflow-showcase"' in login_html
+    assert login_html.count('class="workflow-card"') == 3
+    assert "写剧本" in login_html
+    assert "做分镜" in login_html
+    assert "出成片" in login_html
+
+
 def test_studio_routes_serve_the_sibling_build_directory():
     router = create_frontend_pages_router()
     studio_paths = {
