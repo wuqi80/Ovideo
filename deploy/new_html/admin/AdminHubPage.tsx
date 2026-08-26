@@ -33,7 +33,7 @@ const TileBase: React.FC<{
     children?: React.ReactNode;
 }> = ({ icon, title, subtitle, accent, onClick, href, children }) => {
     const inner = (
-        <div className="group relative bg-n0 hover:bg-n0 border border-n40 hover:border-primary rounded-md p-6 transition-all duration-200 cursor-pointer overflow-hidden shadow-card hover:shadow-atlas">
+        <div className="group relative h-full bg-n0 hover:bg-n0 border border-n40 hover:border-primary rounded-md p-6 transition-all duration-200 cursor-pointer overflow-hidden shadow-card hover:shadow-atlas">
             {/* 顶部辉光线 */}
             <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent ${accent} to-transparent opacity-50 group-hover:opacity-100 transition-opacity`} />
             {/* 角部装饰 */}
@@ -58,9 +58,9 @@ const TileBase: React.FC<{
         </div>
     );
     if (href) {
-        return <a href={href} target="_blank" rel="noreferrer" className="block">{inner}</a>;
+        return <a href={href} target="_blank" rel="noreferrer" className="block h-full">{inner}</a>;
     }
-    return <div onClick={onClick} className="block">{inner}</div>;
+    return <div onClick={onClick} className="block h-full">{inner}</div>;
 };
 
 const KPICard: React.FC<{ label: string; value: number | string; accent: string }> = ({ label, value, accent }) => (
