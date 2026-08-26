@@ -479,7 +479,7 @@ const NodeComponent: React.FC<NodeProps> = ({
           return (
             <div className="w-full h-full p-6 flex flex-col group/text">
                 <div className="studio-node-inner-box flex-1 rounded-2xl p-4 relative overflow-hidden backdrop-blur-sm transition-colors">
-                    <textarea className="studio-node-textarea w-full h-full bg-transparent resize-none focus:outline-none text-sm font-medium leading-relaxed custom-scrollbar selection:bg-amber-500/30" placeholder="输入您的创意构想..." value={localPrompt} onChange={(e) => setLocalPrompt(e.target.value)} onBlur={commitPrompt} onKeyDown={handleCmdEnter} onWheel={(e) => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} maxLength={1000} />
+                    <textarea className="studio-node-textarea w-full h-full bg-transparent resize-none focus:outline-none text-sm font-medium leading-relaxed custom-scrollbar selection:bg-amber-500/30" placeholder={node.title.includes('剧本') ? '输入场景、人物、动作和台词…' : '输入您的创意构想...'} value={localPrompt} onChange={(e) => setLocalPrompt(e.target.value)} onBlur={commitPrompt} onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); commitPrompt(); } }} onWheel={(e) => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} maxLength={6000} />
                 </div>
             </div>
           );
@@ -586,6 +586,7 @@ const NodeComponent: React.FC<NodeProps> = ({
   };
 
   const renderBottomPanel = () => {
+     if (node.type === NodeType.PROMPT_INPUT) return null;
      const isOpen = (isHovered || isInputFocused);
      let models: {l: string, v: string}[] = [];
      if (node.type === NodeType.VIDEO_GENERATOR) {

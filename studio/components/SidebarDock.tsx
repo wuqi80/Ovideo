@@ -31,6 +31,7 @@ interface SidebarDockProps {
     workflows: Workflow[];
     selectedWorkflowId: string | null;
     onSelectWorkflow: (id: string | null) => void;
+    onCreateBasicWorkflow: () => void;
     onSaveWorkflow: () => void;
     onDeleteWorkflow: (id: string) => void;
     onRenameWorkflow: (id: string, title: string) => void;
@@ -76,6 +77,7 @@ export const SidebarDock: React.FC<SidebarDockProps> = ({
     workflows,
     selectedWorkflowId,
     onSelectWorkflow,
+    onCreateBasicWorkflow,
     onSaveWorkflow,
     onDeleteWorkflow,
     onRenameWorkflow
@@ -203,6 +205,20 @@ export const SidebarDock: React.FC<SidebarDockProps> = ({
                         </button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-3 custom-scrollbar space-y-3 relative">
+                        <button
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onCreateBasicWorkflow();
+                                setActivePanel(null);
+                            }}
+                            className="w-full rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-3 text-left transition-all hover:border-cyan-400/60 hover:bg-cyan-500/15"
+                        >
+                            <div className="flex items-center gap-2 text-xs font-semibold text-cyan-200">
+                                <WorkflowIcon size={15} />
+                                一键创建基础工作流
+                            </div>
+                            <div className="mt-1 pl-[23px] text-[10px] text-slate-400">输入剧本 → 生成首帧 → 生成视频</div>
+                        </button>
                         {workflows.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-10 text-slate-500 opacity-60 select-none">
                                 <FolderHeart size={48} strokeWidth={1} className="mb-3 opacity-50" />

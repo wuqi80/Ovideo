@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { NodeType, type Workflow } from './types';
 import {
   createDefaultStudioWorkspace,
+  createBasicScriptToVideoWorkflow,
   createStandardTextImageVideoWorkflow,
   mergeBuiltinStudioWorkflows,
   resolveStudioWorkspace,
@@ -9,8 +10,8 @@ import {
 } from './defaultWorkflows';
 
 describe('Studio built-in workflows', () => {
-  it('defines the minimum text-to-image-to-video graph with matching inputs', () => {
-    const workflow = createStandardTextImageVideoWorkflow();
+  it('defines the minimum script-to-image-to-video graph with script context at both generators', () => {
+    const workflow = createBasicScriptToVideoWorkflow();
 
     expect(workflow.id).toBe(STANDARD_TEXT_IMAGE_VIDEO_WORKFLOW_ID);
     expect(workflow.isBuiltin).toBe(true);
@@ -22,9 +23,16 @@ describe('Studio built-in workflows', () => {
     expect(workflow.connections).toEqual([
       { from: workflow.nodes[0].id, to: workflow.nodes[1].id },
       { from: workflow.nodes[1].id, to: workflow.nodes[2].id },
+      { from: workflow.nodes[0].id, to: workflow.nodes[2].id },
     ]);
     expect(workflow.nodes[1].inputs).toEqual([workflow.nodes[0].id]);
-    expect(workflow.nodes[2].inputs).toEqual([workflow.nodes[1].id]);
+    expect(workflow.nodes[2].inputs).toEqual([workflow.nodes[1].id, workflow.nodes[0].id]);
+    expect(workflow.title).toBe('基础漫剧 · 剧本到视频');
+    expect(workflow.nodes.map(node => node.title)).toEqual([
+      '01 · 输入剧本',
+      '02 · 生成首帧',
+      '03 · 生成视频',
+    ]);
     expect(workflow.nodes[1].data.aspectRatio).toBe('16:9');
     expect(workflow.nodes[2].data.duration).toBe(5);
   });

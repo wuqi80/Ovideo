@@ -12,6 +12,7 @@ import { AppNode, NodeType, NodeStatus, Connection, ContextMenuState, Group, Wor
 import { getGenerationStrategy } from './services/videoStrategies';
 import { useStudioRuntime } from './services/runtime';
 import {
+    createBasicScriptToVideoWorkflow,
     resolveStudioWorkspace,
     STANDARD_TEXT_IMAGE_VIDEO_WORKFLOW_ID,
 } from './defaultWorkflows';
@@ -919,6 +920,22 @@ export const App = () => {
       if (wf) { saveHistory(); setNodes(JSON.parse(JSON.stringify(wf.nodes))); setConnections(JSON.parse(JSON.stringify(wf.connections))); setGroups(JSON.parse(JSON.stringify(wf.groups))); setSelectedWorkflowId(id); }
   };
 
+  const createBasicWorkflow = () => {
+      if (nodesRef.current.length > 0 && !window.confirm('将用基础工作流替换当前画布。当前内容仍可通过撤销恢复，是否继续？')) {
+          return;
+      }
+      const workflow = createBasicScriptToVideoWorkflow();
+      saveHistory();
+      setNodes(workflow.nodes);
+      setConnections(workflow.connections);
+      setGroups(workflow.groups);
+      setSelectedWorkflowId(workflow.id);
+      setSelectedNodeIds([]);
+      setSelectedGroupId(null);
+      setScale(0.85);
+      setPan({ x: 80, y: 100 });
+  };
+
   const deleteWorkflow = (id: string) => {
       if (id === STANDARD_TEXT_IMAGE_VIDEO_WORKFLOW_ID) return;
       setWorkflows(prev => prev.filter(w => w.id !== id));
@@ -1106,6 +1123,11 @@ export const App = () => {
                 </div>
 
                 <div className={`studio-welcome-actions flex items-center gap-1.5 p-1.5 rounded-[18px] backdrop-blur-xl shadow-2xl ${nodes.length > 0 ? 'pointer-events-none' : 'pointer-events-auto'}`}>
+                    <button onClick={createBasicWorkflow} className="studio-welcome-action flex items-center gap-2.5 px-5 py-3 rounded-[14px] bg-cyan-500/15 transition-all group shadow-sm hover:shadow-md hover:-translate-y-0.5 duration-300">
+                        <LayoutTemplate size={16} className="text-cyan-400" />
+                        <span className="text-[13px] font-medium tracking-wide">一键创建基础工作流</span>
+                    </button>
+
                     <button onClick={() => addNode(NodeType.IMAGE_GENERATOR)} className="studio-welcome-action flex items-center gap-2.5 px-5 py-3 rounded-[14px] transition-all group shadow-sm hover:shadow-md hover:-translate-y-0.5 duration-300">
                         <ImageIcon size={16} className="text-zinc-500 transition-colors group-hover:text-cyan-400" />
                         <span className="text-[13px] font-medium tracking-wide">文字生图</span>
@@ -1291,6 +1313,7 @@ export const App = () => {
               workflows={workflows}
               selectedWorkflowId={selectedWorkflowId}
               onSelectWorkflow={loadWorkflow}
+              onCreateBasicWorkflow={createBasicWorkflow}
               onSaveWorkflow={saveCurrentAsWorkflow}
               onDeleteWorkflow={deleteWorkflow}
               onRenameWorkflow={renameWorkflow}

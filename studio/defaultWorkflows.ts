@@ -20,11 +20,11 @@ function createNodes(): AppNode[] {
       x: 40,
       y: 120,
       width: 360,
-      title: '01 · 输入创意描述',
+      title: '01 · 输入剧本',
       status: NodeStatus.IDLE,
       data: {
         model: STUDIO_TEXT_MODEL_CONFIGURED,
-        prompt: '雨夜的霓虹街道上，一位侦探撑伞走向镜头，电影感，柔和光影。',
+        prompt: '场景：雨夜的霓虹街道。\n人物：一位侦探撑伞走向镜头。\n动作：侦探停下脚步，抬头看向闪烁的招牌。\n画面：电影感，柔和光影，16:9。',
       },
       inputs: [],
     },
@@ -34,13 +34,14 @@ function createNodes(): AppNode[] {
       x: 440,
       y: 80,
       width: 360,
-      title: '02 · 生成图片',
+      title: '02 · 生成首帧',
       status: NodeStatus.IDLE,
       data: {
         model: STUDIO_IMAGE_MODEL_CONFIGURED,
         aspectRatio: '16:9',
         resolution: '2K',
         imageCount: 1,
+        prompt: '根据剧本生成一个主体清晰、构图稳定、适合继续生成视频的首帧画面。',
       },
       inputs: [PROMPT_NODE_ID],
     },
@@ -60,7 +61,7 @@ function createNodes(): AppNode[] {
         videoCount: 1,
         generationMode: 'DEFAULT',
       },
-      inputs: [IMAGE_NODE_ID],
+      inputs: [IMAGE_NODE_ID, PROMPT_NODE_ID],
     },
   ];
 }
@@ -69,6 +70,7 @@ function createConnections(): Connection[] {
   return [
     { from: PROMPT_NODE_ID, to: IMAGE_NODE_ID },
     { from: IMAGE_NODE_ID, to: VIDEO_NODE_ID },
+    { from: PROMPT_NODE_ID, to: VIDEO_NODE_ID },
   ];
 }
 
@@ -77,10 +79,10 @@ function createConnections(): Connection[] {
  * creation chain. Every edge is mirrored in the target node's `inputs`, which
  * is the execution source of truth used by the Studio canvas.
  */
-export function createStandardTextImageVideoWorkflow(): Workflow {
+export function createBasicScriptToVideoWorkflow(): Workflow {
   return {
     id: STANDARD_TEXT_IMAGE_VIDEO_WORKFLOW_ID,
-    title: '标准工作流 · 文本到图片到视频',
+    title: '基础漫剧 · 剧本到视频',
     thumbnail: '',
     isBuiltin: true,
     nodes: createNodes(),
@@ -89,9 +91,12 @@ export function createStandardTextImageVideoWorkflow(): Workflow {
   };
 }
 
+/** Compatibility export for snapshots and callers created before the label update. */
+export const createStandardTextImageVideoWorkflow = createBasicScriptToVideoWorkflow;
+
 export function mergeBuiltinStudioWorkflows(workflows: Workflow[]): Workflow[] {
   return [
-    createStandardTextImageVideoWorkflow(),
+    createBasicScriptToVideoWorkflow(),
     ...workflows.filter(workflow => workflow.id !== STANDARD_TEXT_IMAGE_VIDEO_WORKFLOW_ID),
   ];
 }
@@ -102,7 +107,7 @@ export function createDefaultStudioWorkspace(): {
   connections: Connection[];
   groups: Group[];
 } {
-  const workflow = createStandardTextImageVideoWorkflow();
+  const workflow = createBasicScriptToVideoWorkflow();
   return {
     workflows: [workflow],
     nodes: createNodes(),
