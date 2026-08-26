@@ -449,27 +449,41 @@ const NodeComponent: React.FC<NodeProps> = ({
 
   const renderTopBar = () => {
     const showTopBar = isSelected || isHovered;
+    const titleControl = (
+      <div className="flex shrink-0 items-center gap-2 px-2 py-1 pointer-events-auto">
+        {isWorking && <div className="studio-node-icon-button backdrop-blur-md p-1.5 rounded-full"><Loader2 className="animate-spin w-3 h-3 text-cyan-400" /></div>}
+        {isEditingTitle ? (
+          <input className="studio-node-title bg-transparent border-none outline-none text-xs font-bold uppercase tracking-wider w-28 text-right whitespace-nowrap" value={tempTitle} onChange={(e) => setTempTitle(e.target.value)} onBlur={handleTitleSave} onKeyDown={(e) => e.key === 'Enter' && handleTitleSave()} onMouseDown={e => e.stopPropagation()} autoFocus />
+        ) : (
+          <span className="studio-node-title text-xs font-bold uppercase tracking-wider cursor-text text-right whitespace-nowrap" onClick={() => setIsEditingTitle(true)}>{node.title}</span>
+        )}
+      </div>
+    );
+    const mediaActions = (node.data.image || node.data.videoUri || node.data.audioUri) && (
+      <div className="flex shrink-0 items-center gap-1 pointer-events-auto">
+        <button onClick={handleDownload} className="studio-node-icon-button p-1.5 backdrop-blur-md rounded-md transition-colors" title="下载"><Download size={14} /></button>
+        {node.type !== NodeType.AUDIO_GENERATOR && <button onClick={handleExpand} className="studio-node-icon-button p-1.5 backdrop-blur-md rounded-md transition-colors" title="全屏预览"><Maximize2 size={14} /></button>}
+      </div>
+    );
+
+    if (node.type === NodeType.VIDEO_GENERATOR) {
+      return (
+        <div className={`absolute -top-[72px] left-0 w-full flex flex-col gap-1 px-1 transition-all duration-300 ${showTopBar ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+          <div className="flex min-h-7 items-center justify-between">
+            {mediaActions || <div />}
+            {titleControl}
+          </div>
+          <div className="studio-node-mode-strip w-full overflow-x-auto pointer-events-auto">
+            <VideoModeSelector currentMode={generationMode} onSelect={(mode) => onUpdate(node.id, { generationMode: mode })} />
+          </div>
+        </div>
+      );
+    }
+
     return (
     <div className={`absolute -top-10 left-0 w-full flex items-center justify-between px-1 transition-all duration-300 ${showTopBar ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
-        <div className="flex items-center gap-1.5 pointer-events-auto">
-            {node.type === NodeType.VIDEO_GENERATOR && (<VideoModeSelector currentMode={generationMode} onSelect={(mode) => onUpdate(node.id, { generationMode: mode })} />)}
-             {(node.data.image || node.data.videoUri || node.data.audioUri) && (
-                <div className="flex items-center gap-1">
-                    <button onClick={handleDownload} className="studio-node-icon-button p-1.5 backdrop-blur-md rounded-md transition-colors" title="下载"><Download size={14} /></button>
-                    {node.type !== NodeType.AUDIO_GENERATOR && <button onClick={handleExpand} className="studio-node-icon-button p-1.5 backdrop-blur-md rounded-md transition-colors" title="全屏预览"><Maximize2 size={14} /></button>}
-                </div>
-             )}
-        </div>
-        <div className="flex items-center gap-2 pointer-events-auto">
-             {isWorking && <div className="studio-node-icon-button backdrop-blur-md p-1.5 rounded-full"><Loader2 className="animate-spin w-3 h-3 text-cyan-400" /></div>}
-            <div className={`px-2 py-1 flex items-center gap-2`}>
-                {isEditingTitle ? (
-                    <input className="studio-node-title bg-transparent border-none outline-none text-[10px] font-bold uppercase tracking-wider w-24 text-right" value={tempTitle} onChange={(e) => setTempTitle(e.target.value)} onBlur={handleTitleSave} onKeyDown={(e) => e.key === 'Enter' && handleTitleSave()} onMouseDown={e => e.stopPropagation()} autoFocus />
-                ) : (
-                    <span className="studio-node-title text-[10px] font-bold uppercase tracking-wider cursor-text text-right" onClick={() => setIsEditingTitle(true)}>{node.title}</span>
-                )}
-            </div>
-        </div>
+        {mediaActions || <div />}
+        {titleControl}
     </div>
     );
   };
@@ -618,17 +632,17 @@ const NodeComponent: React.FC<NodeProps> = ({
                     <textarea className="studio-node-textarea w-full bg-transparent text-xs p-3 focus:outline-none resize-none custom-scrollbar font-medium leading-relaxed" style={{ height: `${Math.min(inputHeight, 200)}px` }} placeholder={node.type === NodeType.AUDIO_GENERATOR ? "输入需要合成语音的台词..." : "描述您的修改或生成需求..."} value={localPrompt} onChange={(e) => setLocalPrompt(e.target.value)} onBlur={() => { setIsInputFocused(false); commitPrompt(); }} onKeyDown={handleCmdEnter} onFocus={() => setIsInputFocused(true)} onMouseDown={e => e.stopPropagation()} readOnly={isWorking} />
                     <div className="absolute bottom-0 left-0 w-full h-3 cursor-row-resize flex items-center justify-center opacity-0 group-hover/input:opacity-100 transition-opacity" onMouseDown={handleInputResizeStart}><div className="w-8 h-1 rounded-full bg-white/10 group-hover/input:bg-white/20" /></div>
                 </div>
-                <div className="flex items-center justify-between px-2 pb-1 pt-1 relative z-20">
-                    <div className="flex items-center gap-2">
-                         <div className="relative group/model">
-                             <div className="studio-node-control-trigger flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[10px] font-bold"><span>{models.find(m => m.v === selectedModel)?.l || 'AI Model'}</span><ChevronDown size={10} /></div>
+                <div className="flex items-center gap-2 px-2 pb-1 pt-1 relative z-20">
+                    <div className="flex min-w-0 flex-1 items-center gap-1">
+                         <div className="relative min-w-0 group/model">
+                             <div className="studio-node-control-trigger flex min-w-0 items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[11px] font-bold"><span className="block max-w-[92px] truncate whitespace-nowrap">{models.find(m => m.v === selectedModel)?.l || 'AI Model'}</span><ChevronDown className="shrink-0" size={10} /></div>
                              <div className="absolute bottom-full left-0 pb-2 w-40 opacity-0 translate-y-2 pointer-events-none group-hover/model:opacity-100 group-hover/model:translate-y-0 group-hover/model:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{models.map(m => (<div key={m.v} onClick={() => onUpdate(node.id, { model: m.v })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${selectedModel === m.v ? 'studio-node-menu-item-active' : ''}`}>{m.l}</div>))}</div></div>
                          </div>
-                         {node.type !== NodeType.VIDEO_ANALYZER && node.type !== NodeType.AUDIO_GENERATOR && (<div className="relative group/ratio"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[10px] font-bold"><Scaling size={12} /><span>{node.data.aspectRatio || '16:9'}</span></div><div className="absolute bottom-full left-0 pb-2 w-20 opacity-0 translate-y-2 pointer-events-none group-hover/ratio:opacity-100 group-hover/ratio:translate-y-0 group-hover/ratio:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('VIDEO') ? VIDEO_ASPECT_RATIOS : IMAGE_ASPECT_RATIOS).map(r => (<div key={r} onClick={() => handleAspectRatioSelect(r)} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${node.data.aspectRatio === r ? 'studio-node-menu-item-active' : ''}`}>{r}</div>))}</div></div></div>)}
-                         {(node.type.includes('IMAGE') || node.type === NodeType.VIDEO_GENERATOR) && (<div className="relative group/resolution"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[10px] font-bold"><Monitor size={12} /><span>{node.data.resolution || (node.type.includes('IMAGE') ? '1k' : '720p')}</span></div><div className="absolute bottom-full left-0 pb-2 w-20 opacity-0 translate-y-2 pointer-events-none group-hover/resolution:opacity-100 group-hover/resolution:translate-y-0 group-hover/resolution:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('IMAGE') ? IMAGE_RESOLUTIONS : VIDEO_RESOLUTIONS).map(r => (<div key={r} onClick={() => onUpdate(node.id, { resolution: r })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${node.data.resolution === r ? 'studio-node-menu-item-active' : ''}`}>{r}</div>))}</div></div></div>)}
-                         {(node.type.includes('IMAGE') || node.type === NodeType.VIDEO_GENERATOR) && (<div className="relative group/count"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[10px] font-bold"><Layers size={12} /><span>{node.type.includes('IMAGE') ? (node.data.imageCount || 1) : (node.data.videoCount || 1)}</span></div><div className="absolute bottom-full left-0 pb-2 w-16 opacity-0 translate-y-2 pointer-events-none group-hover/count:opacity-100 group-hover/count:translate-y-0 group-hover/count:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('IMAGE') ? IMAGE_COUNTS : VIDEO_COUNTS).map(c => (<div key={c} onClick={() => onUpdate(node.id, node.type.includes('IMAGE') ? { imageCount: c } : { videoCount: c })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${((node.type.includes('IMAGE') ? node.data.imageCount : node.data.videoCount) || 1) === c ? 'studio-node-menu-item-active' : ''}`}>{c}</div>))}</div></div></div>)}
+                         {node.type !== NodeType.VIDEO_ANALYZER && node.type !== NodeType.AUDIO_GENERATOR && (<div className="relative shrink-0 whitespace-nowrap group/ratio"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[11px] font-bold"><Scaling size={12} /><span>{node.data.aspectRatio || '16:9'}</span></div><div className="absolute bottom-full left-0 pb-2 w-20 opacity-0 translate-y-2 pointer-events-none group-hover/ratio:opacity-100 group-hover/ratio:translate-y-0 group-hover/ratio:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('VIDEO') ? VIDEO_ASPECT_RATIOS : IMAGE_ASPECT_RATIOS).map(r => (<div key={r} onClick={() => handleAspectRatioSelect(r)} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${node.data.aspectRatio === r ? 'studio-node-menu-item-active' : ''}`}>{r}</div>))}</div></div></div>)}
+                         {(node.type.includes('IMAGE') || node.type === NodeType.VIDEO_GENERATOR) && (<div className="relative shrink-0 whitespace-nowrap group/resolution"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[11px] font-bold"><Monitor size={12} /><span>{node.data.resolution || (node.type.includes('IMAGE') ? '1k' : '720p')}</span></div><div className="absolute bottom-full left-0 pb-2 w-20 opacity-0 translate-y-2 pointer-events-none group-hover/resolution:opacity-100 group-hover/resolution:translate-y-0 group-hover/resolution:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('IMAGE') ? IMAGE_RESOLUTIONS : VIDEO_RESOLUTIONS).map(r => (<div key={r} onClick={() => onUpdate(node.id, { resolution: r })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${node.data.resolution === r ? 'studio-node-menu-item-active' : ''}`}>{r}</div>))}</div></div></div>)}
+                         {(node.type.includes('IMAGE') || node.type === NodeType.VIDEO_GENERATOR) && (<div className="relative shrink-0 whitespace-nowrap group/count"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[11px] font-bold"><Layers size={12} /><span>{node.type.includes('IMAGE') ? (node.data.imageCount || 1) : (node.data.videoCount || 1)}</span></div><div className="absolute bottom-full left-0 pb-2 w-16 opacity-0 translate-y-2 pointer-events-none group-hover/count:opacity-100 group-hover/count:translate-y-0 group-hover/count:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('IMAGE') ? IMAGE_COUNTS : VIDEO_COUNTS).map(c => (<div key={c} onClick={() => onUpdate(node.id, node.type.includes('IMAGE') ? { imageCount: c } : { videoCount: c })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${((node.type.includes('IMAGE') ? node.data.imageCount : node.data.videoCount) || 1) === c ? 'studio-node-menu-item-active' : ''}`}>{c}</div>))}</div></div></div>)}
                     </div>
-                    <button onClick={handleActionClick} disabled={isWorking} className={`relative flex items-center gap-2 px-4 py-1.5 rounded-[12px] font-bold text-[10px] tracking-wide transition-all duration-300 ${isWorking ? 'bg-white/5 text-slate-500 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-black hover:shadow-lg hover:shadow-cyan-500/20 hover:scale-105 active:scale-95'}`}>{isWorking ? <Loader2 className="animate-spin" size={12} /> : <Wand2 size={12} />}<span>{isWorking ? '生成中...' : '生成'}</span></button>
+                    <button onClick={handleActionClick} disabled={isWorking} className={`relative flex shrink-0 items-center justify-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-[12px] font-bold text-[11px] tracking-wide transition-all duration-300 ${isWorking ? 'bg-white/5 text-slate-500 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-black hover:shadow-lg hover:shadow-cyan-500/20 hover:scale-105 active:scale-95'}`}>{isWorking ? <Loader2 className="shrink-0 animate-spin" size={12} /> : <Wand2 className="shrink-0" size={12} />}<span className="whitespace-nowrap">{isWorking ? '生成中...' : '生成'}</span></button>
                 </div>
             </div>
         </div>

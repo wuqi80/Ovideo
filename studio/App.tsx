@@ -41,6 +41,8 @@ import {
 const SPRING = "cubic-bezier(0.32, 0.72, 0, 1)";
 const SNAP_THRESHOLD = 8; // Pixels for magnetic snap
 const COLLISION_PADDING = 24; // Spacing when nodes bounce off each other
+const MIN_CANVAS_SCALE = 0.2;
+const MAX_CANVAS_SCALE = 3;
 
 // Helper to get image dimensions
 const getImageDimensions = (src: string): Promise<{width: number, height: number}> => {
@@ -200,6 +202,8 @@ export const App = () => {
   const [scale, setScale] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
   const [isDraggingCanvas, setIsDraggingCanvas] = useState(false);
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const isSpacePressedRef = useRef(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
@@ -399,7 +403,7 @@ export const App = () => {
       const scaleX = (window.innerWidth - padding * 2) / contentW;
       const scaleY = (window.innerHeight - padding * 2) / contentH;
       let newScale = Math.min(scaleX, scaleY, 1);
-      newScale = Math.max(0.2, newScale);
+      newScale = Math.max(MIN_CANVAS_SCALE, newScale);
 
       const contentCenterX = minX + contentW / 2;
       const contentCenterY = minY + contentH / 2;
@@ -526,7 +530,7 @@ export const App = () => {
 
   const handleWheel = (e: React.WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
-        e.preventDefault(); const newScale = Math.min(Math.max(0.2, scale - e.deltaY * 0.001), 3);
+        e.preventDefault(); const newScale = Math.min(Math.max(MIN_CANVAS_SCALE, scale - e.deltaY * 0.001), MAX_CANVAS_SCALE);
         const rect = e.currentTarget.getBoundingClientRect(); const x = e.clientX - rect.left; const y = e.clientY - rect.top;
         const scaleDiff = newScale - scale;
         setPan(p => ({ x: p.x - (x - p.x) * (scaleDiff / scale), y: p.y - (y - p.y) * (scaleDiff / scale) }));
@@ -542,6 +546,15 @@ export const App = () => {
           setSelectionRect({ startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY });
       }
       if (e.button === 1 || (e.button === 0 && e.shiftKey)) { setIsDraggingCanvas(true); setLastMousePos({ x: e.clientX, y: e.clientY }); }
+  };
+
+  const handleCanvasMouseDownCapture = (e: React.MouseEvent) => {
+      if (e.button !== 0 || !isSpacePressedRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (contextMenu) setContextMenu(null);
+      setIsDraggingCanvas(true);
+      setLastMousePos({ x: e.clientX, y: e.clientY });
   };
 
   const handleGlobalMouseMove = useCallback((e: MouseEvent) => {
@@ -932,7 +945,7 @@ export const App = () => {
       setSelectedWorkflowId(workflow.id);
       setSelectedNodeIds([]);
       setSelectedGroupId(null);
-      setScale(0.85);
+      setScale(1);
       setPan({ x: 80, y: 100 });
   };
 
@@ -957,10 +970,25 @@ export const App = () => {
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') { if (clipboard) { e.preventDefault(); saveHistory(); const newNode: AppNode = { ...clipboard, id: `n-${Date.now()}-${Math.floor(Math.random()*1000)}`, x: clipboard.x + 50, y: clipboard.y + 50, status: NodeStatus.IDLE, inputs: [] }; setNodes(prev => [...prev, newNode]); setSelectedNodeIds([newNode.id]); } return; }
         if (e.key === 'Delete' || e.key === 'Backspace') { if (selectedGroupId) { saveHistory(); setGroups(prev => prev.filter(g => g.id !== selectedGroupId)); setSelectedGroupId(null); return; } if (selectedNodeIds.length > 0) { deleteNodes(selectedNodeIds); } }
     };
-    const handleKeyDownSpace = (e: KeyboardEvent) => { if (e.code === 'Space' && (e.target as HTMLElement).tagName !== 'INPUT' && (e.target as HTMLElement).tagName !== 'TEXTAREA') { document.body.classList.add('cursor-grab-override'); } };
-    const handleKeyUpSpace = (e: KeyboardEvent) => { if (e.code === 'Space') { document.body.classList.remove('cursor-grab-override'); } };
+    const handleKeyDownSpace = (e: KeyboardEvent) => {
+        const target = e.target as HTMLElement;
+        if (e.code !== 'Space' || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+        e.preventDefault();
+        isSpacePressedRef.current = true;
+        setIsSpacePressed(true);
+    };
+    const releaseSpacePan = () => {
+        isSpacePressedRef.current = false;
+        setIsSpacePressed(false);
+    };
+    const handleKeyUpSpace = (e: KeyboardEvent) => { if (e.code === 'Space') releaseSpacePan(); };
     window.addEventListener('keydown', handleKeyDown); window.addEventListener('keydown', handleKeyDownSpace); window.addEventListener('keyup', handleKeyUpSpace);
-    return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keydown', handleKeyDownSpace); window.removeEventListener('keyup', handleKeyUpSpace); };
+    const handleWindowBlur = () => {
+        releaseSpacePan();
+        setIsDraggingCanvas(false);
+    };
+    window.addEventListener('blur', handleWindowBlur);
+    return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keydown', handleKeyDownSpace); window.removeEventListener('keyup', handleKeyUpSpace); window.removeEventListener('blur', handleWindowBlur); };
   }, [selectedWorkflowId, selectedNodeIds, selectedGroupId, deleteNodes, undo, saveHistory, clipboard]);
 
   const handleCanvasDragOver = (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; };
@@ -1035,13 +1063,6 @@ export const App = () => {
   };
 
   useEffect(() => {
-      const style = document.createElement('style');
-      style.innerHTML = ` .cursor-grab-override, .cursor-grab-override * { cursor: grab !important; } .cursor-grab-override:active, .cursor-grab-override:active * { cursor: grabbing !important; } `;
-      document.head.appendChild(style);
-      return () => { document.head.removeChild(style); };
-  }, []);
-
-  useEffect(() => {
       document.documentElement.dataset.studioTheme = canvasTheme;
       persistStudioCanvasTheme(canvasTheme);
   }, [canvasTheme]);
@@ -1077,14 +1098,14 @@ export const App = () => {
         </button>
       </div>
       <div
-          className={`studio-canvas-content w-full h-full overflow-hidden selection:bg-cyan-500/30 ${isDraggingCanvas ? 'cursor-grabbing' : 'cursor-default'}`}
-          onMouseDown={handleCanvasMouseDown} onWheel={handleWheel}
+          className={`studio-canvas-content w-full h-full overflow-hidden selection:bg-cyan-500/30 ${isDraggingCanvas ? 'cursor-grabbing' : isSpacePressed ? 'cursor-grab-override' : 'cursor-default'}`}
+          onMouseDownCapture={handleCanvasMouseDownCapture} onMouseDown={handleCanvasMouseDown} onWheel={handleWheel}
           onDoubleClick={(e) => { e.preventDefault(); if (e.detail > 1 && !selectionRect) { setContextMenu({ visible: true, x: e.clientX, y: e.clientY, id: '' }); setContextMenuTarget({ type: 'create' }); } }}
           onContextMenu={(e) => { e.preventDefault(); if(e.target === e.currentTarget) setContextMenu(null); }}
           onDragOver={handleCanvasDragOver} onDrop={handleCanvasDrop}
       >
           <div className="absolute inset-0 noise-bg" />
-          <div className="studio-canvas-grid absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, var(--studio-grid-dot) 1px, transparent 1px)', backgroundSize: `${32 * scale}px ${32 * scale}px`, backgroundPosition: `${pan.x}px ${pan.y}px` }} />
+          <div className="studio-canvas-grid absolute inset-0 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, var(--studio-grid-dot) 1px, transparent 1px)', backgroundSize: `${40 * scale}px ${40 * scale}px`, backgroundPosition: `${Math.round(pan.x)}px ${Math.round(pan.y)}px` }} />
 
           <div className={`absolute inset-0 flex flex-col items-center justify-center transition-all duration-700 ease-[${SPRING}] z-50 pointer-events-none ${nodes.length > 0 ? 'opacity-0 scale-105' : 'opacity-100 scale-100'}`}>
                 {/* ... (Welcome Screen) ... */}
@@ -1148,7 +1169,8 @@ export const App = () => {
           <input type="file" ref={replaceVideoInputRef} className="hidden" accept="video/*" onChange={(e) => handleReplaceFile(e, 'video')} />
           <input type="file" ref={replaceImageInputRef} className="hidden" accept="image/*" onChange={(e) => handleReplaceFile(e, 'image')} />
 
-          <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`, width: '100%', height: '100%', transformOrigin: '0 0' }} className="w-full h-full">
+          <div style={{ transform: `translate3d(${Math.round(pan.x)}px, ${Math.round(pan.y)}px, 0)`, width: '100%', height: '100%' }} className="w-full h-full">
+            <div style={{ zoom: scale, width: '100%', height: '100%' }} className="relative w-full h-full">
               {/* Groups Layer */}
               {groups.map(g => (
                   <div
@@ -1245,6 +1267,7 @@ export const App = () => {
               ))}
 
               {selectionRect && <div className="absolute border border-cyan-500/40 bg-cyan-500/10 rounded-lg pointer-events-none" style={{ left: (Math.min(selectionRect.startX, selectionRect.currentX) - pan.x) / scale, top: (Math.min(selectionRect.startY, selectionRect.currentY) - pan.y) / scale, width: Math.abs(selectionRect.currentX - selectionRect.startX) / scale, height: Math.abs(selectionRect.currentY - selectionRect.startY) / scale }} />}
+            </div>
           </div>
 
           {contextMenu && (
@@ -1322,12 +1345,12 @@ export const App = () => {
           <AssistantPanel isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
 
           <div className="studio-canvas-toolbar absolute bottom-8 right-8 flex items-center gap-3 px-4 py-2 backdrop-blur-2xl rounded-full z-50 animate-in fade-in slide-in-from-bottom-4 duration-700">
-              <button onClick={() => setScale(s => Math.max(0.2, s - 0.1))} className="studio-canvas-toolbar-button p-1.5 transition-colors rounded-full"><Minus size={14} strokeWidth={3} /></button>
+              <button onClick={() => setScale(s => Math.max(MIN_CANVAS_SCALE, s - 0.1))} className="studio-canvas-toolbar-button p-1.5 transition-colors rounded-full"><Minus size={14} strokeWidth={3} /></button>
               <div className="flex items-center gap-2 min-w-[100px]">
-                   <input type="range" min="0.2" max="3" step="0.1" value={scale} onChange={(e) => setScale(parseFloat(e.target.value))} className="studio-canvas-toolbar-range w-24 h-1 rounded-full cursor-pointer" />
+                   <input type="range" min={MIN_CANVAS_SCALE} max={MAX_CANVAS_SCALE} step="0.05" value={scale} onChange={(e) => setScale(parseFloat(e.target.value))} className="studio-canvas-toolbar-range w-24 h-1 rounded-full cursor-pointer" />
                    <span className="studio-canvas-toolbar-button text-[10px] font-bold w-8 text-right tabular-nums cursor-pointer" onClick={() => setScale(1)} title="Reset Zoom">{Math.round(scale * 100)}%</span>
               </div>
-              <button onClick={() => setScale(s => Math.min(3, s + 0.1))} className="studio-canvas-toolbar-button p-1.5 transition-colors rounded-full"><Plus size={14} strokeWidth={3} /></button>
+              <button onClick={() => setScale(s => Math.min(MAX_CANVAS_SCALE, s + 0.1))} className="studio-canvas-toolbar-button p-1.5 transition-colors rounded-full"><Plus size={14} strokeWidth={3} /></button>
               <button onClick={handleFitView} className="studio-canvas-toolbar-button p-1.5 transition-colors rounded-full ml-2 border-l pl-3" title="适配视图">
                   <Scan size={14} strokeWidth={3} />
               </button>

@@ -16,7 +16,7 @@ describe('Studio light canvas element theme styles', () => {
     expect(css).toContain('--studio-node-panel: rgba(255, 255, 255');
     expect(css).toContain('--studio-node-media-bg: #F0F0EC');
     expect(css).toContain('.studio-canvas[data-studio-theme="dark"]');
-    expect(css).toContain('--studio-node-surface: rgba(30, 30, 38');
+    expect(css).toContain('--studio-node-surface: #1B1C22');
     expect(css).toContain('--studio-node-media-bg: #1E1E26');
   });
 
