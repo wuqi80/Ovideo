@@ -45,4 +45,14 @@ describe('Studio light canvas element theme styles', () => {
     expect(app).toContain("'/static/branding/chuangju-logo-on-light.svg?v=20260824-chuangju-v1'");
     expect(app).toContain('alt="创剧"');
   });
+
+  it('uses the same first-and-last-frame label in every Studio entry point', () => {
+    const app = readStudioFile('App.tsx');
+    const videoNodeModules = readStudioFile('components/VideoNodeModules.tsx');
+    const visibleCopy = `${app}\n${videoNodeModules}`;
+
+    expect(app).toContain('>首尾帧</span>');
+    expect(videoNodeModules).toContain("title: '首尾帧 (FrameWeaver)'");
+    expect(visibleCopy).not.toMatch(/收尾插帧|首尾插帧/);
+  });
 });

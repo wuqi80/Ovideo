@@ -1118,7 +1118,7 @@ export const App = () => {
 
                     <button onClick={() => addNode(NodeType.VIDEO_GENERATOR, undefined, undefined, { generationMode: 'FIRST_LAST_FRAME' })} className="studio-welcome-action flex items-center gap-2.5 px-5 py-3 rounded-[14px] transition-all group shadow-sm hover:shadow-md hover:-translate-y-0.5 duration-300">
                         <Link size={16} className="text-zinc-500 transition-colors group-hover:text-emerald-400" />
-                        <span className="text-[13px] font-medium tracking-wide">首尾插帧</span>
+                        <span className="text-[13px] font-medium tracking-wide">首尾帧</span>
                     </button>
                 </div>
             </div>

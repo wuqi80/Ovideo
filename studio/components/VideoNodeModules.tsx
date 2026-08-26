@@ -15,7 +15,7 @@ interface VideoModeSelectorProps {
 export const VideoModeSelector: React.FC<VideoModeSelectorProps> = ({ currentMode, onSelect }) => {
     const modes = [
         { mode: 'CONTINUE' as const, icon: Film, title: '剧情延展 (StoryContinuator)' },
-        { mode: 'FIRST_LAST_FRAME' as const, icon: Link, title: '收尾插帧 (FrameWeaver)' },
+        { mode: 'FIRST_LAST_FRAME' as const, icon: Link, title: '首尾帧 (FrameWeaver)' },
         { mode: 'CUT' as const, icon: Scissors, title: '局部分镜 (SceneDirector)' },
         { mode: 'CHARACTER_REF' as const, icon: ScanFace, title: '角色迁移 (CharacterRef)' }
     ];
