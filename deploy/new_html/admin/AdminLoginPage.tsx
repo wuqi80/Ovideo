@@ -4,7 +4,7 @@
  * 设计要点：
  *  - 与主站登录完全独立：调用相同 /api/login，但 token 写到 sessionStorage 独立 key
  *  - 前端白名单兜底：只有 admin / lllsdhr 用户可以进；其他用户登录返回也提示"非管理员"
- *  - 视觉：与创作端登录页共用“深色品牌区 + 浅色表单区”的创剧品牌语言
+ *  - 视觉：独立的后台控制台风格，用克制的网格、状态色和终端排版与创作端区分
  *  - 不再依赖主站是否已登录；管理员可以"主站匿名 + 后台已登录"或反之
  */
 
@@ -20,58 +20,6 @@ import {
 } from './adminAuth';
 import { apiJson } from '../services/httpClient';
 import { BrandLogo } from '../components/BrandLogo';
-
-type WorkflowPreviewKind = 'story' | 'shots' | 'final';
-
-interface WorkflowPreviewProps {
-    index: string;
-    title: string;
-    description: string;
-    kind: WorkflowPreviewKind;
-}
-
-/**
- * 管理端登录页只展示流程轮廓，不加载真实项目数据，避免登录前产生额外请求。
- * 三张卡片与创作端登录页一一对应，品牌升级时只需同步这组语义即可。
- */
-const WorkflowPreview: React.FC<WorkflowPreviewProps> = ({ index, title, description, kind }) => (
-    <article className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.055] p-2.5">
-        <div className="h-[72px] overflow-hidden rounded-lg border border-white/10 bg-[#111C2E] p-2" aria-hidden="true">
-            {kind === 'story' && (
-                <div className="flex h-full gap-2">
-                    <div className="w-5 rounded bg-[#263754]" />
-                    <div className="flex-1 rounded bg-[#E7ECF5] p-2">
-                        <i className="mb-1.5 block h-1.5 w-3/4 rounded bg-[#7D8BA4]" />
-                        <i className="mb-1.5 block h-1.5 w-1/2 rounded bg-[#AAB4C5]" />
-                        <i className="block h-2 w-1/3 rounded bg-[#5B49F0]" />
-                    </div>
-                </div>
-            )}
-            {kind === 'shots' && (
-                <div className="grid h-full grid-cols-3 gap-1.5">
-                    <i className="rounded bg-gradient-to-br from-[#4D8DFF] to-[#244D9A]" />
-                    <i className="rounded bg-gradient-to-br from-[#8B6BFF] to-[#4936A4]" />
-                    <i className="rounded bg-gradient-to-br from-[#22C7C9] to-[#147477]" />
-                </div>
-            )}
-            {kind === 'final' && (
-                <div className="flex h-full flex-col gap-2">
-                    <div className="relative flex-1 rounded bg-gradient-to-br from-[#6553F2] via-[#334A80] to-[#142239]">
-                        <span className="absolute left-1/2 top-1/2 h-0 w-0 -translate-x-1/2 -translate-y-1/2 border-y-[7px] border-l-[11px] border-y-transparent border-l-white" />
-                    </div>
-                    <div className="flex h-2 gap-1"><i className="w-1/3 rounded bg-[#5B49F0]" /><i className="flex-1 rounded bg-[#33425C]" /></div>
-                </div>
-            )}
-        </div>
-        <div className="mt-2 flex items-start gap-2">
-            <span className="text-[10px] font-bold text-[#8B9FFF]">{index}</span>
-            <div className="min-w-0">
-                <div className="text-xs font-semibold text-white">{title}</div>
-                <div className="mt-0.5 truncate text-[10px] text-white/50">{description}</div>
-            </div>
-        </div>
-    </article>
-);
 
 function getLoginRedirect(location: ReturnType<typeof useLocation>): string {
     const redirect = new URLSearchParams(location.search).get('redirect');
@@ -152,122 +100,120 @@ export const AdminLoginPage: React.FC = () => {
     };
 
     return (
-        <main className="min-h-screen w-full bg-n20 font-sans text-n700 lg:flex lg:h-screen lg:overflow-hidden">
-            {/* 品牌区保持与创作端登录页相同的 44/56 桌面比例。 */}
-            <section className="relative hidden h-screen w-[44%] min-w-[520px] overflow-hidden bg-[#09111F] px-12 py-8 text-white lg:flex lg:flex-col">
-                <div className="pointer-events-none absolute inset-0 opacity-[0.07]"
-                    style={{
-                        backgroundImage: 'linear-gradient(rgba(139,107,255,0.9) 1px, transparent 1px), linear-gradient(90deg, rgba(139,107,255,0.9) 1px, transparent 1px)',
-                        backgroundSize: '40px 40px',
-                    }} />
-                <div className="pointer-events-none absolute -right-56 top-16 h-[620px] w-[620px] rounded-full border border-white/10" />
-                <div className="pointer-events-none absolute -bottom-40 -left-36 h-[440px] w-[440px] rounded-full bg-primary/20 blur-[120px]" />
+        <div className="min-h-screen w-screen flex items-center justify-center relative overflow-hidden bg-n0 text-n700 font-sans">
+            {/* 后台保留独立的控制台网格与状态光效，避免与创作端品牌页混淆。 */}
+            <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute inset-0 opacity-[0.06]"
+                     style={{
+                         backgroundImage:
+                             'linear-gradient(rgba(16,185,129,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(16,185,129,0.5) 1px, transparent 1px)',
+                         backgroundSize: '32px 32px',
+                     }} />
+                <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full blur-3xl opacity-30"
+                     style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.35) 0%, rgba(16,185,129,0) 60%)' }} />
+                <div className="absolute bottom-0 right-0 w-[500px] h-[500px] rounded-full blur-3xl opacity-20"
+                     style={{ background: 'radial-gradient(circle, rgba(244,63,94,0.35) 0%, rgba(244,63,94,0) 70%)' }} />
+            </div>
 
-                <BrandLogo tone="dark" className="relative z-10 w-[136px]" />
+            <button
+                onClick={() => navigate('/')}
+                className="absolute top-5 left-5 z-10 flex items-center gap-1.5 px-3 py-1.5 text-xs text-n100 hover:text-n700 transition-colors"
+            >
+                <ArrowLeft className="w-3.5 h-3.5" /> 返回主站
+            </button>
 
-                <div className="relative z-10 my-auto max-w-[560px] py-6">
-                    <p className="mb-4 text-xs font-semibold tracking-[0.18em] text-[#9DAEFF]">创剧 · 系统管理</p>
-                    <h1 className="font-display text-[40px] font-bold leading-[1.14] tracking-tight xl:text-[48px]">
-                        <span className="block">把一个好想法，</span>
-                        <span className="block">变成一部好漫剧</span>
-                    </h1>
-                    <p className="mt-5 max-w-[500px] text-sm leading-7 text-white/60">
-                        在统一后台管理用户、模型、积分和系统运行状态，为每一步创作提供稳定支持。
+            <div className="relative z-10 w-full max-w-md mx-4">
+                <div className="text-center mb-8">
+                    <BrandLogo className="mx-auto mb-3 h-12 w-auto max-w-[220px]" />
+                    <h1 className="text-sm font-semibold tracking-[0.18em] text-n300">ADMIN CONSOLE</h1>
+                    <p className="text-xs text-n100 mt-1.5 tracking-wider uppercase"
+                      style={{ fontFamily: 'var(--font-mono)' }}>
+                        Restricted · Authentication Required
                     </p>
                 </div>
 
-                <div className="relative z-10 grid grid-cols-3 gap-3">
-                    <WorkflowPreview index="01" title="写剧本" description="管理创作与文本能力" kind="story" />
-                    <WorkflowPreview index="02" title="做分镜" description="管理素材与生成能力" kind="shots" />
-                    <WorkflowPreview index="03" title="出成片" description="管理任务与服务状态" kind="final" />
-                </div>
-                <p className="relative z-10 mt-5 text-[10px] text-white/35">© 2026 创剧 · 系统管理后台</p>
-            </section>
-
-            <section className="relative flex min-h-screen flex-1 items-center justify-center bg-[#F6F7FA] px-5 py-16 lg:h-screen lg:min-h-0 lg:px-10">
-                <button
-                    onClick={() => navigate('/')}
-                    className="absolute left-5 top-5 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs text-n200 transition-colors hover:bg-n0 hover:text-n700 lg:left-8 lg:top-7"
+                <form
+                    onSubmit={handleSubmit}
+                    className="relative bg-n0 backdrop-blur-xl border border-n40 rounded-md p-6 shadow-bottom"
                 >
-                    <ArrowLeft className="h-3.5 w-3.5" /> 返回创作端
-                </button>
+                    <div className="absolute -top-px left-6 right-6 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
 
-                <div className="w-full max-w-[440px] rounded-[20px] border border-n40 bg-n0 p-7 shadow-bottom sm:p-9">
-                    <BrandLogo className="mb-9 w-[132px] lg:hidden" />
-
-                    <div className="mb-7">
-                        <span className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl bg-primary-light text-primary">
-                            <ShieldCheck className="h-5 w-5" />
-                        </span>
-                        <h2 className="font-display text-[30px] font-bold tracking-tight text-n800">创剧管理后台</h2>
-                        <p className="mt-2 text-sm text-n200">管理员专用入口，登录后进入系统管理控制台</p>
-                    </div>
-
-                    <form onSubmit={handleSubmit} className="space-y-5">
+                    <div className="space-y-4">
                         <div>
-                            <label htmlFor="admin-username" className="mb-2 block text-sm font-medium text-n500">管理员账号</label>
+                            <label className="block text-[10px] uppercase tracking-widest text-n100 mb-1.5"
+                                  style={{ fontFamily: 'var(--font-mono)' }}>
+                                ACCOUNT
+                            </label>
                             <div className="relative">
-                                <UserIcon className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-n100" />
+                                <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-n100" />
                                 <input
-                                    id="admin-username"
                                     type="text"
                                     autoFocus
                                     autoComplete="username"
                                     value={username}
                                     onChange={e => setUsername(e.target.value)}
-                                    placeholder="请输入管理员账号"
-                                    className="h-12 w-full rounded-lg border border-n40 bg-n0 pl-10 pr-3 text-sm outline-none transition-all placeholder:text-n100 hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                    placeholder="admin / lllsdhr"
+                                    className="w-full bg-n0 border border-n40 hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-md pl-10 pr-3 py-2.5 text-sm transition-all outline-none placeholder:text-n100"
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label htmlFor="admin-password" className="mb-2 block text-sm font-medium text-n500">密码</label>
+                            <label className="block text-[10px] uppercase tracking-widest text-n100 mb-1.5"
+                                  style={{ fontFamily: 'var(--font-mono)' }}>
+                                PASSPHRASE
+                            </label>
                             <div className="relative">
-                                <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-n100" />
+                                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-n100" />
                                 <input
-                                    id="admin-password"
                                     type="password"
                                     autoComplete="current-password"
                                     value={password}
                                     onChange={e => setPassword(e.target.value)}
-                                    placeholder="请输入密码"
-                                    className="h-12 w-full rounded-lg border border-n40 bg-n0 pl-10 pr-3 text-sm outline-none transition-all placeholder:text-n100 hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                    placeholder="••••••••"
+                                    className="w-full bg-n0 border border-n40 hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-md pl-10 pr-3 py-2.5 text-sm transition-all outline-none placeholder:text-n100"
                                 />
                             </div>
                         </div>
 
                         {error && (
-                            <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-r50 px-3 py-2.5">
-                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
-                                <div className="text-xs leading-relaxed text-danger">{error}</div>
+                            <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-r50 border border-danger/30">
+                                <AlertTriangle className="w-4 h-4 text-danger mt-0.5 shrink-0" />
+                                <div className="text-xs text-danger leading-relaxed">{error}</div>
                             </div>
                         )}
 
                         <button
                             type="submit"
                             disabled={loading}
-                            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-white shadow-card transition-all hover:bg-primary-hover hover:shadow-atlas disabled:cursor-not-allowed disabled:opacity-60"
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-primary hover:bg-primary-hover disabled:bg-n0 disabled:cursor-not-allowed text-sm font-semibold text-white shadow-card hover:shadow-atlas transition-all"
                         >
                             {loading ? (
                                 <>
-                                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                                    <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                                     验证中…
                                 </>
                             ) : (
                                 <>
-                                    进入管理后台 <ShieldCheck className="h-4 w-4" />
+                                    <ShieldCheck className="w-4 h-4" /> 进入控制台
                                 </>
                             )}
                         </button>
-                    </form>
+                    </div>
 
-                    <p className="mt-6 border-t border-n40 pt-5 text-center text-xs leading-5 text-n100">
-                        后台与创作端登录状态相互独立<br />凭据仅在当前浏览器标签页内保留
-                    </p>
-                </div>
-            </section>
-        </main>
+                    <div className="mt-5 pt-4 border-t border-n40 flex items-center justify-between text-[10px] text-n100"
+                        style={{ fontFamily: 'var(--font-mono)' }}>
+                        <span>SESSION · SANDBOXED</span>
+                        <span>v 2026.05.26</span>
+                    </div>
+                </form>
+
+                <p className="text-center text-[11px] text-n100 mt-5 leading-relaxed">
+                    本控制台与主站会话隔离 · 主站登录状态不会被改动<br />
+                    凭据仅在当前浏览器标签页内保留
+                </p>
+            </div>
+        </div>
     );
 };
 

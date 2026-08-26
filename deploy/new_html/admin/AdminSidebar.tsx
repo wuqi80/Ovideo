@@ -69,8 +69,9 @@ export const AdminSidebar: React.FC = () => {
           <BrandLogo variant="mark" className="h-6 w-6" />
         </span>
         <div className="leading-tight min-w-0">
-          <div className="text-sm font-bold tracking-tight text-n0 font-display">创剧管理后台</div>
-          <div className="text-[10px] tracking-widest text-n200">系统管理</div>
+          <div className="text-sm font-bold tracking-tight text-n0 font-display">系统管理后台</div>
+          <div className="text-[10px] uppercase tracking-widest text-n200"
+              style={{ fontFamily: 'var(--font-mono)' }}>Admin Console</div>
         </div>
       </div>
 
