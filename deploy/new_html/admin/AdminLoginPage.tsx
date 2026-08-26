@@ -3,7 +3,7 @@
  *
  * 设计要点：
  *  - 与主站登录完全独立：调用相同 /api/login，但 token 写到 sessionStorage 独立 key
- *  - 前端白名单兜底：只有 admin / lllsdhr 用户可以进；其他用户登录返回也提示"非管理员"
+ *  - 管理权限由后端 users.role 校验，不把可变用户名写死在前端
  *  - 视觉：独立的后台控制台风格，用克制的网格、状态色和终端排版与创作端区分
  *  - 不再依赖主站是否已登录；管理员可以"主站匿名 + 后台已登录"或反之
  */
@@ -13,12 +13,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ShieldCheck, Lock, User as UserIcon, AlertTriangle, ArrowLeft } from 'lucide-react';
 import {
     setAdminSession,
-    isAdminWhitelisted,
+    clearAdminSession,
     getAdminToken,
     getAdminUsername,
     getAndClearAdminPostLoginRedirect,
 } from './adminAuth';
 import { apiJson } from '../services/httpClient';
+import { apiJsonWithToken } from '../services/httpClient';
 import { BrandLogo } from '../components/BrandLogo';
 
 function getLoginRedirect(location: ReturnType<typeof useLocation>): string {
@@ -46,6 +47,22 @@ function normalizeAdminRedirect(rawTarget: unknown): string | null {
     }
 }
 
+type AdminSessionResponse = {
+    success: boolean;
+    user_id: string;
+    username: string;
+    role: string;
+};
+
+async function verifyAdminSession(token: string): Promise<AdminSessionResponse> {
+    return apiJsonWithToken<AdminSessionResponse>(
+        '/api/admin/session',
+        token,
+        { method: 'GET' },
+        '管理员权限校验',
+    );
+}
+
 export const AdminLoginPage: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -54,13 +71,22 @@ export const AdminLoginPage: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // 已登录后台 → 直跳目标
+    // 已登录后台 → 向后端确认当前角色后再跳转。
     useEffect(() => {
         const token = getAdminToken();
-        const u = getAdminUsername();
-        if (token && isAdminWhitelisted(u)) {
-            navigate(getLoginRedirect(location), { replace: true });
-        }
+        const storedUsername = getAdminUsername();
+        if (!token || !storedUsername) return;
+        let active = true;
+        verifyAdminSession(token)
+            .then(session => {
+                if (!active) return;
+                setAdminSession(token, session.username);
+                navigate(getLoginRedirect(location), { replace: true });
+            })
+            .catch(() => {
+                if (active) clearAdminSession();
+            });
+        return () => { active = false; };
     }, [navigate, location]);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -86,11 +112,8 @@ export const AdminLoginPage: React.FC = () => {
                 return;
             }
             const respUsername = data.username || username.trim();
-            if (!isAdminWhitelisted(respUsername)) {
-                setError(`账号 ${respUsername} 不在管理员白名单内`);
-                return;
-            }
-            setAdminSession(data.token, respUsername);
+            const session = await verifyAdminSession(data.token);
+            setAdminSession(data.token, session.username || respUsername);
             navigate(getLoginRedirect(location), { replace: true });
         } catch (err: any) {
             setError(err?.message || '网络异常');
@@ -152,7 +175,7 @@ export const AdminLoginPage: React.FC = () => {
                                     autoComplete="username"
                                     value={username}
                                     onChange={e => setUsername(e.target.value)}
-                                    placeholder="admin / lllsdhr"
+                                    placeholder="管理员账号"
                                     className="w-full bg-n0 border border-n40 hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-md pl-10 pr-3 py-2.5 text-sm transition-all outline-none placeholder:text-n100"
                                 />
                             </div>

@@ -54,6 +54,17 @@ logger = logging.getLogger(__name__)
 # ============================================
 # 2026-05-26 Slice 4/5 收尾：管理员鉴权依赖
 # ============================================
+async def _load_admin_identity(subject: str) -> Optional[Dict[str, Any]]:
+    """Resolve either a login username or the stable user_id in older tokens."""
+    from dao_user import UserDAO
+
+    user = await UserDAO.get_user_by_username(subject)
+    if user:
+        return dict(user)
+    user = await UserDAO.admin_get_user_detail(subject)
+    return dict(user) if user else None
+
+
 async def require_admin(request: Request) -> str:
     """
     依赖：所有 /api/admin/* 接口必须由 users.role ∈ {'admin','super_admin'} 触发。
@@ -63,20 +74,23 @@ async def require_admin(request: Request) -> str:
     if not auth.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="未授权")
     import jwt_auth
-    username = jwt_auth.verify_token(auth[7:])
-    if not username:
+    subject = jwt_auth.verify_token(auth[7:])
+    if not subject:
         raise HTTPException(status_code=401, detail="Token 已失效或不存在")
-    # 取用户 role
+    # Tokens issued before username editing used the login name as subject.
+    # Resolve both login names and stable IDs so an already-open admin session
+    # does not lose access merely because its display/login name changed.
     try:
-        from dao_user import UserDAO
-        user = await UserDAO.get_user_by_username(username)
+        user = await _load_admin_identity(subject)
     except Exception as e:
-        logger.error(f"require_admin: 查询用户失败 username={username} err={e}")
+        logger.error("require_admin: identity lookup failed subject=%s err=%s", subject, e)
         raise HTTPException(status_code=500, detail="鉴权查询失败")
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")
+    username = str(user.get('username') or subject)
+    user_id = str(user.get('user_id') or subject)
     # 兼容旧库未 ALTER：默认 'user'
-    role = (user.get('role') if isinstance(user, dict) else None) or 'user'
+    role = user.get('role') or 'user'
     if role not in ('admin', 'super_admin'):
         # Bootstrap access is explicit and environment-owned. It exists only so
         # the first administrator can promote persisted roles after installation.
@@ -85,7 +99,7 @@ async def require_admin(request: Request) -> str:
         boot = (_os.environ.get('OSTORY_ADMIN_USERNAMES') or '').strip()
         if boot:
             allowed |= {s.strip() for s in boot.split(',') if s.strip()}
-        if username in allowed:
+        if username in allowed or user_id in allowed or subject in allowed:
             return username
         raise HTTPException(status_code=403, detail=f"需要管理员权限（当前角色：{role}）")
     return username
@@ -1334,6 +1348,7 @@ async def admin_delete_credit_rule(rule_id: str, request: Request):
 # ============================================
 from dao_user import UserDAO  # noqa: E402
 from dao_project_group import ProjectGroupDAO  # noqa: E402
+from services import admin_user_service  # noqa: E402
 
 
 class AdminUserCreateBody(BaseModel):
@@ -1350,6 +1365,10 @@ class AdminUserUpdateBody(BaseModel):
     avatar_url: Optional[str] = None
 
 
+class AdminUsernameUpdateBody(BaseModel):
+    username: str = Field(..., min_length=2, max_length=40)
+
+
 class AdminDisableBody(BaseModel):
     reason: Optional[str] = None
 
@@ -1360,6 +1379,20 @@ class AdminResetPasswordBody(BaseModel):
 
 class AdminPermissionsBody(BaseModel):
     permissions: Dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/session", dependencies=[Depends(require_admin)])
+async def admin_get_session(admin_username: str = Depends(require_admin)):
+    """Return the canonical role-backed admin identity for frontend session setup."""
+    user = await _load_admin_identity(admin_username)
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在")
+    return {
+        "success": True,
+        "user_id": user.get("user_id"),
+        "username": user.get("username"),
+        "role": user.get("role") or "user",
+    }
 
 
 @router.get("/users", dependencies=[Depends(require_admin)])
@@ -1442,6 +1475,70 @@ async def admin_update_user(user_id: str, body: AdminUserUpdateBody, request: Re
         before=user, after=body.dict(exclude_none=True),
     )
     return {"success": True}
+
+
+@router.put("/users/{user_id}/username", dependencies=[Depends(require_admin)])
+async def admin_update_username(
+    user_id: str,
+    body: AdminUsernameUpdateBody,
+    request: Request,
+):
+    """Rename a login account without changing its stable ownership key."""
+    _require_db()
+    import admin_audit_service
+
+    # Capture the caller before applying the rename. A JWT issued by the login
+    # endpoint may still use the old username as its subject; after the write,
+    # that subject is no longer sufficient to rediscover UUID-backed accounts.
+    caller_subject = admin_audit_service.caller_admin_id(request)
+    caller_before = await _load_admin_identity(caller_subject)
+    try:
+        result = await admin_user_service.rename_user(
+            user_id,
+            body.username,
+            user_dao=UserDAO,
+        )
+    except admin_user_service.AdminUserNotFound as exc:
+        raise HTTPException(status_code=404, detail="用户不存在") from exc
+    except admin_user_service.AdminUsernameInvalid as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="用户名需为 2-40 位中文、字母、数字、下划线或连字符",
+        ) from exc
+    except admin_user_service.AdminUsernameExists as exc:
+        raise HTTPException(status_code=400, detail="用户名已存在") from exc
+    except admin_user_service.ProtectedSystemUsername as exc:
+        raise HTTPException(status_code=400, detail="内置 admin 账号的用户名不可修改") from exc
+    except admin_user_service.AdminUsernameUpdateFailed as exc:
+        raise HTTPException(status_code=500, detail="用户名修改失败") from exc
+
+    user = result["user"]
+    response: Dict[str, Any] = {
+        "success": True,
+        "changed": result["changed"],
+        "user": _normalize_admin_user(user),
+    }
+    if not result["changed"]:
+        return response
+
+    await admin_audit_service.record(
+        request,
+        admin_user_id=str((caller_before or {}).get("user_id") or caller_subject),
+        action="user_rename",
+        target_type="user",
+        target_id=user_id,
+        before={"username": result["before"].get("username")},
+        after={"username": user.get("username")},
+    )
+
+    if caller_before and str(caller_before.get("user_id")) == str(user_id):
+        import jwt_auth
+
+        response["session"] = {
+            "token": jwt_auth.create_token(str(user.get("username"))),
+            "username": user.get("username"),
+        }
+    return response
 
 
 @router.post("/users/{user_id}/disable", dependencies=[Depends(require_admin)])

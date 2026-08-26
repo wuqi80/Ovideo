@@ -23,6 +23,7 @@ import {
   CreditRule,
 } from '../services/creditService';
 import { apiJson } from '../services/httpClient';
+import { setAdminSession } from '../admin/adminAuth';
 import AdminOrganizationsTab from '../admin/AdminOrganizationsTab';
 import {
   crmMessage, crmConfirm, crmPrompt,
@@ -184,6 +185,42 @@ const AccountsTab: React.FC = () => {
     try { await apiPost(`/api/admin/users/${uid}/reset-password`, { new_password: pw }); crmMessage.success('密码已重置'); }
     catch (e: any) { crmMessage.error(`重置失败：${await readApiError(e)}`); }
   };
+  const handleRenameUser = async (uid: string, currentUsername: string) => {
+    if (uid === 'admin') {
+      crmMessage.warning('内置 admin 账号的用户名不可修改');
+      return;
+    }
+    const value = await crmPrompt({
+      title: `修改用户名 — ${currentUsername}`,
+      label: '新用户名（2-40 位中文、字母、数字、下划线或连字符）',
+      defaultValue: currentUsername,
+      required: true,
+      confirmText: '保存',
+    });
+    if (value === null) return;
+    const nextUsername = value.trim();
+    if (nextUsername === currentUsername) return;
+    if (!/^[A-Za-z0-9_\-\u4e00-\u9fff]{2,40}$/.test(nextUsername)) {
+      crmMessage.error('用户名需为 2-40 位中文、字母、数字、下划线或连字符');
+      return;
+    }
+    try {
+      const result = await apiPut<{
+        changed: boolean;
+        user: { username: string };
+        session?: { token: string; username: string };
+      }>(`/api/admin/users/${uid}/username`, { username: nextUsername });
+      if (result.session) {
+        setAdminSession(result.session.token, result.session.username);
+      }
+      _adminUsersCache = null;
+      _adminUsersPromise = null;
+      crmMessage.success(`用户名已修改为 ${result.user.username}`);
+      reload();
+    } catch (e: any) {
+      crmMessage.error(`修改用户名失败：${await readApiError(e)}`);
+    }
+  };
   const handleSetRole = async (uid: string, role: string) => {
     try { await apiPut(`/api/admin/users/${uid}`, { role }); crmMessage.success('角色已更新'); reload(); }
     catch (e: any) { crmMessage.error(`更新失败：${await readApiError(e)}`); }
@@ -264,6 +301,13 @@ const AccountsTab: React.FC = () => {
                 {u.last_login_at ? new Date(u.last_login_at).toLocaleString('zh-CN') : '-'}
               </td>
               <td className="p-2.5 text-right whitespace-nowrap">
+                <CrmActionLink
+                  type="default"
+                  disabled={u.user_id === 'admin'}
+                  title={u.user_id === 'admin' ? '内置 admin 账号用户名不可修改' : '修改登录用户名'}
+                  onClick={() => handleRenameUser(u.user_id, u.username)}
+                >修改用户名</CrmActionLink>
+                <CrmActionSep />
                 {active
                   ? <CrmActionLink type="danger" onClick={() => handleDisable(u.user_id)}>禁用</CrmActionLink>
                   : <CrmActionLink type="primary" onClick={() => handleEnable(u.user_id)}>启用</CrmActionLink>}

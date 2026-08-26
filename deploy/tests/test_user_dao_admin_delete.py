@@ -34,6 +34,7 @@ async def test_auth_user_dao_methods_return_empty_values_when_db_unavailable(mon
 
     assert await UserDAO.get_user_by_id("user_missing_db") is None
     assert await UserDAO.get_user_by_username("yuan") is None
+    assert await UserDAO.get_user_by_username_any("yuan") is None
     assert await UserDAO.create_user(username="yuan", password="secret") is None
     assert await UserDAO.update_last_login("user_missing_db") is False
     assert await UserDAO.update_user_permissions("user_missing_db", {"allowedModels": []}) is False
@@ -51,6 +52,25 @@ async def test_delete_user_by_id_uses_user_id_parameter(monkeypatch):
     query, args = db.calls[0]
     assert "DELETE FROM users WHERE user_id = $1" in query
     assert args == ("user_123",)
+
+
+async def test_get_user_by_username_any_includes_disabled_accounts(monkeypatch):
+    db = _FakeDB()
+    db.fetchrow_results = [{
+        "user_id": "user_disabled",
+        "username": "reserved_name",
+        "status": "disabled",
+        "is_active": True,
+    }]
+    monkeypatch.setattr(user_module, "get_db_manager", lambda: db)
+
+    result = await UserDAO.get_user_by_username_any("reserved_name")
+
+    assert result["user_id"] == "user_disabled"
+    query, args = db.calls[0]
+    assert "WHERE username = $1" in query
+    assert "is_active = TRUE" not in query
+    assert args == ("reserved_name",)
 
 
 async def test_admin_get_user_detail_prefers_full_admin_fields(monkeypatch):

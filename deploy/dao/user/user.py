@@ -229,6 +229,28 @@ class UserDAO:
             return await db.fetchrow(query, username)
 
     @staticmethod
+    async def get_user_by_username_any(username: str) -> Optional[Dict[str, Any]]:
+        """Return an account by login name regardless of active status.
+
+        Administrative uniqueness checks must include disabled accounts; the
+        database unique constraint does not stop applying when an account is
+        disabled.
+        """
+        db = get_db_manager()
+        if not db:
+            logger.warning("get_user_by_username_any skipped because database manager is unavailable: %s", username)
+            return None
+        row = await db.fetchrow(
+            """
+            SELECT user_id, username
+            FROM users
+            WHERE username = $1
+            """,
+            username,
+        )
+        return dict(row) if row else None
+
+    @staticmethod
     async def is_admin_user(username: str) -> bool:
         """Return whether a username has platform-admin privileges."""
         if not username:

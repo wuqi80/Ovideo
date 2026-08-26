@@ -15,7 +15,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getAdminToken, getAdminUsername, clearAdminSession, isAdminWhitelisted } from './adminAuth';
+import { getAdminToken, getAdminUsername, clearAdminSession } from './adminAuth';
 import { AdminSidebar } from './AdminSidebar';
 import { getActiveTrail } from './adminMenu';
 
@@ -24,11 +24,11 @@ export const AdminLayout: React.FC = () => {
     const location = useLocation();
     const [now, setNow] = useState(() => new Date());
 
-    // 鉴权门：未登录后台或非白名单 → 跳 /admin/login
+    // 本地只检查独立后台会话是否存在；角色权限由后端 require_admin 统一判定。
     useEffect(() => {
         const token = getAdminToken();
         const username = getAdminUsername();
-        if (!token || !isAdminWhitelisted(username)) {
+        if (!token || !username) {
             const from = `${location.pathname}${location.search}${location.hash}`;
             navigate(`/admin/login?redirect=${encodeURIComponent(from)}`, {
                 replace: true,

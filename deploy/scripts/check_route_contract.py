@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 293
-DEFAULT_EXPECTED_OPERATIONS = 354
+DEFAULT_EXPECTED_PATHS = 295
+DEFAULT_EXPECTED_OPERATIONS = 356
 DEFAULT_EXPECTED_FRONTEND_ROUTES = 32
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
@@ -57,6 +57,8 @@ EXPECTED_ENDPOINTS = {
     ("/api/upload", "POST"): ("routers.files", "upload_file"),
     ("/api/comfyui/upload", "POST"): ("routers.comfyui_files", "comfyui_upload_proxy"),
     ("/api/admin/users", "GET"): ("admin_routes", "admin_list_users"),
+    ("/api/admin/session", "GET"): ("admin_routes", "admin_get_session"),
+    ("/api/admin/users/{user_id}/username", "PUT"): ("admin_routes", "admin_update_username"),
     ("/api/admin/users/{user_id}/permissions", "PUT"): ("admin_routes", "admin_update_permissions"),
     ("/api/admin/workflows/import-existing/{workflow_key}", "POST"): (
         "admin_routes",

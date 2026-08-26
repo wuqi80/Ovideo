@@ -285,6 +285,18 @@ export async function apiJson<T>(
   return handleResponse(response, apiName) as Promise<T>;
 }
 
+/** Use an explicit one-off token before a route-scoped session has been stored. */
+export async function apiJsonWithToken<T>(
+  url: string,
+  token: string,
+  options: RequestInit = {},
+  apiName: string = 'API',
+): Promise<T> {
+  const headers = normalizeHeaders(options.headers);
+  headers.Authorization = `Bearer ${token}`;
+  return apiJson<T>(url, { ...options, headers }, apiName, { requireAuth: false });
+}
+
 export async function apiBlob(
   url: string,
   options: RequestInit = {},

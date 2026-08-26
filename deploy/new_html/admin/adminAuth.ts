@@ -65,11 +65,6 @@ export function getAndClearAdminPostLoginRedirect(): string | null {
     }
 }
 
-export function isAdminWhitelisted(username: string | null): boolean {
-    if (!username) return false;
-    return username === 'admin' || username === 'lllsdhr';
-}
-
 /**
  * 路径感知的 token 优先级：
  *   - /admin/* 路径下 + 存在 admin_session_token → 返回 admin token（后端 require_admin 闸门）
