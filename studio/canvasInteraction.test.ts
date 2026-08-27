@@ -26,8 +26,17 @@ describe('Studio canvas interaction contracts', () => {
 
   it('renders readable canvas text without scaling the whole DOM as a bitmap-like layer', () => {
     expect(appSource).toContain('const MIN_CANVAS_SCALE = 0.2');
-    expect(appSource).toContain("style={{ zoom: scale, width: '100%', height: '100%' }}");
+    expect(appSource).toContain('Math.round(value * 100) === 100 ? 1 : value');
+    expect(appSource).toContain('snapCanvasScale(Math.min(Math.max(MIN_CANVAS_SCALE');
+    expect(appSource).toContain("left: Math.round(pan.x), top: Math.round(pan.y)");
+    expect(appSource).toContain("style={{ zoom: scale === 1 ? undefined : scale, width: '100%', height: '100%' }}");
+    expect(appSource).not.toContain('translate3d');
     expect(appSource).not.toContain('scale(${scale})');
+    expect(nodeSource).toContain('left: Math.round(node.x), top: Math.round(node.y)');
+    expect(nodeSource).not.toContain('backdropFilter:');
+    expect(nodeSource).not.toContain('left-1/2 -translate-x-1/2');
+    expect(nodeSource).not.toContain('translate-y-0 scale-100');
+    expect(videoModulesSource).not.toContain('backdrop-blur-md');
     expect(stylesSource).toContain('-webkit-font-smoothing: auto');
   });
 

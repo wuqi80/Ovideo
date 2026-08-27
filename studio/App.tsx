@@ -43,6 +43,9 @@ const SNAP_THRESHOLD = 8; // Pixels for magnetic snap
 const COLLISION_PADDING = 24; // Spacing when nodes bounce off each other
 const MIN_CANVAS_SCALE = 0.2;
 const MAX_CANVAS_SCALE = 3;
+// Keep the rendered scale aligned with the percentage shown in the toolbar.
+// A value that rounds to 100% must be exactly 1 so text is not resampled.
+const snapCanvasScale = (value: number) => Math.round(value * 100) === 100 ? 1 : value;
 
 // Helper to get image dimensions
 const getImageDimensions = (src: string): Promise<{width: number, height: number}> => {
@@ -403,7 +406,7 @@ export const App = () => {
       const scaleX = (window.innerWidth - padding * 2) / contentW;
       const scaleY = (window.innerHeight - padding * 2) / contentH;
       let newScale = Math.min(scaleX, scaleY, 1);
-      newScale = Math.max(MIN_CANVAS_SCALE, newScale);
+      newScale = snapCanvasScale(Math.max(MIN_CANVAS_SCALE, newScale));
 
       const contentCenterX = minX + contentW / 2;
       const contentCenterY = minY + contentH / 2;
@@ -530,7 +533,7 @@ export const App = () => {
 
   const handleWheel = (e: React.WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
-        e.preventDefault(); const newScale = Math.min(Math.max(MIN_CANVAS_SCALE, scale - e.deltaY * 0.001), MAX_CANVAS_SCALE);
+        e.preventDefault(); const newScale = snapCanvasScale(Math.min(Math.max(MIN_CANVAS_SCALE, scale - e.deltaY * 0.001), MAX_CANVAS_SCALE));
         const rect = e.currentTarget.getBoundingClientRect(); const x = e.clientX - rect.left; const y = e.clientY - rect.top;
         const scaleDiff = newScale - scale;
         setPan(p => ({ x: p.x - (x - p.x) * (scaleDiff / scale), y: p.y - (y - p.y) * (scaleDiff / scale) }));
@@ -1169,8 +1172,11 @@ export const App = () => {
           <input type="file" ref={replaceVideoInputRef} className="hidden" accept="video/*" onChange={(e) => handleReplaceFile(e, 'video')} />
           <input type="file" ref={replaceImageInputRef} className="hidden" accept="image/*" onChange={(e) => handleReplaceFile(e, 'image')} />
 
-          <div style={{ transform: `translate3d(${Math.round(pan.x)}px, ${Math.round(pan.y)}px, 0)`, width: '100%', height: '100%' }} className="w-full h-full">
-            <div style={{ zoom: scale, width: '100%', height: '100%' }} className="relative w-full h-full">
+          <div
+            style={{ position: 'absolute', left: Math.round(pan.x), top: Math.round(pan.y), width: '100%', height: '100%' }}
+            className="w-full h-full"
+          >
+            <div style={{ zoom: scale === 1 ? undefined : scale, width: '100%', height: '100%' }} className="relative w-full h-full">
               {/* Groups Layer */}
               {groups.map(g => (
                   <div
@@ -1345,12 +1351,12 @@ export const App = () => {
           <AssistantPanel isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
 
           <div className="studio-canvas-toolbar absolute bottom-8 right-8 flex items-center gap-3 px-4 py-2 backdrop-blur-2xl rounded-full z-50 animate-in fade-in slide-in-from-bottom-4 duration-700">
-              <button onClick={() => setScale(s => Math.max(MIN_CANVAS_SCALE, s - 0.1))} className="studio-canvas-toolbar-button p-1.5 transition-colors rounded-full"><Minus size={14} strokeWidth={3} /></button>
+              <button onClick={() => setScale(s => snapCanvasScale(Math.max(MIN_CANVAS_SCALE, s - 0.1)))} className="studio-canvas-toolbar-button p-1.5 transition-colors rounded-full"><Minus size={14} strokeWidth={3} /></button>
               <div className="flex items-center gap-2 min-w-[100px]">
-                   <input type="range" min={MIN_CANVAS_SCALE} max={MAX_CANVAS_SCALE} step="0.05" value={scale} onChange={(e) => setScale(parseFloat(e.target.value))} className="studio-canvas-toolbar-range w-24 h-1 rounded-full cursor-pointer" />
+                   <input type="range" min={MIN_CANVAS_SCALE} max={MAX_CANVAS_SCALE} step="0.05" value={scale} onChange={(e) => setScale(snapCanvasScale(parseFloat(e.target.value)))} className="studio-canvas-toolbar-range w-24 h-1 rounded-full cursor-pointer" />
                    <span className="studio-canvas-toolbar-button text-[10px] font-bold w-8 text-right tabular-nums cursor-pointer" onClick={() => setScale(1)} title="Reset Zoom">{Math.round(scale * 100)}%</span>
               </div>
-              <button onClick={() => setScale(s => Math.min(MAX_CANVAS_SCALE, s + 0.1))} className="studio-canvas-toolbar-button p-1.5 transition-colors rounded-full"><Plus size={14} strokeWidth={3} /></button>
+              <button onClick={() => setScale(s => snapCanvasScale(Math.min(MAX_CANVAS_SCALE, s + 0.1)))} className="studio-canvas-toolbar-button p-1.5 transition-colors rounded-full"><Plus size={14} strokeWidth={3} /></button>
               <button onClick={handleFitView} className="studio-canvas-toolbar-button p-1.5 transition-colors rounded-full ml-2 border-l pl-3" title="适配视图">
                   <Scan size={14} strokeWidth={3} />
               </button>

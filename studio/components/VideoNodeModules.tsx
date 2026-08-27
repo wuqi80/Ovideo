@@ -35,7 +35,7 @@ export const VideoModeSelector: React.FC<VideoModeSelectorProps> = ({ currentMod
                 <button
                    key={item.mode}
                    onClick={(e) => { e.stopPropagation(); handleSelect(item.mode); }}
-                   className={`studio-node-mode-button flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1.5 rounded-md transition-all text-[11px] font-bold backdrop-blur-md ${currentMode === item.mode ? 'studio-node-mode-button-active shadow-md' : 'opacity-70 hover:opacity-100'}`}
+                   className={`studio-node-mode-button flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1.5 rounded-md transition-colors text-xs font-bold ${currentMode === item.mode ? 'studio-node-mode-button-active shadow-md' : 'opacity-70 hover:opacity-100'}`}
                    title={item.title}
                 >
                     <item.icon size={12} />

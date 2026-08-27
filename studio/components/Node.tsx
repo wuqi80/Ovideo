@@ -54,7 +54,7 @@ const IMAGE_RESOLUTIONS = ['1k', '2k', '4k'];
 const VIDEO_RESOLUTIONS = ['480p', '720p', '1080p'];
 const IMAGE_COUNTS = [1, 2, 3, 4];
 const VIDEO_COUNTS = [1, 2, 3, 4];
-const GLASS_PANEL = "studio-node-control-panel backdrop-blur-2xl";
+const GLASS_PANEL = "studio-node-control-panel";
 const DEFAULT_NODE_WIDTH = 420;
 const DEFAULT_FIXED_HEIGHT = 360;
 const AUDIO_NODE_HEIGHT = 200;
@@ -468,7 +468,7 @@ const NodeComponent: React.FC<NodeProps> = ({
 
     if (node.type === NodeType.VIDEO_GENERATOR) {
       return (
-        <div className={`absolute -top-[72px] left-0 w-full flex flex-col gap-1 px-1 transition-all duration-300 ${showTopBar ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+        <div className={`absolute -top-[72px] left-0 w-full flex flex-col gap-1 px-1 transition-opacity duration-200 ${showTopBar ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           <div className="flex min-h-7 items-center justify-between">
             {mediaActions || <div />}
             {titleControl}
@@ -481,7 +481,7 @@ const NodeComponent: React.FC<NodeProps> = ({
     }
 
     return (
-    <div className={`absolute -top-10 left-0 w-full flex items-center justify-between px-1 transition-all duration-300 ${showTopBar ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+    <div className={`absolute -top-10 left-0 w-full flex items-center justify-between px-1 transition-opacity duration-200 ${showTopBar ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
         {mediaActions || <div />}
         {titleControl}
     </div>
@@ -492,7 +492,7 @@ const NodeComponent: React.FC<NodeProps> = ({
       if (node.type === NodeType.PROMPT_INPUT) {
           return (
             <div className="w-full h-full p-6 flex flex-col group/text">
-                <div className="studio-node-inner-box flex-1 rounded-2xl p-4 relative overflow-hidden backdrop-blur-sm transition-colors">
+                <div className="studio-node-inner-box flex-1 rounded-2xl p-4 relative overflow-hidden transition-colors">
                     <textarea className="studio-node-textarea w-full h-full bg-transparent resize-none focus:outline-none text-sm font-medium leading-relaxed custom-scrollbar selection:bg-amber-500/30" placeholder={node.title.includes('剧本') ? '输入场景、人物、动作和台词…' : '输入您的创意构想...'} value={localPrompt} onChange={(e) => setLocalPrompt(e.target.value)} onBlur={commitPrompt} onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); commitPrompt(); } }} onWheel={(e) => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} maxLength={6000} />
                 </div>
             </div>
@@ -623,7 +623,7 @@ const NodeComponent: React.FC<NodeProps> = ({
                 : normalizeStudioTextModel(node.data.model);
 
      return (
-        <div className={`absolute top-full left-1/2 -translate-x-1/2 w-[98%] pt-2 z-50 flex flex-col items-center justify-start transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${isOpen ? `opacity-100 translate-y-0 scale-100` : 'opacity-0 translate-y-[-10px] scale-95 pointer-events-none'}`}>
+        <div className={`absolute top-full left-[1%] w-[98%] pt-2 z-50 flex flex-col items-center justify-start transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
             {/* InputThumbnails: Set strict Z-Index to lower layer */}
             {hasInputs && onInputReorder && (<div className="w-full flex justify-center mb-2 z-0 relative"><InputThumbnails assets={inputAssets!} onReorder={(newOrder) => onInputReorder(node.id, newOrder)} /></div>)}
             {/* Glass Panel: Set strict Z-Index to higher layer to overlap thumbnails */}
@@ -655,9 +655,8 @@ const NodeComponent: React.FC<NodeProps> = ({
         className={`studio-node absolute rounded-[24px] group ${isSelected ? 'z-30' : 'z-10'}`}
         data-selected={isSelected ? 'true' : 'false'}
         style={{
-            left: node.x, top: node.y, width: nodeWidth, height: nodeHeight,
-            transition: isInteracting ? 'none' : 'all 0.5s cubic-bezier(0.32, 0.72, 0, 1)',
-            backdropFilter: isInteracting ? 'none' : 'blur(24px)',
+            left: Math.round(node.x), top: Math.round(node.y), width: Math.round(nodeWidth), height: Math.round(nodeHeight),
+            transition: isInteracting ? 'none' : 'left 0.5s cubic-bezier(0.32, 0.72, 0, 1), top 0.5s cubic-bezier(0.32, 0.72, 0, 1), width 0.5s cubic-bezier(0.32, 0.72, 0, 1), height 0.5s cubic-bezier(0.32, 0.72, 0, 1), border-color 0.2s ease, box-shadow 0.2s ease',
             boxShadow: isInteracting ? 'none' : undefined,
             willChange: isInteracting ? 'left, top, width, height' : 'auto'
         }}
