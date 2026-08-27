@@ -20,8 +20,15 @@ describe('Studio canvas interaction contracts', () => {
     expect(nodeSource).toContain('max-w-[92px] truncate whitespace-nowrap');
     expect(nodeSource).toContain('flex shrink-0 items-center justify-center gap-2 whitespace-nowrap');
     expect(nodeSource).toContain('<span className="whitespace-nowrap">');
-    expect(videoModulesSource).toContain('flex shrink-0 items-center gap-1.5 whitespace-nowrap');
+    expect(videoModulesSource).toContain('flex min-w-max items-center gap-0.5');
+    expect(videoModulesSource).toContain('flex shrink-0 items-center gap-1 whitespace-nowrap px-1.5');
     expect(nodeSource).toContain('studio-node-mode-strip w-full overflow-x-auto');
+  });
+
+  it('keeps the Space-pan instruction visible beside the canvas controls', () => {
+    expect(appSource).toContain('studio-canvas-pan-hint pointer-events-none');
+    expect(appSource).toContain('按住空格拖动画布');
+    expect(appSource).toContain('按住空格并拖动鼠标可移动画布');
   });
 
   it('renders readable canvas text without scaling the whole DOM as a bitmap-like layer', () => {

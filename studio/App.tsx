@@ -34,7 +34,7 @@ import {
     Plus, Copy, Trash2, Type, Image as ImageIcon, Video as VideoIcon,
     ScanFace, Brush, MousePointerClick, LayoutTemplate, X, Film, Link, RefreshCw, Upload,
     Minus, FolderHeart, Unplug, Sparkles, ChevronLeft, ChevronRight, Scan, Music, Mic2, ArrowLeft,
-    Moon, Sun
+    Moon, Sun, Hand
 } from 'lucide-react';
 
 // Apple Physics Curve
@@ -1099,6 +1099,13 @@ export const App = () => {
           {isDarkCanvas ? <Sun size={15} /> : <Moon size={15} />}
           {isDarkCanvas ? '浅色背景' : '深色背景'}
         </button>
+        <div
+          className="studio-canvas-chip studio-canvas-pan-hint pointer-events-none inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-medium"
+          title="按住空格并拖动鼠标可移动画布"
+        >
+          <Hand size={14} />
+          <span>按住空格拖动画布</span>
+        </div>
       </div>
       <div
           className={`studio-canvas-content w-full h-full overflow-hidden selection:bg-cyan-500/30 ${isDraggingCanvas ? 'cursor-grabbing' : isSpacePressed ? 'cursor-grab-override' : 'cursor-default'}`}

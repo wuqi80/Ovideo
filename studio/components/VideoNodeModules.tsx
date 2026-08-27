@@ -30,15 +30,15 @@ export const VideoModeSelector: React.FC<VideoModeSelectorProps> = ({ currentMod
     };
 
     return (
-        <div className="flex min-w-max items-center gap-1">
+        <div className="flex min-w-max items-center gap-0.5">
             {modes.map(item => (
                 <button
                    key={item.mode}
                    onClick={(e) => { e.stopPropagation(); handleSelect(item.mode); }}
-                   className={`studio-node-mode-button flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1.5 rounded-md transition-colors text-xs font-bold ${currentMode === item.mode ? 'studio-node-mode-button-active shadow-md' : 'opacity-70 hover:opacity-100'}`}
+                   className={`studio-node-mode-button flex shrink-0 items-center gap-1 whitespace-nowrap px-1.5 py-1.5 rounded-md transition-colors text-xs font-bold ${currentMode === item.mode ? 'studio-node-mode-button-active shadow-md' : 'opacity-70 hover:opacity-100'}`}
                    title={item.title}
                 >
-                    <item.icon size={12} />
+                    <item.icon className="shrink-0" size={11} />
                     <span>{item.title.split(' ')[0]}</span>
                 </button>
             ))}
