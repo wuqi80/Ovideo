@@ -132,6 +132,70 @@ async def test_list_agent_nodes_hides_agent_when_comfyui_is_unhealthy(monkeypatc
     assert nodes[0]["status"] == "unavailable"
 
 
+async def test_list_agent_nodes_reports_external_shared_runtime_as_busy(monkeypatch):
+    class FakeAgentDAO:
+        @staticmethod
+        async def list_all_with_active_task_counts():
+            return [
+                {
+                    "agent_id": "agent_local_8188",
+                    "name": "local-8188",
+                    "status": "online",
+                    "enabled": True,
+                    "comfyui_instances": [{"port": 8188, "status": "healthy"}],
+                    "system_info": {
+                        "shared_comfyui": {
+                            "state": "busy_external",
+                            "owner": "external",
+                            "port": 8188,
+                            "running": 1,
+                            "pending": 0,
+                            "claim_allowed": False,
+                        }
+                    },
+                }
+            ]
+
+    monkeypatch.setitem(sys.modules, "dao_agent", SimpleNamespace(AgentDAO=FakeAgentDAO))
+
+    nodes = await cluster_node_service.list_agent_nodes(include_offline=True)
+
+    assert nodes[0]["status"] == "busy"
+    assert nodes[0]["shared_comfyui"]["owner"] == "external"
+    assert nodes[0]["shared_comfyui"]["claim_allowed"] is False
+
+
+async def test_list_agent_nodes_does_not_revive_offline_agent_from_stale_shared_state(monkeypatch):
+    class FakeAgentDAO:
+        @staticmethod
+        async def list_all_with_active_task_counts():
+            return [
+                {
+                    "agent_id": "agent_local_8188",
+                    "name": "local-8188",
+                    "status": "offline",
+                    "enabled": True,
+                    "system_info": {
+                        "shared_comfyui": {
+                            "state": "busy_external",
+                            "owner": "external",
+                            "port": 8188,
+                            "running": 1,
+                            "pending": 0,
+                            "claim_allowed": False,
+                        }
+                    },
+                }
+            ]
+
+    monkeypatch.setitem(sys.modules, "dao_agent", SimpleNamespace(AgentDAO=FakeAgentDAO))
+
+    nodes = await cluster_node_service.list_agent_nodes(include_offline=True)
+
+    assert nodes[0]["status"] == "offline"
+    assert nodes[0]["shared_comfyui"]["state"] == "busy_external"
+
+
 async def test_list_agent_nodes_degrades_safely(monkeypatch):
     class BrokenAgentDAO:
         @staticmethod

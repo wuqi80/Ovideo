@@ -5,7 +5,13 @@ import {
   getCanvasBoards,
   updateCanvasNode,
 } from '@app/services/canvasService';
-import { assertEnoughCredits, consumeCredits, estimateTextTokens } from '@app/services/creditService';
+import {
+  assertEnoughCredits,
+  consumeCredits,
+  estimateCredits as estimateHostCredits,
+  estimateTextTokens,
+  getCreditBalance as getHostCreditBalance,
+} from '@app/services/creditService';
 import { uploadEntityFile } from '@app/services/entityFileService';
 import { generateGeminiImageVariant } from '@app/services/geminiImageGenerationService';
 import { callGeminiProxyWithRetry } from '@app/services/geminiProxyService';
@@ -22,6 +28,7 @@ import type {
   StudioSnapshot,
   StudioVideoOptions,
 } from '../services/runtime';
+import type { StudioCreditFeature, StudioCreditQuote } from '../services/creditPolicy';
 import {
   STUDIO_AUDIO_MODEL_SPEECH_HD,
   STUDIO_IMAGE_MODEL_CONFIGURED,
@@ -117,6 +124,17 @@ export function extractVideoResult(status: any): string {
   return firstVideo?.url || result?.video_url || result?.file_url || result?.url || '';
 }
 
+export function assertStudioBatchCredits(
+  quote: { enabled: boolean; estimated_cost: number; balance: number | null },
+  quantity: number,
+): void {
+  if (!quote.enabled) return;
+  const total = Math.max(0, Number(quote.estimated_cost || 0)) * Math.max(1, Math.round(quantity || 1));
+  if (quote.balance !== null && quote.balance < total) {
+    throw new Error(`积分不足：本次预计需要 ${total} 积分，当前可用 ${quote.balance} 积分`);
+  }
+}
+
 function makeTaskId(prefix: string): string {
   const suffix = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
@@ -190,6 +208,24 @@ export function createOstoryRuntime(input: {
   let stateNodeId = '';
   let ensurePromise: Promise<void> | null = null;
   let saveTail: Promise<void> = Promise.resolve();
+
+  const getCreditBalance = async (): Promise<number> => {
+    const result = await getHostCreditBalance();
+    return Number(result.available_credits || 0);
+  };
+
+  const estimateCredits = async (
+    featureKey: StudioCreditFeature,
+    params: Record<string, unknown>,
+  ): Promise<StudioCreditQuote> => {
+    const result = await estimateHostCredits(featureKey, params);
+    return {
+      enabled: result.enabled,
+      estimatedCost: Number(result.estimated_cost || 0),
+      balance: result.balance === null ? null : Number(result.balance || 0),
+      enough: result.enough,
+    };
+  };
 
   const ensureStateNode = async (): Promise<void> => {
     if (boardId && stateNodeId) return;
@@ -420,12 +456,14 @@ export function createOstoryRuntime(input: {
     const duration = Math.max(2, Math.min(15, Math.round(options.duration || 5)));
     const count = Math.max(1, Math.min(4, Math.round(options.count || 1)));
     const creditParams = {
-      video_count: count,
-      model: wantedSubModel,
-      duration,
+      task_type: 'seedance_multi',
+      sub_model: wantedSubModel,
+      model: `seedance-${wantedSubModel}`,
+      duration_seconds: duration,
       resolution: '720p',
     };
-    await assertEnoughCredits('video_generation', creditParams);
+    const videoQuote = await assertEnoughCredits('video_generation', creditParams);
+    assertStudioBatchCredits(videoQuote, count);
 
     const urls: string[] = [];
     let lastTaskId = '';
@@ -584,6 +622,8 @@ export function createOstoryRuntime(input: {
     saveSnapshot,
     uploadAsset,
     uploadDataUrl,
+    getCreditBalance,
+    estimateCredits,
     sendChatMessage,
     generateImage,
     generateVideo,

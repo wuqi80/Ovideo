@@ -136,6 +136,7 @@ interface EpisodeContextValue {
   loadSlices: (...slices: DataSlice[]) => Promise<void>;
   loadSlicesQuiet: (...slices: DataSlice[]) => Promise<void>;
   forceReloadSlices: (...slices: DataSlice[]) => Promise<void>;
+  forceReloadSlicesQuiet: (...slices: DataSlice[]) => Promise<void>;
   loadStoryboardItemsPage: (options: { limit: number; offset?: number; includeTotal?: boolean }) => Promise<void>;
   reload: () => Promise<void>;
   updateStoryboardDuration: (itemId: string, durationMs: number) => Promise<void>;
@@ -164,6 +165,7 @@ const EpisodeContext = createContext<EpisodeContextValue>({
   loadSlices: async () => {},
   loadSlicesQuiet: async () => {},
   forceReloadSlices: async () => {},
+  forceReloadSlicesQuiet: async () => {},
   loadStoryboardItemsPage: async () => {},
   reload: async () => {},
   updateStoryboardDuration: async () => {},
@@ -382,6 +384,13 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
     await fetchSlices({ quiet: true }, ...newSlices);
   }, [fetchSlices]);
 
+  // Refresh already loaded data without replacing the active page with the
+  // global loading screen.  Page-local selection and scroll state must survive
+  // background refreshes that follow a successful generation or upload.
+  const forceReloadSlicesQuiet = useCallback(async (...slices: DataSlice[]) => {
+    await fetchSlices({ quiet: true }, ...slices);
+  }, [fetchSlices]);
+
   const loadStoryboardItemsPage = useCallback(async (options: { limit: number; offset?: number; includeTotal?: boolean }) => {
     if (!episodeId) return;
     const sid = selectedScriptIdRef.current || undefined;
@@ -520,6 +529,7 @@ export const EpisodeProvider: React.FC<EpisodeProviderProps> = ({ children, proj
       loadSlices,
       loadSlicesQuiet,
       forceReloadSlices: fetchSlices,
+      forceReloadSlicesQuiet,
       loadStoryboardItemsPage,
       reload,
       updateStoryboardDuration,

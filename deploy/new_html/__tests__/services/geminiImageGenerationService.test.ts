@@ -8,7 +8,10 @@ vi.mock('../../services/geminiImageService', () => ({
   generateGeminiImageViaProxy,
 }));
 
-import { generateFinalIllustrationResult } from '../../services/geminiImageGenerationService';
+import {
+  generateFinalIllustrationResult,
+  generateMaterialImage,
+} from '../../services/geminiImageGenerationService';
 
 describe('geminiImageGenerationService', () => {
   afterEach(() => {
@@ -36,5 +39,26 @@ describe('geminiImageGenerationService', () => {
 
     await expect(pending).resolves.toMatchObject({ file_id: 'file_1' });
     expect(generateGeminiImageViaProxy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not override a final illustration prompt with a forced anime style', async () => {
+    generateGeminiImageViaProxy.mockResolvedValueOnce([{ file_id: 'file_1', url: '/storage/image/file_1.webp' }]);
+
+    await generateFinalIllustrationResult('photorealistic portrait', []);
+
+    const request = generateGeminiImageViaProxy.mock.calls[0][0];
+    expect(request.prompt).toContain('photorealistic portrait');
+    expect(request.prompt).toContain('Preserve the visual style explicitly stated above');
+    expect(request.prompt).not.toMatch(/Anime\/Manga/i);
+  });
+
+  it('does not force material generation to anime', async () => {
+    generateGeminiImageViaProxy.mockResolvedValueOnce([{ file_id: 'file_1', url: '/storage/image/file_1.webp' }]);
+
+    await expect(generateMaterialImage('小男孩', 'character', '写实人物')).resolves.toBe('/storage/image/file_1.webp');
+
+    const request = generateGeminiImageViaProxy.mock.calls[0][0];
+    expect(request.prompt).toContain('Follow the style explicitly requested in the context');
+    expect(request.prompt).not.toMatch(/Anime\/Manga/i);
   });
 });

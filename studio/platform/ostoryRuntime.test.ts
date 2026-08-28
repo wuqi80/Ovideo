@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSeedanceMediaInputs,
+  assertStudioBatchCredits,
   chargeSuccessfulResult,
   extractVideoResult,
   parseStudioSnapshot,
@@ -45,5 +46,19 @@ describe('创剧 Studio runtime helpers', () => {
       },
     )).rejects.toThrow('provider failed');
     expect(chargeCalls).toBe(0);
+  });
+
+  it('blocks a batch before submission when the total video balance is insufficient', () => {
+    expect(() => assertStudioBatchCredits({
+      enabled: true,
+      estimated_cost: 75,
+      balance: 149,
+    }, 2)).toThrow('本次预计需要 150 积分');
+
+    expect(() => assertStudioBatchCredits({
+      enabled: true,
+      estimated_cost: 75,
+      balance: 150,
+    }, 2)).not.toThrow();
   });
 });

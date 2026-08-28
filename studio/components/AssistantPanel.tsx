@@ -1,7 +1,12 @@
 
 import React, { useRef, useEffect, useState } from 'react';
-import { X, Eraser, Copy, CornerDownLeft, Loader2, Sparkles, Brain, PenLine, Wand2 } from 'lucide-react';
+import { X, Eraser, Copy, CornerDownLeft, Loader2, Sparkles, Brain, PenLine, Wand2, Coins } from 'lucide-react';
 import { useStudioRuntime } from '../services/runtime';
+import {
+  buildStudioTextCreditRequest,
+  summarizeStudioCreditQuote,
+  type StudioCreditQuote,
+} from '../services/creditPolicy';
 
 interface Message {
   role: 'user' | 'model';
@@ -130,6 +135,8 @@ export const AssistantPanel: React.FC<AssistantPanelProps> = ({ isOpen, onClose 
   const [messages, setMessages] = useState<Message[]>([{ role: 'model', text: '你好！我是您的创意助手。今天想创作些什么？' }]);
   const [isLoading, setIsLoading] = useState(false);
   const [input, setInput] = useState('');
+  const [creditQuote, setCreditQuote] = useState<StudioCreditQuote | null>(null);
+  const [isCreditLoading, setIsCreditLoading] = useState(false);
 
   // States for different modes
   const [isThinkingMode, setIsThinkingMode] = useState(false);
@@ -139,6 +146,34 @@ export const AssistantPanel: React.FC<AssistantPanelProps> = ({ isOpen, onClose 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const creditText = `${messages.slice(-12).map(message => message.text).join('\n')}\n${input}`.trim();
+  const creditRequest = buildStudioTextCreditRequest(creditText);
+  const creditRequestKey = JSON.stringify(creditRequest);
+  const creditSummary = summarizeStudioCreditQuote(creditRequest, creditQuote);
+  const creditInsufficient = Boolean(input.trim() && creditSummary.enabled && !creditSummary.enough);
+
+  useEffect(() => {
+    if (!isOpen || !input.trim()) {
+      setCreditQuote(null);
+      setIsCreditLoading(false);
+      return;
+    }
+    let active = true;
+    setIsCreditLoading(true);
+    const timer = window.setTimeout(() => {
+      runtime.estimateCredits(creditRequest.featureKey, creditRequest.params)
+        .then(quote => { if (active) setCreditQuote(quote); })
+        .catch(error => {
+          console.warn('[studio] failed to estimate assistant credits', error);
+          if (active) setCreditQuote(null);
+        })
+        .finally(() => { if (active) setIsCreditLoading(false); });
+    }, 160);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [creditRequestKey, input, isOpen, runtime]);
 
   // Auto-scroll
   useEffect(() => {
@@ -166,7 +201,7 @@ export const AssistantPanel: React.FC<AssistantPanelProps> = ({ isOpen, onClose 
   }, [isOpen, onClose]);
 
   const handleSendMessage = async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || creditInsufficient) return;
 
     const userText = input;
     setInput('');
@@ -354,14 +389,25 @@ export const AssistantPanel: React.FC<AssistantPanelProps> = ({ isOpen, onClose 
           />
           <button
             onClick={handleSendMessage}
-            disabled={!input.trim() || isLoading}
-            className={`absolute right-2 top-2 p-2 rounded-full transition-all duration-300 ${input.trim() && !isLoading ? 'bg-cyan-500 text-black hover:bg-cyan-400 hover:scale-105 shadow-lg shadow-cyan-500/20' : 'bg-white/5 text-slate-600 cursor-not-allowed'}`}
+            disabled={!input.trim() || isLoading || creditInsufficient}
+            title={creditInsufficient ? '积分不足，请先补充积分' : undefined}
+            className={`absolute right-2 top-2 p-2 rounded-full transition-all duration-300 ${input.trim() && !isLoading && !creditInsufficient ? 'bg-cyan-500 text-black hover:bg-cyan-400 hover:scale-105 shadow-lg shadow-cyan-500/20' : 'bg-white/5 text-slate-600 cursor-not-allowed'}`}
           >
             {isLoading ? <Loader2 size={16} className="animate-spin" /> : <CornerDownLeft size={16} />}
           </button>
         </div>
-        <div className="text-[9px] text-slate-600 text-center font-medium tracking-wide">
-            Shift + Enter 换行
+        <div className="flex items-center justify-between px-1 text-[9px] font-medium tracking-wide">
+            <span className="text-slate-600">Shift + Enter 换行</span>
+            {input.trim() && (
+              <span className={`inline-flex items-center gap-1 ${creditInsufficient ? 'text-red-400' : 'text-slate-500'}`}>
+                <Coins size={10} />
+                {isCreditLoading
+                  ? '积分计算中…'
+                  : creditSummary.enabled
+                    ? `预计 ${creditSummary.totalCost} 积分 · 成功后扣除`
+                    : '当前不计积分'}
+              </span>
+            )}
         </div>
       </div>
     </div>

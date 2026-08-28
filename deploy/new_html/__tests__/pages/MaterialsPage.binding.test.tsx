@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(__dirname, '../../pages/MaterialsPage.tsx'), 'utf-8');
+const episodeContext = readFileSync(resolve(__dirname, '../../contexts/EpisodeContext.tsx'), 'utf-8');
 
 describe('MaterialsPage binding propagation', () => {
   it('asks before replacing the locked material on later matching shots', () => {
@@ -32,5 +33,17 @@ describe('MaterialsPage binding propagation', () => {
     expect(source).not.toContain('reference_images: newUrls');
     expect(source).toContain("await linkEntityFile(material.fileId, 'asset', targetAssetId, 'material_image')");
     expect(source).toContain('const additions = materials.filter');
+  });
+
+  it('keeps the active shot mounted while refreshing generated assets', () => {
+    expect(episodeContext).toContain('forceReloadSlicesQuiet: (...slices: DataSlice[]) => Promise<void>');
+    expect(episodeContext).toContain('await fetchSlices({ quiet: true }, ...slices)');
+    expect(source).toContain("await forceReloadSlicesQuiet('assets')");
+
+    const updateLibrary = source.slice(
+      source.indexOf('const handleUpdateLibrary'),
+      source.indexOf('const [toastMsg'),
+    );
+    expect(updateLibrary).not.toContain("await forceReloadSlices('assets')");
   });
 });

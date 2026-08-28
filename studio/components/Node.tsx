@@ -1,7 +1,7 @@
 
 // ... existing imports
 import { AppNode, NodeStatus, NodeType } from '../types';
-import { RefreshCw, Play, Image as ImageIcon, Video as VideoIcon, Type, AlertCircle, CheckCircle, Plus, Maximize2, Download, MoreHorizontal, Wand2, Scaling, FileSearch, Edit, Loader2, Layers, Trash2, X, Upload, Scissors, Film, MousePointerClick, Crop as CropIcon, ChevronDown, ChevronUp, GripHorizontal, Link, Copy, Monitor, Music, Pause, Volume2, Mic2 } from 'lucide-react';
+import { RefreshCw, Play, Image as ImageIcon, Video as VideoIcon, Type, AlertCircle, CheckCircle, Plus, Maximize2, Download, MoreHorizontal, Wand2, Scaling, FileSearch, Edit, Loader2, Layers, Trash2, X, Upload, Scissors, Film, MousePointerClick, Crop as CropIcon, ChevronDown, ChevronUp, GripHorizontal, Link, Copy, Monitor, Music, Pause, Volume2, Mic2, Coins } from 'lucide-react';
 import { VideoModeSelector, SceneDirectorOverlay } from './VideoNodeModules';
 import React, { memo, useRef, useState, useEffect, useCallback } from 'react';
 import { useStudioRuntime } from '../services/runtime';
@@ -15,6 +15,11 @@ import {
     normalizeStudioTextModel,
     normalizeStudioVideoModel,
 } from '../services/modelOptions';
+import {
+    buildStudioNodeCreditRequest,
+    summarizeStudioCreditQuote,
+    type StudioCreditQuote,
+} from '../services/creditPolicy';
 
 // ... (keep constants and helper functions: arePropsEqual, safePlay, safePause, InputThumbnails, AudioVisualizer) ...
 
@@ -305,14 +310,40 @@ const NodeComponent: React.FC<NodeProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [localPrompt, setLocalPrompt] = useState(node.data.prompt || '');
   const [inputHeight, setInputHeight] = useState(48);
+  const [creditQuote, setCreditQuote] = useState<StudioCreditQuote | null>(null);
+  const [isCreditLoading, setIsCreditLoading] = useState(false);
   const isResizingInput = useRef(false);
   const inputStartDragY = useRef(0);
   const inputStartHeight = useRef(0);
 
   useEffect(() => { setLocalPrompt(node.data.prompt || ''); }, [node.data.prompt]);
+  const creditRequest = buildStudioNodeCreditRequest(node, localPrompt);
+  const creditRequestKey = creditRequest ? JSON.stringify(creditRequest) : '';
+  const creditSummary = creditRequest ? summarizeStudioCreditQuote(creditRequest, creditQuote) : null;
+  const creditInsufficient = Boolean(creditSummary?.enabled && !creditSummary.enough);
+
+  useEffect(() => {
+      if ((!isHovered && !isInputFocused) || !creditRequest) return;
+      let active = true;
+      setIsCreditLoading(true);
+      const timer = window.setTimeout(() => {
+          runtime.estimateCredits(creditRequest.featureKey, creditRequest.params)
+              .then(quote => { if (active) setCreditQuote(quote); })
+              .catch(error => {
+                  console.warn('[studio] failed to estimate node credits', error);
+                  if (active) setCreditQuote(null);
+              })
+              .finally(() => { if (active) setIsCreditLoading(false); });
+      }, 120);
+      return () => {
+          active = false;
+          window.clearTimeout(timer);
+      };
+  }, [creditRequestKey, isHovered, isInputFocused, runtime]);
+
   const commitPrompt = () => { if (localPrompt !== (node.data.prompt || '')) onUpdate(node.id, { prompt: localPrompt }); };
-  const handleActionClick = () => { commitPrompt(); onAction(node.id, localPrompt); };
-  const handleCmdEnter = (e: React.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); commitPrompt(); onAction(node.id, localPrompt); }};
+  const handleActionClick = () => { if (creditInsufficient) return; commitPrompt(); onAction(node.id, localPrompt); };
+  const handleCmdEnter = (e: React.KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); if (creditInsufficient) return; commitPrompt(); onAction(node.id, localPrompt); }};
 
   const handleInputResizeStart = (e: React.MouseEvent) => {
       e.stopPropagation(); e.preventDefault();
@@ -628,6 +659,19 @@ const NodeComponent: React.FC<NodeProps> = ({
             {hasInputs && onInputReorder && (<div className="w-full flex justify-center mb-2 z-0 relative"><InputThumbnails assets={inputAssets!} onReorder={(newOrder) => onInputReorder(node.id, newOrder)} /></div>)}
             {/* Glass Panel: Set strict Z-Index to higher layer to overlap thumbnails */}
             <div className={`w-full rounded-[20px] p-1 flex flex-col gap-1 ${GLASS_PANEL} relative z-[100]`} onMouseDown={e => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
+                {creditSummary && (
+                    <div className={`flex items-center gap-1.5 px-3 pt-2 text-[10px] font-medium ${creditInsufficient ? 'text-red-400' : 'studio-node-muted'}`}>
+                        <Coins size={11} className="shrink-0" />
+                        <span className="whitespace-nowrap">
+                            {isCreditLoading
+                                ? '正在计算积分…'
+                                : creditSummary.enabled
+                                    ? `预计 ${creditSummary.totalCost} 积分 · 成功后扣除`
+                                    : '当前生成不计积分'}
+                        </span>
+                        {creditInsufficient && <span className="ml-auto whitespace-nowrap">余额不足</span>}
+                    </div>
+                )}
                 <div className="studio-node-control-input relative group/input rounded-[16px]">
                     <textarea className="studio-node-textarea w-full bg-transparent text-xs p-3 focus:outline-none resize-none custom-scrollbar font-medium leading-relaxed" style={{ height: `${Math.min(inputHeight, 200)}px` }} placeholder={node.type === NodeType.AUDIO_GENERATOR ? "输入需要合成语音的台词..." : "描述您的修改或生成需求..."} value={localPrompt} onChange={(e) => setLocalPrompt(e.target.value)} onBlur={() => { setIsInputFocused(false); commitPrompt(); }} onKeyDown={handleCmdEnter} onFocus={() => setIsInputFocused(true)} onMouseDown={e => e.stopPropagation()} readOnly={isWorking} />
                     <div className="absolute bottom-0 left-0 w-full h-3 cursor-row-resize flex items-center justify-center opacity-0 group-hover/input:opacity-100 transition-opacity" onMouseDown={handleInputResizeStart}><div className="w-8 h-1 rounded-full bg-white/10 group-hover/input:bg-white/20" /></div>
@@ -642,7 +686,7 @@ const NodeComponent: React.FC<NodeProps> = ({
                          {(node.type.includes('IMAGE') || node.type === NodeType.VIDEO_GENERATOR) && (<div className="relative shrink-0 whitespace-nowrap group/resolution"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[11px] font-bold"><Monitor size={12} /><span>{node.data.resolution || (node.type.includes('IMAGE') ? '1k' : '720p')}</span></div><div className="absolute bottom-full left-0 pb-2 w-20 opacity-0 translate-y-2 pointer-events-none group-hover/resolution:opacity-100 group-hover/resolution:translate-y-0 group-hover/resolution:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('IMAGE') ? IMAGE_RESOLUTIONS : VIDEO_RESOLUTIONS).map(r => (<div key={r} onClick={() => onUpdate(node.id, { resolution: r })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${node.data.resolution === r ? 'studio-node-menu-item-active' : ''}`}>{r}</div>))}</div></div></div>)}
                          {(node.type.includes('IMAGE') || node.type === NodeType.VIDEO_GENERATOR) && (<div className="relative shrink-0 whitespace-nowrap group/count"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[11px] font-bold"><Layers size={12} /><span>{node.type.includes('IMAGE') ? (node.data.imageCount || 1) : (node.data.videoCount || 1)}</span></div><div className="absolute bottom-full left-0 pb-2 w-16 opacity-0 translate-y-2 pointer-events-none group-hover/count:opacity-100 group-hover/count:translate-y-0 group-hover/count:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('IMAGE') ? IMAGE_COUNTS : VIDEO_COUNTS).map(c => (<div key={c} onClick={() => onUpdate(node.id, node.type.includes('IMAGE') ? { imageCount: c } : { videoCount: c })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${((node.type.includes('IMAGE') ? node.data.imageCount : node.data.videoCount) || 1) === c ? 'studio-node-menu-item-active' : ''}`}>{c}</div>))}</div></div></div>)}
                     </div>
-                    <button onClick={handleActionClick} disabled={isWorking} className={`relative flex shrink-0 items-center justify-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-[12px] font-bold text-[11px] tracking-wide transition-all duration-300 ${isWorking ? 'bg-white/5 text-slate-500 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-black hover:shadow-lg hover:shadow-cyan-500/20 hover:scale-105 active:scale-95'}`}>{isWorking ? <Loader2 className="shrink-0 animate-spin" size={12} /> : <Wand2 className="shrink-0" size={12} />}<span className="whitespace-nowrap">{isWorking ? '生成中...' : '生成'}</span></button>
+                    <button onClick={handleActionClick} disabled={isWorking || creditInsufficient} title={creditInsufficient ? '积分不足，请先补充积分' : undefined} className={`relative flex shrink-0 items-center justify-center gap-2 whitespace-nowrap px-4 py-1.5 rounded-[12px] font-bold text-[11px] tracking-wide transition-all duration-300 ${isWorking || creditInsufficient ? 'bg-white/5 text-slate-500 cursor-not-allowed' : 'bg-gradient-to-r from-cyan-500 to-blue-500 text-black hover:shadow-lg hover:shadow-cyan-500/20 hover:scale-105 active:scale-95'}`}>{isWorking ? <Loader2 className="shrink-0 animate-spin" size={12} /> : <Wand2 className="shrink-0" size={12} />}<span className="whitespace-nowrap">{isWorking ? '生成中...' : '生成'}</span></button>
                 </div>
             </div>
         </div>

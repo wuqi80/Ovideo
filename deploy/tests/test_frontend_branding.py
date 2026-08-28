@@ -112,7 +112,7 @@ def test_login_page_uses_the_compact_easy_style_split_and_three_step_preview():
     assert "写剧本" in login_html
     assert "做分镜" in login_html
     assert "出成片" in login_html
-    assert "把一个想法，变成一部好漫剧" in login_html
+    assert '<h1><span>把一个好想法，</span><span>变成一部好漫剧</span></h1>' in login_html
     assert "把一个想法，变成一部好故事" not in login_html
 
 

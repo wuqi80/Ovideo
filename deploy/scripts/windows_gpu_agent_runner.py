@@ -132,6 +132,9 @@ GPU2_RUNTIME_COMMANDS = {
     "music": ROOT / "scripts" / "windows_gpu_start_music3_comfyui.cmd",
 }
 
+SHARED_COMFYUI_PORT = 8188
+SHARED_COMFYUI_STATE_TTL_SECONDS = 2.0
+
 GPU2_QWEN_COMPAT_PREFIXES = (
     "qwen_",
     "qwen_lora_",
@@ -596,6 +599,137 @@ def _detect_gpu2_runtime_profile(port: int) -> str | None:
         details.get("executable", ""),
         details.get("command", ""),
     )
+
+
+def _read_shared_comfyui_queue(port: int = SHARED_COMFYUI_PORT) -> Dict[str, int]:
+    """Read only ComfyUI queue counters used to arbitrate a shared GPU port."""
+    with urllib.request.urlopen(
+        f"http://127.0.0.1:{int(port)}/queue",
+        timeout=5,
+    ) as response:
+        payload = json.load(response)
+    if not isinstance(payload, dict):
+        raise RuntimeError("ComfyUI queue response is not an object")
+
+    running = payload.get("queue_running") or []
+    pending = payload.get("queue_pending") or []
+    if not isinstance(running, list) or not isinstance(pending, list):
+        raise RuntimeError("ComfyUI queue response has invalid queue fields")
+    return {"running": len(running), "pending": len(pending)}
+
+
+class SharedComfyUIPortGuard:
+    """Fail closed when port 8188 is owned or occupied by another product.
+
+    The other product does not need to know about this Agent. We only observe
+    the shared listener and queue. An unknown listener is never unloaded,
+    stopped, or used by Ovideo, even when its queue looks idle.
+    """
+
+    def __init__(
+        self,
+        *,
+        port: int = SHARED_COMFYUI_PORT,
+        listener: Callable[[int], bool] = _tcp_port_is_listening,
+        profile_detector: Callable[[int], str | None] = _detect_gpu2_runtime_profile,
+        queue_reader: Callable[[int], Dict[str, int]] = _read_shared_comfyui_queue,
+        clock: Callable[[], float] = time.monotonic,
+        ttl_seconds: float = SHARED_COMFYUI_STATE_TTL_SECONDS,
+    ) -> None:
+        self.port = int(port)
+        self.listener = listener
+        self.profile_detector = profile_detector
+        self.queue_reader = queue_reader
+        self.clock = clock
+        self.ttl_seconds = max(0.0, float(ttl_seconds))
+        self._checked_at = float("-inf")
+        self._state: Dict[str, Any] = {
+            "state": "unknown",
+            "port": self.port,
+            "claim_allowed": False,
+            "owner": "unknown",
+            "running": 0,
+            "pending": 0,
+            "reason": "shared GPU state has not been checked",
+        }
+        self._lock = threading.Lock()
+
+    def inspect(self, *, force: bool = False) -> Dict[str, Any]:
+        with self._lock:
+            now = self.clock()
+            if not force and now - self._checked_at < self.ttl_seconds:
+                return dict(self._state)
+
+            if not self.listener(self.port):
+                state = {
+                    "state": "idle",
+                    "port": self.port,
+                    "claim_allowed": True,
+                    "owner": "none",
+                    "running": 0,
+                    "pending": 0,
+                    "reason": "shared port is free",
+                }
+            else:
+                profile = self.profile_detector(self.port)
+                owner = "ovideo" if profile else "external"
+                try:
+                    queue = self.queue_reader(self.port)
+                    running = max(0, int(queue.get("running") or 0))
+                    pending = max(0, int(queue.get("pending") or 0))
+                except Exception as exc:
+                    state = {
+                        "state": "unavailable",
+                        "port": self.port,
+                        "claim_allowed": False,
+                        "owner": owner,
+                        "running": 0,
+                        "pending": 0,
+                        "reason": f"shared queue probe failed: {exc}",
+                    }
+                else:
+                    busy = running > 0 or pending > 0
+                    if not profile:
+                        state = {
+                            "state": "busy_external" if busy else "reserved_external",
+                            "port": self.port,
+                            "claim_allowed": False,
+                            "owner": "external",
+                            "running": running,
+                            "pending": pending,
+                            "reason": (
+                                "shared port is executing another product task"
+                                if busy
+                                else "shared port is owned by another product"
+                            ),
+                        }
+                    elif busy:
+                        state = {
+                            "state": "busy_ovideo",
+                            "port": self.port,
+                            "claim_allowed": False,
+                            "owner": "ovideo",
+                            "running": running,
+                            "pending": pending,
+                            "reason": "Ovideo ComfyUI queue is busy",
+                        }
+                    else:
+                        state = {
+                            "state": "idle",
+                            "port": self.port,
+                            "claim_allowed": True,
+                            "owner": "ovideo",
+                            "running": 0,
+                            "pending": 0,
+                            "reason": "Ovideo owns an idle shared runtime",
+                        }
+
+            self._checked_at = now
+            self._state = state
+            return dict(state)
+
+    def claim_allowed(self) -> bool:
+        return bool(self.inspect(force=True).get("claim_allowed"))
 
 
 def _free_gpu2_models() -> bool:
@@ -2606,6 +2740,7 @@ def main() -> None:
         if value.strip()
     ]
     runtime_manager = Gpu2RuntimeManager()
+    shared_port_guard = SharedComfyUIPortGuard()
     resource_controller = Gpu2ResourceController(
         ROOT,
         comfy_reader=_read_gpu2_memory_snapshot,
@@ -2617,6 +2752,7 @@ def main() -> None:
             info = super()._get_system_info()
             info["resource_guard"] = resource_controller.status()
             info["local_gpu_maintenance"] = gpu2_agent_maintenance_enabled()
+            info["shared_comfyui"] = shared_port_guard.inspect()
             return info
 
         def _probe_comfyui_capabilities(self, port, status=""):
@@ -2633,6 +2769,15 @@ def main() -> None:
             if gpu2_agent_maintenance_enabled():
                 print(
                     "[OSTORY] Local GPU maintenance gate is closed; no queued task will be claimed",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return None
+            shared_state = shared_port_guard.inspect(force=True)
+            if not shared_state.get("claim_allowed"):
+                print(
+                    "[OSTORY] New task claim blocked by shared ComfyUI state: "
+                    f"{shared_state.get('state')} ({shared_state.get('reason')})",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -2656,6 +2801,12 @@ def main() -> None:
             return super().poll()
 
         def execute_comfyui_task(self, task):
+            shared_state = shared_port_guard.inspect(force=True)
+            if not shared_state.get("claim_allowed"):
+                raise RuntimeError(
+                    "Shared ComfyUI port is unavailable: "
+                    f"{shared_state.get('state')} ({shared_state.get('reason')})"
+                )
             acceleration_requested = (
                 is_gpu2_h3_task(task)
                 and gpu2_h3_sage_attention_requested(task)

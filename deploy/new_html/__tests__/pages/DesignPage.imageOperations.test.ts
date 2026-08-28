@@ -78,4 +78,10 @@ describe('DesignPage image operation modals', () => {
     expect(source).toContain('model: generationModel.billingModel');
     expect(source).not.toContain('{option.label} · {option.runtime}');
   });
+
+  it('applies the selected style at submission and strips saved legacy suffixes', () => {
+    expect(source).toContain('const styledPrompt = applyImageStylePreset(basePrompt, activeStyle)');
+    expect(source).toContain('prompt: withStandardTurnaround(styledPrompt, asset.assetType, standardTurnaround)');
+    expect(source).toContain('detectImageStylePreset(storedPrompt) || savedStyle()');
+  });
 });

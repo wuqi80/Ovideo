@@ -149,13 +149,27 @@ async def confirm_script_version(
         raise ScriptConversationItemNotFound("Draft script version not found")
     events = []
     previous_version_id = version.pop("previous_version_id", None)
-    if content_workflow_dao is not None and previous_version_id != version_id:
+    # Confirmation and stale propagation use separate DAO transactions.  If an
+    # older deployment confirmed the version but failed while creating stale
+    # events, a retry sees the confirmed version as the current pointer.  Fall
+    # back to the immutable base version so the idempotent stale events can be
+    # repaired instead of being skipped forever.
+    propagation_base_version_id = (
+        previous_version_id
+        if previous_version_id != version_id
+        else version.get("base_version_id")
+    )
+    if (
+        content_workflow_dao is not None
+        and propagation_base_version_id
+        and propagation_base_version_id != version_id
+    ):
         from services.content_workflow_service import mark_confirmed_script_stale
 
         events = await mark_confirmed_script_stale(
             episode_id=episode_id,
             version_id=version_id,
-            previous_version_id=previous_version_id,
+            previous_version_id=propagation_base_version_id,
             patch=version.get("patch") or {},
             user_id=user_id,
             workflow_dao=content_workflow_dao,

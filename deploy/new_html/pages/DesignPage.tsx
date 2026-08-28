@@ -26,7 +26,12 @@ import {
 import { callAI } from '../services/aiService';
 import { crmMessage } from '../admin/crmUI';
 import { AiModel } from '../types';
-import { IMAGE_QUALITY_SUFFIX } from '../prompts/imagePrompts';
+import {
+  IMAGE_QUALITY_SUFFIX,
+  applyImageStylePreset,
+  detectImageStylePreset,
+  stripImageStylePresets,
+} from '../prompts/imagePrompts';
 import type { AssetItem } from '../types';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { useScriptModelOptions } from '../hooks/useScriptModelOptions';
@@ -794,9 +799,8 @@ export const DesignPage: React.FC = () => {
             await updateAsset(asset.assetId, { description: desc });
           }
         }
-        const styleSuffix = STYLE_PRESETS.find(s => s.id === config.style)?.suffix || '';
         const prompt = withStandardTurnaround(
-          desc + styleSuffix,
+          applyImageStylePreset(desc, config.style),
           asset.assetType,
           config.threeView,
         );
@@ -1275,9 +1279,13 @@ const UnifiedAIModal: React.FC<{
   onSubmit: (p: { assetId: string; engine: MaterialAIEngine; geminiModel: string; prompt: string; references: string[]; aspectRatio: string; resolution: '1K' | '2K' | '4K'; sequential: string; count: number }) => void;
 }> = ({ asset, scriptText, modelOptions, projectId, episodeId, onClose, onSubmit }) => {
   const { forceReloadSlices } = useEpisode();
-  const initialPrompt = useMemo(
+  const storedPrompt = useMemo(
     () => (asset.styleParams?.ai_prompt as string) || asset.description || asset.name,
-    [asset]
+    [asset],
+  );
+  const initialPrompt = useMemo(
+    () => stripImageStylePresets(storedPrompt),
+    [storedPrompt],
   );
   const [engine, setEngine] = useState<MaterialAIEngine>(savedEngine());
   const [geminiModel, setGeminiModel] = useState(savedGeminiModel());
@@ -1292,13 +1300,15 @@ const UnifiedAIModal: React.FC<{
   const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
   const [sequential, setSequential] = useState<'disabled' | 'auto'>('disabled');
   const [count, setCount] = useState(1);
-  const [activeStyle, setActiveStyle] = useState(savedStyle());
+  const [activeStyle, setActiveStyle] = useState(
+    () => detectImageStylePreset(storedPrompt) || savedStyle(),
+  );
   const [standardTurnaround, setStandardTurnaround] = useState(
     supportsStandardTurnaround(asset.assetType),
   );
   const [isRefining, setIsRefining] = useState(false);
   const [refineModel, setRefineModel] = useState(savedRefineModel());
-  const persistedPromptRef = useRef(initialPrompt);
+  const persistedPromptRef = useRef(storedPrompt.trim());
   const materials = useMemo(() => assetToMaterials(asset), [asset]);
   const generationModel = useMemo(
     () => findDesignImageModel(engine, geminiModel),
@@ -1356,7 +1366,7 @@ const UnifiedAIModal: React.FC<{
   };
 
   const persistPrompt = useCallback(async (newPrompt: string) => {
-    const text = (newPrompt || '').trim();
+    const text = stripImageStylePresets(newPrompt);
     if (!text || text === persistedPromptRef.current) return;
     try {
       await updateAsset(asset.assetId, {
@@ -1370,9 +1380,10 @@ const UnifiedAIModal: React.FC<{
   }, [asset, forceReloadSlices]);
 
   const handleClose = useCallback(() => {
-    persistPrompt(prompt);
+    savePrefs({ style: activeStyle });
+    persistPrompt(stripImageStylePresets(prompt));
     onClose();
-  }, [persistPrompt, prompt, onClose]);
+  }, [activeStyle, persistPrompt, prompt, onClose]);
 
   const toggleRef = (id: string) => {
     if (!imageToImageEnabled) return;
@@ -1416,9 +1427,8 @@ const UnifiedAIModal: React.FC<{
     setCount(nextCount);
   };
 
-  const appendStyle = (styleId: string, suffix: string) => {
-    if (activeStyle === styleId) { const prev = STYLE_PRESETS.find(s => s.id === styleId); if (prev) setPrompt(p => p.replace(prev.suffix, '').trim()); setActiveStyle(''); }
-    else { if (activeStyle) { const prev = STYLE_PRESETS.find(s => s.id === activeStyle); if (prev) setPrompt(p => p.replace(prev.suffix, '').trim()); } setPrompt(p => p.trim() + suffix); setActiveStyle(styleId); }
+  const appendStyle = (styleId: string) => {
+    setActiveStyle(current => current === styleId ? '' : styleId);
   };
 
   const handleRefine = async () => {
@@ -1474,12 +1484,21 @@ const UnifiedAIModal: React.FC<{
       crmMessage.warning(`参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张`);
       return;
     }
-    persistPrompt(prompt);
+    const basePrompt = stripImageStylePresets(prompt);
+    const styledPrompt = applyImageStylePreset(basePrompt, activeStyle);
+    savePrefs({
+      engine,
+      geminiModel,
+      style: activeStyle,
+      aspect: aspectRatio,
+      resolution,
+    });
+    persistPrompt(basePrompt);
     onSubmit({
       assetId: asset.assetId,
       engine,
       geminiModel,
-      prompt: withStandardTurnaround(prompt, asset.assetType, standardTurnaround),
+      prompt: withStandardTurnaround(styledPrompt, asset.assetType, standardTurnaround),
       references: imageToImageEnabled
         ? materials.filter(material => selectedRefs.has(material.id)).map(material => material.url)
         : [],
@@ -1600,7 +1619,7 @@ const UnifiedAIModal: React.FC<{
                     <button
                       key={style.id}
                       type="button"
-                      onClick={() => appendStyle(style.id, style.suffix)}
+                      onClick={() => appendStyle(style.id)}
                       className={`h-8 px-3 rounded-md border text-xs transition-colors ${activeStyle === style.id ? 'bg-primary text-white border-primary' : 'bg-n0 text-n300 border-n40 hover:border-primary hover:text-n800'}`}
                     >
                       {style.label}

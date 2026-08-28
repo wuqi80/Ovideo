@@ -5,8 +5,6 @@
  * 这里提供一些辅助提示词模板
  */
 
-import { PromptTemplate } from './scriptPrompts';
-
 /**
  * 图像优化提示词（用于增强生成质量）
  */
@@ -18,14 +16,88 @@ export const IMAGE_QUALITY_SUFFIX = {
   anime: ', anime style, vibrant colors, clean lines, cel shading',
   
   // 写实风格
-  realistic: ', photorealistic, cinematic lighting, depth of field, ray tracing',
+  realistic: ', photorealistic live-action photography, cinematic lighting, depth of field, ray tracing, realistic skin texture, natural facial anatomy and body proportions, real-world materials, strictly non-illustrated, exclude anime, manga, cartoon, cel shading, CGI, 3D render, game art, and doll-like appearance; if reference images are provided, use them only for identity, clothing, and structure, never inherit an illustrated rendering style',
   
   // 水彩风格
   watercolor: ', watercolor painting, soft edges, pastel colors, artistic',
   
   // 3D渲染
   render3d: ', 3d render, octane render, unreal engine, volumetric lighting',
-};
+} as const;
+
+export type ImageStylePresetId = keyof typeof IMAGE_QUALITY_SUFFIX;
+
+const LEGACY_IMAGE_STYLE_MARKERS: Array<{ id: ImageStylePresetId; fragment: string }> = [
+  ...Object.entries(IMAGE_QUALITY_SUFFIX).map(([id, fragment]) => ({
+    id: id as ImageStylePresetId,
+    fragment,
+  })),
+  // 兼容已经保存到项目或 localStorage 的旧写实后缀。
+  { id: 'realistic', fragment: ', photorealistic, cinematic lighting, depth of field, ray tracing' },
+  // 兼容旧版公共 Gemini 封装追加的固定动漫风格。
+  { id: 'anime', fragment: 'Style: Anime/Manga style, high detail, character sheet or environment concept art.' },
+  { id: 'anime', fragment: 'Style: High quality Anime/Manga screenshot, detailed background, cinematic lighting.' },
+];
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function cleanStylePrompt(value: string): string {
+  return value
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/,\s*,+/g, ', ')
+    .replace(/(?:,|，)\s*$/g, '')
+    .trim();
+}
+
+function stripRealisticStyleConflicts(prompt: string): string {
+  return cleanStylePrompt(prompt
+    .replace(/\b(?:anime|manga|cartoon)\s+(?:art\s+)?style\b/gi, '')
+    .replace(/\bcel[-\s]?shad(?:ed|ing)\b/gi, '')
+    .replace(/(?:二次元|动漫|漫画|卡通)(?:画面|绘画|插画)?风格/g, ''));
+}
+
+/**
+ * 清除由产品风格按钮或旧版公共封装写入的风格片段。
+ *
+ * 只移除系统已知的完整片段，不删除用户自己写在主体描述中的风格要求。
+ */
+export function stripImageStylePresets(prompt: string): string {
+  let result = String(prompt || '');
+  for (const { fragment } of LEGACY_IMAGE_STYLE_MARKERS) {
+    result = result.replace(new RegExp(escapeRegExp(fragment), 'gi'), '');
+  }
+  return cleanStylePrompt(result);
+}
+
+/** 识别旧项目已经写入提示词的最后一个系统风格，便于无损迁移到独立选中状态。 */
+export function detectImageStylePreset(prompt: string): ImageStylePresetId | '' {
+  const source = String(prompt || '').toLocaleLowerCase();
+  let detected: ImageStylePresetId | '' = '';
+  let detectedAt = -1;
+  for (const { id, fragment } of LEGACY_IMAGE_STYLE_MARKERS) {
+    const index = source.lastIndexOf(fragment.toLocaleLowerCase());
+    if (index > detectedAt) {
+      detected = id;
+      detectedAt = index;
+    }
+  }
+  return detected;
+}
+
+/**
+ * 在真正提交生图请求时应用唯一风格，避免历史动漫后缀和当前写实选择并存。
+ */
+export function applyImageStylePreset(prompt: string, styleId?: string | null): string {
+  const stripped = stripImageStylePresets(prompt);
+  const base = styleId === 'realistic' ? stripRealisticStyleConflicts(stripped) : stripped;
+  const suffix = styleId && styleId in IMAGE_QUALITY_SUFFIX
+    ? IMAGE_QUALITY_SUFFIX[styleId as ImageStylePresetId]
+    : '';
+  return `${base}${suffix}`.trim();
+}
 
 /**
  * 负面提示词（需要避免的元素）

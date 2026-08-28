@@ -1,0 +1,80 @@
+import { describe, expect, it } from 'vitest';
+import { NodeStatus, NodeType, type AppNode } from '../types';
+import {
+  buildStudioNodeCreditRequest,
+  buildStudioTextCreditRequest,
+  summarizeStudioCreditQuote,
+} from './creditPolicy';
+
+function node(type: NodeType, data: AppNode['data'] = {}): AppNode {
+  return {
+    id: 'node-1',
+    type,
+    x: 0,
+    y: 0,
+    title: 'test',
+    status: NodeStatus.IDLE,
+    data,
+    inputs: [],
+  };
+}
+
+describe('Studio credit policy', () => {
+  it('quotes batch Seedance generation with the server-owned task shape', () => {
+    const request = buildStudioNodeCreditRequest(node(NodeType.VIDEO_GENERATOR, {
+      model: 'standard',
+      duration: 10,
+      resolution: '720p',
+      videoCount: 3,
+    }));
+
+    expect(request).toEqual({
+      featureKey: 'video_generation',
+      params: {
+        task_type: 'seedance_multi',
+        model: 'seedance-standard',
+        sub_model: 'standard',
+        duration_seconds: 10,
+        resolution: '720p',
+      },
+      quantity: 3,
+      fallbackUnitCost: 190,
+    });
+
+    expect(summarizeStudioCreditQuote(request!, {
+      enabled: true,
+      estimatedCost: 190,
+      balance: 500,
+      enough: true,
+    })).toMatchObject({ totalCost: 570, enough: false });
+  });
+
+  it('passes image count and audio character count to canonical rules', () => {
+    expect(buildStudioNodeCreditRequest(node(NodeType.IMAGE_GENERATOR, {
+      model: 'nanobanana',
+      imageCount: 4,
+      resolution: '2k',
+      aspectRatio: '16:9',
+    }))).toMatchObject({
+      featureKey: 'image_generation',
+      params: { image_count: 4, model: 'gemini-2.5-flash-image' },
+      quantity: 1,
+    });
+
+    expect(buildStudioNodeCreditRequest(node(NodeType.AUDIO_GENERATOR, {
+      prompt: '你好，创剧',
+    }))).toMatchObject({
+      featureKey: 'audio_generation_tts',
+      params: { character_count: 5, model: 'speech-hd' },
+    });
+  });
+
+  it('uses the prompt rule for assistant and storyboard text calls', () => {
+    expect(buildStudioTextCreditRequest('把一个想法变成好漫剧')).toMatchObject({
+      featureKey: 'prompt_optimize',
+      params: { model: 'gemini-2.5-flash', output_tokens: 1200 },
+      quantity: 1,
+      fallbackUnitCost: 2,
+    });
+  });
+});

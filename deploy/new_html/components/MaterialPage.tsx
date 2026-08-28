@@ -25,7 +25,12 @@ import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { deleteEntityFile, uploadEntityFile } from '../services/entityFileService';
 import { callAI } from '../services/aiService';
 import { crmMessage } from '../admin/crmUI';
-import { IMAGE_QUALITY_SUFFIX } from '../prompts/imagePrompts';
+import {
+  IMAGE_QUALITY_SUFFIX,
+  applyImageStylePreset,
+  detectImageStylePreset,
+  stripImageStylePresets,
+} from '../prompts/imagePrompts';
 import { useScriptModelOptions } from '../hooks/useScriptModelOptions';
 import {
   formatScriptModelSelectLabel,
@@ -2013,10 +2018,13 @@ const MaterialAIModal: React.FC<{
     const modelOptions = useScriptModelOptions();
     const savedEngine = materialAIPrefs.get('design_ai_engine', 'nanobanana') as MaterialAIEngine;
     const savedGeminiModel = materialAIPrefs.get('design_ai_gemini_model', 'gemini-2.5-flash-image');
+    const storedPrompt = materialAIPrefs.get(materialPromptStorageKey(config), config.defaultPrompt);
     const [engine, setEngine] = useState<MaterialAIEngine>(savedEngine);
     const [geminiModel, setGeminiModel] = useState(savedGeminiModel);
     const [prompt, setPrompt] = useState(() => (
-        materialAIPrefs.get(materialPromptStorageKey(config), config.defaultPrompt)
+        stripImageStylePresets(
+            storedPrompt,
+        )
     ));
     const [aspectRatio, setAspectRatio] = useState(
         materialAIPrefs.get('design_ai_aspect_ratio', '1:1'),
@@ -2031,7 +2039,7 @@ const MaterialAIModal: React.FC<{
     const [sequential, setSequential] = useState<'disabled' | 'auto'>('disabled');
     const [count, setCount] = useState(1);
     const [activeStyle, setActiveStyle] = useState(
-        materialAIPrefs.get('design_ai_style', ''),
+        detectImageStylePreset(storedPrompt) || materialAIPrefs.get('design_ai_style', ''),
     );
     const [standardTurnaround, setStandardTurnaround] = useState(
         supportsStandardTurnaround(config.type),
@@ -2076,7 +2084,11 @@ const MaterialAIModal: React.FC<{
     }), [finalAspectRatio, generatedImageCount, generationModel.billingModel, resolution]);
 
     useEffect(() => {
-        setPrompt(materialAIPrefs.get(materialPromptStorageKey(config), config.defaultPrompt));
+        const nextStoredPrompt = materialAIPrefs.get(materialPromptStorageKey(config), config.defaultPrompt);
+        setPrompt(stripImageStylePresets(nextStoredPrompt));
+        setActiveStyle(
+            detectImageStylePreset(nextStoredPrompt) || materialAIPrefs.get('design_ai_style', ''),
+        );
         setSelectedRefs(new Set());
         setSequential('disabled');
         setCount(1);
@@ -2107,7 +2119,7 @@ const MaterialAIModal: React.FC<{
         materialAIPrefs.set('design_ai_aspect_ratio', aspectRatio);
         materialAIPrefs.set('design_ai_resolution', resolution);
         materialAIPrefs.set('design_ai_refine_model', refineModel);
-        materialAIPrefs.set(materialPromptStorageKey(config), prompt.trim());
+        materialAIPrefs.set(materialPromptStorageKey(config), stripImageStylePresets(prompt));
     };
 
     const handleClose = () => {
@@ -2165,15 +2177,8 @@ const MaterialAIModal: React.FC<{
         setCount(nextCount);
     };
 
-    const appendStyle = (styleId: string, suffix: string) => {
-        if (activeStyle === styleId) {
-            setPrompt(current => current.replace(suffix, '').trim());
-            setActiveStyle('');
-            return;
-        }
-        const previous = MATERIAL_IMAGE_STYLE_PRESETS.find(style => style.id === activeStyle);
-        setPrompt(current => `${previous ? current.replace(previous.suffix, '').trim() : current.trim()}${suffix}`);
-        setActiveStyle(styleId);
+    const appendStyle = (styleId: string) => {
+        setActiveStyle(current => current === styleId ? '' : styleId);
     };
 
     const handleRefine = async () => {
@@ -2235,10 +2240,11 @@ const MaterialAIModal: React.FC<{
         const references = config.materials
             .filter(m => selectedRefs.has(m.id))
             .map(m => m.url);
+        const styledPrompt = applyImageStylePreset(prompt, activeStyle);
         onSubmit({
             tagName: config.tagName,
             engine,
-            prompt: withStandardTurnaround(prompt, config.type, standardTurnaround),
+            prompt: withStandardTurnaround(styledPrompt, config.type, standardTurnaround),
             references: imageToImageEnabled ? references : [],
             geminiModel,
             aspectRatio: finalAspectRatio,
@@ -2363,7 +2369,7 @@ const MaterialAIModal: React.FC<{
                                         <button
                                             key={style.id}
                                             type="button"
-                                            onClick={() => appendStyle(style.id, style.suffix)}
+                                            onClick={() => appendStyle(style.id)}
                                             className={`h-8 rounded-md border px-3 text-xs transition-colors ${activeStyle === style.id ? 'border-primary bg-primary text-white' : 'border-n40 bg-n0 text-n300 hover:border-primary hover:text-n800'}`}
                                         >
                                             {style.label}

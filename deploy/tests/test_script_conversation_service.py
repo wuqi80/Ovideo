@@ -192,3 +192,60 @@ async def test_confirm_and_reject_draft_are_explicit_actions():
     assert confirmed["previous_version_id"] == "ver_old"
     assert confirmed["version"]["status"] == "ready"
     assert rejected["version"]["status"] == "rejected"
+
+
+async def test_confirm_retry_repairs_stale_events_after_primary_commit():
+    class AlreadyConfirmedConversationDAO(FakeConversationDAO):
+        @classmethod
+        async def confirm_version(cls, script_id, version_id, user_id):
+            return {
+                "version_id": version_id,
+                "script_id": script_id,
+                "status": "ready",
+                "previous_version_id": version_id,
+                "base_version_id": "ver_old",
+                "patch": {},
+            }
+
+    class RetryWorkflowDAO:
+        stale_calls = []
+
+        @staticmethod
+        async def list_storyboard_targets(**_kwargs):
+            return [{
+                "item_id": "item_" + "a" * 36,
+                "lineage_id": "line_1",
+                "episode_id": "ep_1",
+                "project_id": "proj_1",
+                "audio_segments": [{
+                    "segmentId": "item_" + "a" * 36 + ":speech:" + "b" * 36,
+                    "kind": "speech",
+                    "speaker": "角色",
+                }],
+                "script_segment_source_text": "",
+            }]
+
+        @classmethod
+        async def create_stale_event(cls, **kwargs):
+            cls.stale_calls.append(kwargs)
+            return {"stale_event_id": f"stale_{len(cls.stale_calls)}", **kwargs}
+
+    RetryWorkflowDAO.stale_calls = []
+    result = await service.confirm_script_version(
+        episode_id="ep_1",
+        script_id="script_1",
+        version_id="ver_new",
+        user_id="user_1",
+        conversation_dao=AlreadyConfirmedConversationDAO,
+        content_workflow_dao=RetryWorkflowDAO,
+    )
+
+    audio_slots = [
+        event["target_slot"]
+        for event in RetryWorkflowDAO.stale_calls
+        if event["target_slot"].startswith("dialogue_audio:")
+    ]
+    assert result["previous_version_id"] == "ver_new"
+    assert len(audio_slots) == 1
+    assert len(audio_slots[0]) > 50
+    assert RetryWorkflowDAO.stale_calls[0]["detail"]["previousVersionId"] == "ver_old"

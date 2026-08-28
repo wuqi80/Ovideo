@@ -7,6 +7,7 @@ import type {
   VideoGenerationMode,
   Workflow,
 } from '../types';
+import type { StudioCreditFeature, StudioCreditQuote } from './creditPolicy';
 
 export interface StudioSnapshot {
   schemaVersion: 1;
@@ -53,6 +54,11 @@ export interface StudioRuntime {
   saveSnapshot(snapshot: StudioSnapshot): Promise<void>;
   uploadAsset(file: File, nodeId?: string): Promise<string>;
   uploadDataUrl(dataUrl: string, fileName: string, nodeId?: string): Promise<string>;
+  getCreditBalance(): Promise<number>;
+  estimateCredits(
+    featureKey: StudioCreditFeature,
+    params: Record<string, unknown>,
+  ): Promise<StudioCreditQuote>;
   sendChatMessage(
     history: Array<{ role: string; parts: Array<{ text: string }> }>,
     message: string,

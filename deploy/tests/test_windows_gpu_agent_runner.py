@@ -24,6 +24,7 @@ from scripts.windows_gpu_agent_runner import (
     GIB,
     Gpu2ModelReleaseGate,
     Gpu2RuntimeManager,
+    SharedComfyUIPortGuard,
     GPU2_H3_WIDTH,
     GPU2_QWEN_MODEL_FILES,
     GPU2_WAN_BLOCKS_TO_SWAP,
@@ -110,6 +111,77 @@ def test_gpu2_agent_maintenance_gate_defaults_closed(monkeypatch):
 
     monkeypatch.setenv("OSTORY_GPU_AGENT_MAINTENANCE", "0")
     assert gpu2_agent_maintenance_enabled() is False
+
+
+def test_shared_comfyui_guard_allows_claim_when_8188_is_free():
+    guard = SharedComfyUIPortGuard(
+        listener=lambda _port: False,
+        profile_detector=lambda _port: None,
+        queue_reader=lambda _port: {"running": 0, "pending": 0},
+        ttl_seconds=0,
+    )
+
+    state = guard.inspect(force=True)
+
+    assert state["state"] == "idle"
+    assert state["owner"] == "none"
+    assert state["claim_allowed"] is True
+
+
+@pytest.mark.parametrize(
+    ("queue", "expected_state"),
+    [
+        ({"running": 1, "pending": 0}, "busy_external"),
+        ({"running": 0, "pending": 2}, "busy_external"),
+        ({"running": 0, "pending": 0}, "reserved_external"),
+    ],
+)
+def test_shared_comfyui_guard_never_claims_an_external_8188_listener(queue, expected_state):
+    guard = SharedComfyUIPortGuard(
+        listener=lambda _port: True,
+        profile_detector=lambda _port: None,
+        queue_reader=lambda _port: queue,
+        ttl_seconds=0,
+    )
+
+    state = guard.inspect(force=True)
+
+    assert state["state"] == expected_state
+    assert state["owner"] == "external"
+    assert state["claim_allowed"] is False
+
+
+def test_shared_comfyui_guard_allows_idle_ovideo_runtime_only():
+    guard = SharedComfyUIPortGuard(
+        listener=lambda _port: True,
+        profile_detector=lambda _port: "h3",
+        queue_reader=lambda _port: {"running": 0, "pending": 0},
+        ttl_seconds=0,
+    )
+
+    state = guard.inspect(force=True)
+
+    assert state["state"] == "idle"
+    assert state["owner"] == "ovideo"
+    assert state["claim_allowed"] is True
+
+
+def test_shared_comfyui_guard_fails_closed_when_queue_state_is_unknown():
+    def broken_queue(_port):
+        raise TimeoutError("queue timeout")
+
+    guard = SharedComfyUIPortGuard(
+        listener=lambda _port: True,
+        profile_detector=lambda _port: "wan",
+        queue_reader=broken_queue,
+        ttl_seconds=0,
+    )
+
+    state = guard.inspect(force=True)
+
+    assert state["state"] == "unavailable"
+    assert state["claim_allowed"] is False
+    assert "queue timeout" in state["reason"]
 
 
 def test_gpu2_port_recovery_waits_for_sustained_outage_and_respects_cooldown(tmp_path):

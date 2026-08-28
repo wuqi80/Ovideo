@@ -9,14 +9,14 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Coins, RefreshCw, ArrowDownCircle, ArrowUpCircle, Snowflake } from 'lucide-react';
+import { Coins, RefreshCw, ArrowDownCircle, Info, Snowflake } from 'lucide-react';
 import {
   getCreditBalance, listCreditTransactions,
   CreditBalance, CreditTransaction,
 } from '../services/creditService';
 
 const CHANGE_TYPE_LABEL: Record<string, { label: string; color: string; sign: 1 | -1 | 0 }> = {
-  freeze:        { label: '冻结',       color: 'text-warning', sign: -1 },
+  freeze:        { label: '冻结（暂占）', color: 'text-warning', sign: 0 },
   release:       { label: '退还',       color: 'text-success', sign:  1 },
   consume:       { label: '消耗',       color: 'text-danger',   sign: -1 },
   admin_credit:  { label: '管理员充值', color: 'text-success', sign:  1 },
@@ -26,6 +26,52 @@ const CHANGE_TYPE_LABEL: Record<string, { label: string; color: string; sign: 1 
   expire:        { label: '过期',       color: 'text-n300',  sign: -1 },
 };
 
+const FEATURE_LABEL: Record<string, string> = {
+  design_image_generation: 'AI 生图',
+  storyboard_image_generation: '分镜生图',
+  storyboard_design_generation: '分镜设计',
+  script_model_call: '剧本 AI',
+};
+
+const IMAGE_TIER_LABEL: Record<string, string> = {
+  image_tier_1: '一阶模型',
+  image_tier_2: '二阶模型',
+  image_tier_3: '三阶模型',
+};
+
+/**
+ * 默认流水中，同一 task 的 freeze + consume/release 是一次业务结算，
+ * 不是两次扣费。隐藏已结算的中间冻结行，但在用户明确筛选“冻结”时保留原始审计流水。
+ */
+export function collapseSettledFreezeRows(
+  transactions: CreditTransaction[],
+  filterChangeType = '',
+): CreditTransaction[] {
+  if (filterChangeType) return transactions;
+  const settledTaskIds = new Set(
+    transactions
+      .filter(item => item.task_id && (item.change_type === 'consume' || item.change_type === 'release'))
+      .map(item => item.task_id as string),
+  );
+  return transactions.filter(item => !(
+    item.change_type === 'freeze'
+    && item.task_id
+    && settledTaskIds.has(item.task_id)
+  ));
+}
+
+export function formatCreditBillingDetail(transaction: CreditTransaction): string {
+  const params = transaction.metadata?.billing_params || {};
+  const count = Number(params.image_count || 0);
+  const model = String(params.model || '');
+  const parts: string[] = [];
+  if (count > 0) parts.push(`${count} 张`);
+  if (model) parts.push(IMAGE_TIER_LABEL[model] || model);
+  if (params.resolution) parts.push(String(params.resolution));
+  if (params.aspect_ratio) parts.push(String(params.aspect_ratio));
+  return parts.join(' · ') || '-';
+}
+
 export const CreditsPage: React.FC = () => {
   const navigate = useNavigate();
   const [balance, setBalance] = useState<CreditBalance | null>(null);
@@ -34,6 +80,7 @@ export const CreditsPage: React.FC = () => {
   const [filterFeature, setFilterFeature] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const visibleTransactions = collapseSettledFreezeRows(transactions, filterChangeType);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -102,6 +149,12 @@ export const CreditsPage: React.FC = () => {
 
         {/* 筛选 + 流水 */}
         <section className="rounded-md border border-n40 bg-n0 shadow-card">
+          <div className="flex items-start gap-2 border-b border-n40 bg-b50/50 px-4 py-3 text-xs text-n300">
+            <Info size={14} className="mt-0.5 shrink-0 text-primary" />
+            <span>
+              任务提交时会先暂时冻结预估积分；成功后从冻结额结算为消耗，不会再扣一次，失败则自动退还。
+            </span>
+          </div>
           <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-n40 text-sm">
             <span className="font-medium whitespace-nowrap">积分流水</span>
             <select
@@ -120,16 +173,22 @@ export const CreditsPage: React.FC = () => {
               placeholder="按功能筛选 (feature_key)"
               className="order-last w-full text-xs bg-n0 border border-n40 rounded px-2 py-1 sm:order-none sm:w-56"
             />
-            <span className="ml-auto text-xs text-n100">共 {transactions.length} 条</span>
+            <span className="ml-auto text-xs text-n100">
+              共 {visibleTransactions.length} 笔
+              {!filterChangeType && visibleTransactions.length !== transactions.length
+                ? `（已合并 ${transactions.length - visibleTransactions.length} 条中间冻结流水）`
+                : ''}
+            </span>
           </div>
 
           <div className="overflow-auto">
-            <table className="w-full min-w-[720px] text-xs">
+            <table className="w-full min-w-[900px] text-xs">
               <thead className="text-n100 bg-n20">
                 <tr>
                   <th className="text-left py-2 px-3">时间</th>
                   <th className="text-left py-2 px-3">类型</th>
                   <th className="text-left py-2 px-3">功能</th>
+                  <th className="text-left py-2 px-3">计费详情</th>
                   <th className="text-right py-2 px-3">金额</th>
                   <th className="text-right py-2 px-3">余额前</th>
                   <th className="text-right py-2 px-3">余额后</th>
@@ -137,7 +196,7 @@ export const CreditsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {transactions.map(t => {
+                {visibleTransactions.map(t => {
                   const meta = CHANGE_TYPE_LABEL[t.change_type] || { label: t.change_type, color: 'text-n700', sign: 0 as const };
                   const sign = meta.sign;
                   return (
@@ -146,9 +205,16 @@ export const CreditsPage: React.FC = () => {
                         {new Date(t.created_at).toLocaleString('zh-CN')}
                       </td>
                       <td className={`py-2 px-3 ${meta.color}`}>{meta.label}</td>
-                      <td className="py-2 px-3 text-n700">{t.feature_key || '-'}</td>
+                      <td className="py-2 px-3 text-n700">
+                        {FEATURE_LABEL[t.feature_key || ''] || t.feature_key || '-'}
+                      </td>
+                      <td className="py-2 px-3 whitespace-nowrap text-n300">
+                        {formatCreditBillingDetail(t)}
+                      </td>
                       <td className={`py-2 px-3 text-right font-mono ${meta.color}`}>
-                        {sign === 1 ? '+' : sign === -1 ? '-' : ''}{t.amount}
+                        {t.change_type === 'freeze'
+                          ? `暂占 ${t.amount}`
+                          : `${sign === 1 ? '+' : sign === -1 ? '-' : ''}${t.amount}`}
                       </td>
                       <td className="py-2 px-3 text-right font-mono text-n300">{t.balance_before}</td>
                       <td className="py-2 px-3 text-right font-mono text-n700">{t.balance_after}</td>
@@ -158,9 +224,9 @@ export const CreditsPage: React.FC = () => {
                     </tr>
                   );
                 })}
-                {!transactions.length && (
+                {!visibleTransactions.length && (
                   <tr>
-                    <td colSpan={7} className="text-center py-8 text-n100">
+                    <td colSpan={8} className="text-center py-8 text-n100">
                       暂无流水
                     </td>
                   </tr>

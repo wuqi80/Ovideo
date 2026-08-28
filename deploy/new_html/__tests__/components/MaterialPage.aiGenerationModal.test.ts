@@ -41,4 +41,10 @@ describe('MaterialPage AI generation modal', () => {
     expect(source).toContain('model: generationModel.billingModel');
     expect(source).toContain("if (!results.length) throw new Error('未返回图片，本次不扣积分')");
   });
+
+  it('applies exactly one selected image style when the request is submitted', () => {
+    expect(source).toContain('const styledPrompt = applyImageStylePreset(prompt, activeStyle)');
+    expect(source).toContain('prompt: withStandardTurnaround(styledPrompt, config.type, standardTurnaround)');
+    expect(source).toContain('stripImageStylePresets(nextStoredPrompt)');
+  });
 });

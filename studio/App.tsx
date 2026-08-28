@@ -34,7 +34,7 @@ import {
     Plus, Copy, Trash2, Type, Image as ImageIcon, Video as VideoIcon,
     ScanFace, Brush, MousePointerClick, LayoutTemplate, X, Film, Link, RefreshCw, Upload,
     Minus, FolderHeart, Unplug, Sparkles, ChevronLeft, ChevronRight, Scan, Music, Mic2, ArrowLeft,
-    Moon, Sun, Hand
+    Moon, Sun, Hand, Coins
 } from 'lucide-react';
 
 // Apple Physics Curve
@@ -181,6 +181,7 @@ export const App = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
 
   // Sketch Editor State
   const [isSketchEditorOpen, setIsSketchEditorOpen] = useState(false);
@@ -285,6 +286,32 @@ export const App = () => {
       nodesRef.current = nodes; connectionsRef.current = connections; groupsRef.current = groups;
       historyRef.current = history; historyIndexRef.current = historyIndex; connectionStartRef.current = connectionStart;
   }, [nodes, connections, groups, history, historyIndex, connectionStart]);
+
+  const refreshCreditBalance = useCallback(async () => {
+      try {
+          setCreditBalance(await runtime.getCreditBalance());
+      } catch (error) {
+          console.warn('[studio] failed to refresh credit balance', error);
+      }
+  }, [runtime]);
+
+  useEffect(() => {
+      void refreshCreditBalance();
+      const handleFocus = () => void refreshCreditBalance();
+      const handleCreditsUpdated = (event: Event) => {
+          const rawBalance = (event as CustomEvent<{ balance?: unknown }>).detail?.balance;
+          if (typeof rawBalance === 'number' && Number.isFinite(rawBalance)) setCreditBalance(rawBalance);
+          void refreshCreditBalance();
+      };
+      const timer = window.setInterval(() => void refreshCreditBalance(), 60_000);
+      window.addEventListener('focus', handleFocus);
+      window.addEventListener('credits:updated', handleCreditsUpdated);
+      return () => {
+          window.clearInterval(timer);
+          window.removeEventListener('focus', handleFocus);
+          window.removeEventListener('credits:updated', handleCreditsUpdated);
+      };
+  }, [refreshCreditBalance]);
 
   // --- Persistence ---
   useEffect(() => {
@@ -1107,6 +1134,17 @@ export const App = () => {
           <span>按住空格拖动画布</span>
         </div>
       </div>
+      <button
+        type="button"
+        onClick={() => { window.location.href = '/credits'; }}
+        className="studio-header-button fixed right-5 top-5 z-[160] inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold backdrop-blur-xl transition"
+        title="查看积分明细"
+        aria-label={`可用积分 ${creditBalance ?? '加载中'}`}
+      >
+        <Coins size={15} />
+        <span>可用积分</span>
+        <strong className="font-mono text-[13px]">{creditBalance ?? '--'}</strong>
+      </button>
       <div
           className={`studio-canvas-content w-full h-full overflow-hidden selection:bg-cyan-500/30 ${isDraggingCanvas ? 'cursor-grabbing' : isSpacePressed ? 'cursor-grab-override' : 'cursor-default'}`}
           onMouseDownCapture={handleCanvasMouseDownCapture} onMouseDown={handleCanvasMouseDown} onWheel={handleWheel}

@@ -24,12 +24,12 @@ export const generateMaterialImage = async (
     context: string,
 ): Promise<string> => {
     const prompt = `
-        Generate a high quality concept art style image for a ${type} named "${name}".
+        Generate a high quality reference image for a ${type} named "${name}".
 
         Context/Description from script:
         "${context}"
 
-        Style: Anime/Manga style, high detail, character sheet or environment concept art.
+        Visual style rule: Follow the style explicitly requested in the context. Do not substitute a different default style. Keep the result high detail and suitable for a character sheet or environment reference.
     `;
     const results = await generateGeminiImageVariant({
         prompt,
@@ -59,7 +59,7 @@ export const generateFinalIllustrationResult = async (
 ): Promise<GeneratedFileResult> => {
     return callWithRetry(async () => {
         const results = await generateGeminiImageVariant({
-            prompt: `${prompt}\n\nStyle: High quality Anime/Manga screenshot, detailed background, cinematic lighting.`,
+            prompt: `${prompt}\n\nVisual style rule: Preserve the visual style explicitly stated above and do not substitute a different house style. Keep the image high detail with coherent lighting and composition.`,
             references: referenceImages,
             referenceMetadata,
             aspectRatio: imageOptions?.aspectRatio ?? '16:9',

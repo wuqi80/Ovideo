@@ -50,7 +50,7 @@ export const MaterialsPage: React.FC = () => {
     script, assets,
     assetScopeMode, setAssetScopeMode,
     isLoading, error,
-    forceReloadSlices,
+    forceReloadSlices, forceReloadSlicesQuiet,
   } = useEpisode();
   const [storyboardItems, setStoryboardItems] = useState<StoryboardItemDB[]>([]);
   const [storyboardLoading, setStoryboardLoading] = useState(false);
@@ -290,7 +290,10 @@ export const MaterialsPage: React.FC = () => {
       }
     }
 
-    await forceReloadSlices('assets');
+    // A generated/uploaded material only needs an asset refresh.  Keep the
+    // MaterialPage mounted so its selectedShotId (for example shot 06) is not
+    // reset to the first storyboard item after every successful generation.
+    await forceReloadSlicesQuiet('assets');
   }, [
     assetNameToId,
     assets,
@@ -298,7 +301,7 @@ export const MaterialsPage: React.FC = () => {
     projectId,
     episodeId,
     selectedScriptId,
-    forceReloadSlices,
+    forceReloadSlicesQuiet,
     materialLibraryFromDb,
   ]);
 

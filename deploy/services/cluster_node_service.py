@@ -67,6 +67,17 @@ def _agent_node(row: Dict[str, Any]) -> Dict[str, Any]:
     elif status == "busy":
         current_tasks = max(1, current_tasks)
 
+    shared_comfyui = _jsonish(system_info.get("shared_comfyui"), {})
+    shared_state = str(shared_comfyui.get("state") or "").lower()
+    # A shared-port observation belongs to the Agent heartbeat that reported it.
+    # Once that Agent is offline, keep the authoritative offline state instead of
+    # presenting a stale queue snapshot as a currently busy node.
+    if status in {"online", "busy", "healthy"}:
+        if shared_state in {"busy_external", "busy_ovideo"}:
+            status = "busy"
+        elif shared_state in {"reserved_external", "unavailable"}:
+            status = "unavailable"
+
     return {
         "id": agent_id,
         "node_id": agent_id,
@@ -84,6 +95,7 @@ def _agent_node(row: Dict[str, Any]) -> Dict[str, Any]:
         # The current Agent loop executes one task at a time even when it monitors multiple ports.
         "max_concurrent": 1,
         "gpu_usage": stats.get("gpu_usage") or system_info.get("gpu_usage"),
+        "shared_comfyui": shared_comfyui,
     }
 
 

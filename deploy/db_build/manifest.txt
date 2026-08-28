@@ -80,3 +80,4 @@ sql/db_migration_video_reverse.sql          # REF files, projects, users
 
 # ---- 8. 内容工作流统一层（依赖创作核心、files、assets、video_segments）----
 sql/db_migration_content_workflow_model.sql # takes/selected/stale/bindings/lineage/script patches
+sql/db_migration_content_workflow_slot_width.sql # widen qualified audio slots used by stale propagation
