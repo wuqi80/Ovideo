@@ -14,6 +14,7 @@ import {
   parseVideoScriptGroups,
 } from '../utils/scriptPipelineParsers';
 import { normalizePositiveIntegerSeconds } from '../utils/storyboardSegments';
+import type { ProjectOrientation } from '../utils/projectCreationPreferences';
 import type { TextTaskContext } from './textTaskContext';
 
 const loadAiModelService = () => import('./aiModelService');
@@ -421,6 +422,7 @@ export async function splitScriptIntoValidatedSegments(
   options: {
     taskContext?: TextTaskContext;
     onProgress?: (progress: PipelineProgress) => void;
+    orientation?: ProjectOrientation;
   } = {},
 ): Promise<ScriptSegment[]> {
   options.onProgress?.({ stage: 'split', completed: 0, total: 1 });
@@ -458,6 +460,7 @@ export async function generateVideoScriptForSegments(
   options: {
     taskContext?: TextTaskContext;
     onProgress?: (progress: PipelineProgress) => void;
+    orientation?: ProjectOrientation;
   } = {},
 ): Promise<EpisodeVideoScriptResult> {
   const inputTexts: string[] = [];
@@ -493,6 +496,7 @@ export async function generateVideoScriptForSegments(
           ...options.taskContext,
           suppressNotification: true,
         },
+        options.orientation,
       );
       const output = await validateOrRepairGeneratedSegment(
         model,
@@ -533,6 +537,7 @@ export async function generateEpisodeVideoScript(
   options: {
     taskContext?: TextTaskContext;
     onProgress?: (progress: PipelineProgress) => void;
+    orientation?: ProjectOrientation;
   } = {},
 ): Promise<EpisodeVideoScriptResult> {
   const segments = await splitScriptIntoValidatedSegments(model, originalContent, options);
@@ -557,6 +562,7 @@ export async function iterateEpisodeVideoScript(
   options: {
     taskContext?: TextTaskContext;
     onStream?: (chunk: string) => void;
+    orientation?: ProjectOrientation;
   } = {},
 ): Promise<EpisodeVideoScriptResult> {
   const { aiIterateVideoScript } = await loadAiModelService();
@@ -568,6 +574,7 @@ export async function iterateEpisodeVideoScript(
     conversationContext,
     undefined,
     options.taskContext,
+    options.orientation,
   );
   const content = await validateOrReplanVideoScript(model, raw, {
     originalScript,
@@ -702,6 +709,7 @@ export async function generateStoryboardDesignForVersion(
   options: {
     taskContext?: TextTaskContext;
     onProgress?: (progress: PipelineProgress) => void;
+    orientation?: ProjectOrientation;
   } = {},
 ): Promise<StoryboardDesignResult> {
   const groups = parseVideoScriptGroups(videoScript);
@@ -734,6 +742,7 @@ export async function generateStoryboardDesignForVersion(
         shot.block.rawBlock,
         shot.canonicalShotNo,
         extractionTaskContext,
+        options.orientation,
       );
       const extractions = await validateOrReplanStoryboardExtractions(
         model,

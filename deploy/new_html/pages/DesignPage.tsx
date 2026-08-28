@@ -7,6 +7,7 @@ import {
   ChevronDown, GripVertical,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
+import { useProject } from '../contexts/ProjectContext';
 import {
   createAsset,
   deleteAsset,
@@ -76,10 +77,12 @@ import {
   DESIGN_CREDIT_DEFAULTS,
   DESIGN_CREDIT_FEATURES,
   designImageCreditParams,
+  designImageFallbackCost,
   designPromptRefinementCreditParams,
   designPromptRefinementFallbackCost,
   newDesignCreditUsageId,
 } from '../utils/designCredits';
+import { projectDefaultAspectRatio } from '../utils/projectCreationPreferences';
 
 type AssetTab = 'character' | 'scene' | 'prop';
 type MaterialAIEngine = DesignImageEngine;
@@ -568,7 +571,7 @@ export const DesignPage: React.FC = () => {
     try {
       await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, estimateParams);
     } catch (err: any) {
-      crmMessage.error(err?.message || '积分校验失败');
+      crmMessage.error(err?.message || '创作点数校验失败');
       return;
     }
 
@@ -600,7 +603,7 @@ export const DesignPage: React.FC = () => {
         });
       }
       if (generated.length === 0) {
-        throw new Error('生成接口未返回有效图片，本次不扣积分');
+        throw new Error('生成接口未返回有效图片，本次不扣创作点数');
       }
       generatedCount = generated.length;
       const settlement = await consumeCredits({
@@ -620,12 +623,12 @@ export const DesignPage: React.FC = () => {
         },
       });
       await forceReloadSlices('assets');
-      crmMessage.success(`生成 ${generatedCount} 张图片，已扣除 ${settlement.charged_credits} 积分`);
+      crmMessage.success(`生成 ${generatedCount} 张图片，已扣除 ${settlement.charged_credits} 创作点数`);
     } catch (err: any) {
       console.error('AI生成失败:', err);
       if (generatedCount > 0) {
         await forceReloadSlices('assets').catch(() => undefined);
-        crmMessage.warning(`图片已生成，但积分结算失败：${err?.message || String(err)}`);
+        crmMessage.warning(`图片已生成，但创作点数结算失败：${err?.message || String(err)}`);
       } else {
         crmMessage.error(err?.message || 'AI生成失败');
       }
@@ -645,7 +648,7 @@ export const DesignPage: React.FC = () => {
     try {
       await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, creditParams);
     } catch (err: any) {
-      crmMessage.error(err?.message || '积分校验失败');
+      crmMessage.error(err?.message || '创作点数校验失败');
       return;
     }
 
@@ -684,10 +687,10 @@ export const DesignPage: React.FC = () => {
             file_id: result.fileId || null,
           },
         });
-        crmMessage.success(`角度调整完成，已扣除 ${settlement.charged_credits} 积分`);
+        crmMessage.success(`角度调整完成，已扣除 ${settlement.charged_credits} 创作点数`);
       } catch (err: any) {
         console.error('Online angle credit settlement failed', err);
-        crmMessage.warning(`图片已保存，但积分结算失败：${err?.message || String(err)}`);
+        crmMessage.warning(`图片已保存，但创作点数结算失败：${err?.message || String(err)}`);
       }
     } catch (err: any) { console.error('角度调整失败:', err); crmMessage.error(err?.message || '角度调整失败'); }
     finally { setBusyAssetId(null); }
@@ -707,7 +710,7 @@ export const DesignPage: React.FC = () => {
     try {
       await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, creditParams);
     } catch (err: any) {
-      crmMessage.error(err?.message || '积分校验失败');
+      crmMessage.error(err?.message || '创作点数校验失败');
       return;
     }
 
@@ -738,10 +741,10 @@ export const DesignPage: React.FC = () => {
             file_id: result.fileId || null,
           },
         });
-        crmMessage.success(`${workflow === 'upscale_hd' ? '高清放大' : '去水印'}完成，已扣除 ${settlement.charged_credits} 积分`);
+        crmMessage.success(`${workflow === 'upscale_hd' ? '高清放大' : '去水印'}完成，已扣除 ${settlement.charged_credits} 创作点数`);
       } catch (err: any) {
         console.error('Online image operation credit settlement failed', err);
-        crmMessage.warning(`图片已保存，但积分结算失败：${err?.message || String(err)}`);
+        crmMessage.warning(`图片已保存，但创作点数结算失败：${err?.message || String(err)}`);
       }
     } catch (err: any) { console.error('处理失败:', err); crmMessage.error(err?.message || '处理失败'); }
     finally { setBusyAssetId(null); }
@@ -765,7 +768,7 @@ export const DesignPage: React.FC = () => {
     try {
       await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, estimateParams);
     } catch (err: any) {
-      crmMessage.error(err?.message || '积分校验失败');
+      crmMessage.error(err?.message || '创作点数校验失败');
       return;
     }
 
@@ -830,7 +833,7 @@ export const DesignPage: React.FC = () => {
           });
         }
         if (generated.length === 0) {
-          throw new Error('生成接口未返回有效图片，本项不扣积分');
+          throw new Error('生成接口未返回有效图片，本项不扣创作点数');
         }
         generatedCount += generated.length;
         okCount++;
@@ -862,13 +865,13 @@ export const DesignPage: React.FC = () => {
         });
         chargedCredits = settlement.charged_credits;
       } catch (err: any) {
-        errors.push(`积分结算失败：${err?.message || String(err)}`);
+        errors.push(`创作点数结算失败：${err?.message || String(err)}`);
       }
     }
     await forceReloadSlices('assets');
     setBusyAssetId(null); setBusyLabel('');
     if (!errors.length) {
-      crmMessage.success(`批量生成完成：成功 ${okCount} 项，已扣除 ${chargedCredits} 积分`);
+      crmMessage.success(`批量生成完成：成功 ${okCount} 项，已扣除 ${chargedCredits} 创作点数`);
     } else if (okCount > 0) {
       crmMessage.warning(`批量生成：成功 ${okCount}，失败 ${errors.length}。首个失败 → ${errors[0]}`);
     } else {
@@ -1279,6 +1282,11 @@ const UnifiedAIModal: React.FC<{
   onSubmit: (p: { assetId: string; engine: MaterialAIEngine; geminiModel: string; prompt: string; references: string[]; aspectRatio: string; resolution: '1K' | '2K' | '4K'; sequential: string; count: number }) => void;
 }> = ({ asset, scriptText, modelOptions, projectId, episodeId, onClose, onSubmit }) => {
   const { forceReloadSlices } = useEpisode();
+  const { project } = useProject();
+  const defaultAspectRatio = projectDefaultAspectRatio(
+    project?.settings,
+    savedAspect() === '9:16' ? '9:16' : '16:9',
+  );
   const storedPrompt = useMemo(
     () => (asset.styleParams?.ai_prompt as string) || asset.description || asset.name,
     [asset],
@@ -1290,7 +1298,11 @@ const UnifiedAIModal: React.FC<{
   const [engine, setEngine] = useState<MaterialAIEngine>(savedEngine());
   const [geminiModel, setGeminiModel] = useState(savedGeminiModel());
   const [prompt, setPrompt] = useState(initialPrompt);
-  const [aspectRatio, setAspectRatio] = useState(savedAspect());
+  const [aspectRatio, setAspectRatio] = useState(() => standardTurnaroundAspectRatio(
+    asset.assetType,
+    defaultAspectRatio,
+    supportsStandardTurnaround(asset.assetType),
+  ));
   const [resolution, setResolution] = useState<DesignImageResolution>(() => (
     normalizeDesignImageResolution(
       findDesignImageModel(savedEngine(), savedGeminiModel()),
@@ -1363,6 +1375,11 @@ const UnifiedAIModal: React.FC<{
     setEngine(nextModel.engine);
     setGeminiModel(nextModel.geminiModel);
     setResolution(current => normalizeDesignImageResolution(nextModel, current));
+  };
+
+  const toggleStandardTurnaround = (enabled: boolean) => {
+    setStandardTurnaround(enabled);
+    if (enabled) setAspectRatio('16:9');
   };
 
   const persistPrompt = useCallback(async (newPrompt: string) => {
@@ -1442,7 +1459,7 @@ const UnifiedAIModal: React.FC<{
       const result = await callAI(refineModel, { system: p.system, user: p.user });
       if (result && typeof result === 'string') {
         const refined = result.trim();
-        if (!refined) throw new Error('润色未返回内容，本次不扣积分');
+        if (!refined) throw new Error('润色未返回内容，本次不扣创作点数');
         setPrompt(refined);
         savePrefs({ refineModel });
         await persistPrompt(refined);
@@ -1459,15 +1476,15 @@ const UnifiedAIModal: React.FC<{
               source: 'design_workspace',
             },
           });
-          crmMessage.success(`润色完成，已扣除 ${settlement.charged_credits} 积分`);
+          crmMessage.success(`润色完成，已扣除 ${settlement.charged_credits} 创作点数`);
         } catch (error: any) {
           console.error('Design prompt refinement credit settlement failed', error);
-          crmMessage.warning(`润色已完成，但积分结算失败：${error?.message || String(error)}`);
+          crmMessage.warning(`润色已完成，但创作点数结算失败：${error?.message || String(error)}`);
         }
       } else {
-        throw new Error('润色未返回内容，本次不扣积分');
+        throw new Error('润色未返回内容，本次不扣创作点数');
       }
-    } catch (err: any) { console.error('AI润色失败:', err); crmMessage.error(err?.message || 'AI润色失败，本次不扣积分'); }
+    } catch (err: any) { console.error('AI润色失败:', err); crmMessage.error(err?.message || 'AI润色失败，本次不扣创作点数'); }
     finally { setIsRefining(false); }
   };
 
@@ -1593,7 +1610,7 @@ const UnifiedAIModal: React.FC<{
                     className="h-8 min-w-[210px] appearance-none rounded-r-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
                   >
                     {refineModelOptions.map(option => (
-                      <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)} · {designPromptRefinementFallbackCost(getScriptModelBillingKey(option))}积分</option>
+                      <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)} · {designPromptRefinementFallbackCost(getScriptModelBillingKey(option))}创作点数</option>
                     ))}
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
@@ -1628,7 +1645,7 @@ const UnifiedAIModal: React.FC<{
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-end gap-2 xl:justify-end">
+              <div className="flex flex-wrap items-end gap-2 xl:w-[556px] xl:justify-end">
                 <label className="relative min-w-[350px]">
                   <span className="mb-1.5 block text-[10px] font-medium text-n300">生成模型</span>
                   <div className="flex items-center gap-2">
@@ -1654,8 +1671,10 @@ const UnifiedAIModal: React.FC<{
                   <span className="mb-1.5 block text-[10px] font-medium text-n300">比例</span>
                   <select
                     value={aspectRatio}
+                    disabled={standardTurnaround && supportsStandardTurnaround(asset.assetType)}
                     onChange={event => setAspectRatio(event.target.value)}
-                    className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-7 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
+                    title={standardTurnaround && supportsStandardTurnaround(asset.assetType) ? `${standardTurnaroundLabel(asset.assetType)}固定使用 16:9` : undefined}
+                    className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-7 text-xs text-n700 outline-none hover:border-primary focus:border-primary disabled:cursor-not-allowed disabled:bg-n20 disabled:text-n100"
                   >
                     {['1:1', '3:4', '4:3', '9:16', '16:9'].map(ratio => <option key={ratio} value={ratio}>{ratio}</option>)}
                   </select>
@@ -1684,7 +1703,7 @@ const UnifiedAIModal: React.FC<{
                     <input
                       type="checkbox"
                       checked={standardTurnaround}
-                      onChange={event => setStandardTurnaround(event.target.checked)}
+                      onChange={event => toggleStandardTurnaround(event.target.checked)}
                       className="accent-primary"
                     />
                     {standardTurnaroundLabel(asset.assetType)}
@@ -1692,7 +1711,7 @@ const UnifiedAIModal: React.FC<{
                 )}
               </div>
 
-              <div className="flex items-center gap-2 xl:min-w-[556px] xl:justify-start xl:pl-[84px]">
+              <div className="flex items-center gap-2 xl:w-[556px] xl:justify-start">
                 <label className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs ${
                   generationModel.supportsImageToImageBatch
                     ? 'border-n40 text-n700'
@@ -1734,7 +1753,7 @@ const UnifiedAIModal: React.FC<{
           <InlineCreditEstimate
             featureKey={DESIGN_CREDIT_FEATURES.imageGeneration}
             params={imageCreditParams}
-            fallbackCost={generatedImageCount * DESIGN_CREDIT_DEFAULTS.imageGenerationPerImage}
+            fallbackCost={designImageFallbackCost(generationModel.billingModel, resolution, generatedImageCount)}
           />
           <div className="flex items-center gap-3">
             <button onClick={handleClose} className="px-4 py-2 rounded-lg border border-n40 text-xs text-n700 hover:bg-n20">取消</button>
@@ -1752,11 +1771,16 @@ const BatchGenerateModal: React.FC<{
   assets: AssetItem[]; selectedIds: Set<string>; scriptText: string; modelOptions: readonly ScriptModelOption[];
   onClose: () => void; onSubmit: (config: { assetIds: string[]; engine: MaterialAIEngine; geminiModel: string; style: string; aspectRatio: string; resolution: '1K' | '2K' | '4K'; threeView: boolean; refineModel: AiModel }) => void;
 }> = ({ assets, selectedIds, scriptText, modelOptions, onClose, onSubmit }) => {
+  const { project } = useProject();
+  const defaultAspectRatio = projectDefaultAspectRatio(
+    project?.settings,
+    savedAspect() === '9:16' ? '9:16' : '16:9',
+  );
   const [checked, setChecked] = useState<Set<string>>(() => selectedIds.size > 0 ? new Set(selectedIds) : new Set(assets.filter(a => !a.thumbnailUrl && !(a.referenceImages?.length > 0)).map(a => a.assetId)));
   const [engine, setEngine] = useState<MaterialAIEngine>(savedEngine());
   const [geminiModel, setGeminiModel] = useState(savedGeminiModel());
   const [style, setStyle] = useState(savedStyle());
-  const [aspectRatio, setAspectRatio] = useState(savedAspect());
+  const [aspectRatio, setAspectRatio] = useState(defaultAspectRatio);
   const [resolution, setResolution] = useState(savedResolution());
   const [threeView, setThreeView] = useState(true);
   const [refineModel, setRefineModel] = useState(savedRefineModel());
@@ -1876,7 +1900,7 @@ const BatchGenerateModal: React.FC<{
             <InlineCreditEstimate
               featureKey={DESIGN_CREDIT_FEATURES.imageGeneration}
               params={batchCreditParams}
-              fallbackCost={checked.size * DESIGN_CREDIT_DEFAULTS.imageGenerationPerImage}
+              fallbackCost={designImageFallbackCost(batchGenerationModel.billingModel, resolution, checked.size)}
             />
           ) : (
             <span className="text-xs text-n100">请选择要生成的资产</span>

@@ -129,6 +129,7 @@ async def test_create_project_creates_initial_version_owner_member_and_log():
         description="desc",
         visibility=None,
         member_usernames=None,
+        settings={"creation_preferences": {"orientation": "portrait", "aspect_ratio": "9:16"}},
         project_dao=FakeProjectDAO,
         version_dao=FakeVersionDAO,
         project_member_dao=FakeProjectMemberDAO,
@@ -139,6 +140,9 @@ async def test_create_project_creates_initial_version_owner_member_and_log():
     assert result["success"] is True
     assert result["project"]["project_id"] == "proj_1"
     assert FakeProjectDAO.created["visibility"] == "private"
+    assert FakeProjectDAO.created["settings"] == {
+        "creation_preferences": {"orientation": "portrait", "aspect_ratio": "9:16"}
+    }
     assert FakeVersionDAO.created == {
         "project_id": "proj_1",
         "user_id": "owner",
@@ -166,6 +170,7 @@ async def test_create_project_adds_named_members_and_reports_missing_users():
         description="",
         visibility="private",
         member_usernames=[" alice ", "missing", "alice", "owner-name"],
+        settings=None,
         project_dao=FakeProjectDAO,
         version_dao=FakeVersionDAO,
         project_member_dao=FakeProjectMemberDAO,

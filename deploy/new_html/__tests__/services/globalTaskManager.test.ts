@@ -106,6 +106,50 @@ describe('GlobalTaskManager notification polling', () => {
     expect(snapshots[0][1].progress).toBeUndefined();
   });
 
+  it('preserves task type and storyboard navigation context from active tasks', async () => {
+    mockGetActiveTasks.mockResolvedValueOnce({
+      success: true,
+      tasks: [{
+        task_id: 'gemini_img_42',
+        task_type: 'gemini_image',
+        category: 'image',
+        status: 'processing',
+        display_name: 'AI 生图任务',
+        project_id: 'proj_1',
+        episode_id: 'ep_1',
+        source_page: 'design',
+        source_item_id: 'shot_06',
+        entity_type: 'storyboard_item',
+        entity_id: 'shot_06',
+        file_role: 'generated_image',
+        provider: 'gemini',
+        model: 'nanobanana',
+        created_at: new Date().toISOString(),
+      }],
+    });
+    mockGetTaskNotifications.mockResolvedValueOnce({ success: true, notifications: [] });
+
+    const manager = new GlobalTaskManager();
+    const snapshots: any[][] = [];
+    manager.addEventListener((type, data) => {
+      if (type === 'tasks_updated' && data.tasks) snapshots.push(data.tasks);
+    });
+
+    await (manager as any).poll();
+
+    expect(snapshots[0][0]).toMatchObject({
+      taskType: 'gemini_image',
+      projectId: 'proj_1',
+      episodeId: 'ep_1',
+      sourceItemId: 'shot_06',
+      entityType: 'storyboard_item',
+      entityId: 'shot_06',
+      fileRole: 'generated_image',
+      provider: 'gemini',
+      modelName: 'nanobanana',
+    });
+  });
+
   it('reconciles terminal task state without creating a visible notification while SSE is connected', async () => {
     mockGetTaskNotifications
       .mockResolvedValueOnce({ success: true, notifications: [] })

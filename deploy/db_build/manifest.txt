@@ -50,6 +50,7 @@ sql/db_migration_script_credit_rules.sql    # INSERT script/storyboard usage rul
 sql/db_migration_script_model_tier_credit_rules.sql # UPDATE script/storyboard model tier multipliers
 sql/db_migration_design_credit_rules.sql    # INSERT design image/angle/upscale usage rules
 sql/db_migration_design_image_credit_tiers.sql # UPDATE public image tiers and 40-100 credits/image
+sql/db_migration_design_image_credit_pricing_v2.sql # UPDATE tier/resolution creation-point matrix
 sql/db_migration_design_prompt_refinement_credit_rule.sql # INSERT 1-4 credit prompt refinement rule
 sql/db_migration_design_multi_angle_credit_rule.sql # INSERT fixed 60-credit human multi-angle rule
 sql/db_migration_generation_credit_rules.sql # INSERT queued video enhancement credit rule
@@ -81,3 +82,6 @@ sql/db_migration_video_reverse.sql          # REF files, projects, users
 # ---- 8. 内容工作流统一层（依赖创作核心、files、assets、video_segments）----
 sql/db_migration_content_workflow_model.sql # takes/selected/stale/bindings/lineage/script patches
 sql/db_migration_content_workflow_slot_width.sql # widen qualified audio slots used by stale propagation
+sql/db_migration_phone_email_auth.sql # phone-first auth, verified email preferences, delivery outbox
+sql/db_migration_creation_points.sql # permanent and expiring creation-point buckets
+sql/db_migration_wechat_creation_point_recharge.sql # WeChat Native orders and idempotent permanent-point crediting

@@ -21,7 +21,9 @@ describe('create idea seed', () => {
     saveCreateIdeaSeed(storage, {
       sentence: ' 深夜便利店里来了一个不会离开的顾客。 ',
       genre: '悬疑',
-      duration: '60s 竖屏',
+      durationSeconds: 60,
+      orientation: 'portrait',
+      aspectRatio: '9:16',
       projectId: 'project-1',
       episodeId: 'episode-1',
     });
@@ -31,6 +33,24 @@ describe('create idea seed', () => {
       sentence: '深夜便利店里来了一个不会离开的顾客。',
       projectId: 'project-1',
       episodeId: 'episode-1',
+      durationSeconds: 60,
+      orientation: 'portrait',
+      aspectRatio: '9:16',
+    });
+  });
+
+  it('keeps old combined duration seeds readable during the transition', () => {
+    const storage = createStorage();
+    storage.setItem(CREATE_IDEA_STORAGE_KEY, JSON.stringify({
+      sentence: '旧版创意',
+      duration: '60s 竖屏',
+      episodeId: 'episode-1',
+    }));
+
+    expect(readCreateIdeaSeed(storage, 'episode-1')).toMatchObject({
+      durationSeconds: 60,
+      orientation: 'portrait',
+      aspectRatio: '9:16',
     });
   });
 

@@ -209,18 +209,23 @@ def create_ai_proxy_router(
             item.model_dump() if hasattr(item, "model_dump") else dict(item)
             for item in (getattr(request, "reference_metadata", None) or [])
         ]
+        entity_type = getattr(request, "entity_type", None)
+        entity_id = getattr(request, "entity_id", None)
+        source_page = getattr(request, "source_page", None)
+        if not source_page:
+            source_page = "generation" if entity_type == "storyboard_item" else "design"
         task_data = {
             "prompt": request.prompt,
             "provider": provider,
             "model": model,
             "model_scope": getattr(request, "model_scope", None),
-            "entity_type": request.entity_type,
-            "entity_id": request.entity_id,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
             "file_role": request.file_role,
             "project_id": request.project_id,
             "episode_id": request.episode_id,
-            "source_page": "design",
-            "source_item_id": request.entity_id,
+            "source_page": source_page,
+            "source_item_id": getattr(request, "source_item_id", None) or entity_id,
             "display_name": extra.pop("display_name", f"{provider} image"),
             "category": "image",
             "reference_snapshot": build_reference_snapshot(
@@ -594,7 +599,7 @@ def create_ai_proxy_router(
                     n=request.n,
                     ref_count=len(request.references or []),
                     submitted_reference_snapshot=submitted_references,
-                    display_name=("四阶 · 高清生图模型" if tier == "vip" else "四阶 · 全能生图模型"),
+                    display_name=("GPT Image 2 VIP · 高清生图模型" if tier == "vip" else "GPT Image 2 · 全能生图模型"),
                 ),
                 images_count=len(images),
                 logger=logger,
@@ -657,7 +662,7 @@ def create_ai_proxy_router(
                 count=request.count,
                 sequential=request.sequential,
                 ref_count=len(request.references or []),
-                display_name="三阶 · 参考图生图模型",
+                display_name="Doubao-Seedream-5.0-lite · 参考图生图模型",
             ),
             logger=logger,
         )

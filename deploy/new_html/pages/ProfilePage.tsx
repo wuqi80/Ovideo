@@ -9,6 +9,7 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  Mail,
   PencilLine,
   Phone,
   ShieldCheck,
@@ -21,12 +22,17 @@ import { clearAccountIdentity } from '../services/accountStorage';
 import { secureApiUrl } from '../services/httpClient';
 import {
   changeMyPassword,
+  getMyEmailPreferences,
   getMyProfile,
+  sendMyEmailVerification,
+  type EmailNotificationPreferences,
   ProfileCredits,
   ProfileProjectStats,
   ProfileRecentProject,
   type MyProfile,
   updateMyProfile,
+  updateMyEmailPreferences,
+  verifyMyEmail,
 } from '../services/profileService';
 
 const EMPTY_STATS: ProfileProjectStats = {
@@ -63,26 +69,36 @@ export const ProfilePage: React.FC = () => {
   const [stats, setStats] = useState<ProfileProjectStats>(EMPTY_STATS);
   const [recentProjects, setRecentProjects] = useState<ProfileRecentProject[]>([]);
   const [displayName, setDisplayName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [verificationCode, setVerificationCode] = useState('');
+  const [email, setEmail] = useState('');
+  const [emailCode, setEmailCode] = useState('');
+  const [emailPreferences, setEmailPreferences] = useState<EmailNotificationPreferences>({
+    task_success: true,
+    task_failure: true,
+    credit_alert: true,
+    sharing: true,
+  });
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [sendingEmailCode, setSendingEmailCode] = useState(false);
+  const [verifyingEmail, setVerifyingEmail] = useState(false);
+  const [savingEmailPreferences, setSavingEmailPreferences] = useState(false);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getMyProfile();
+      const [data, emailSettings] = await Promise.all([getMyProfile(), getMyEmailPreferences()]);
       setProfile(data.profile);
       setCredits(data.credits || EMPTY_CREDITS);
       setStats(data.project_stats || EMPTY_STATS);
       setRecentProjects(data.recent_projects || []);
       setDisplayName(data.profile.username || '');
-      setPhoneNumber(data.profile.phone_number || '');
-      setVerificationCode('');
+      setEmail(emailSettings.email || data.profile.email || '');
+      setEmailPreferences(emailSettings.preferences);
+      setEmailCode('');
     } catch (error) {
       console.error('加载个人中心失败:', error);
       crmMessage.error('加载个人中心失败，请刷新重试');
@@ -96,16 +112,13 @@ export const ProfilePage: React.FC = () => {
   const profileChanged = useMemo(() => {
     if (!profile) return false;
     return (
-      displayName.trim() !== (profile.username || '') ||
-      phoneNumber.trim() !== (profile.phone_number || '') ||
-      verificationCode.trim().length > 0
+      displayName.trim() !== (profile.username || '')
     );
-  }, [displayName, phoneNumber, profile, verificationCode]);
+  }, [displayName, profile]);
 
   const handleSaveProfile = useCallback(async () => {
     if (!profile || !profileChanged) return;
     const nextName = displayName.trim();
-    const nextPhone = phoneNumber.trim();
     if (!nextName) {
       crmMessage.warning('显示名称不能为空');
       return;
@@ -114,23 +127,66 @@ export const ProfilePage: React.FC = () => {
     try {
       const payload: Parameters<typeof updateMyProfile>[0] = {};
       if (nextName !== profile.username) payload.username = nextName;
-      if (nextPhone !== (profile.phone_number || '') || verificationCode.trim()) {
-        payload.phone_number = nextPhone;
-        if (verificationCode.trim()) payload.verification_code = verificationCode.trim();
-      }
       const data = await updateMyProfile(payload);
       setProfile(data.profile);
       setDisplayName(data.profile.username || '');
-      setPhoneNumber(data.profile.phone_number || '');
-      setVerificationCode('');
-      crmMessage.success(data.profile.phone_verified ? '个人信息已保存，手机号已验证' : '个人信息已保存');
+      crmMessage.success('个人信息已保存');
     } catch (error: any) {
       console.error('保存个人信息失败:', error);
       crmMessage.error(error?.message || '保存个人信息失败');
     } finally {
       setSavingProfile(false);
     }
-  }, [displayName, phoneNumber, profile, profileChanged, verificationCode]);
+  }, [displayName, profile, profileChanged]);
+
+  const handleSendEmailCode = useCallback(async () => {
+    const nextEmail = email.trim();
+    if (!nextEmail) {
+      crmMessage.warning('请输入邮箱地址');
+      return;
+    }
+    setSendingEmailCode(true);
+    try {
+      await sendMyEmailVerification(nextEmail);
+      setProfile(current => current ? { ...current, email: nextEmail, email_verified: false } : current);
+      crmMessage.success('验证邮件已发送，请查收验证码');
+    } catch (error: any) {
+      crmMessage.error(error?.message || '发送验证邮件失败');
+    } finally {
+      setSendingEmailCode(false);
+    }
+  }, [email]);
+
+  const handleVerifyEmail = useCallback(async () => {
+    if (!emailCode.trim()) {
+      crmMessage.warning('请输入邮箱验证码');
+      return;
+    }
+    setVerifyingEmail(true);
+    try {
+      const result = await verifyMyEmail(email.trim(), emailCode.trim());
+      setProfile(current => current ? { ...current, email: result.email, email_verified: true } : current);
+      setEmailCode('');
+      crmMessage.success('邮箱验证成功');
+    } catch (error: any) {
+      crmMessage.error(error?.message || '邮箱验证失败');
+    } finally {
+      setVerifyingEmail(false);
+    }
+  }, [email, emailCode]);
+
+  const handleSaveEmailPreferences = useCallback(async () => {
+    setSavingEmailPreferences(true);
+    try {
+      const result = await updateMyEmailPreferences(emailPreferences);
+      setEmailPreferences(result.preferences);
+      crmMessage.success('邮件通知设置已保存');
+    } catch (error: any) {
+      crmMessage.error(error?.message || '保存邮件通知设置失败');
+    } finally {
+      setSavingEmailPreferences(false);
+    }
+  }, [emailPreferences]);
 
   const handleSavePassword = useCallback(async () => {
     if (!currentPassword || !newPassword) {
@@ -243,30 +299,21 @@ export const ProfilePage: React.FC = () => {
 
                       <label className="block">
                         <span className="text-sm font-medium text-n700">手机号</span>
-                        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                          <div className="relative flex-1">
-                            <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-n100" />
-                            <input
-                              value={phoneNumber}
-                              onChange={event => setPhoneNumber(event.target.value)}
-                              placeholder="输入手机号"
-                              className="h-10 w-full rounded-lg border border-n40 bg-n0 pl-10 pr-24 text-sm text-n800 outline-none transition-all placeholder:text-n100 focus:border-primary focus:ring-2 focus:ring-primary/15"
-                            />
-                            {profile?.phone_verified && phoneNumber === (profile.phone_number || '') && (
-                              <span className="absolute right-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full border border-g75 bg-g50 px-2 py-0.5 text-xs text-g400">
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                已验证
-                              </span>
-                            )}
-                          </div>
+                        <div className="relative mt-2">
+                          <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-n100" />
                           <input
-                            value={verificationCode}
-                            onChange={event => setVerificationCode(event.target.value)}
-                            placeholder="验证码 888888"
-                            className="h-10 w-full rounded-lg border border-n40 bg-n0 px-3 text-sm text-n800 outline-none transition-all placeholder:text-n100 focus:border-primary focus:ring-2 focus:ring-primary/15 sm:w-36"
+                            value={profile?.phone_number || ''}
+                            readOnly
+                            className="h-10 w-full rounded-lg border border-n40 bg-n20 pl-10 pr-24 text-sm text-n500 outline-none"
                           />
+                          {profile?.phone_verified && (
+                            <span className="absolute right-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full border border-g75 bg-g50 px-2 py-0.5 text-xs text-g400">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              已验证
+                            </span>
+                          )}
                         </div>
-                        <span className="mt-2 block text-xs text-n200">当前阶段固定验证码为 888888；修改手机号后需保存验证。</span>
+                        <span className="mt-2 block text-xs text-n200">手机号是登录身份，不能从个人资料直接修改。</span>
                       </label>
 
                       <div className="flex justify-end">
@@ -278,6 +325,97 @@ export const ProfilePage: React.FC = () => {
                         >
                           {savingProfile ? '保存中...' : '保存更改'}
                         </button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="rounded-lg border border-n40 bg-n0 shadow-card">
+                    <CardHeader
+                      icon={<Mail className="h-5 w-5" />}
+                      title="邮箱与通知"
+                      description="邮箱为可选信息，验证后可接收任务和账号通知。"
+                    />
+                    <div className="space-y-5 border-t border-n40 p-6">
+                      <label className="block">
+                        <span className="text-sm font-medium text-n700">通知邮箱</span>
+                        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                          <div className="relative flex-1">
+                            <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-n100" />
+                            <input
+                              type="email"
+                              value={email}
+                              onChange={event => setEmail(event.target.value)}
+                              placeholder="name@example.com"
+                              className="h-10 w-full rounded-lg border border-n40 bg-n0 pl-10 pr-24 text-sm text-n800 outline-none transition-all placeholder:text-n100 focus:border-primary focus:ring-2 focus:ring-primary/15"
+                            />
+                            {profile?.email_verified && email.trim().toLowerCase() === (profile.email || '').toLowerCase() && (
+                              <span className="absolute right-2 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 rounded-full border border-g75 bg-g50 px-2 py-0.5 text-xs text-g400">
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                已验证
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleSendEmailCode}
+                            disabled={sendingEmailCode}
+                            className="h-10 rounded-lg border border-b75 bg-b50 px-4 text-sm font-medium text-primary disabled:opacity-50"
+                          >
+                            {sendingEmailCode ? '发送中...' : '发送验证码'}
+                          </button>
+                        </div>
+                      </label>
+
+                      {(!profile?.email_verified || email.trim().toLowerCase() !== (profile.email || '').toLowerCase()) && (
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <input
+                            value={emailCode}
+                            onChange={event => setEmailCode(event.target.value)}
+                            placeholder="输入 6 位邮箱验证码"
+                            className="h-10 flex-1 rounded-lg border border-n40 bg-n0 px-3 text-sm text-n800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleVerifyEmail}
+                            disabled={verifyingEmail}
+                            className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white disabled:opacity-50"
+                          >
+                            {verifyingEmail ? '验证中...' : '验证邮箱'}
+                          </button>
+                        </div>
+                      )}
+
+                      <div>
+                        <p className="text-sm font-medium text-n700">邮件通知类型</p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          {([
+                            ['task_success', '任务完成'],
+                            ['task_failure', '任务失败'],
+                            ['credit_alert', '创作点数提醒'],
+                            ['sharing', '分享与协作'],
+                          ] as const).map(([key, label]) => (
+                            <label key={key} className="flex items-center gap-2 rounded-lg border border-n40 px-3 py-2 text-sm text-n700">
+                              <input
+                                type="checkbox"
+                                checked={emailPreferences[key]}
+                                onChange={event => setEmailPreferences(current => ({ ...current, [key]: event.target.checked }))}
+                                className="accent-primary"
+                              />
+                              {label}
+                            </label>
+                          ))}
+                        </div>
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={handleSaveEmailPreferences}
+                            disabled={!profile?.email_verified || savingEmailPreferences}
+                            className="h-10 rounded-lg border border-n40 px-4 text-sm font-medium text-n700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {savingEmailPreferences ? '保存中...' : '保存通知设置'}
+                          </button>
+                        </div>
+                        {!profile?.email_verified && <p className="mt-2 text-xs text-n200">验证邮箱后，邮件通知设置才会生效。</p>}
                       </div>
                     </div>
                   </section>
@@ -318,20 +456,20 @@ export const ProfilePage: React.FC = () => {
                   <section className="rounded-lg border border-n40 bg-n0 shadow-card">
                     <CardHeader
                       icon={<Coins className="h-5 w-5" />}
-                      title="我的积分"
+                      title="我的创作点数"
                       description="查看当前余额和使用明细。"
                     />
                     <div className="grid grid-cols-3 border-y border-n40 bg-n10">
                       <StatCell label="可用" value={credits.available_credits} />
-                      <StatCell label="冻结" value={credits.frozen_credits} />
-                      <StatCell label="已用" value={credits.total_used_credits} />
+                      <StatCell label="账户" value={credits.account_credits || 0} />
+                      <StatCell label="赠送" value={credits.gift_credits || 0} />
                     </div>
                     <button
                       type="button"
                       onClick={() => navigate('/credits')}
                       className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-n700 transition-colors hover:bg-n20 hover:text-primary"
                     >
-                      积分详情
+                      创作点数详情
                       <ChevronRight className="h-4 w-4" />
                     </button>
                   </section>

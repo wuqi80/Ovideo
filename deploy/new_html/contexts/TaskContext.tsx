@@ -78,11 +78,12 @@ function isPublicShareRoute(): boolean {
 
 function inferRuntimeTaskKind(task: GlobalTask): TaskKind {
   const category = String(task.category || '').toLowerCase();
-  const name = String(task.displayName || task.id || '').toLowerCase();
+  const name = `${task.displayName || ''} ${task.taskType || ''} ${task.id || ''}`.toLowerCase();
   if (category.includes('image') || name.includes('image') || name.includes('图像') || name.includes('生图')) {
     if (name.includes('doubao') || name.includes('豆包')) return 'doubao-image';
-    if (name.includes('gemini')) return 'gemini-image';
-    return 'comfyui-image';
+    if (name.includes('gemini') || name.includes('ai 生图任务')) return 'gemini-image';
+    if (name.includes('comfyui') || name.includes('集群') || name.includes('节点')) return 'comfyui-image';
+    return 'other';
   }
   if (category.includes('video')) return 'video-i2v';
   if (category.includes('text')) return 'script-segment';
@@ -218,13 +219,31 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 initialStatus: t.status === 'running' ? 'running' : 'queued',
                 targetItemId: t.sourceItemId,
                 targetProjectId: t.projectId,
+                targetEntityType: t.entityType,
+                targetEntityId: t.entityId,
+                episodeId: t.episodeId,
+                fileRole: t.fileRole,
                 progress: t.progress,
+                metadata: {
+                  ...(t.provider ? { provider: t.provider } : {}),
+                  ...(t.modelName ? { modelName: t.modelName } : {}),
+                },
               });
-            } else if (existing.status !== t.status || existing.progress !== t.progress || existing.error) {
+            } else if (
+              existing.status !== t.status
+              || existing.progress !== t.progress
+              || existing.error
+              || (t.provider && existing.metadata?.provider !== t.provider)
+              || (t.modelName && existing.metadata?.modelName !== t.modelName)
+            ) {
               taskRegistry.update(t.id, {
                 status: t.status,
                 progress: t.progress,
                 error: undefined,
+                metadata: {
+                  ...(t.provider ? { provider: t.provider } : {}),
+                  ...(t.modelName ? { modelName: t.modelName } : {}),
+                },
               });
             }
           }
@@ -234,6 +253,21 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
           for (const t of data.tasks) {
             const existing = taskRegistry.get(t.id);
             if (!existing) continue;
+            taskRegistry.update(t.id, {
+              kind: inferRuntimeTaskKind(t),
+              title: t.displayName || existing.title,
+              targetPage: t.sourcePage,
+              targetProjectId: t.projectId || existing.targetProjectId,
+              targetItemId: t.sourceItemId || existing.targetItemId,
+              targetEntityType: t.entityType || existing.targetEntityType,
+              targetEntityId: t.entityId || existing.targetEntityId,
+              episodeId: t.episodeId || existing.episodeId,
+              fileRole: t.fileRole || existing.fileRole,
+              metadata: {
+                ...(t.provider ? { provider: t.provider } : {}),
+                ...(t.modelName ? { modelName: t.modelName } : {}),
+              },
+            });
             if (t.status === 'completed') {
               taskRegistry.complete(t.id);
             } else if (t.status === 'failed') {
@@ -280,6 +314,12 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (n.taskId) {
             const existing = taskRegistry.get(n.taskId);
             if (existing) {
+              taskRegistry.update(n.taskId, {
+                metadata: {
+                  ...(n.provider ? { provider: n.provider } : {}),
+                  ...(n.modelName ? { modelName: n.modelName } : {}),
+                },
+              });
               if (n.status === 'completed') {
                 taskRegistry.complete(n.taskId);
               } else if (n.status === 'failed') {
@@ -333,6 +373,10 @@ export const TaskProvider: React.FC<{ children: React.ReactNode }> = ({ children
         projectId: t.targetProjectId || '',
         sourcePage: t.targetPage,
         sourceItemId: t.targetItemId,
+        entityType: t.targetEntityType,
+        entityId: t.targetEntityId,
+        fileRole: t.fileRole,
+        episodeId: t.episodeId,
         progress: t.progress,
         createdAt: t.createdAt,
         startedAt: t.startedAt,

@@ -14,9 +14,9 @@ import { callDeepseekChatWithRetry } from './deepseekService';
 export type RewriteBackend = 'geminiProxy' | 'geminiSDK' | 'deepseek';
 
 export const REWRITE_BACKEND_LABELS: Record<RewriteBackend, string> = {
-    geminiProxy: '四阶 · 全能写作模型（默认）',
-    geminiSDK:   '四阶 · 全能写作模型（兼容旧选项）',
-    deepseek:    '二阶 · 快速写作模型（中文优化）',
+    geminiProxy: 'gemini-2.5-flash · 全能写作模型（默认）',
+    geminiSDK:   'gemini-2.5-flash · 全能写作模型（兼容旧选项）',
+    deepseek:    'deepseek-v4-flash · 快速写作模型（中文优化）',
 };
 
 /** 预设改写指令 — 选择后无需输入自定义文本即可生成 */

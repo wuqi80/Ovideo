@@ -66,14 +66,13 @@ describe('QuickScriptSourceColumn', () => {
     expect(screen.queryByRole('button', { name: '生成新版' })).not.toBeInTheDocument();
   });
 
-  it('shows public model hints outside the dropdown', () => {
+  it('shows model versions in the dropdown and capability hints outside it', () => {
     render(<QuickScriptSourceColumn {...baseProps} />);
 
     expect(screen.getByTestId('quick-script-model-hint')).toHaveTextContent('速度优先');
     const modelSelect = screen.getByLabelText('选择剧本模型');
-    expect(modelSelect).toHaveTextContent('二阶 · 快速写作模型');
+    expect(modelSelect).toHaveTextContent('deepseek-v4-flash · 快速写作模型');
     expect(modelSelect).not.toHaveTextContent('速度优先');
-    expect(modelSelect).not.toHaveTextContent('deepseek');
   });
 
   it('runs the complete pipeline against the selected script id', async () => {
@@ -110,7 +109,7 @@ describe('QuickScriptSourceColumn', () => {
   it('shows the estimated credit cost in the quick three-stage panel', () => {
     render(<QuickScriptSourceColumn {...baseProps} />);
 
-    expect(screen.getByText(/预计消耗积分：/)).toBeInTheDocument();
+    expect(screen.getByText(/预计消耗创作点数：/)).toBeInTheDocument();
     expect(screen.getByText('· 成功后扣除')).toBeInTheDocument();
   });
 
@@ -118,10 +117,10 @@ describe('QuickScriptSourceColumn', () => {
     render(<QuickScriptSourceColumn {...baseProps} actualCreditCost={5} />);
 
     expect(screen.getByText('本次合计消耗：5')).toBeInTheDocument();
-    expect(screen.getByText('积分')).toBeInTheDocument();
-    expect(screen.getByText(/再次生成预计消耗积分：/)).toBeInTheDocument();
+    expect(screen.getByText('创作点数')).toBeInTheDocument();
+    expect(screen.getByText(/再次生成预计消耗创作点数：/)).toBeInTheDocument();
     expect(screen.getByText('· 成功后扣除')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText('再次生成预计消耗积分：16')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('再次生成预计消耗创作点数：16')).toBeInTheDocument());
   });
 
   it('marks quick stages complete from persisted outputs when stage metadata is stale', () => {

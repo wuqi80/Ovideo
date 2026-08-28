@@ -46,6 +46,8 @@ def _enrich_task_row_from_data(row: Dict[str, Any], *, include_empty_entity: boo
         "source_item_id",
         "display_name",
         "category",
+        "provider",
+        "model",
     )
     for key in context_keys:
         value = row.get(key) or task_data.get(key)
@@ -160,6 +162,8 @@ async def _reconcile_active_tasks_with_queue(
             "entity_id",
             "file_role",
             "episode_id",
+            "provider",
+            "model",
         ):
             if queue_data.get(key):
                 merged_row[key] = queue_data[key]

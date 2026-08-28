@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -23,6 +23,7 @@ class ProjectCreate(BaseModel):
     description: Optional[str] = ""
     visibility: Optional[str] = "private"
     member_usernames: Optional[List[str]] = None
+    settings: Optional[Dict[str, Any]] = None
 
 
 def create_project_core_router(
@@ -57,6 +58,7 @@ def create_project_core_router(
                 description=project_data.description,
                 visibility=project_data.visibility,
                 member_usernames=project_data.member_usernames,
+                settings=project_data.settings,
                 project_dao=ProjectDAO,
                 version_dao=VersionDAO,
                 project_member_dao=ProjectMemberDAO,

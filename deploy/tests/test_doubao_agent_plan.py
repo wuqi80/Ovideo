@@ -87,7 +87,7 @@ def test_doubao_exposes_one_image_operation_binding() -> None:
     assert get_provider_model_binding_options("doubao") == [
         {
             "operation": "generate",
-            "label": "筑基境界",
+            "label": "Doubao Seedream 5.0 Lite",
             "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
         }
     ]
@@ -357,7 +357,7 @@ async def test_doubao_sensitive_prompt_without_safe_rewrite_returns_actionable_4
     assert calls == 1
     assert exc_info.value.status_code == 422
     assert "内容安全审核" in exc_info.value.detail
-    assert "本次不扣积分" in exc_info.value.detail
+    assert "本次不扣创作点数" in exc_info.value.detail
 
 
 @pytest.mark.asyncio

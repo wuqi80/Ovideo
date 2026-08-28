@@ -2,7 +2,7 @@
 """
 Credit API Routes
 ==================
-/api/credits/* — 用户侧积分接口（余额 / 估算 / 流水）。
+/api/credits/* — 用户侧创作点数接口（余额 / 估算 / 流水）。
 
 """
 from __future__ import annotations
@@ -44,18 +44,21 @@ class CreditConsumeRequest(BaseModel):
 
 @router.get("/balance")
 async def get_balance(user_id: str = Depends(get_current_user)):
-    """获取当前用户的积分账户余额（不存在则自动创建）。"""
+    """获取当前用户的创作点数账户余额（不存在则自动创建）。"""
     try:
         account = await CreditAccountDAO.get_or_create('user', user_id)
         return {
             "success": True,
             "account_id": account['account_id'],
             "available_credits": int(account.get('available_credits') or 0),
+            "account_credits": int(account.get('account_credits') or 0),
+            "gift_credits": int(account.get('gift_credits') or 0),
+            "gift_expires_at": account.get('gift_expires_at'),
             "frozen_credits": int(account.get('frozen_credits') or 0),
             "total_used_credits": int(account.get('total_used_credits') or 0),
         }
     except Exception as e:
-        logger.error(f"获取积分余额失败: {e}", exc_info=True)
+        logger.error(f"获取创作点数余额失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -64,7 +67,7 @@ async def estimate_credits(
     payload: CreditEstimateRequest,
     user_id: str = Depends(get_current_user),
 ):
-    """估算某 feature_key 在指定参数下的积分消耗。"""
+    """估算某 feature_key 在指定参数下的创作点数消耗。"""
     if not payload.feature_key:
         raise HTTPException(status_code=400, detail="feature_key 不能为空")
     try:
@@ -76,7 +79,7 @@ async def estimate_credits(
         )
         return {"success": True, **result}
     except Exception as e:
-        logger.error(f"积分估算失败: {e}", exc_info=True)
+        logger.error(f"创作点数估算失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -104,8 +107,8 @@ async def consume_credits(
     except credit_service.CreditServiceError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:
-        logger.error("积分结算失败: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="积分结算失败") from exc
+        logger.error("创作点数结算失败: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="创作点数结算失败") from exc
 
 
 @router.get("/transactions")
@@ -118,7 +121,7 @@ async def list_transactions(
     limit: int = 100,
     offset: int = 0,
 ):
-    """当前用户的积分流水。"""
+    """当前用户的创作点数流水。"""
     try:
         limit = max(1, min(limit, 500))
         offset = max(0, offset)
@@ -138,5 +141,5 @@ async def list_transactions(
             "offset": offset,
         }
     except Exception as e:
-        logger.error(f"获取积分流水失败: {e}", exc_info=True)
+        logger.error(f"获取创作点数流水失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

@@ -16,10 +16,12 @@ import {
     LayoutGrid, Palette, Wand2, RotateCw,
 } from 'lucide-react';
 import { useTaskManager } from '../contexts/TaskContext';
-import type { RegisteredTask, SourcePage, TaskKind } from '../types';
+import type { RegisteredTask, TaskKind } from '../types';
 import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 import { formatPublicTaskText } from '../utils/publicTaskTerminology';
 import { getModelDisplayName } from '../services/videoModelService';
+import { buildNotificationTargetUrl } from '../services/notificationNavigation';
+import { getNotificationModelLabel } from '../services/notificationLabels';
 
 // ===== 状态色板（窄域、克制） =====
 const STATUS_THEME = {
@@ -66,8 +68,8 @@ const KIND_LABEL: Record<string, string> = {
     sora2: getModelDisplayName('Sora2'),
     veo: getModelDisplayName('Veo'),
     'video-i2v': '图生视频', 'video-comfy': '节点视频任务',
-    'comfyui-image': '集群图片', 'gemini-image': 'AI 生图', 'doubao-image': '三阶 · 参考图',
-    nanobanana: '一阶 · 快速', 'qwen-image': '二阶 · 多参考', 'qwen-lora': '二阶 · 风格', kontext: '三阶 · 高质量',
+    'comfyui-image': '节点图片', 'gemini-image': 'Gemini 生图', 'doubao-image': 'Doubao Seedream 5.0 Lite · 参考图',
+    nanobanana: 'Gemini 3.1 Flash · 快速', 'qwen-image': 'Qwen Image Edit 2509 · 多参考', 'qwen-lora': 'Qwen 2509 + LoRA · 风格', kontext: 'Kontext v2 · 高质量',
     matting: '抠图', 'angle-adjust': '角度调整',
     'human-multi-angle': '多角度', 'around-angle': '环绕镜头',
     'image-fusion': '图像融合', 'panorama-360': '全景 360', 'panorama-fusion': '全景融合',
@@ -87,32 +89,6 @@ function fmtRelative(ms: number): string {
     if (dt < 3_600_000) return `${Math.floor(dt / 60_000)} 分钟前`;
     if (dt < 86_400_000) return `${Math.floor(dt / 3_600_000)} 小时前`;
     return `${Math.floor(dt / 86_400_000)} 天前`;
-}
-
-// ===== Page → URL 路径（点通知跳转用） =====
-function buildTargetUrl(task: RegisteredTask): string | null {
-    const { targetPage, episodeId, targetProjectId } = task;
-    if (!targetProjectId || !episodeId) {
-        // 缺 projectId/episodeId 时退回 episodes 落地页
-        return targetProjectId ? `/projects/${targetProjectId}/episodes` : null;
-    }
-    const base = `/projects/${targetProjectId}/ep/${episodeId}/workflow`;
-    const map: Record<SourcePage, string | null> = {
-        editor: `/projects/${targetProjectId}/ep/${episodeId}/workflow/script`,
-        script: `${base}/script`,
-        design: `${base}/design`,
-        materials: `${base}/materials`,
-        audio: `${base}/audio`,
-        storyboard: `${base}/storyboard`,
-        generation: `${base}/storyboard`,
-        video: `${base}/video`,
-        enhance: `${base}/enhance`,
-        postprocess: `${base}/postprocess`,
-        canvas: `/projects/${targetProjectId}/ep/${episodeId}/canvas`,
-        history: `${base}/history`,
-        global: null,
-    };
-    return map[targetPage] || null;
 }
 
 // ===== Status 文案 =====
@@ -226,10 +202,11 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({ triggerCla
     }, [unreadCount, markAllRead, refreshNotifications, computeMenuPos]);
 
     const handleNavigate = useCallback((task: RegisteredTask) => {
-        const url = buildTargetUrl(task);
-        if (url && url !== location.pathname) navigate(url);
+        const url = buildNotificationTargetUrl(task);
+        const currentUrl = `${location.pathname}${location.search}`;
+        if (url && url !== currentUrl) navigate(url);
         setOpen(false);
-    }, [navigate, location.pathname]);
+    }, [navigate, location.pathname, location.search]);
 
     const triggerCls = triggerClassName
         || `relative inline-flex items-center justify-center ${compact ? 'p-1.5' : 'p-2'} rounded-md text-n300 hover:text-n800 hover:bg-n20 transition-all duration-200`;
@@ -396,7 +373,7 @@ interface TaskItemProps {
 const TaskItem: React.FC<TaskItemProps> = ({ task, onNavigate, onRemove, removeLabel, removeIconKind }) => {
     const theme = STATUS_THEME[task.status] || STATUS_THEME.queued;
     const KindIcon = getKindIcon(task.kind);
-    const kindLabel = KIND_LABEL[task.kind] || task.kind;
+    const kindLabel = getNotificationModelLabel(task) || KIND_LABEL[task.kind] || task.kind;
     const statusText = statusLabel(task);
 
     return (

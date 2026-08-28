@@ -103,16 +103,40 @@ def _eval_additive_factor(factor: Dict[str, Any], params: Dict[str, Any]) -> flo
     """Evaluate additive usage factors while keeping legacy multipliers intact."""
     if not isinstance(factor, dict):
         return 0.0
+    ftype = factor.get('type')
     key = factor.get('key')
     if not key:
         return 0.0
     try:
         value = max(0.0, float(params.get(key, 0) or 0))
-        cost_per_unit = float(factor.get('cost_per_unit', 0) or 0)
     except (TypeError, ValueError):
         return 0.0
 
-    ftype = factor.get('type')
+    if ftype == 'lookup_unit_add':
+        # Exact server-owned lookup tables support tier-specific resolution
+        # pricing without trusting a browser-supplied cost. Rules are ordered
+        # from most specific to fallback matches.
+        cost_per_unit = factor.get('default_cost_per_unit', 0)
+        for rule in factor.get('rules', []) or []:
+            expected = rule.get('when') or {}
+            if not isinstance(expected, dict):
+                continue
+            if all(
+                str(params.get(match_key, '')).strip().lower()
+                == str(match_value).strip().lower()
+                for match_key, match_value in expected.items()
+            ):
+                cost_per_unit = rule.get('cost_per_unit', cost_per_unit)
+                break
+        try:
+            return value * float(cost_per_unit or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    try:
+        cost_per_unit = float(factor.get('cost_per_unit', 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
     if ftype == 'linear_add':
         return value * cost_per_unit
     if ftype == 'per_unit_add':
@@ -138,11 +162,12 @@ def compute_cost(rule: Dict[str, Any], params: Dict[str, Any]) -> int:
     base = int(rule.get('base_cost', 0) or 0)
     factors = rule.get('factors') or []
     total = float(base)
+    additive_types = {'linear_add', 'per_unit_add', 'lookup_unit_add'}
     for factor in factors:
-        if isinstance(factor, dict) and factor.get('type') in {'linear_add', 'per_unit_add'}:
+        if isinstance(factor, dict) and factor.get('type') in additive_types:
             total += _eval_additive_factor(factor, params)
     for factor in factors:
-        if not isinstance(factor, dict) or factor.get('type') not in {'linear_add', 'per_unit_add'}:
+        if not isinstance(factor, dict) or factor.get('type') not in additive_types:
             total *= _eval_factor(factor, params)
     cost = int(round(total))
     min_c = int(rule.get('min_cost', 0) or 0)

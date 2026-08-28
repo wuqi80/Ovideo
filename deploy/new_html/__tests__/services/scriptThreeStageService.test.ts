@@ -85,6 +85,7 @@ describe('three-stage script pipeline prefers usable output over blocking valida
 
     const progress: Array<{ stage: string; completed: number; total: number }> = [];
     const result = await generateEpisodeVideoScript(AiModel.DeepseekChat, '孙悟空大闹天宫', {
+      orientation: 'landscape',
       onProgress: event => progress.push({
         stage: event.stage,
         completed: event.completed,
@@ -104,6 +105,7 @@ describe('three-stage script pipeline prefers usable output over blocking valida
       }),
       undefined,
       expect.objectContaining({ suppressNotification: true }),
+      'landscape',
     );
     expect(result.segments).toHaveLength(2);
     expect(result.segments.map(segment => segment.estimatedDurationSec)).toEqual([8, 7]);
@@ -361,20 +363,25 @@ describe('three-stage script pipeline prefers usable output over blocking valida
       durationSec: null,
     }]);
 
-    const result = await generateStoryboardDesignForVersion(AiModel.DeepseekChat, [
-      '分段1',
-      '分镜1-1',
-      '时长（秒）：15',
-      '画面描述：主角推门进入办公室。',
-      `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
-      `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
-    ].join('\n'));
+    const result = await generateStoryboardDesignForVersion(
+      AiModel.DeepseekChat,
+      [
+        '分段1',
+        '分镜1-1',
+        '时长（秒）：15',
+        '画面描述：主角推门进入办公室。',
+        `【视觉风格】${VISUAL_STYLE_REFERENCE}`,
+        `【正向稳定约束】${STABILITY_CONSTRAINT_REFERENCE}`,
+      ].join('\n'),
+      { orientation: 'landscape' },
+    );
 
     expect(aiMocks.aiExtractStoryboardPromptFromVideoShot).toHaveBeenCalledWith(
       AiModel.DeepseekChat,
       expect.stringContaining('分镜1-1'),
       '分镜1-1',
       expect.objectContaining({ suppressNotification: true }),
+      'landscape',
     );
     expect(aiMocks.aiReplanInvalidStoryboardExtraction).not.toHaveBeenCalled();
     expect(result.items.map(item => item.shotNumber)).toEqual(['镜头1-1', '镜头1-2']);

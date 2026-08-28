@@ -53,7 +53,7 @@ describe('创剧 Studio runtime helpers', () => {
       enabled: true,
       estimated_cost: 75,
       balance: 149,
-    }, 2)).toThrow('本次预计需要 150 积分');
+    }, 2)).toThrow('本次预计需要 150 创作点数');
 
     expect(() => assertStudioBatchCredits({
       enabled: true,

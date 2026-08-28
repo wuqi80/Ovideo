@@ -210,9 +210,9 @@ WORKFLOW_CONFIGS = {
     
     # 一阶（smooth）- I2V
     'smooth_i2v': WorkflowConfig(
-        name='一阶 图片转视频',
+        name='Smooth 图片转视频',
         file='smooth_i2v.json',
-        description='使用 一阶(smooth) 模型将单张图片转换为视频',
+        description='使用 Smooth 模型将单张图片转换为视频',
         placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
             'image_data': 'image',
@@ -228,9 +228,9 @@ WORKFLOW_CONFIGS = {
     
     # 一阶（smooth）- Morph
     'smooth_morph': WorkflowConfig(
-        name='一阶 首尾帧过渡',
+        name='Smooth 首尾帧过渡',
         file=None,
-        description='使用 一阶(smooth) 模型生成首尾帧之间的过渡视频',
+        description='使用 Smooth 模型生成首尾帧之间的过渡视频',
         placeholders=['start_image', 'end_image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
             'image_data': 'start_image',
@@ -247,9 +247,9 @@ WORKFLOW_CONFIGS = {
     
     # 二阶（Dawasi）- I2V
     'dawasi_i2v': WorkflowConfig(
-        name='二阶 图片转视频',
+        name='Dawasi 图片转视频',
         file='Dawasi_i2v.json',
-        description='使用 二阶(Dawasi) 模型将单张图片转换为视频',
+        description='使用 Dawasi 模型将单张图片转换为视频',
         placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
             'image_data': 'image',
@@ -265,9 +265,9 @@ WORKFLOW_CONFIGS = {
     
     # 二阶（Dawasi）- Morph
     'dawasi_morph': WorkflowConfig(
-        name='二阶 首尾帧过渡',
+        name='Dawasi 首尾帧过渡',
         file=None,
-        description='使用 二阶(Dawasi) 模型生成首尾帧之间的过渡视频',
+        description='使用 Dawasi 模型生成首尾帧之间的过渡视频',
         placeholders=['start_image', 'end_image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
             'image_data': 'start_image',
@@ -284,9 +284,9 @@ WORKFLOW_CONFIGS = {
     
     # 三阶（hunyuan）- I2V（无首尾帧）
     'hunyuan_i2v': WorkflowConfig(
-        name='三阶 图片转视频',
+        name='Hunyuan Video 图片转视频',
         file=None,
-        description='使用 三阶(hunyuan) 模型将单张图片转换为视频',
+        description='使用 Hunyuan Video 模型将单张图片转换为视频',
         placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
             'image_data': 'image',
@@ -302,9 +302,9 @@ WORKFLOW_CONFIGS = {
     
     # 四阶（LTX）- I2V（无首尾帧）
     'ltx_i2v': WorkflowConfig(
-        name='四阶 图片转视频',
+        name='LTX Video 图片转视频',
         file='LTX_i2v.json',
-        description='使用 四阶(LTX) 模型将单张图片转换为视频',
+        description='使用 LTX Video 模型将单张图片转换为视频',
         placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
             'image_data': 'image',
@@ -320,9 +320,9 @@ WORKFLOW_CONFIGS = {
     
     # 五阶（Turbo2.2）- I2V（无首尾帧）
     'turbo22_i2v': WorkflowConfig(
-        name='五阶 图片转视频',
+        name='Turbo 2.2 图片转视频',
         file=None,
-        description='使用 五阶(Turbo2.2) 模型将单张图片转换为视频',
+        description='使用 Turbo 2.2 模型将单张图片转换为视频',
         placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
             'image_data': 'image',
@@ -338,9 +338,9 @@ WORKFLOW_CONFIGS = {
     
     # 六阶（Turbo2.1）- I2V（无首尾帧）
     'turbo21_i2v': WorkflowConfig(
-        name='六阶 图片转视频',
+        name='Turbo 2.1 图片转视频',
         file=None,
-        description='使用 六阶(Turbo2.1) 模型将单张图片转换为视频',
+        description='使用 Turbo 2.1 模型将单张图片转换为视频',
         placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
             'image_data': 'image',
@@ -356,9 +356,9 @@ WORKFLOW_CONFIGS = {
     
     # 七阶（SVD_WAN）- I2V（无首尾帧）
     'svdwan_i2v': WorkflowConfig(
-        name='七阶 图片转视频',
+        name='SVD-WAN 图片转视频',
         file=None,
-        description='使用 七阶(SVD_WAN) 模型将单张图片转换为视频',
+        description='使用 SVD-WAN 模型将单张图片转换为视频',
         placeholders=['image', 'prompt', 'negative_prompt', 'seed'],
         param_mapping={
             'image_data': 'image',
@@ -940,7 +940,7 @@ WORKFLOW_CONFIGS = {
     # ==================== 筑基二阶(qwenN_lora)工作流 ====================
     
     'qwenN_lora_1': WorkflowConfig(
-        name='筑基二阶 1张参考图',
+        name='Qwen Image Edit 2509 + LoRA 1张参考图',
         file=None,
         description='使用K神LoRA模型生成图像（1张参考图）',
         placeholders=['image', 'prompt', 'seed'],
@@ -955,7 +955,7 @@ WORKFLOW_CONFIGS = {
     ),
     
     'qwenN_lora_2': WorkflowConfig(
-        name='筑基二阶 2张参考图',
+        name='Qwen Image Edit 2509 + LoRA 2张参考图',
         file=None,
         description='使用K神LoRA模型生成图像（2张参考图）',
         placeholders=['image_1', 'image_2', 'prompt', 'seed'],
@@ -971,7 +971,7 @@ WORKFLOW_CONFIGS = {
     ),
     
     'qwenN_lora_3': WorkflowConfig(
-        name='筑基二阶 3张参考图',
+        name='Qwen Image Edit 2509 + LoRA 3张参考图',
         file=None,
         description='使用K神LoRA模型生成图像（3张参考图）',
         placeholders=['image_1', 'image_2', 'image_3', 'prompt', 'seed'],
@@ -988,7 +988,7 @@ WORKFLOW_CONFIGS = {
     ),
     
     'qwenN_lora_4': WorkflowConfig(
-        name='筑基二阶 4张参考图',
+        name='Qwen Image Edit 2509 + LoRA 4张参考图',
         file=None,
         description='使用K神LoRA模型生成图像（4张参考图）',
         placeholders=['image_1', 'image_2', 'image_3', 'image_4', 'prompt', 'seed'],
@@ -1006,7 +1006,7 @@ WORKFLOW_CONFIGS = {
     ),
     
     'qwenN_lora_5': WorkflowConfig(
-        name='筑基二阶 5张参考图',
+        name='Qwen Image Edit 2509 + LoRA 5张参考图',
         file=None,
         description='使用K神LoRA模型生成图像（5张参考图）',
         placeholders=['image_1', 'image_2', 'image_3', 'image_4', 'image_5', 'prompt', 'seed'],
@@ -1025,7 +1025,7 @@ WORKFLOW_CONFIGS = {
     ),
     
     'qwenN_lora_6': WorkflowConfig(
-        name='筑基二阶 6张参考图',
+        name='Qwen Image Edit 2509 + LoRA 6张参考图',
         file=None,
         description='使用K神LoRA模型生成图像（6张参考图）',
         placeholders=['image_1', 'image_2', 'image_3', 'image_4', 'image_5', 'image_6', 'prompt', 'seed'],

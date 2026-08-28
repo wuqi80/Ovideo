@@ -57,6 +57,8 @@ import {
 } from './utils/scriptWorkspaceMode';
 import { clearCreateIdeaSeed, readCreateIdeaSeed } from './utils/createIdeaSeed';
 import { ScriptWorkspaceModeSwitch } from './components/ScriptWorkspaceModeSwitch';
+import { useProject } from './contexts/ProjectContext';
+import { projectDefaultAspectRatio } from './utils/projectCreationPreferences';
 
 const loadAiModelService = () => import('./services/aiModelService');
 const loadScriptThreeStageService = () => import('./services/scriptThreeStageService');
@@ -491,6 +493,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   onActivateScript,
   onAfterExport,
 }) => {
+  const { project } = useProject();
+  const projectAspectRatio = projectDefaultAspectRatio(project?.settings, '16:9');
+  const projectOrientation = projectAspectRatio === '9:16' ? 'portrait' : 'landscape';
   const scriptModelOptions = useScriptModelOptions();
   const scriptWorkspaceUsername = localStorage.getItem('username');
   const [scriptWorkspaceMode, setScriptWorkspaceMode] = useState<ScriptWorkspaceMode>(
@@ -2050,6 +2055,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         generationRequirements,
         appendStreamChunk,
         taskContext,
+        projectOrientation,
       );
       pipelineInputTexts = [generationSource, generationRequirements].filter(Boolean);
       pipelineOutputTexts = [result];
@@ -2167,7 +2173,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     } finally {
       setConversationSendingId(null);
     }
-  }, [aiModel, propEpisodeId, scriptConversations, scriptModelOptions, selectedFileId, updateFileWithHistory, urlProjectId]);
+  }, [aiModel, projectOrientation, propEpisodeId, scriptConversations, scriptModelOptions, selectedFileId, updateFileWithHistory, urlProjectId]);
 
   const handleConversationConfirmVersion = useCallback(async (version: ScriptStoryboardVersion) => {
     const fileId = selectedFileId;
@@ -2306,7 +2312,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         ? version
         : await selectScriptVersion(propEpisodeId, fileId, version.id);
 
-      // 历史区的“恢复此版本”只恢复该脚本版本最近一次镜头设计，不再次调用 AI、扣积分或生成新卡。
+      // 历史区的“恢复此版本”只恢复该脚本版本最近一次镜头设计，不再次调用 AI、扣创作点数或生成新卡。
       if (options.autoSnapshot === false) {
         const localSnapshots = filesRef.current
           .find(item => item.id === fileId)
@@ -2362,6 +2368,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         aiModel,
         selectedVersion.content,
         {
+          orientation: projectOrientation,
           taskContext: {
             projectId: urlProjectId,
             episodeId: propEpisodeId,
@@ -2467,6 +2474,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   }, [
     aiModel,
     persistStoryboardSnapshot,
+    projectOrientation,
     propEpisodeId,
     replaceActiveStoryboardDesign,
     scriptModelOptions,
@@ -3386,7 +3394,9 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                     aiModel,
                     segment,
                     '',  // 不再需要 userRequirements
-                    handleStreamChunk
+                    handleStreamChunk,
+                    undefined,
+                    projectOrientation,
                 );
 
                 // 最终解析当前段
@@ -3495,7 +3505,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     }
     setIsProcessing(false);
     setProcessingType(null);
-  }, [files, checkedFileIds, selectedFileId, aiModel]);
+  }, [files, checkedFileIds, selectedFileId, aiModel, projectOrientation]);
 
   /**
    * 🆕 从剧本中提取分镜和场景描述
@@ -3659,7 +3669,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       });
       estimatedCreditCost = Number(creditQuote.estimated_cost || 0);
     } catch (error) {
-      alert(error instanceof Error ? error.message : '积分校验失败');
+      alert(error instanceof Error ? error.message : '创作点数校验失败');
       return false;
     }
 
@@ -3670,6 +3680,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         file.originalContent,
         ordered,
         {
+          orientation: projectOrientation,
           taskContext: {
             projectId: urlProjectId,
             episodeId: propEpisodeId,
@@ -3789,6 +3800,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   }, [
     aiModel,
     clearActiveStoryboardDesign,
+    projectOrientation,
     propEpisodeId,
     scriptModelOptions,
     selectedFileId,
@@ -3826,7 +3838,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         model: modelInfo.billingModel,
       });
     } catch (error) {
-      alert(error instanceof Error ? error.message : '积分校验失败');
+      alert(error instanceof Error ? error.message : '创作点数校验失败');
       return false;
     }
 
@@ -3837,6 +3849,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         aiModel,
         videoScript,
         {
+          orientation: projectOrientation,
           taskContext: {
             projectId: urlProjectId,
             episodeId: propEpisodeId,
@@ -3939,6 +3952,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
   }, [
     aiModel,
     persistStoryboardSnapshot,
+    projectOrientation,
     propEpisodeId,
     replaceActiveStoryboardDesign,
     scriptConversations,
@@ -3993,7 +4007,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         model: modelInfo.billingModel,
       });
     } catch (error) {
-      alert(error instanceof Error ? error.message : '积分校验失败');
+      alert(error instanceof Error ? error.message : '创作点数校验失败');
       return;
     }
 
@@ -4055,7 +4069,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       
       console.log('🎉 所有分镜生成完成！');
       if (billingSuccessfulShots === 0) {
-        throw new Error('所有镜头详情均生成失败，本次未扣除积分');
+        throw new Error('所有镜头详情均生成失败，本次未扣除创作点数');
       }
       const billingParams = {
         shot_count: billingSuccessfulShots,
@@ -4626,7 +4640,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                         />
                       </div>
                       <span className="ml-auto text-[10px] text-n200">
-                        四列使用同一生成、版本、积分与镜头数据
+                        四列使用同一生成、版本、创作点数与镜头数据
                       </span>
                     </header>
 
@@ -4788,6 +4802,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                       files={files}
                       selectedFileId={selectedFileId}
                       episodeId={propEpisodeId}
+                      defaultImageRatio={projectAspectRatio}
                       materialLibrary={materialLibrary}
                       shotPageSize={WORKSPACE_INITIAL_STORYBOARD_COUNT}
                       totalShotCount={selectedFileId ? (storyboardTotalsByFileId[selectedFileId] ?? selectedFile?.storyboard?.items?.length ?? 0) : 0}
@@ -4816,6 +4831,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
                   onUpdateNotification={updateTaskNotification}
                   isActive={currentView === AppView.Video}
                   sessionScope={propEpisodeId || ''}
+                  defaultAspectRatio={projectAspectRatio}
                 />
                 </React.Suspense>
             </div>

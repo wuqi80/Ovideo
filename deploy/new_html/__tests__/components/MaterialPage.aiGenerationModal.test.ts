@@ -13,7 +13,8 @@ describe('MaterialPage AI generation modal', () => {
     expect(source).toContain('DESIGN_IMAGE_MODEL_OPTIONS.map');
     expect(source).toContain("generationModel.resolutions.map");
     expect(source).toContain('图生图');
-    expect(source).toContain('xl:min-w-[556px] xl:justify-start xl:pl-[84px]');
+    expect(source).toContain('xl:w-[556px] xl:justify-start');
+    expect(source).not.toContain('xl:pl-[84px]');
     expect(source).toContain('InlineCreditEstimate');
     expect(source).toContain('generationModel.hint');
     expect(source).toContain('<option key={option.id} value={option.id}>{option.label}</option>');
@@ -22,6 +23,12 @@ describe('MaterialPage AI generation modal', () => {
     expect(source).toContain('designPromptRefinementFallbackCost(getScriptModelBillingKey(option))');
     expect(source).toContain('DESIGN_CREDIT_FEATURES.promptRefinement');
     expect(source).toContain("taskId: newDesignCreditUsageId('material-prompt-refinement')");
+  });
+
+  it('keeps white-background turnaround sheets visibly fixed to 16:9', () => {
+    expect(source).toContain("if (enabled) setAspectRatio('16:9')");
+    expect(source).toContain('disabled={standardTurnaround && supportsStandardTurnaround(config.type)}');
+    expect(source).toContain('固定使用 16:9');
   });
 
   it('keeps the design modal sizing and removes the legacy engine sidebar', () => {
@@ -39,7 +46,7 @@ describe('MaterialPage AI generation modal', () => {
     expect(source).toContain('assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration');
     expect(source).toContain("taskId: newDesignCreditUsageId('material-image')");
     expect(source).toContain('model: generationModel.billingModel');
-    expect(source).toContain("if (!results.length) throw new Error('未返回图片，本次不扣积分')");
+    expect(source).toContain("if (!results.length) throw new Error('未返回图片，本次不扣创作点数')");
   });
 
   it('applies exactly one selected image style when the request is submitted', () => {

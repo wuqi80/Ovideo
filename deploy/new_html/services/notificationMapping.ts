@@ -55,8 +55,18 @@ function normalizeTargetPage(raw: string | null): SourcePage {
  * category（后端粗粒度）+ title（含模型/任务类型关键词）→ TaskKind（前端细粒度）。
  * 大致还原 generation kind，找不到就退到 'other'。
  */
-function inferKindFromCategoryAndTitle(category: string | null, title: string): TaskKind {
-    const t = (title || '').toLowerCase();
+function inferKindFromCategoryAndTitle(
+    category: string | null,
+    title: string,
+    metadata?: Record<string, unknown>,
+): TaskKind {
+    const context = [
+        title,
+        metadata?.task_type,
+        metadata?.provider,
+        metadata?.model,
+    ].filter(value => typeof value === 'string').join(' ').toLowerCase();
+    const t = context;
     if (category === 'video' || /upscale|放大|i2v|视频|seedance|wan2|kling|vidu|happyhorse|sora|veo/.test(t)) {
         if (/upscale|放大/.test(t)) return 'video-upscale';
         if (/seedance/.test(t)) return 'seedance';
@@ -81,10 +91,11 @@ function inferKindFromCategoryAndTitle(category: string | null, title: string): 
         if (/角度|angle/.test(t)) return 'angle-adjust';
         if (/融合|fusion/.test(t)) return 'image-fusion';
         if (/全景|panorama/.test(t)) return 'panorama-360';
-        if (/gemini/.test(t)) return 'gemini-image';
+        if (/gemini|^ai\s*生图任务/.test(t)) return 'gemini-image';
         if (/doubao|豆包/.test(t)) return 'doubao-image';
         if (/nanobanana|香蕉/.test(t)) return 'nanobanana';
-        return 'comfyui-image';
+        if (/comfyui|集群|节点/.test(t)) return 'comfyui-image';
+        return 'other';
     }
     if (/tts|配音/.test(t)) {
         if (/minimax/.test(t)) return 'minimax-tts';
@@ -141,7 +152,18 @@ export function mapNotificationToTask(n: ServerNotificationRow): RegisteredTask 
         ? (n.metadata as Record<string, unknown>)
         : undefined;
 
-    const kind = inferKindFromCategoryAndTitle(n.category, n.title);
+    const metadataText = (key: string): string | undefined => {
+        const value = metadata?.[key];
+        return typeof value === 'string' && value.trim() ? value : undefined;
+    };
+    const entityType = metadataText('entity_type');
+    const entityId = metadataText('entity_id');
+    const sourceItemId = metadataText('source_item_id');
+    const persistedSourcePage = n.target_page || metadataText('source_page') || null;
+    const sourcePage = entityType === 'storyboard_item' && persistedSourcePage === 'design'
+        ? 'generation'
+        : persistedSourcePage;
+    const kind = inferKindFromCategoryAndTitle(n.category, n.title, metadata);
     return {
         taskId,
         notificationId: n.notification_id,
@@ -152,10 +174,13 @@ export function mapNotificationToTask(n: ServerNotificationRow): RegisteredTask 
         createdAt: ts,
         startedAt: ts,
         completedAt: ts,
-        targetPage: normalizeTargetPage(n.target_page),
-        targetProjectId: n.target_project_id || undefined,
-        targetItemId: n.target_item_id || undefined,
-        episodeId: undefined,
+        targetPage: normalizeTargetPage(sourcePage),
+        targetProjectId: n.target_project_id || metadataText('project_id'),
+        targetItemId: n.target_item_id || sourceItemId || entityId,
+        targetEntityType: entityType,
+        targetEntityId: entityId,
+        episodeId: metadataText('episode_id'),
+        fileRole: metadataText('file_role'),
         error: status === 'failed' ? (n.message || '任务失败') : undefined,
         metadata,
         // 持久化标志：之后 mergeFromServer 用它去重 + 区分内存/后端来源
@@ -175,7 +200,7 @@ export function mapRuntimeNotificationToTask(n: TaskNotification): RegisteredTas
     const timestamp = Number.isFinite(n.timestamp) ? n.timestamp : Date.now();
     const rawTitle = stripStatusSuffix(n.message || taskId);
     const status: GlobalTaskStatus = n.status === 'failed' ? 'failed' : 'completed';
-    const kind = inferKindFromCategoryAndTitle(n.type, rawTitle);
+    const kind = inferKindFromCategoryAndTitle(n.type, `${rawTitle} ${n.taskType || ''} ${n.taskId || n.id}`);
 
     return {
         taskId,
@@ -194,6 +219,10 @@ export function mapRuntimeNotificationToTask(n: TaskNotification): RegisteredTas
         targetEntityId: n.entityId,
         episodeId: n.episodeId,
         fileRole: n.fileRole,
+        metadata: {
+            ...(n.provider ? { provider: n.provider } : {}),
+            ...(n.modelName ? { modelName: n.modelName } : {}),
+        },
         error: status === 'failed' ? (n.message || '任务失败') : undefined,
     };
 }

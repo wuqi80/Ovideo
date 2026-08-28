@@ -54,12 +54,13 @@ export const ADMIN_MENU: MenuSection[] = [
   },
   {
     id: 'credits',
-    label: '积分体系',
+    label: '创作点数体系',
     icon: 'Coins',
     children: [
-      { id: 'credit_rules', label: '积分规则', to: '/admin/features?tab=credit_rules' },
-      { id: 'credit_accounts', label: '积分账户', to: '/admin/features?tab=credit_accounts' },
-      { id: 'credit_transactions', label: '积分流水', to: '/admin/features?tab=credit_transactions' },
+      { id: 'credit_rules', label: '创作点数规则', to: '/admin/features?tab=credit_rules' },
+      { id: 'credit_accounts', label: '创作点数账户', to: '/admin/features?tab=credit_accounts' },
+      { id: 'credit_transactions', label: '创作点数台账', to: '/admin/features?tab=credit_transactions' },
+      { id: 'recharge_orders', label: '充值台账', to: '/admin/features?tab=recharge_orders' },
     ],
   },
   {

@@ -92,12 +92,14 @@ from services.api_provider_health_monitor import (
 from services.ai_proxy_service import generate_gemini_images
 from services.ai_proxy_types import AIProxyError
 from services.auth_user_service import ensure_authenticated_user_record
+from services.email_delivery_service import email_outbox_worker_loop
 from services.user_profile_service import resolve_authenticated_user_id
 from services.api_provider_runtime import build_provider_runtime_status
 from services.task_stale_reaper import reap_stale_tasks
 from routers.ai_proxy import create_ai_proxy_router
 from routers.admin_compat import create_admin_compat_router
 from routers.auth import create_auth_router
+from routers.phone_auth import create_phone_auth_router
 from routers.cluster_status import create_cluster_status_router
 from routers.comfyui_files import create_comfyui_files_router
 from routers.fallback_static import create_fallback_static_router
@@ -109,6 +111,7 @@ from routers.prompts import create_prompt_router
 from routers.tasks import create_task_router
 from routers.user_session import create_user_session_router
 from routers.video import create_video_router
+from routers.wechat_pay import create_wechat_pay_router
 from routers.workspace import create_workspace_router
 import task_service
 
@@ -403,6 +406,11 @@ async def lifespan(app: FastAPI):
         raise
 
     set_provider_health_redis(redis_client)
+
+    # 邮件通知通过数据库 outbox 异步投递。只有数据库可用时才启动，
+    # 避免 SMTP 抖动影响 API 请求，也避免无数据库模式下产生无意义重试。
+    if db_manager:
+        _create_background_task(email_outbox_worker_loop(), "email_outbox_worker")
 
     # ✅ 始终初始化 TaskService（Agent 模式下 agent 通过 Redis 队列拉取任务）
     import task_service
@@ -985,6 +993,17 @@ app.include_router(
 logger.info("Auth API routes registered (/api/login)")
 
 app.include_router(
+    create_phone_auth_router(
+        get_redis_client=lambda: redis_client,
+        create_session_token=create_session_token,
+        require_auth_dependency=require_auth,
+        user_dao=UserDAO,
+        logger=logger,
+    )
+)
+logger.info("Phone auth and verified-email routes registered (/api/auth/phone/*, /api/me/email/*)")
+
+app.include_router(
     create_admin_compat_router(
         require_auth=require_auth,
         online_users=_online_users,
@@ -1029,9 +1048,17 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Resource Share 路由注册失败（不阻塞启动）: {e}")
 
-# 2026-05-26 Slice 2: 积分系统路由
+# 2026-05-26 Slice 2: 创作点数系统路由
 app.include_router(credit_router)
 logger.info("✅ Credits API 路由已注册 (/api/credits)")
+
+app.include_router(
+    create_wechat_pay_router(
+        get_current_user_dependency=get_current_user,
+        logger=logger,
+    )
+)
+logger.info("✅ WeChat creation-point recharge routes registered (/api/payments/wechat/*)")
 
 # 2026-05-26 Slice 3: 视频反推提示词路由
 app.include_router(video_reverse_router)

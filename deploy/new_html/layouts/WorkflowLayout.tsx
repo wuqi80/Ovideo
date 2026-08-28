@@ -55,7 +55,7 @@ export const WorkflowLayout: React.FC = () => {
       const balance = await getCreditBalance();
       setAvailableCredits(balance.available_credits);
     } catch (error) {
-      console.warn('获取用户积分失败:', error);
+      console.warn('获取用户创作点数失败:', error);
       setAvailableCredits(null);
     }
   }, []);
@@ -162,14 +162,14 @@ export const WorkflowLayout: React.FC = () => {
               })}
             </nav>
 
-            {/* 右：积分 · 通知 · 导出 */}
+            {/* 右：创作点数 · 通知 · 导出 */}
             <div className="workflow-shell-account flex shrink-0 items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => navigate('/credits')}
                 className="inline-flex h-8 items-center gap-1.5 rounded px-2 text-xs font-medium text-n500 hover:bg-y50 hover:text-warning"
-                title="查看我的积分"
-                aria-label={`可用积分：${availableCredits ?? '加载中'}`}
+                title="查看我的创作点数"
+                aria-label={`可用创作点数：${availableCredits ?? '加载中'}`}
               >
                 <Coins className="h-4 w-4 shrink-0 text-warning" />
                 <span className="font-mono font-bold tabular-nums">{availableCredits === null ? '--' : availableCredits.toLocaleString()}</span>

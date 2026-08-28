@@ -201,6 +201,74 @@ export const buildConversationTurns = (
   return turns;
 };
 
+/**
+ * 历史迁移数据的 created_at 可能晚于首个 AI 版本，不能直接按接口数组渲染。
+ * 这里用版本关系恢复语义顺序：初始输入 → V1 → 修改要求 → V2…，
+ * 未绑定版本的失败或流式消息则稳定地追加在已知版本之后。
+ */
+export const orderConversationMessages = (
+  messages: ScriptConversationMessage[],
+  versions: ScriptStoryboardVersion[],
+  fallbackInitialContent = '',
+): ScriptConversationMessage[] => {
+  if (messages.length <= 1) return [...messages];
+
+  const sourceOrder = new Map(messages.map((message, index) => [message.id, index]));
+  const messagesById = new Map(messages.map(message => [message.id, message]));
+  const realVersions = versions.filter(version => !version.id.startsWith('legacy_'));
+  const orderedVersions = [...(realVersions.length > 0 ? realVersions : versions)].sort((left, right) => (
+    left.versionNo - right.versionNo
+      || left.createdAt - right.createdAt
+      || left.id.localeCompare(right.id)
+  ));
+  const result: ScriptConversationMessage[] = [];
+  const added = new Set<string>();
+  const append = (message?: ScriptConversationMessage) => {
+    if (!message || added.has(message.id)) return;
+    added.add(message.id);
+    result.push(message);
+  };
+
+  const normalizedInitialContent = fallbackInitialContent.trim().replace(/\r\n/g, '\n');
+  const firstVersionMessage = orderedVersions[0]?.messageId
+    ? messagesById.get(orderedVersions[0].messageId as string)
+    : undefined;
+  const firstVersionRequest = firstVersionMessage?.replyToMessageId
+    ? messagesById.get(firstVersionMessage.replyToMessageId)
+    : undefined;
+  const matchingInitialMessage = normalizedInitialContent
+    ? messages.find(message => (
+        message.role === 'user'
+          && message.content.trim().replace(/\r\n/g, '\n') === normalizedInitialContent
+      ))
+    : undefined;
+
+  // 优先按原始剧本文本或 V1 的回复关系识别初始输入；迁移时间戳只作为最后兜底。
+  append(
+    matchingInitialMessage
+      || (firstVersionRequest?.role === 'user' ? firstVersionRequest : undefined)
+      || messages.find(message => message.role === 'user'),
+  );
+
+  orderedVersions.forEach(version => {
+    const versionMessage = version.messageId ? messagesById.get(version.messageId) : undefined;
+    if (versionMessage?.replyToMessageId) {
+      append(messagesById.get(versionMessage.replyToMessageId));
+    }
+    append(versionMessage);
+  });
+
+  messages
+    .filter(message => !added.has(message.id))
+    .sort((left, right) => (
+      left.createdAt - right.createdAt
+        || (sourceOrder.get(left.id) || 0) - (sourceOrder.get(right.id) || 0)
+    ))
+    .forEach(append);
+
+  return result;
+};
+
 export const setCollapsedEntry = (
   current: Set<string>,
   key: string,
@@ -343,28 +411,33 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       .filter(version => version.messageId)
       .map(version => [version.messageId as string, version]),
   ), [conversation?.versions]);
-  const firstUserMessageId = useMemo(
-    () => conversation?.messages.find(message => message.role === 'user')?.id,
-    [conversation?.messages],
-  );
-  const initialScriptContent = useMemo(() => {
-    const firstUserMessage = conversation?.messages.find(message => (
-      message.role === 'user' && message.content.trim()
-    ));
-    return firstUserMessage?.content || selectedFile?.originalContent || '';
-  }, [conversation?.messages, selectedFile?.originalContent]);
-  const conversationTurns = useMemo(() => buildConversationTurns(
+  const orderedConversationMessages = useMemo(() => orderConversationMessages(
     conversation?.messages || [],
     conversation?.versions || [],
     selectedFile?.originalContent || '',
   ), [conversation?.messages, conversation?.versions, selectedFile?.originalContent]);
+  const firstUserMessageId = useMemo(
+    () => orderedConversationMessages.find(message => message.role === 'user')?.id,
+    [orderedConversationMessages],
+  );
+  const initialScriptContent = useMemo(() => {
+    const firstUserMessage = orderedConversationMessages.find(message => (
+      message.role === 'user' && message.content.trim()
+    ));
+    return firstUserMessage?.content || selectedFile?.originalContent || '';
+  }, [orderedConversationMessages, selectedFile?.originalContent]);
+  const conversationTurns = useMemo(() => buildConversationTurns(
+    orderedConversationMessages,
+    conversation?.versions || [],
+    selectedFile?.originalContent || '',
+  ), [conversation?.versions, orderedConversationMessages, selectedFile?.originalContent]);
   const creditEstimateParams = useMemo(() => {
     if (!selectedFile) return null;
     const versions = conversation?.versions || [];
     const isFirstTurn = versions.length === 0;
     const currentVersion = versions.find(version => version.id === conversation?.currentVersionId)
       || versions[versions.length - 1];
-    const conversationContext = (conversation?.messages || []).slice(-10)
+    const conversationContext = orderedConversationMessages.slice(-10)
       .map(message => `${message.role}:${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
       .join('\n');
     const billingInput = isFirstTurn
@@ -380,7 +453,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
       output_tokens: forecastOutputTokens,
       model,
     };
-  }, [aiModel, conversation?.currentVersionId, conversation?.messages, conversation?.versions, draft, modelOptions, selectedFile]);
+  }, [aiModel, conversation?.currentVersionId, conversation?.versions, draft, modelOptions, orderedConversationMessages, selectedFile]);
 
   useEffect(() => {
     setCollapsed(new Set());
@@ -430,7 +503,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     }
   }, [selectedFile?.id, selectedFile?.originalContent, conversation?.messages?.length]);
 
-  const latestMessage = conversation?.messages?.[conversation.messages.length - 1];
+  const latestMessage = orderedConversationMessages[orderedConversationMessages.length - 1];
 
   const updateScrollControls = useCallback(() => {
     const node = scrollRef.current;
@@ -690,7 +763,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               <div className="mt-3 flex flex-wrap items-center gap-2 rounded border border-danger/20 bg-danger-light px-3 py-2 text-xs text-danger">
                 <span>{failureMessage}</span>
                 <span className="ml-auto font-medium">
-                  {creditCharged ? `已扣除 ${creditCost} 积分` : '本次未扣积分'}
+                  {creditCharged ? `已扣除 ${creditCost} 创作点数` : '本次未扣创作点数'}
                 </span>
                 <button
                   type="button"
@@ -781,8 +854,8 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 </button>
                 <span className="ml-auto inline-flex items-center gap-3">
                   {Number.isFinite(creditCost) && creditCost > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-warning" title="本轮模型调用实际扣除积分">
-                      <Coins className="h-3.5 w-3.5" /> 本次消耗 {creditCost} 积分
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-warning" title="本轮模型调用实际扣除创作点数">
+                      <Coins className="h-3.5 w-3.5" /> 本次消耗 {creditCost} 创作点数
                     </span>
                   )}
                   {conversation?.currentVersionId === version.id && (
@@ -919,7 +992,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               </div>
             </aside>
 
-            <main className="min-w-0 space-y-3">{conversation!.messages.map(renderMessage)}</main>
+            <main className="min-w-0 space-y-3">{orderedConversationMessages.map(renderMessage)}</main>
 
             <aside className="hidden min-w-0 lg:block" data-testid="conversation-summary-rail">
               <div className="sticky top-4 border-l border-n40 pl-3">
@@ -958,7 +1031,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             <h3 className="text-sm font-semibold text-n800">开始生成分镜脚本</h3>
             <p className="mt-2 text-xs leading-6 text-n300">在下方输入剧本文本。生成后可继续发送修改意见，每次回复都会保留为独立版本。</p>
             <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-warning">
-              <Coins className="h-3.5 w-3.5" /> 每次生成都会扣除一定数量的积分
+              <Coins className="h-3.5 w-3.5" /> 每次生成都会扣除一定数量的创作点数
             </p>
           </div>
         )}
@@ -1082,7 +1155,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               title="根据当前输入、历史上下文、预计输出和所选模型动态计算"
             >
               <Coins className="h-3.5 w-3.5" />
-              预计消耗积分：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
+              预计消耗创作点数：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
             </span>
             <div className="ml-auto flex min-w-0 items-center gap-2">
               {selectedModelHint && (
@@ -1177,7 +1250,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             </button>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-warning">
               <Coins className="h-3.5 w-3.5" />
-              预计消耗积分：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
+              预计消耗创作点数：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
             </span>
             <div className="ml-auto flex min-w-0 items-center gap-2">
               {selectedModelHint && (

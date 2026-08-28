@@ -59,6 +59,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
                     ownerName: '',
                     memberCount: data.members?.length || 0,
                     isArchived: p.is_archived,
+                    settings: p.settings && typeof p.settings === 'object' ? p.settings : {},
                     createdAt: new Date(p.created_at).getTime(),
                     updatedAt: new Date(p.updated_at).getTime(),
                     lastAccessedAt: p.last_accessed_at ? new Date(p.last_accessed_at).getTime() : undefined

@@ -63,7 +63,7 @@ async def test_video_reverse_enqueue_failure_releases_freeze(monkeypatch):
 
     release.assert_awaited_once_with(
         'task-reserved',
-        reason='任务入队失败，退回预冻结积分',
+        reason='任务入队失败，退回预冻结创作点数',
         operator='user-1',
         project_id='project-1',
     )

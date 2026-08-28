@@ -1,6 +1,6 @@
 /**
  * CreditsPage.tsx
- * 2026-05-26 Slice 2 — 用户积分页面
+ * 2026-05-26 Slice 2 — 用户创作点数页面
  *
  * 路由: /credits
  * 显示: 余额卡片 + 流水表格 + 筛选
@@ -14,6 +14,7 @@ import {
   getCreditBalance, listCreditTransactions,
   CreditBalance, CreditTransaction,
 } from '../services/creditService';
+import WechatCreationPointRecharge from '../components/WechatCreationPointRecharge';
 
 const CHANGE_TYPE_LABEL: Record<string, { label: string; color: string; sign: 1 | -1 | 0 }> = {
   freeze:        { label: '冻结（暂占）', color: 'text-warning', sign: 0 },
@@ -34,9 +35,9 @@ const FEATURE_LABEL: Record<string, string> = {
 };
 
 const IMAGE_TIER_LABEL: Record<string, string> = {
-  image_tier_1: '一阶模型',
-  image_tier_2: '二阶模型',
-  image_tier_3: '三阶模型',
+  image_tier_1: 'Gemini 2.5 Flash Image',
+  image_tier_2: 'Gemini 3.1 Flash Image Preview',
+  image_tier_3: 'Doubao-Seedream-5.0-lite',
 };
 
 /**
@@ -112,7 +113,7 @@ export const CreditsPage: React.FC = () => {
           <button onClick={() => navigate(-1)} className="text-sm text-n300 hover:text-n800">← 返回</button>
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <Coins size={20} className="text-warning" />
-            我的积分
+            我的创作点数
           </h1>
           <button onClick={reload} className="ml-auto p-2 rounded bg-n0 hover:bg-n20">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -126,12 +127,25 @@ export const CreditsPage: React.FC = () => {
         )}
 
         {/* 余额卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <BalanceCard
-            title="可用积分"
+            title="可用创作点数"
             value={balance?.available_credits ?? 0}
             color="from-g50 to-n0"
             icon={<Coins size={20} className="text-success" />}
+          />
+          <BalanceCard
+            title="账户点数"
+            value={balance?.account_credits ?? 0}
+            color="from-b50 to-n0"
+            icon={<Coins size={20} className="text-primary" />}
+          />
+          <BalanceCard
+            title="赠送点数"
+            value={balance?.gift_credits ?? 0}
+            subtitle={balance?.gift_expires_at ? `${new Date(balance.gift_expires_at).toLocaleString('zh-CN')} 过期` : '暂无当日赠送'}
+            color="from-y50 to-n0"
+            icon={<Coins size={20} className="text-warning" />}
           />
           <BalanceCard
             title="冻结中"
@@ -147,16 +161,18 @@ export const CreditsPage: React.FC = () => {
           />
         </div>
 
+        <WechatCreationPointRecharge onPaymentSuccess={reload} />
+
         {/* 筛选 + 流水 */}
         <section className="rounded-md border border-n40 bg-n0 shadow-card">
           <div className="flex items-start gap-2 border-b border-n40 bg-b50/50 px-4 py-3 text-xs text-n300">
             <Info size={14} className="mt-0.5 shrink-0 text-primary" />
             <span>
-              任务提交时会先暂时冻结预估积分；成功后从冻结额结算为消耗，不会再扣一次，失败则自动退还。
+              任务提交时会先暂时冻结预估创作点数；成功后从冻结额结算为消耗，不会再扣一次，失败则自动退还。
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-n40 text-sm">
-            <span className="font-medium whitespace-nowrap">积分流水</span>
+            <span className="font-medium whitespace-nowrap">创作点数流水</span>
             <select
               value={filterChangeType}
               onChange={e => setFilterChangeType(e.target.value)}
@@ -244,15 +260,17 @@ export const CreditsPage: React.FC = () => {
 const BalanceCard: React.FC<{
   title: string;
   value: number;
+  subtitle?: string;
   color: string;
   icon: React.ReactNode;
-}> = ({ title, value, color, icon }) => (
+}> = ({ title, value, subtitle, color, icon }) => (
   <div className={`relative rounded-md border border-n40 p-4 shadow-card bg-gradient-to-br ${color}`}>
     <div className="flex items-center justify-between">
       <div className="text-xs text-n300">{title}</div>
       {icon}
     </div>
     <div className="mt-2 text-3xl font-semibold tabular-nums">{value.toLocaleString()}</div>
+    {subtitle && <div className="mt-2 text-[11px] leading-4 text-n200">{subtitle}</div>}
   </div>
 );
 

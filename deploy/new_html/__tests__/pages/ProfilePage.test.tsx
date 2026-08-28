@@ -5,12 +5,16 @@ import '@testing-library/jest-dom';
 import { MemoryRouter } from 'react-router-dom';
 
 import ProfilePage from '../../pages/ProfilePage';
-import { getMyProfile } from '../../services/profileService';
+import { getMyEmailPreferences, getMyProfile } from '../../services/profileService';
 
 vi.mock('../../services/profileService', () => ({
   getMyProfile: vi.fn(),
   updateMyProfile: vi.fn(),
   changeMyPassword: vi.fn(),
+  getMyEmailPreferences: vi.fn(),
+  sendMyEmailVerification: vi.fn(),
+  verifyMyEmail: vi.fn(),
+  updateMyEmailPreferences: vi.fn(),
 }));
 
 vi.mock('../../services/httpClient', () => ({
@@ -40,6 +44,8 @@ describe('ProfilePage', () => {
       },
       credits: {
         available_credits: 1200,
+        account_credits: 1100,
+        gift_credits: 100,
         frozen_credits: 30,
         total_used_credits: 450,
       },
@@ -59,6 +65,17 @@ describe('ProfilePage', () => {
         updated_at: '2026-07-25T00:00:00Z',
       }],
     });
+    (getMyEmailPreferences as any).mockResolvedValue({
+      success: true,
+      email: 'creator@example.com',
+      email_verified: true,
+      preferences: {
+        task_success: true,
+        task_failure: true,
+        credit_alert: true,
+        sharing: true,
+      },
+    });
   });
 
   it('renders identity, phone verification, credits, and recent projects', async () => {
@@ -72,10 +89,11 @@ describe('ProfilePage', () => {
     expect(await screen.findByRole('heading', { name: '个人中心' })).toBeInTheDocument();
     expect(screen.getByDisplayValue('未命名创作者')).toBeInTheDocument();
     expect(screen.getByDisplayValue('15900007184')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('验证码 888888')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('creator@example.com')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('输入 6 位邮箱验证码')).toBeInTheDocument();
     expect(screen.getByText('已验证')).toBeInTheDocument();
     expect(screen.getByText('1,200')).toBeInTheDocument();
-    expect(screen.getByText('积分详情')).toBeInTheDocument();
+    expect(screen.getByText('创作点数详情')).toBeInTheDocument();
     expect(screen.getByText('屏幕录制')).toBeInTheDocument();
   });
 });

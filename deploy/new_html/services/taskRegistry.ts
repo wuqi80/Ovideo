@@ -62,6 +62,7 @@ export interface RegisterInput {
     targetProjectId?: string;
     episodeId?: string;
     fileRole?: string;
+    metadata?: Record<string, unknown>;
 }
 
 class TaskRegistry {
@@ -152,6 +153,7 @@ class TaskRegistry {
                 targetProjectId: input.targetProjectId,
                 episodeId: input.episodeId,
                 fileRole: input.fileRole,
+                metadata: input.metadata,
             };
 
         this.tasks.set(task.taskId, task);
@@ -175,6 +177,7 @@ class TaskRegistry {
         if (input.targetProjectId !== undefined) out.targetProjectId = input.targetProjectId;
         if (input.episodeId !== undefined) out.episodeId = input.episodeId;
         if (input.fileRole !== undefined) out.fileRole = input.fileRole;
+        if (input.metadata !== undefined) out.metadata = input.metadata;
         return out;
     }
 

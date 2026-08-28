@@ -131,7 +131,7 @@ export function assertStudioBatchCredits(
   if (!quote.enabled) return;
   const total = Math.max(0, Number(quote.estimated_cost || 0)) * Math.max(1, Math.round(quantity || 1));
   if (quote.balance !== null && quote.balance < total) {
-    throw new Error(`积分不足：本次预计需要 ${total} 积分，当前可用 ${quote.balance} 积分`);
+    throw new Error(`创作点数不足：本次预计需要 ${total} 创作点数，当前可用 ${quote.balance} 创作点数`);
   }
 }
 

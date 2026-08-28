@@ -150,7 +150,7 @@ DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT = "https://ark.cn-beijing.volces.com/api/plan/v
 DOUBAO_IMAGE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     {
         "operation": "generate",
-        "label": "筑基境界",
+        "label": "Doubao Seedream 5.0 Lite",
         "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
     },
 ]
@@ -328,35 +328,35 @@ DEEPSEEK_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
 SEEDANCE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     {
         "operation": "standard",
-        "label": "飞升 (Seedance 2.0)",
+        "label": "Doubao Seedance 2.0 Standard",
         "model_name": SEEDANCE_DEFAULT_MODEL_MAP["standard"],
     },
     {
         "operation": "fast",
-        "label": "渡劫 (Seedance 2.0 Fast)",
+        "label": "Doubao Seedance 2.0 Fast",
         "model_name": SEEDANCE_DEFAULT_MODEL_MAP["fast"],
     },
     {
         "operation": "mini",
-        "label": "元婴 (Seedance 2.0 Mini)",
+        "label": "Doubao Seedance 2.0 Mini",
         "model_name": SEEDANCE_DEFAULT_MODEL_MAP["mini"],
     },
 ]
 
 DASHSCOPE_MODEL_BINDING_LABELS: Dict[str, str] = {
-    "wan26": "大能 (Wan2.6)",
-    "kling-standard": "合体 (Kling Standard)",
-    "kling-omni": "合体 (Kling Omni)",
-    "vidu-reference-q3-mix": "大乘 (Vidu Q3 Mix 参考生视频)",
-    "vidu-reference-q3": "大乘 (Vidu Q3 参考生视频)",
-    "vidu-reference-q3-turbo": "大乘 (Vidu Q3 Turbo 参考生视频)",
-    "vidu-reference-q2-pro": "大乘 (Vidu Q2 Pro 参考生视频)",
-    "vidu-reference-q2": "大乘 (Vidu Q2 参考生视频)",
-    "vidu-startend-q3-pro": "大乘 (Vidu Q3 Pro 首尾帧)",
-    "vidu-startend-q3-turbo": "大乘 (Vidu Q3 Turbo 首尾帧)",
-    "vidu-startend-q2-pro": "大乘 (Vidu Q2 Pro 首尾帧)",
-    "vidu-startend-q2-turbo": "大乘 (Vidu Q2 Turbo 首尾帧)",
-    "happyhorse": "炼虚 (HappyHorse)",
+    "wan26": "Wan 2.6 I2V",
+    "kling-standard": "Kling V3 Standard",
+    "kling-omni": "Kling V3 Omni",
+    "vidu-reference-q3-mix": "Vidu Q3 Mix 参考生视频",
+    "vidu-reference-q3": "Vidu Q3 参考生视频",
+    "vidu-reference-q3-turbo": "Vidu Q3 Turbo 参考生视频",
+    "vidu-reference-q2-pro": "Vidu Q2 Pro 参考生视频",
+    "vidu-reference-q2": "Vidu Q2 参考生视频",
+    "vidu-startend-q3-pro": "Vidu Q3 Pro 首尾帧",
+    "vidu-startend-q3-turbo": "Vidu Q3 Turbo 首尾帧",
+    "vidu-startend-q2-pro": "Vidu Q2 Pro 首尾帧",
+    "vidu-startend-q2-turbo": "Vidu Q2 Turbo 首尾帧",
+    "happyhorse": "HappyHorse 1.0",
 }
 
 DASHSCOPE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
@@ -371,12 +371,12 @@ DASHSCOPE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
 MINIMAX_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     {
         "operation": "video-standard",
-        "label": "金丹 (Hailuo 2.3)",
+        "label": "MiniMax Hailuo 2.3",
         "model_name": MINIMAX_DEFAULT_VIDEO_MODEL,
     },
     {
         "operation": "video-fast",
-        "label": "金丹 Fast (Hailuo 2.3 Fast)",
+        "label": "MiniMax Hailuo 2.3 Fast",
         "model_name": MINIMAX_FAST_VIDEO_MODEL,
     },
     {
@@ -391,7 +391,7 @@ MINIMAX_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     },
     {
         "operation": MINIMAX_M3_OPERATION,
-        "label": "练气 (MiniMax M3 文本)",
+        "label": "MiniMax M3 文本",
         "model_name": MINIMAX_M3_MODEL,
     },
 ]
@@ -905,21 +905,21 @@ API_MODEL_PRESETS: List[dict] = [
         "model_name": DEEPSEEK_DEFAULT_MODEL_MAP["deepseek-chat"],
     },
     {
-        "name": "化神1阶（快速）",
+        "name": "Gemini 2.5 Flash Image",
         "provider": "gemini-image",
         "operation": "gemini-2.5-flash-image",
-        "operation_label": "化神1阶（快速）",
+        "operation_label": "Gemini 2.5 Flash Image",
         "model_name": "gemini-2.5-flash-image",
     },
     {
-        "name": "化神2阶（高质量）",
+        "name": "Gemini 3.1 Flash Image Preview",
         "provider": "gemini-image",
         "operation": "gemini-3-pro-image-preview",
-        "operation_label": "化神2阶（高质量）",
+        "operation_label": "Gemini 3.1 Flash Image Preview",
         "model_name": "gemini-3.1-flash-image-preview",
     },
     {
-        "name": "筑基境界",
+        "name": "Doubao Seedream 5.0 Lite",
         "provider": "doubao",
         "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
     },
@@ -933,14 +933,14 @@ API_MODEL_PRESETS: List[dict] = [
         "provider": "minimax",
         "model_name": MINIMAX_DEFAULT_VIDEO_MODEL,
         "operation": "video-standard",
-        "operation_label": "金丹 (Hailuo 2.3)",
+        "operation_label": "MiniMax Hailuo 2.3",
     },
     {
         "name": "MiniMax Hailuo 2.3 Fast",
         "provider": "minimax",
         "model_name": MINIMAX_FAST_VIDEO_MODEL,
         "operation": "video-fast",
-        "operation_label": "金丹 Fast (Hailuo 2.3 Fast)",
+        "operation_label": "MiniMax Hailuo 2.3 Fast",
     },
     {
         "name": "MiniMax Speech 2.8 HD",
@@ -963,7 +963,7 @@ API_MODEL_PRESETS: List[dict] = [
         "provider": "minimax",
         "model_name": MINIMAX_M3_MODEL,
         "operation": MINIMAX_M3_OPERATION,
-        "operation_label": "练气 (MiniMax M3 文本)",
+        "operation_label": "MiniMax M3 文本",
         "category": "text",
     },
     {
@@ -977,37 +977,37 @@ API_MODEL_PRESETS: List[dict] = [
         "model_name": VEO_DEFAULT_VIDEO_MODEL,
     },
     {
-        "name": "大能 Wan2.6 (DashScope)",
+        "name": "Wan 2.6 I2V (DashScope)",
         "provider": "dashscope",
         "model_name": DASHSCOPE_DEFAULT_MODEL_MAP["wan26"],
     },
     {
-        "name": "阿里云百炼共享 API · 合体 (Kling)",
+        "name": "阿里云百炼共享 API · Kling V3",
         "provider": "dashscope",
         "model_name": "kling/kling-v3-video-generation",
     },
     {
-        "name": "阿里云百炼共享 API · 大乘 (Vidu)",
+        "name": "阿里云百炼共享 API · Vidu Q3",
         "provider": "dashscope",
         "model_name": "vidu/viduq3-turbo_reference2video",
     },
     {
-        "name": "阿里云百炼共享 API · 炼虚 (HappyHorse)",
+        "name": "阿里云百炼共享 API · HappyHorse 1.0",
         "provider": "dashscope",
         "model_name": "happyhorse-1.0-r2v",
     },
     {
-        "name": "飞升 (Seedance 2.0)",
+        "name": "Doubao Seedance 2.0 Standard",
         "provider": "seedance",
         "model_name": "doubao-seedance-2-0-260128",
     },
     {
-        "name": "渡劫 (Seedance 2.0 Fast)",
+        "name": "Doubao Seedance 2.0 Fast",
         "provider": "seedance",
         "model_name": "doubao-seedance-2-0-fast-260128",
     },
     {
-        "name": "元婴 (Seedance 2.0 Mini)",
+        "name": "Doubao Seedance 2.0 Mini",
         "provider": "seedance",
         "model_name": "doubao-seedance-2-0-mini-260615",
     },

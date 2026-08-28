@@ -101,7 +101,7 @@ async def _freeze_and_submit_reverse_task(
             try:
                 await credit_service.release(
                     task_id,
-                    reason='任务入队失败，退回预冻结积分',
+                    reason='任务入队失败，退回预冻结创作点数',
                     operator=user_id,
                     project_id=project_id,
                 )
@@ -248,7 +248,7 @@ async def estimate_video_reverse(
     payload: VideoReverseEstimateRequest,
     user_id: str = Depends(get_current_user),
 ):
-    """估算视频反推的积分消耗。优先用 video_file_id 反查时长。"""
+    """估算视频反推的创作点数消耗。优先用 video_file_id 反查时长。"""
     duration = payload.duration_seconds
     if payload.video_file_id:
         file_record = await FileDAO.get_file(payload.video_file_id)
@@ -312,7 +312,7 @@ async def create_video_reverse_task(
     )
     estimated_cost = int(estimate.get('estimated_cost') or 0)
     if estimate.get('enabled') and not estimate.get('enough'):
-        raise HTTPException(status_code=402, detail=f'积分不足，需要 {estimated_cost}')
+        raise HTTPException(status_code=402, detail=f'创作点数不足，需要 {estimated_cost}')
 
     # 提交异步任务
     try:
@@ -430,7 +430,7 @@ async def cancel_video_reverse_task(
             if generic_status in _REVERSE_TERMINAL_STATUSES:
                 task = await _reconcile_terminal_task(task)
                 return {"success": True, "task": task, "note": "任务已结束，未执行退款"}
-            raise HTTPException(status_code=409, detail='底层任务未能取消，积分尚未退回，请稍后重试')
+            raise HTTPException(status_code=409, detail='底层任务未能取消，创作点数尚未退回，请稍后重试')
 
     await VideoReverseTaskDAO.update_status(
         reverse_task_id, 'cancelled', progress=100,
@@ -440,7 +440,7 @@ async def cancel_video_reverse_task(
         try:
             await credit_service.release(task['task_id'], reason='用户取消', operator=user_id)
         except Exception as exc:
-            logger.warning(f"取消时释放积分失败: {exc}")
+            logger.warning(f"取消时释放创作点数失败: {exc}")
     return {"success": True}
 
 
@@ -472,7 +472,7 @@ async def retry_video_reverse_task(
     )
     estimated_cost = int(estimate.get('estimated_cost') or 0)
     if estimate.get('enabled') and not estimate.get('enough'):
-        raise HTTPException(status_code=402, detail=f'积分不足，需要 {estimated_cost}')
+        raise HTTPException(status_code=402, detail=f'创作点数不足，需要 {estimated_cost}')
 
     task_id = task_service.allocate_task_id()
     task_data = {

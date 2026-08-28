@@ -176,7 +176,7 @@ export const VideoReversePage: React.FC<VideoReversePageProps> = ({
   };
 
   const handleCancel = async (rid: string) => {
-    if (!confirm('确定要取消该任务吗？已冻结积分将退回。')) return;
+    if (!confirm('确定要取消该任务吗？已冻结创作点数将退回。')) return;
     try {
       await cancelVideoReverseTask(rid);
       reload();
@@ -376,7 +376,7 @@ export const VideoReversePage: React.FC<VideoReversePageProps> = ({
         open={estimateOpen}
         featureKey="video_reverse_prompt"
         params={{ duration_seconds: pendingDuration }}
-        title="视频反推积分预估"
+        title="视频反推创作点数预估"
         description={`视频时长 ${pendingDuration.toFixed(1)}s，请确认是否继续`}
         confirmLabel="开始反推"
         onCancel={() => { setEstimateOpen(false); setPendingVideoFileId(null); }}

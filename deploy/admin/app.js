@@ -1066,15 +1066,15 @@ function renderApiCard(c) {
   const usageHints = {
     'minimax': '此密钥同时驱动：Hailuo 视频生成 + 配音页 voice-design / voice-clone（共用 MINIMAX_API_KEY）',
     'gemini-text': '剧本生成 / AI 润色 等文本任务（GEMINI_TEXT_API_KEY）',
-    'gemini-image': '设计页 AI 生图（化神进阶）使用此密钥（GEMINI_IMAGE_API_KEY）',
-    'doubao': '设计页 AI 生图（筑基境界 Seedream）使用此密钥（ARK_API_KEY）',
+    'gemini-image': '设计页 Gemini Image 生图使用此密钥（GEMINI_IMAGE_API_KEY）',
+    'doubao': '设计页 Doubao Seedream 5.0 Lite 生图使用此密钥（ARK_API_KEY）',
     'deepseek': '剧本生成的 DeepSeek 文本模型（DEEPSEEK_API_KEY）',
     'sora2': '视频生成 Sora2 模型（SORA2_API_KEY）',
     'veo': '视频生成 Veo 模型（VEO_API_KEY）',
     'dashscope': '阿里云百炼共享 API · 一份 Key 驱动 Wan2.6 + Kling + Vidu + HappyHorse 全部视频族（DASHSCOPE_API_KEY）',
-    'seedance': '视频生成 Seedance 2.0 / 2.0 Fast（飞升 + 渡劫，SEEDANCE_API_KEY）',
-    'laozhang-gpt-image': '分镜页 GPT Image 2 系列（天劫一阶 gpt-image-2-vip）+ 化神 Gemini，使用 laozhang【默认分组】Token（GPT_IMAGE_API_KEY）',
-    'laozhang-sora2': '分镜页 GPT Image 2 官方混合（天劫二阶 gpt-image-2），使用 laozhang【Sora2Official 分组】Token（SORA2_GPT_IMAGE_API_KEY）',
+    'seedance': '视频生成 Doubao Seedance 2.0 / 2.0 Fast（SEEDANCE_API_KEY）',
+    'laozhang-gpt-image': '分镜页 GPT Image 2 VIP + Gemini Image，使用 laozhang【默认分组】Token（GPT_IMAGE_API_KEY）',
+    'laozhang-sora2': '分镜页 GPT Image 2 官方混合，使用 laozhang【Sora2Official 分组】Token（SORA2_GPT_IMAGE_API_KEY）',
   };
   const hint = meta?.notes || usageHints[provider] || '';
 

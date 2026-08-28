@@ -52,11 +52,14 @@ import {
   DESIGN_CREDIT_DEFAULTS,
   DESIGN_CREDIT_FEATURES,
   designImageCreditParams,
+  designImageFallbackCost,
   designPromptRefinementCreditParams,
   designPromptRefinementFallbackCost,
   newDesignCreditUsageId,
 } from '../utils/designCredits';
 import { assertEnoughCredits, consumeCredits } from '../services/creditService';
+import { useProject } from '../contexts/ProjectContext';
+import { projectDefaultAspectRatio } from '../utils/projectCreationPreferences';
 
 type MaterialAIEngine = DesignImageEngine;
 type BindingAssetType = 'character' | 'scene' | 'prop';
@@ -533,7 +536,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     try {
       await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, billingParams);
     } catch (error: any) {
-      crmMessage.error(error?.message || '积分校验失败');
+      crmMessage.error(error?.message || '创作点数校验失败');
       return;
     }
 
@@ -572,7 +575,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
             });
         }
 
-        if (!results.length) throw new Error('未返回图片，本次不扣积分');
+        if (!results.length) throw new Error('未返回图片，本次不扣创作点数');
         generatedCount = results.length;
         
         const existing = materialLibrary[payload.tagName] || [];
@@ -611,16 +614,16 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
               source: 'material_workspace',
             },
           });
-          crmMessage.success(`生成 ${generatedCount} 张图片，已扣除 ${settlement.charged_credits} 积分`);
+          crmMessage.success(`生成 ${generatedCount} 张图片，已扣除 ${settlement.charged_credits} 创作点数`);
         } catch (error: any) {
           console.error('Material AI credit settlement failed', error);
-          crmMessage.warning(`图片已生成，但积分结算失败：${error?.message || String(error)}`);
+          crmMessage.warning(`图片已生成，但创作点数结算失败：${error?.message || String(error)}`);
         }
     } catch (error: any) {
         console.error('Material AI generation failed', error);
         crmMessage.error(savedToLibrary
           ? `图片已保存，但后续处理失败：${error?.message || String(error)}`
-          : (error?.message || '生成失败，本次不扣积分。'));
+          : (error?.message || '生成失败，本次不扣创作点数。'));
     } finally {
         setAIGeneratingTag(null);
     }
@@ -696,7 +699,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     try {
         await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, creditParams);
     } catch (error: any) {
-        crmMessage.error(error?.message || '积分校验失败');
+        crmMessage.error(error?.message || '创作点数校验失败');
         return;
     }
 
@@ -748,10 +751,10 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                     file_id: result.fileId || null,
                 },
             });
-            crmMessage.success(`${workflowName}完成，已扣除 ${settlement.charged_credits} 积分`);
+            crmMessage.success(`${workflowName}完成，已扣除 ${settlement.charged_credits} 创作点数`);
         } catch (error: any) {
             console.error('Online image operation credit settlement failed', error);
-            crmMessage.warning(`图片已保存，但积分结算失败：${error?.message || String(error)}`);
+            crmMessage.warning(`图片已保存，但创作点数结算失败：${error?.message || String(error)}`);
         }
     } catch (error: any) {
         console.error('Material processing failed', error);
@@ -847,7 +850,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
     try {
         await assertEnoughCredits(DESIGN_CREDIT_FEATURES.imageGeneration, creditParams);
     } catch (error: any) {
-        crmMessage.error(error?.message || '积分校验失败');
+        crmMessage.error(error?.message || '创作点数校验失败');
         return;
     }
 
@@ -901,10 +904,10 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                     file_id: result.fileId || null,
                 },
             });
-            crmMessage.success(`角度调整完成，已扣除 ${settlement.charged_credits} 积分`);
+            crmMessage.success(`角度调整完成，已扣除 ${settlement.charged_credits} 创作点数`);
         } catch (error: any) {
             console.error('Online angle credit settlement failed', error);
-            crmMessage.warning(`图片已保存，但积分结算失败：${error?.message || String(error)}`);
+            crmMessage.warning(`图片已保存，但创作点数结算失败：${error?.message || String(error)}`);
         }
     } catch (error:any) {
         console.error('Camera adjust failed', error);
@@ -2015,6 +2018,7 @@ const MaterialAIModal: React.FC<{
     onClose: () => void;
     onSubmit: (payload: MaterialAIGenerationPayload) => void;
 }> = ({ config, projectId, episodeId, onClose, onSubmit }) => {
+    const { project } = useProject();
     const modelOptions = useScriptModelOptions();
     const savedEngine = materialAIPrefs.get('design_ai_engine', 'nanobanana') as MaterialAIEngine;
     const savedGeminiModel = materialAIPrefs.get('design_ai_gemini_model', 'gemini-2.5-flash-image');
@@ -2026,9 +2030,15 @@ const MaterialAIModal: React.FC<{
             storedPrompt,
         )
     ));
-    const [aspectRatio, setAspectRatio] = useState(
-        materialAIPrefs.get('design_ai_aspect_ratio', '1:1'),
-    );
+    const savedAspectRatio = materialAIPrefs.get('design_ai_aspect_ratio', '1:1');
+    const [aspectRatio, setAspectRatio] = useState(() => standardTurnaroundAspectRatio(
+        config.type,
+        projectDefaultAspectRatio(
+            project?.settings,
+            savedAspectRatio === '9:16' ? '9:16' : '16:9',
+        ),
+        supportsStandardTurnaround(config.type),
+    ));
     const [resolution, setResolution] = useState<DesignImageResolution>(() => (
         normalizeDesignImageResolution(
             findDesignImageModel(savedEngine, savedGeminiModel),
@@ -2092,7 +2102,9 @@ const MaterialAIModal: React.FC<{
         setSelectedRefs(new Set());
         setSequential('disabled');
         setCount(1);
-        setStandardTurnaround(supportsStandardTurnaround(config.type));
+        const nextStandardTurnaround = supportsStandardTurnaround(config.type);
+        setStandardTurnaround(nextStandardTurnaround);
+        if (nextStandardTurnaround) setAspectRatio('16:9');
     }, [config]);
 
     useEffect(() => {
@@ -2165,6 +2177,11 @@ const MaterialAIModal: React.FC<{
         }
     };
 
+    const toggleStandardTurnaround = (enabled: boolean) => {
+        setStandardTurnaround(enabled);
+        if (enabled) setAspectRatio('16:9');
+    };
+
     const updateGenerationCount = (rawValue: string) => {
         const requested = Number(rawValue);
         const nextCount = Number.isFinite(requested) ? Math.max(1, Math.floor(requested)) : 1;
@@ -2207,17 +2224,17 @@ const MaterialAIModal: React.FC<{
                             source: 'material_workspace',
                         },
                     });
-                    crmMessage.success(`润色完成，已扣除 ${settlement.charged_credits} 积分`);
+                    crmMessage.success(`润色完成，已扣除 ${settlement.charged_credits} 创作点数`);
                 } catch (error: any) {
                     console.error('Material prompt refinement credit settlement failed', error);
-                    crmMessage.warning(`润色已完成，但积分结算失败：${error?.message || String(error)}`);
+                    crmMessage.warning(`润色已完成，但创作点数结算失败：${error?.message || String(error)}`);
                 }
             } else {
-                throw new Error('润色未返回内容，本次不扣积分');
+                throw new Error('润色未返回内容，本次不扣创作点数');
             }
         } catch (error: any) {
             console.error('素材提示词 AI 润色失败:', error);
-            crmMessage.error(error?.message || 'AI 润色失败，本次不扣积分');
+            crmMessage.error(error?.message || 'AI 润色失败，本次不扣创作点数');
         } finally {
             setIsRefining(false);
         }
@@ -2344,7 +2361,7 @@ const MaterialAIModal: React.FC<{
                                         className="h-8 min-w-[210px] appearance-none rounded-r-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
                                     >
                                         {refineModelOptions.map(option => (
-                                            <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)} · {designPromptRefinementFallbackCost(getScriptModelBillingKey(option))}积分</option>
+                                            <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)} · {designPromptRefinementFallbackCost(getScriptModelBillingKey(option))}创作点数</option>
                                         ))}
                                     </select>
                                     <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
@@ -2378,7 +2395,7 @@ const MaterialAIModal: React.FC<{
                                 </div>
                             </div>
 
-                            <div className="flex flex-wrap items-end gap-2 xl:justify-end">
+                            <div className="flex flex-wrap items-end gap-2 xl:w-[556px] xl:justify-end">
                                 <label className="relative min-w-[350px]">
                                     <span className="mb-1.5 block text-[10px] font-medium text-n300">生成模型</span>
                                     <div className="flex items-center gap-2">
@@ -2404,8 +2421,10 @@ const MaterialAIModal: React.FC<{
                                     <span className="mb-1.5 block text-[10px] font-medium text-n300">比例</span>
                                     <select
                                         value={aspectRatio}
+                                        disabled={standardTurnaround && supportsStandardTurnaround(config.type)}
                                         onChange={event => setAspectRatio(event.target.value)}
-                                        className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-7 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
+                                        title={standardTurnaround && supportsStandardTurnaround(config.type) ? `${standardTurnaroundLabel(config.type)}固定使用 16:9` : undefined}
+                                        className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-7 text-xs text-n700 outline-none hover:border-primary focus:border-primary disabled:cursor-not-allowed disabled:bg-n20 disabled:text-n100"
                                     >
                                         {['1:1', '3:4', '4:3', '9:16', '16:9'].map(ratio => <option key={ratio} value={ratio}>{ratio}</option>)}
                                     </select>
@@ -2433,7 +2452,7 @@ const MaterialAIModal: React.FC<{
                                         <input
                                             type="checkbox"
                                             checked={standardTurnaround}
-                                            onChange={(e) => setStandardTurnaround(e.target.checked)}
+                                            onChange={(e) => toggleStandardTurnaround(e.target.checked)}
                                             className="accent-primary"
                                         />
                                         {standardTurnaroundLabel(config.type)}
@@ -2441,7 +2460,7 @@ const MaterialAIModal: React.FC<{
                                 )}
                             </div>
 
-                            <div className="flex items-center gap-2 xl:min-w-[556px] xl:justify-start xl:pl-[84px]">
+                            <div className="flex items-center gap-2 xl:w-[556px] xl:justify-start">
                                 <label className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs ${
                                     generationModel.supportsImageToImageBatch
                                         ? 'border-n40 text-n700'
@@ -2481,7 +2500,7 @@ const MaterialAIModal: React.FC<{
                     <InlineCreditEstimate
                         featureKey={DESIGN_CREDIT_FEATURES.imageGeneration}
                         params={imageCreditParams}
-                        fallbackCost={generatedImageCount * DESIGN_CREDIT_DEFAULTS.imageGenerationPerImage}
+                        fallbackCost={designImageFallbackCost(generationModel.billingModel, resolution, generatedImageCount)}
                     />
                     <div className="flex items-center gap-3">
                         <button onClick={handleClose} className="rounded-lg border border-n40 px-4 py-2 text-xs text-n700 hover:bg-n20">取消</button>

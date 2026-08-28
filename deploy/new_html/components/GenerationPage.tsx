@@ -165,6 +165,8 @@ interface GenerationPageProps {
   files: ProjectFile[];
   selectedFileId: string | null;
   episodeId?: string;
+  projectId?: string;
+  focusShotId?: string | null;
   materialLibrary: MaterialLibrary;
   onUpdateStoryboardItem: (shotId: string, updates: Partial<StoryboardItem> | ((item: StoryboardItem) => Partial<StoryboardItem>)) => void;
   onSaveVersion: (name: string) => Promise<void> | void;
@@ -181,12 +183,15 @@ interface GenerationPageProps {
   onBatchDeleteStoryboardItems?: (itemIds: string[]) => Promise<void> | void;  // 2026-06-14：批量删除选中镜头
   assetScopeMode?: 'episode' | 'project';
   onAssetScopeModeChange?: (mode: 'episode' | 'project') => void;
+  defaultImageRatio?: GptImageRatio;
 }
 
 export const GenerationPage: React.FC<GenerationPageProps> = ({
   files,
   selectedFileId,
   episodeId,
+  projectId,
+  focusShotId,
   materialLibrary,
   onUpdateStoryboardItem,
   onSaveVersion,
@@ -203,6 +208,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
   onBatchDeleteStoryboardItems,
   assetScopeMode = 'episode',
   onAssetScopeModeChange,
+  defaultImageRatio = '16:9',
 }) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -214,6 +220,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     version: 1,
     defaultValue: null,
   });
+  const shotCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const pendingNotificationFocusRef = useRef<string | null>(null);
+  const handledNotificationFocusRef = useRef<string | null>(null);
   
   // Batch Selection — 多选 Set 不持久化（运行时态，刷新清空合理）
   const [selectedShotIds, setSelectedShotIds] = useState<Set<string>>(new Set());
@@ -255,7 +264,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     kind: TaskKind,
     titlePrefix: string,
   ): ComfyUITaskRegistryMeta => {
-    const projectId = (() => {
+    const resolvedProjectId = projectId || (() => {
       try { return localStorage.getItem('current_project_id') || undefined; } catch { return undefined; }
     })();
     const shotLabel = shot?.shotNumber || (shot?.id ? `#${String(shot.id).slice(0, 6)}` : '?');
@@ -266,11 +275,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       targetEntityType: 'storyboard_item',
       targetEntityId: shot?.id,
       targetItemId: shot?.id,
-      targetProjectId: projectId,
+      targetProjectId: resolvedProjectId,
       episodeId,
       fileRole: 'generated_image',
     };
-  }, [episodeId]);
+  }, [episodeId, projectId]);
 
   // 追踪用户是否手动修改了prompt（textarea onBlur 用来决定是否写回 shot.imagePrompt）
   const userEditedPromptRef = useRef<boolean>(false);
@@ -536,7 +545,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
 
   // Generation Model State
   // 2026-05-21：扩 type — 加 qwenN_lora（修历史漏洞，UI 早就在用但 type 没声明）
-  // + gpt_image_vip（天劫一阶 / gpt-image-2-vip）+ gpt_image_official（天劫二阶 / gpt-image-2 Sora2）
+  // + gpt_image_vip（gpt-image-2-vip）+ gpt_image_official（gpt-image-2 Sora2）
   type GenerationModel = StoryboardGenerationModel;
   // 2026-05-20 (Bug #3)：模型选择持久化 — 切页 / 刷新都不丢用户偏好。
   const [globalModel, setGlobalModel] = usePersistedPageState<GenerationModel>({
@@ -612,13 +621,13 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     configLockDrafts[item.id] ?? Boolean(item.isConfigConfirmed)
   ), [configLockDrafts]);
 
-  // 所有分镜图像模型共享比例 / 分辨率偏好。默认 16:9 + 1K；
+  // 所有分镜图像模型共享比例 / 分辨率偏好。新项目默认跟随创建时选择；
   // 用户主动选择 auto 时，提交前按最大参考图解析为确定值。
   const [imageRatio, setImageRatio] = usePersistedPageState<GptImageRatio>({
     page: 'GenerationPage:imageRatio',
     episodeId,
-    version: 2,
-    defaultValue: '16:9',
+    version: 3,
+    defaultValue: defaultImageRatio,
   });
   const [imageK, setImageK] = usePersistedPageState<GptImageK>({
     page: 'GenerationPage:imageK',
@@ -696,6 +705,31 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           setVisibleShotCount(Math.ceil((idx + 1) / SHOT_PAGE_SIZE) * SHOT_PAGE_SIZE);
       }
   }, [selectedShotId, selectedFile, visibleShotCount]);
+
+  // A notification deep link selects the originating shot and ensures the
+  // virtualized rail has rendered enough items before scrolling it into view.
+  useEffect(() => {
+      if (!focusShotId || handledNotificationFocusRef.current === focusShotId) return;
+      const items = selectedFile?.storyboard?.items || [];
+      const index = items.findIndex(item => item.id === focusShotId);
+      if (index < 0) return;
+      pendingNotificationFocusRef.current = focusShotId;
+      setSelectedShotId(focusShotId);
+      setVisibleShotCount(current => Math.max(current, index + 1));
+  }, [focusShotId, selectedFile?.storyboard?.items, setSelectedShotId]);
+
+  useEffect(() => {
+      const targetShotId = pendingNotificationFocusRef.current;
+      if (!targetShotId || selectedShotId !== targetShotId) return;
+      const target = shotCardRefs.current.get(targetShotId);
+      if (!target) return;
+      const frame = window.requestAnimationFrame(() => {
+          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          handledNotificationFocusRef.current = targetShotId;
+          pendingNotificationFocusRef.current = null;
+      });
+      return () => window.cancelAnimationFrame(frame);
+  }, [selectedShotId, visibleShotCount, selectedFile?.storyboard?.items]);
 
 
   // 任务恢复：页面加载时检查 localStorage 中未完成的任务，恢复轮询
@@ -1451,7 +1485,15 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               const result = await generateFinalIllustrationResult(
                   promptToUse,
                   refImages,
-                  { entityType: 'storyboard_item', entityId: shot.id, fileRole: 'generated_image', episodeId },
+                  {
+                      entityType: 'storyboard_item',
+                      entityId: shot.id,
+                      fileRole: 'generated_image',
+                      projectId,
+                      episodeId,
+                      sourcePage: 'generation',
+                      sourceItemId: shot.id,
+                  },
                   {
                       aspectRatio: resolvedImageSettings.ratio,
                       imageSize: resolvedImageSettings.k,
@@ -1497,7 +1539,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   entityType: 'storyboard_item',
                   entityId: shot.id,
                   fileRole: 'generated_image',
+                  projectId,
                   episodeId,
+                  sourcePage: 'generation',
+                  sourceItemId: shot.id,
               });
               generated = response.files.map((file, index) => {
                   const url = file.file_url || file.url || file.data_url || response.images[index] || '';
@@ -1537,7 +1582,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                       updateShotProgressStage(shot.id, '处理节点已接收任务，正在生成', 10);
                   },
                   {
-                      entityType: 'storyboard_item', entityId: shot.id, fileRole: 'generated_image', episodeId,
+                      entityType: 'storyboard_item', entityId: shot.id, fileRole: 'generated_image', projectId, episodeId,
                       preferredAgentId, preferredNodeId, outputWidth, outputHeight,
                   },
                   buildRegistryMeta(
@@ -1603,7 +1648,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                  },
                });
              } catch (settlementError: any) {
-               crmMessage.warning(`分镜图片已生成，但积分结算失败：${settlementError?.message || String(settlementError)}`);
+               crmMessage.warning(`分镜图片已生成，但创作点数结算失败：${settlementError?.message || String(settlementError)}`);
              }
            }
            updateShotProgressStage(shot.id, '生成完成', 100);
@@ -2074,9 +2119,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                     processing_node: gpu.name,
                 },
             });
-            crmMessage.success(`多角度人物生成完成，已扣除 ${settlement.charged_credits} 积分`);
+            crmMessage.success(`多角度人物生成完成，已扣除 ${settlement.charged_credits} 创作点数`);
         } catch (settlementError: any) {
-            crmMessage.warning(`多角度图片已生成，但积分结算失败：${settlementError?.message || String(settlementError)}`);
+            crmMessage.warning(`多角度图片已生成，但创作点数结算失败：${settlementError?.message || String(settlementError)}`);
         }
     } catch (error: any) {
         console.error('Human multi-angle generation failed', error);
@@ -2719,6 +2764,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                            <div
                                key={item.id}
                                data-testid="storyboard-shot-card"
+                               data-storyboard-shot-id={item.id}
+                               ref={(element) => {
+                                   if (element) shotCardRefs.current.set(item.id, element);
+                                   else shotCardRefs.current.delete(item.id);
+                               }}
                                onClick={() => {
                                    setSelectedShotId(item.id);
                                }}
@@ -2988,7 +3038,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         <div className="text-[9px] text-n100 mb-2 flex items-center gap-1">
                           <span className="text-primary">●</span>
                           当前镜头输出参数
-                          <span className="text-n100 ml-1">· 默认 16:9 / 1K</span>
+                          <span className="text-n100 ml-1">· 项目默认 {defaultImageRatio} / 1K</span>
                         </div>
                         <div className={`grid ${selectedGenerationModel === 'gpt_image_official' ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
                           <div>

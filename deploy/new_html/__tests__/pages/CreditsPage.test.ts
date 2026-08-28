@@ -59,8 +59,8 @@ describe('CreditsPage transaction presentation', () => {
     expect(collapseSettledFreezeRows([freeze])).toEqual([freeze]);
   });
 
-  it('explains the batch count, public tier, resolution and aspect ratio', () => {
+  it('explains the batch count, model version, resolution and aspect ratio', () => {
     expect(formatCreditBillingDetail(transaction({})))
-      .toBe('11 张 · 三阶模型 · 1K · 16:9');
+      .toBe('11 张 · Doubao-Seedream-5.0-lite · 1K · 16:9');
   });
 });

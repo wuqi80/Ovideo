@@ -85,8 +85,8 @@ def create_user_session_router(
                 user_dao=user_dao,
             )
             if result.get("username_changed") and create_session_token:
-                new_username = result["profile"].get("username")
-                result["token"] = create_session_token(new_username)
+                # JWT subject keeps the stable user_id; display-name changes do not alter ownership.
+                result["token"] = create_session_token(user_id)
             return result
         except user_profile_service.UserProfileNotFound as exc:
             raise HTTPException(status_code=404, detail="用户不存在") from exc
@@ -98,6 +98,8 @@ def create_user_session_router(
             raise HTTPException(status_code=400, detail="手机号格式不正确") from exc
         except user_profile_service.InvalidVerificationCode as exc:
             raise HTTPException(status_code=400, detail="验证码不正确") from exc
+        except user_profile_service.PhoneIdentityImmutable as exc:
+            raise HTTPException(status_code=400, detail="手机号是登录身份，不能在个人资料中直接修改") from exc
         except Exception as exc:
             logger.error("update_my_profile failed user_id=%s err=%s", user_id, exc, exc_info=True)
             raise HTTPException(status_code=500, detail="更新个人资料失败") from exc

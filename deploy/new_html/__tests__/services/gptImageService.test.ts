@@ -88,6 +88,25 @@ describe('generateGptImage', () => {
     expect(body.references).toEqual(['data:image/png;base64,AAAA', '/storage/x.png']);
   });
 
+  it('forwards the shot navigation context used by task notifications', async () => {
+    fetchMock.mockResolvedValueOnce(okResp());
+    await generateGptImage({
+      tier: 'vip',
+      prompt: 'p',
+      projectId: 'proj_1',
+      episodeId: 'ep_1',
+      sourcePage: 'generation',
+      sourceItemId: 'shot_06',
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toMatchObject({
+      project_id: 'proj_1',
+      episode_id: 'ep_1',
+      source_page: 'generation',
+      source_item_id: 'shot_06',
+    });
+  });
+
   it('tier 非法值直接抛错，不发请求', async () => {
     await expect(
       // @ts-expect-error 故意传脏值测分支

@@ -12,6 +12,10 @@ import type { ScriptSegment, ExtractedStoryboardPrompt } from '../types';
 import { parseScriptSegments, parseStoryboardPromptExtractions } from '../utils/scriptPipelineParsers';
 import { normalizeScriptIterationResult } from '../utils/scriptIteration';
 import type { TextTaskContext } from './textTaskContext';
+import {
+  applyProjectOrientationToPrompt,
+  type ProjectOrientation,
+} from '../utils/projectCreationPreferences';
 
 /**
  * 改写小说为剧本
@@ -210,10 +214,11 @@ export const aiGenerateVideoScriptFromSegment = async (
   segment: ScriptSegment,
   onStream?: (chunk: string) => void,
   taskContext?: TextTaskContext,
+  orientation: ProjectOrientation = 'portrait',
 ): Promise<string> => {
   return await callAI(
     model,
-    PROMPTS.GENERATE_VIDEO_SCRIPT_FROM_SEGMENT,
+    applyProjectOrientationToPrompt(PROMPTS.GENERATE_VIDEO_SCRIPT_FROM_SEGMENT, orientation),
     {
       segmentText: [
         segment.sourceText,
@@ -234,6 +239,7 @@ export const aiGenerateVideoScriptFromSegments = async (
   model: AiModel,
   segments: ScriptSegment[],
   taskContext?: TextTaskContext,
+  orientation: ProjectOrientation = 'portrait',
 ): Promise<string> => {
   const segmentsText = segments.map((segment, index) => [
     `分段${index + 1}`,
@@ -242,7 +248,7 @@ export const aiGenerateVideoScriptFromSegments = async (
   ].join('\n')).join('\n---\n');
   return await callAI(
     model,
-    PROMPTS.GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS,
+    applyProjectOrientationToPrompt(PROMPTS.GENERATE_VIDEO_SCRIPT_FROM_SEGMENTS, orientation),
     { segmentsText },
     undefined,
     {
@@ -262,10 +268,11 @@ export const aiIterateVideoScript = async (
   conversationContext: string,
   onStream?: (chunk: string) => void,
   taskContext?: TextTaskContext,
+  orientation: ProjectOrientation = 'portrait',
 ): Promise<string> => {
   return await callAI(
     model,
-    PROMPTS.ITERATE_VIDEO_SCRIPT,
+    applyProjectOrientationToPrompt(PROMPTS.ITERATE_VIDEO_SCRIPT, orientation),
     {
       originalScript,
       currentVideoScript,
@@ -291,10 +298,11 @@ export const aiReplanInvalidVideoScript = async (
   instruction: string,
   conversationContext: string,
   taskContext?: TextTaskContext,
+  orientation: ProjectOrientation = 'portrait',
 ): Promise<string> => {
   return await callAI(
     model,
-    PROMPTS.REPLAN_INVALID_VIDEO_SCRIPT,
+    applyProjectOrientationToPrompt(PROMPTS.REPLAN_INVALID_VIDEO_SCRIPT, orientation),
     {
       originalScript,
       invalidVideoScript,
@@ -319,12 +327,13 @@ export const aiExtractStoryboardPromptsFromVideoShots = async (
   videoShotBlocks: string,
   expectedShotNumbers: string[],
   taskContext?: TextTaskContext,
+  orientation: ProjectOrientation = 'portrait',
 ): Promise<ExtractedStoryboardPrompt[]> => {
   const orderedShotNumbers = expectedShotNumbers.map(value => value.trim()).filter(Boolean);
   if (orderedShotNumbers.length === 0) return [];
   const raw = await callAI(
     model,
-    PROMPTS.EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT,
+    applyProjectOrientationToPrompt(PROMPTS.EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT, orientation),
     {
       videoShotBlock: videoShotBlocks,
       canonicalShotNo: orderedShotNumbers[0],
@@ -346,10 +355,11 @@ export const aiExtractStoryboardPromptFromVideoShot = async (
   videoShotBlock: string,
   canonicalShotNo: string = '镜头1-1',
   taskContext?: TextTaskContext,
+  orientation: ProjectOrientation = 'portrait',
 ): Promise<ExtractedStoryboardPrompt[]> => {
   const raw = await callAI(
     model,
-    PROMPTS.EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT,
+    applyProjectOrientationToPrompt(PROMPTS.EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT, orientation),
     {
       videoShotBlock,
       canonicalShotNo,
@@ -372,10 +382,11 @@ export const aiReplanInvalidStoryboardExtraction = async (
   invalidExtraction: string,
   validationError: string,
   taskContext?: TextTaskContext,
+  orientation: ProjectOrientation = 'portrait',
 ): Promise<ExtractedStoryboardPrompt[]> => {
   const raw = await callAI(
     model,
-    PROMPTS.REPLAN_INVALID_STORYBOARD_EXTRACTION,
+    applyProjectOrientationToPrompt(PROMPTS.REPLAN_INVALID_STORYBOARD_EXTRACTION, orientation),
     {
       videoShotBlock,
       canonicalShotNo,
@@ -431,10 +442,11 @@ export const aiGenerateStoryboardScript = async (
   userRequirements: string = '',
   onStream?: (chunk: string) => void,
   taskContext?: TextTaskContext,
+  orientation: ProjectOrientation = 'portrait',
 ): Promise<string> => {
   return await callAI(
     model,
-    PROMPTS.GENERATE_STORYBOARD_SCRIPT,
+    applyProjectOrientationToPrompt(PROMPTS.GENERATE_STORYBOARD_SCRIPT, orientation),
     { 
       novelText,
       userRequirements: userRequirements ? `\n**用户要求：**\n${userRequirements}` : ''

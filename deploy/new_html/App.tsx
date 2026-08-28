@@ -170,7 +170,7 @@ const App: React.FC = () => {
                             <Route path="postprocess" element={<PostProcessPage />} />
                     </Route>
 
-                    {/* 2026-05-26 Slice 2: 用户积分页 */}
+                    {/* 2026-05-26 Slice 2: 用户创作点数页 */}
                     <Route path="/credits" element={<CreditsPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
 

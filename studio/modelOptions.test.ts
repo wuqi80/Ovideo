@@ -3,11 +3,15 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   STUDIO_AUDIO_MODEL_OPTIONS,
+  STUDIO_AUDIO_MODEL_LABEL,
   STUDIO_IMAGE_MODEL_OPTIONS,
   STUDIO_IMAGE_MODEL_CONFIGURED,
   STUDIO_IMAGE_MODEL_LABEL,
   STUDIO_TEXT_MODEL_OPTIONS,
+  STUDIO_TEXT_MODEL_LABEL,
   STUDIO_VIDEO_MODEL_OPTIONS,
+  STUDIO_VIDEO_MODEL_FAST_LABEL,
+  STUDIO_VIDEO_MODEL_STANDARD_LABEL,
   normalizeStudioAudioModel,
   normalizeStudioImageModel,
   normalizeStudioTextModel,
@@ -58,8 +62,12 @@ describe('Studio image model contract', () => {
     expect(exposedValues.every(value => backendOperations.has(value))).toBe(true);
   });
 
-  it('labels image generation as a backend-configured Gemini image model', () => {
-    expect(STUDIO_IMAGE_MODEL_LABEL).toContain('后台配置');
+  it('exposes actual model versions with capability suffixes', () => {
+    expect(STUDIO_TEXT_MODEL_LABEL).toBe('gemini-2.5-flash · 全能写作模型');
+    expect(STUDIO_IMAGE_MODEL_LABEL).toBe('Gemini 2.5 Flash Image · 快速生图模型');
+    expect(STUDIO_VIDEO_MODEL_STANDARD_LABEL).toBe('doubao-seedance-2-0-260128 · 多模态标准视频模型');
+    expect(STUDIO_VIDEO_MODEL_FAST_LABEL).toBe('doubao-seedance-2-0-fast-260128 · 多模态快速视频模型');
+    expect(STUDIO_AUDIO_MODEL_LABEL).toBe('speech-2.8-hd · 高清语音模型');
     expect(readStudioFile('components/Node.tsx')).toContain('STUDIO_IMAGE_MODEL_OPTIONS');
   });
 

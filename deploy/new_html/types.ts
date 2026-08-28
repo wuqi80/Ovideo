@@ -421,6 +421,7 @@ export interface ProjectInfo {
   memberRole?: string;
   visibility?: 'private' | 'org-default' | string;
   groupId?: string | null;
+  settings?: Record<string, any>;
 }
 
 export interface Episode {
@@ -548,11 +549,18 @@ export interface RegisteredTask {
 export interface GlobalTask {
   id: string;
   category: TaskCategory;
+  taskType?: string;
   status: GlobalTaskStatus;
   displayName: string;
   projectId: string;
   sourcePage: SourcePage;
   sourceItemId?: string;
+  entityType?: string;
+  entityId?: string;
+  fileRole?: string;
+  episodeId?: string;
+  provider?: string;
+  modelName?: string;
   progress?: number;
   createdAt: number;
   startedAt?: number;
@@ -573,10 +581,13 @@ export interface TaskNotification {
   targetItemId?: string;
   timestamp: number;
   taskId?: string;
+  taskType?: string;
   entityType?: string;
   entityId?: string;
   fileRole?: string;
   episodeId?: string;
+  provider?: string;
+  modelName?: string;
 }
 
 // =============================================

@@ -61,4 +61,26 @@ describe('geminiImageGenerationService', () => {
     expect(request.prompt).toContain('Follow the style explicitly requested in the context');
     expect(request.prompt).not.toMatch(/Anime\/Manga/i);
   });
+
+  it('forwards storyboard navigation context to the proxy task', async () => {
+    generateGeminiImageViaProxy.mockResolvedValueOnce([{ file_id: 'file_1', url: '/storage/image/file_1.webp' }]);
+
+    await generateFinalIllustrationResult('shot prompt', [], {
+      entityType: 'storyboard_item',
+      entityId: 'shot_06',
+      fileRole: 'generated_image',
+      projectId: 'proj_1',
+      episodeId: 'ep_1',
+      sourcePage: 'generation',
+      sourceItemId: 'shot_06',
+    });
+
+    expect(generateGeminiImageViaProxy.mock.calls[0][0]).toMatchObject({
+      model: 'nanobanana',
+      projectId: 'proj_1',
+      episodeId: 'ep_1',
+      sourcePage: 'generation',
+      sourceItemId: 'shot_06',
+    });
+  });
 });

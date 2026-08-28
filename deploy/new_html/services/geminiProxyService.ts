@@ -96,7 +96,7 @@ export const callGeminiProxyStream = async (
     return fullContent;
   } catch (error) {
     if (timedOut || (error as { name?: string } | null)?.name === 'AbortError') {
-      throw new Error('Gemini 生成超时或连接中断，本次未扣积分，请手动重试');
+      throw new Error('Gemini 生成超时或连接中断，本次未扣创作点数，请手动重试');
     }
     throw error;
   } finally {

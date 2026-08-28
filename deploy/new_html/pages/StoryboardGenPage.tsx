@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useEpisode } from '../contexts/EpisodeContext';
 import {
@@ -52,6 +52,8 @@ function fmtTimeSimple(ms: number): string {
 
 export const StoryboardGenPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const notificationShotId = searchParams.get('shotId');
   const {
     episodeId, projectId, selectedScriptId,
     script, storyboardItems, assets, audioTracks,
@@ -103,6 +105,11 @@ export const StoryboardGenPage: React.FC = () => {
     setVisibleEntityShotCount(count);
     await loadStoryboardItemsPage({ limit: count, includeTotal: true });
   }, [loadStoryboardItemsPage, storyboardItems.length, storyboardTotalCount, visibleEntityShotCount]);
+
+  useEffect(() => {
+    if (!notificationShotId || storyboardItems.some(item => item.itemId === notificationShotId)) return;
+    void handleLoadAllStoryboardItems();
+  }, [handleLoadAllStoryboardItems, notificationShotId, storyboardItems]);
 
   const visibleStoryboardItems = useMemo(
     () => storyboardItems.slice(0, visibleEntityShotCount),
@@ -561,6 +568,8 @@ export const StoryboardGenPage: React.FC = () => {
             files={[enhancedFile]}
             selectedFileId={episodeId}
             episodeId={episodeId}
+            projectId={projectId}
+            focusShotId={notificationShotId}
             shotPageSize={STORYBOARD_INITIAL_SHOT_COUNT}
             totalShotCount={storyboardTotalCount || storyboardItems.length}
             onVisibleShotCountChange={handleVisibleShotCountChange}

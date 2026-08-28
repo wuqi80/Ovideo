@@ -132,14 +132,14 @@ export const AdminHubPage: React.FC = () => {
                 <TileBase
                     icon={<Cpu className="w-6 h-6 text-primary" />}
                     title="生成管理"
-                    subtitle="账号 · 项目分组 · 积分 · 素材库 · 审计日志"
+                    subtitle="账号 · 项目分组 · 创作点数 · 素材库 · 审计日志"
                     accent="via-emerald-500/60"
                     onClick={() => navigate('/admin/features?tab=accounts')}
                 >
                     <div className="grid grid-cols-3 gap-2 text-[11px] text-n100">
                         <div className="flex items-center gap-1.5"><Users size={12} className="text-n100" />账号 / 权限</div>
                         <div className="flex items-center gap-1.5"><FolderTree size={12} className="text-n100" />项目分组</div>
-                        <div className="flex items-center gap-1.5"><ScrollText size={12} className="text-n100" />积分账户</div>
+                        <div className="flex items-center gap-1.5"><ScrollText size={12} className="text-n100" />创作点数账户</div>
                         <div className="flex items-center gap-1.5"><ImageIcon size={12} className="text-n100" />素材库</div>
                         <div className="flex items-center gap-1.5"><Activity size={12} className="text-n100" />生成统计</div>
                         <div className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-n100" />审计日志</div>

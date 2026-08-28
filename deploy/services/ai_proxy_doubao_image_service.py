@@ -43,7 +43,7 @@ DOUBAO_ABSTRACT_GEOGRAPHY_REPLACEMENTS = (
 )
 DOUBAO_SENSITIVE_INPUT_MESSAGE = (
     "提示词触发了供应商内容安全审核，请调整涉及真实地图、"
-    "地区边界或敏感标识的描述后重试，本次不扣积分。"
+    "地区边界或敏感标识的描述后重试，本次不扣创作点数。"
 )
 
 

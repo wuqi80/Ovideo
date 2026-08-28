@@ -50,6 +50,7 @@ const ProjectHub: React.FC = () => {
     const [editProjectName, setEditProjectName] = useState('');
     const [editProjectDesc, setEditProjectDesc] = useState('');
     const [editMembers, setEditMembers] = useState<ProjectMemberRow[]>([]);
+    const memberResponsibilityBaselineRef = useRef<Record<string, string>>({});
     const [editMembersLoading, setEditMembersLoading] = useState(false);
     const [editSaving, setEditSaving] = useState(false);
     const [memberBusyId, setMemberBusyId] = useState<string | null>(null);
@@ -265,6 +266,7 @@ const ProjectHub: React.FC = () => {
 
     const loadEditMembers = useCallback(async (projectId: string) => {
         setEditMembersLoading(true);
+        memberResponsibilityBaselineRef.current = {};
         try {
             const data = await getProjectMembers(projectId);
             const members = data.members || [];
@@ -294,6 +296,7 @@ const ProjectHub: React.FC = () => {
         setEditTarget(null);
         setEditMembers([]);
         setNewMemberIdentity('');
+        memberResponsibilityBaselineRef.current = {};
     }, []);
 
     const closeEditProject = useCallback(() => {
@@ -789,9 +792,9 @@ const ProjectHub: React.FC = () => {
                                                     onChange={e => setNewMemberRole(e.target.value)}
                                                     className="h-9 flex-1 rounded border border-n40 bg-n0 px-2 text-xs text-n700 outline-none transition-colors focus:border-primary"
                                                 >
-                                                    <option value="member">member</option>
-                                                    <option value="admin">admin</option>
-                                                    <option value="readonly">readonly</option>
+                                                    <option value="member">成员·member</option>
+                                                    <option value="admin">管理·admin</option>
+                                                    <option value="readonly">只读·readonly</option>
                                                 </select>
                                                 <button
                                                     type="button"
@@ -839,12 +842,15 @@ const ProjectHub: React.FC = () => {
                                                                 value={member.role || 'member'}
                                                                 onChange={e => handleUpdateEditMember(member, { role: e.target.value })}
                                                                 disabled={isOwner || busy}
+                                                                onMouseDown={e => {
+                                                                    if (isOwner) e.preventDefault();
+                                                                }}
                                                                 className="h-8 w-full rounded border border-n40 bg-n0 px-2 text-xs text-n700 outline-none focus:border-primary disabled:opacity-50"
                                                             >
                                                                 <option value="owner" disabled>owner</option>
-                                                                <option value="admin">admin</option>
-                                                                <option value="member">member</option>
-                                                                <option value="readonly">readonly</option>
+                                                                <option value="admin">管理·admin</option>
+                                                                <option value="member">成员·member</option>
+                                                                <option value="readonly">只读·readonly</option>
                                                             </select>
                                                         </label>
                                                         <label className="block">
@@ -852,6 +858,9 @@ const ProjectHub: React.FC = () => {
                                                             <input
                                                                 type="text"
                                                                 value={member.responsibility || ''}
+                                                                onFocus={() => {
+                                                                    memberResponsibilityBaselineRef.current[member.user_id] = member.responsibility?.trim() || 'all';
+                                                                }}
                                                                 onChange={e => {
                                                                     const next = e.target.value;
                                                                     setEditMembers(prev => prev.map(item =>
@@ -860,7 +869,18 @@ const ProjectHub: React.FC = () => {
                                                                             : item
                                                                     ));
                                                                 }}
-                                                                onBlur={e => handleUpdateEditMember(member, { responsibility: e.target.value.trim() || 'all' })}
+                                                                onBlur={e => {
+                                                                    const next = e.target.value.trim() || 'all';
+                                                                    const previous = memberResponsibilityBaselineRef.current[member.user_id]
+                                                                        ?? member.responsibility?.trim()
+                                                                        ?? 'all';
+                                                                    delete memberResponsibilityBaselineRef.current[member.user_id];
+                                                                    if (next === previous) return;
+                                                                    void handleUpdateEditMember(
+                                                                        { ...member, responsibility: previous },
+                                                                        { responsibility: next },
+                                                                    );
+                                                                }}
                                                                 disabled={busy}
                                                                 placeholder="all / script / art"
                                                                 className="h-8 w-full rounded border border-n40 bg-n0 px-2 text-xs text-n700 outline-none placeholder:text-n100 focus:border-primary disabled:opacity-50"

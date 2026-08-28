@@ -11,14 +11,14 @@ describe('Studio credit integration', () => {
   it('shows and refreshes the available balance from the shared credit account', () => {
     expect(appSource).toContain('await runtime.getCreditBalance()');
     expect(appSource).toContain("window.addEventListener('credits:updated', handleCreditsUpdated)");
-    expect(appSource).toContain('查看积分明细');
-    expect(appSource).toContain('<span>可用积分</span>');
+    expect(appSource).toContain('查看创作点数明细');
+    expect(appSource).toContain('<span>可用创作点数</span>');
   });
 
   it('shows estimates and blocks insufficient node and assistant actions', () => {
-    expect(nodeSource).toContain('预计 ${creditSummary.totalCost} 积分 · 成功后扣除');
+    expect(nodeSource).toContain('预计 ${creditSummary.totalCost} 创作点数 · 成功后扣除');
     expect(nodeSource).toContain('disabled={isWorking || creditInsufficient}');
-    expect(assistantSource).toContain('预计 ${creditSummary.totalCost} 积分 · 成功后扣除');
+    expect(assistantSource).toContain('预计 ${creditSummary.totalCost} 创作点数 · 成功后扣除');
     expect(assistantSource).toContain('isLoading || creditInsufficient');
   });
 

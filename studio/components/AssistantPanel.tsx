@@ -390,7 +390,7 @@ export const AssistantPanel: React.FC<AssistantPanelProps> = ({ isOpen, onClose 
           <button
             onClick={handleSendMessage}
             disabled={!input.trim() || isLoading || creditInsufficient}
-            title={creditInsufficient ? '积分不足，请先补充积分' : undefined}
+            title={creditInsufficient ? '创作点数不足，请先补充创作点数' : undefined}
             className={`absolute right-2 top-2 p-2 rounded-full transition-all duration-300 ${input.trim() && !isLoading && !creditInsufficient ? 'bg-cyan-500 text-black hover:bg-cyan-400 hover:scale-105 shadow-lg shadow-cyan-500/20' : 'bg-white/5 text-slate-600 cursor-not-allowed'}`}
           >
             {isLoading ? <Loader2 size={16} className="animate-spin" /> : <CornerDownLeft size={16} />}
@@ -402,10 +402,10 @@ export const AssistantPanel: React.FC<AssistantPanelProps> = ({ isOpen, onClose 
               <span className={`inline-flex items-center gap-1 ${creditInsufficient ? 'text-red-400' : 'text-slate-500'}`}>
                 <Coins size={10} />
                 {isCreditLoading
-                  ? '积分计算中…'
+                  ? '创作点数计算中…'
                   : creditSummary.enabled
-                    ? `预计 ${creditSummary.totalCost} 积分 · 成功后扣除`
-                    : '当前不计积分'}
+                    ? `预计 ${creditSummary.totalCost} 创作点数 · 成功后扣除`
+                    : '当前不计创作点数'}
               </span>
             )}
         </div>

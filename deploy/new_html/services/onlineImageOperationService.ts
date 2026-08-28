@@ -4,7 +4,7 @@ export type OnlineImageOperation = 'angle_adjustment' | 'upscale_hd' | 'remove_w
 
 export const ONLINE_IMAGE_OPERATION_MODEL = 'doubao-seedream-5-0-lite-260128';
 export const ONLINE_IMAGE_OPERATION_BILLING_MODEL = 'image_tier_3';
-export const ONLINE_IMAGE_OPERATION_LABEL = '三阶 · 参考图生图模型';
+export const ONLINE_IMAGE_OPERATION_LABEL = 'Doubao-Seedream-5.0-lite · 参考图生图模型';
 
 export interface OnlineImageOperationOptions {
   operation: OnlineImageOperation;

@@ -1,6 +1,6 @@
 /**
  * creditService.ts
- * 2026-05-26 Slice 2 — 用户侧积分 API
+ * 2026-05-26 Slice 2 — 用户侧创作点数 API
  */
 
 import { apiJson } from './httpClient';
@@ -9,6 +9,9 @@ export interface CreditBalance {
   success: boolean;
   account_id: string;
   available_credits: number;
+  account_credits: number;
+  gift_credits: number;
+  gift_expires_at?: string | null;
   frozen_credits: number;
   total_used_credits: number;
 }
@@ -87,7 +90,7 @@ export async function assertEnoughCredits(
 ): Promise<CreditEstimateResult> {
   const quote = await estimateCredits(featureKey, params);
   if (quote.enabled && !quote.enough) {
-    throw new Error(`积分不足：本次预计需要 ${quote.estimated_cost} 积分，当前可用 ${quote.balance ?? 0} 积分`);
+    throw new Error(`创作点数不足：本次预计需要 ${quote.estimated_cost} 点，当前可用 ${quote.balance ?? 0} 点`);
   }
   return quote;
 }
@@ -136,6 +139,97 @@ export async function listCreditTransactions(
   return apiJson(`/api/credits/transactions${qs}`, {
     method: 'GET',
   }, 'listCreditTransactions');
+}
+
+export interface WechatRechargeQuote {
+  point_amount: number;
+  base_amount_fen: number;
+  discount_bps: number;
+  discount_label: string;
+  amount_fen: number;
+  saved_amount_fen: number;
+  currency: 'CNY';
+}
+
+export interface WechatPayOptions {
+  success: boolean;
+  enabled: boolean;
+  base_ratio: { cny_yuan: number; creation_points: number };
+  max_point_amount: number;
+  max_amount_fen: number;
+  discount_tiers: Array<{
+    min_point_amount: number;
+    min_pay_amount_fen: number;
+    discount_bps: number;
+    label: string;
+  }>;
+  suggestions: WechatRechargeQuote[];
+}
+
+export interface WechatRechargeOrder {
+  payment_order_id: string;
+  out_trade_no: string;
+  point_amount: number;
+  base_amount_fen: number;
+  discount_bps: number;
+  amount_fen: number;
+  currency: 'CNY';
+  status: 'PENDING' | 'PAID' | 'CLOSED' | 'EXPIRED' | 'FAILED';
+  code_url: string | null;
+  transaction_id: string | null;
+  failure_reason: string | null;
+  expires_at: string;
+  paid_at: string | null;
+  created_at: string;
+}
+
+export async function getWechatPayOptions(): Promise<WechatPayOptions> {
+  return apiJson('/api/payments/wechat/options', { method: 'GET' }, 'getWechatPayOptions');
+}
+
+export async function quoteWechatRecharge(pointAmount: number): Promise<WechatRechargeQuote> {
+  const result = await apiJson<{ success: boolean; quote: WechatRechargeQuote }>(
+    '/api/payments/wechat/quote',
+    { method: 'POST', body: JSON.stringify({ point_amount: pointAmount }) },
+    'quoteWechatRecharge',
+  );
+  return result.quote;
+}
+
+export async function quoteWechatRechargeAmount(amountFen: number): Promise<WechatRechargeQuote> {
+  const result = await apiJson<{ success: boolean; quote: WechatRechargeQuote }>(
+    '/api/payments/wechat/quote',
+    { method: 'POST', body: JSON.stringify({ amount_fen: amountFen }) },
+    'quoteWechatRechargeAmount',
+  );
+  return result.quote;
+}
+
+export async function createWechatRechargeOrder(pointAmount: number): Promise<WechatRechargeOrder> {
+  const result = await apiJson<{ success: boolean; order: WechatRechargeOrder }>(
+    '/api/payments/wechat/orders',
+    { method: 'POST', body: JSON.stringify({ point_amount: pointAmount }) },
+    'createWechatRechargeOrder',
+  );
+  return result.order;
+}
+
+export async function createWechatRechargeOrderByAmount(amountFen: number): Promise<WechatRechargeOrder> {
+  const result = await apiJson<{ success: boolean; order: WechatRechargeOrder }>(
+    '/api/payments/wechat/orders',
+    { method: 'POST', body: JSON.stringify({ amount_fen: amountFen }) },
+    'createWechatRechargeOrderByAmount',
+  );
+  return result.order;
+}
+
+export async function getWechatRechargeOrder(outTradeNo: string): Promise<WechatRechargeOrder> {
+  const result = await apiJson<{ success: boolean; order: WechatRechargeOrder }>(
+    `/api/payments/wechat/orders/${encodeURIComponent(outTradeNo)}`,
+    { method: 'GET' },
+    'getWechatRechargeOrder',
+  );
+  return result.order;
 }
 
 

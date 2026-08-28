@@ -78,6 +78,10 @@ def create_frontend_pages_router() -> APIRouter:
         return FileResponse("login.html")
 
     @router.get("/login")
+    @router.get("/register")
+    @router.get("/legacy-login")
+    @router.get("/bind-phone")
+    @router.get("/password-reset")
     async def login_page():
         return FileResponse("login.html")
 

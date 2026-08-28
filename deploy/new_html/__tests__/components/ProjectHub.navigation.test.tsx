@@ -13,7 +13,9 @@ import {
   addProjectMember,
   getProjectMembers,
   updateProject,
+  updateProjectMember,
 } from '../../services/projectWorkflowService';
+import { crmMessage } from '../../admin/crmUI';
 
 vi.mock('../../services/httpClient', () => ({
   apiJson: vi.fn(),
@@ -272,6 +274,9 @@ describe('ProjectHub navigation and filters', () => {
     await waitFor(() => expect(getProjectMembers).toHaveBeenCalledWith('active-1'));
     expect(screen.getAllByText('admin').some(node => node.tagName.toLowerCase() === 'div')).toBe(true);
     expect(screen.getAllByText('alice').some(node => node.tagName.toLowerCase() === 'div')).toBe(true);
+    expect(screen.getAllByRole('option', { name: '成员·member' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('option', { name: '管理·admin' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('option', { name: '只读·readonly' }).length).toBeGreaterThan(0);
 
     const memberInput = screen.getByPlaceholderText('例如 admin 或 user_xxx，可换行输入多个成员');
     expect(memberInput.tagName).toBe('TEXTAREA');
@@ -320,5 +325,55 @@ describe('ProjectHub navigation and filters', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: '关闭' }));
     expect(screen.queryByRole('dialog', { name: '编辑项目' })).not.toBeInTheDocument();
+  });
+
+  it('does not save or show success when the disabled owner role is clicked', async () => {
+    render(
+      <MemoryRouter>
+        <ProjectHub />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('树洞里的星辰');
+    fireEvent.click(screen.getByLabelText('树洞里的星辰 更多操作'));
+    fireEvent.click(screen.getByText('编辑项目'));
+
+    const dialog = await screen.findByRole('dialog', { name: '编辑项目' });
+    await waitFor(() => expect(getProjectMembers).toHaveBeenCalledWith('active-1'));
+    const ownerRole = within(dialog).getByDisplayValue('owner');
+    const ownerResponsibility = within(dialog).getByDisplayValue('all');
+
+    expect(ownerRole).toBeDisabled();
+    fireEvent.focus(ownerResponsibility);
+    fireEvent.click(ownerRole);
+    fireEvent.blur(ownerResponsibility);
+
+    expect(updateProjectMember).not.toHaveBeenCalled();
+    expect(crmMessage.success).not.toHaveBeenCalledWith('成员信息已更新');
+  });
+
+  it('still saves a responsibility after its value actually changes', async () => {
+    render(
+      <MemoryRouter>
+        <ProjectHub />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('树洞里的星辰');
+    fireEvent.click(screen.getByLabelText('树洞里的星辰 更多操作'));
+    fireEvent.click(screen.getByText('编辑项目'));
+
+    const dialog = await screen.findByRole('dialog', { name: '编辑项目' });
+    const responsibility = await within(dialog).findByDisplayValue('art');
+    fireEvent.focus(responsibility);
+    fireEvent.change(responsibility, { target: { value: 'script' } });
+    fireEvent.blur(responsibility);
+
+    await waitFor(() => {
+      expect(updateProjectMember).toHaveBeenCalledWith('active-1', 'user_2', {
+        responsibility: 'script',
+      });
+      expect(crmMessage.success).toHaveBeenCalledWith('成员信息已更新');
+    });
   });
 });

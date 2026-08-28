@@ -172,7 +172,7 @@ async def test_video_capabilities_expose_only_h3_processing_node_models(monkeypa
     assert h3["available"] is True
     assert h3["preferred_agent_id"] == "agent_gpu2"
     assert h3["preferred_node_id"] == "agent_gpu2"
-    assert h3["label"] == "一阶 · 节点标准模型"
+    assert h3["label"] == "MiniMax H3 · 节点标准模型"
 
 
 async def test_video_capabilities_hide_seedance_model_marked_error_in_health_cache(monkeypatch):
@@ -270,7 +270,7 @@ async def test_video_capabilities_expose_minimax_h3_on_unified_8188_runtime(monk
     h3_mini = next(model for model in result["models"] if model["key"] == "MiniMaxH3Mini")
     assert h3["available"] is True
     assert h3["provider"] == "processing_cluster"
-    assert h3["model_name"] == "MiniMax-H3 FL2VA"
+    assert h3["model_name"] == "MiniMax H3"
     assert h3["preferred_agent_id"] == "agent_gpu2"
     assert h3["preferred_node_id"] == "agent_gpu2"
     assert h3["preferred_comfyui_port"] == 8188

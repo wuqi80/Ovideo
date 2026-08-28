@@ -176,18 +176,18 @@ const UI = {
         // 模型选择
         const modelSelectHtml = `
             <select onchange="TaskManager.updateTaskModel(${index}, this.value); UI.refreshUI();" class="bg-slate-900 border border-slate-700 text-[10px] text-white rounded px-1 py-0.5 focus:outline-none focus:border-indigo-500 cursor-pointer hover:bg-slate-700">
-                <option value="Wan2" ${group.model === 'Wan2' ? 'selected' : ''}>练气</option>
-                <option value="一阶" ${group.model === '一阶' ? 'selected' : ''}>一阶</option>
-                <option value="二阶" ${group.model === '二阶' ? 'selected' : ''}>二阶</option>
-                <option value="三阶" ${group.model === '三阶' ? 'selected' : ''}>三阶</option>
-                <option value="四阶" ${group.model === '四阶' ? 'selected' : ''}>四阶</option>
-                <option value="五阶" ${group.model === '五阶' ? 'selected' : ''}>五阶</option>
-                <option value="六阶" ${group.model === '六阶' ? 'selected' : ''}>六阶</option>
-                <option value="七阶" ${group.model === '七阶' ? 'selected' : ''}>七阶</option>
-                <option value="Veo" ${group.model === 'Veo' ? 'selected' : ''}>筑基</option>
-                <option value="Sora2" ${group.model === 'Sora2' ? 'selected' : ''}>化神</option>
-                <option value="MINI" ${group.model === 'MINI' ? 'selected' : ''}>金丹</option>
-                <option value="大能" ${group.model === '大能' ? 'selected' : ''}>大能</option>
+                <option value="Wan2" ${group.model === 'Wan2' ? 'selected' : ''}>Wan2</option>
+                <option value="一阶" ${group.model === '一阶' ? 'selected' : ''}>Smooth</option>
+                <option value="二阶" ${group.model === '二阶' ? 'selected' : ''}>Dawasi</option>
+                <option value="三阶" ${group.model === '三阶' ? 'selected' : ''}>Hunyuan Video</option>
+                <option value="四阶" ${group.model === '四阶' ? 'selected' : ''}>LTX Video</option>
+                <option value="五阶" ${group.model === '五阶' ? 'selected' : ''}>Turbo 2.2</option>
+                <option value="六阶" ${group.model === '六阶' ? 'selected' : ''}>Turbo 2.1</option>
+                <option value="七阶" ${group.model === '七阶' ? 'selected' : ''}>SVD-WAN</option>
+                <option value="Veo" ${group.model === 'Veo' ? 'selected' : ''}>veo-3.1-landscape-fast-fl</option>
+                <option value="Sora2" ${group.model === 'Sora2' ? 'selected' : ''}>sora_video2-landscape-15s</option>
+                <option value="MINI" ${group.model === 'MINI' ? 'selected' : ''}>MiniMax-Hailuo-2.3</option>
+                <option value="大能" ${group.model === '大能' ? 'selected' : ''}>wan2.6-i2v</option>
             </select>
         `;
         
@@ -499,21 +499,21 @@ const UI = {
         }
     },
     
-    // 获取模型显示名称（修真境界化）
+    // Stable internal keys map to creator-facing model names.
     getModelDisplayName(model) {
         const modelNameMap = {
-            'Wan2': '练气',
-            '一阶': '一阶',
-            '二阶': '二阶',
-            '三阶': '三阶',
-            '四阶': '四阶',
-            '五阶': '五阶',
-            '六阶': '六阶',
-            '七阶': '七阶',
-            'Veo': '筑基',
-            'MINI': '金丹',
-            'Sora2': '化神',
-            '大能': '大能'
+            'Wan2': 'Wan2',
+            '一阶': 'Smooth',
+            '二阶': 'Dawasi',
+            '三阶': 'Hunyuan Video',
+            '四阶': 'LTX Video',
+            '五阶': 'Turbo 2.2',
+            '六阶': 'Turbo 2.1',
+            '七阶': 'SVD-WAN',
+            'Veo': 'veo-3.1-landscape-fast-fl',
+            'MINI': 'MiniMax-Hailuo-2.3',
+            'Sora2': 'sora_video2-landscape-15s',
+            '大能': 'wan2.6-i2v'
         };
         return modelNameMap[model] || model;
     },

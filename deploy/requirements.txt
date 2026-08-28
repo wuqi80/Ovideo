@@ -28,6 +28,8 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 PyJWT==2.8.0
 bcrypt==4.1.2
+alibabacloud-dysmsapi20170525==4.6.0
+cryptography>=42,<46
 
 # === AI / LLM ===
 openai>=1.35.0

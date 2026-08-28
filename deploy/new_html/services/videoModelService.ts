@@ -242,6 +242,7 @@ export function makeDefaultDashScopeParams(
   model: DashScopeVideoModel,
   prompt: string = '',
   seedMedia: SeedanceMediaInput[] = [],
+  aspectRatio: '16:9' | '9:16' = '16:9',
 ): DashScopeVideoParams {
   const base: DashScopeVideoParams = {
     model,
@@ -257,7 +258,7 @@ export function makeDefaultDashScopeParams(
       ...base,
       sub_model_kling: 'standard',
       mode: 'std',
-      aspect_ratio: '16:9',
+      aspect_ratio: aspectRatio,
       audio: false,
       kling_multi_shot: false,
       kling_shot_type: 'intelligence',
@@ -274,7 +275,7 @@ export function makeDefaultDashScopeParams(
       resolution: '720P',
       audio: false,
       vidu_resolution: '720P',
-      vidu_size: '1280*720',
+      vidu_size: aspectRatio === '9:16' ? '720*1280' : '1280*720',
       vidu_audio: false,
     };
   }
@@ -282,9 +283,9 @@ export function makeDefaultDashScopeParams(
   return {
     ...base,
     resolution: '720P',
-    ratio: '16:9',
+    ratio: aspectRatio,
     hh_resolution: '1080P',
-    hh_ratio: '16:9',
+    hh_ratio: aspectRatio,
     hh_duration: 5,
     hh_watermark: true,
   };
@@ -325,20 +326,20 @@ export function getModelDisplayName(model: VideoModel): string {
     '五阶': '历史视频模型',
     '六阶': '历史视频模型',
     '七阶': '历史视频模型',
-    MiniMaxH3: '一阶 · 节点标准模型',
-    MiniMaxH3Fast: '二阶 · 节点快速模型',
-    MiniMaxH3Mini: '三阶 · 节点简化模型',
-    Veo: '八阶 · 高质量快速视频模型',
-    MINI: '七阶 · 首尾帧标准视频模型',
-    Sora2: '九阶 · 长镜头视频模型',
-    '大能': '十阶 · 镜头叙事视频模型',
-    Seedance15: 'Seedance 1.5',
-    Seedance2: '四阶 · 多模态标准视频模型',
-    Seedance2Fast: '五阶 · 多模态快速视频模型',
-    Seedance2Mini: '六阶 · 多模态简化视频模型',
-    Kling: '十一阶 · 全能音画视频模型',
-    Vidu: '十二阶 · 多参考视频模型',
-    HappyHorse: '十三阶 · 角色一致性视频模型',
+    MiniMaxH3: 'MiniMax H3 · 节点标准模型',
+    MiniMaxH3Fast: 'MiniMax H3 Fast · 节点快速模型',
+    MiniMaxH3Mini: 'MiniMax H3 Mini · 节点简化模型',
+    Veo: 'veo-3.1-landscape-fast-fl · 高质量快速视频模型',
+    MINI: 'MiniMax-Hailuo-2.3 · 首尾帧标准视频模型',
+    Sora2: 'sora_video2-landscape-15s · 长镜头视频模型',
+    '大能': 'wan2.6-i2v · 镜头叙事视频模型',
+    Seedance15: 'doubao-seedance-1.5-pro · 首尾帧视频模型',
+    Seedance2: 'doubao-seedance-2-0-260128 · 多模态标准视频模型',
+    Seedance2Fast: 'doubao-seedance-2-0-fast-260128 · 多模态快速视频模型',
+    Seedance2Mini: 'doubao-seedance-2-0-mini-260615 · 多模态简化视频模型',
+    Kling: 'kling/kling-v3-video-generation · 全能音画视频模型',
+    Vidu: 'vidu/viduq3_reference2video · 多参考视频模型',
+    HappyHorse: 'happyhorse-1.0-r2v · 角色一致性视频模型',
   };
   return modelNameMap[model] || model;
 }
@@ -465,12 +466,27 @@ export function formatVideoModelRuntimeLabel(capability?: VideoCapabilityModelLi
 
 export function formatVideoModelOptionLabel(
   model: VideoModel,
-  _capability?: VideoCapabilityModelLike | null,
+  capability?: VideoCapabilityModelLike | null,
 ): string {
-  // Runtime provider/model names stay in the capability object for dispatch,
-  // diagnostics and billing. The creator-facing selector only exposes the
-  // stable product tier name, matching the script model catalogue.
-  return getModelDisplayName(model);
+  const suffixes: Partial<Record<VideoModel, string>> = {
+    MiniMaxH3: '节点标准模型',
+    MiniMaxH3Fast: '节点快速模型',
+    MiniMaxH3Mini: '节点简化模型',
+    Veo: '高质量快速视频模型',
+    MINI: '首尾帧标准视频模型',
+    Sora2: '长镜头视频模型',
+    '大能': '镜头叙事视频模型',
+    Seedance15: '首尾帧视频模型',
+    Seedance2: '多模态标准视频模型',
+    Seedance2Fast: '多模态快速视频模型',
+    Seedance2Mini: '多模态简化视频模型',
+    Kling: '全能音画视频模型',
+    Vidu: '多参考视频模型',
+    HappyHorse: '角色一致性视频模型',
+  };
+  const runtime = formatVideoModelRuntimeLabel(capability);
+  const suffix = suffixes[model];
+  return runtime && suffix ? `${runtime} · ${suffix}` : getModelDisplayName(model);
 }
 
 export function buildVideoModelOptions(

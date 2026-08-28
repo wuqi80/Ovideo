@@ -11,9 +11,15 @@ import { ChevronDown, Sparkles } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
 import AppSidebar from '../components/AppSidebar';
 import { saveCreateIdeaSeed } from '../utils/createIdeaSeed';
+import {
+  aspectRatioForOrientation,
+  orientationLabel,
+  projectCreationSettings,
+  type ProjectOrientation,
+} from '../utils/projectCreationPreferences';
 
-const GENRES = ['悬疑', '爱情', '科幻', '喜剧', '温情', '恐怖'];
-const DURATIONS = ['30s', '60s 竖屏', '90s', '180s'];
+const GENRES = ['悬疑', '爱情', '科幻', '喜剧', '温情', '恐怖', '校园'];
+const DURATIONS = [30, 60, 90, 180];
 const EXAMPLES = [
   '深夜便利店的收银员发现，每晚午夜都有一个从不离开的顾客。',
   '外卖骑手接到一单，送餐地址是三年前已经拆掉的老房子。',
@@ -34,12 +40,16 @@ const chipClass = (active: boolean) =>
 export const CreatePage: React.FC = () => {
   const navigate = useNavigate();
   const [sentence, setSentence] = useState('');
-  const [genre, setGenre] = useState('悬疑');
-  const [duration, setDuration] = useState('60s 竖屏');
+  const [genrePreset, setGenrePreset] = useState('悬疑');
+  const [customGenre, setCustomGenre] = useState('');
+  const [durationSeconds, setDurationSeconds] = useState(60);
+  const [orientation, setOrientation] = useState<ProjectOrientation>('portrait');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const canGenerate = !!sentence.trim() && !busy;
+  const genre = genrePreset === '自定义' ? customGenre.trim() : genrePreset;
+  const aspectRatio = aspectRatioForOrientation(orientation);
+  const canGenerate = !!sentence.trim() && !!genre && !busy;
 
   const generate = async () => {
     const idea = sentence.trim();
@@ -52,9 +62,15 @@ export const CreatePage: React.FC = () => {
         method: 'POST',
         body: JSON.stringify({
           project_name: projectName,
-          description: `一句话创意：${idea}（题材：${genre} · 时长：${duration}）`,
+          description: `一句话创意：${idea}（题材：${genre} · 时长：${durationSeconds}秒 · 画面：${orientationLabel(orientation)} ${aspectRatio}）`,
           visibility: 'private',
           member_usernames: [],
+          settings: projectCreationSettings({
+            genre,
+            durationSeconds,
+            orientation,
+            aspectRatio,
+          }),
         }),
       }, '创建项目');
       const newProjectId = created?.project?.project_id;
@@ -74,7 +90,9 @@ export const CreatePage: React.FC = () => {
       saveCreateIdeaSeed(sessionStorage, {
         sentence: idea,
         genre,
-        duration,
+        durationSeconds,
+        orientation,
+        aspectRatio,
         projectId: newProjectId,
         episodeId: newEpisodeId,
       });
@@ -119,23 +137,41 @@ export const CreatePage: React.FC = () => {
               <details className="group min-w-0 flex-1">
                 <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-lg px-1 py-1 text-[12.5px] text-n300 hover:text-primary">
                   <ChevronDown size={14} className="transition-transform group-open:rotate-180" />
-                  可选：调整故事类型和成片时长
-                  <span className="text-n100">（{genre} · {duration}）</span>
+                  可选：调整故事类型、成片时长和画面方向
+                  <span className="text-n100">（{genre || '自定义'} · {durationSeconds}秒 · {orientationLabel(orientation)}）</span>
                 </summary>
                 <div className="mt-2 flex flex-col gap-2 rounded-xl bg-n20 p-3">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="mr-0.5 w-12 text-[11px] text-n100">故事类型</span>
-                    {GENRES.map(g => (
-                      <button key={g} type="button" onClick={() => setGenre(g)} className={chipClass(genre === g)}>
+                    {[...GENRES, '自定义'].map(g => (
+                      <button key={g} type="button" onClick={() => setGenrePreset(g)} className={chipClass(genrePreset === g)}>
                         {g}
                       </button>
                     ))}
+                    {genrePreset === '自定义' && (
+                      <input
+                        aria-label="自定义故事类型"
+                        value={customGenre}
+                        onChange={event => setCustomGenre(event.target.value)}
+                        maxLength={20}
+                        placeholder="输入故事类型"
+                        className="min-w-[140px] flex-1 rounded-lg border border-n40 bg-n0 px-3 py-1.5 text-[12.5px] text-n700 outline-none placeholder:text-n100 focus:border-b300"
+                      />
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="mr-0.5 w-12 text-[11px] text-n100">成片时长</span>
                     {DURATIONS.map(d => (
-                      <button key={d} type="button" onClick={() => setDuration(d)} className={chipClass(duration === d)}>
-                        {d}
+                      <button key={d} type="button" onClick={() => setDurationSeconds(d)} className={chipClass(durationSeconds === d)}>
+                        {d}秒
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="mr-0.5 w-12 text-[11px] text-n100">画面方向</span>
+                    {(['landscape', 'portrait'] as ProjectOrientation[]).map(value => (
+                      <button key={value} type="button" onClick={() => setOrientation(value)} className={chipClass(orientation === value)}>
+                        {orientationLabel(value)} · {aspectRatioForOrientation(value)}
                       </button>
                     ))}
                   </div>

@@ -861,7 +861,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 <HardDrive className="w-4 h-4" />
                 集群节点监控
               </button>
-              {/* 2026-05-26 Slices 2/4/5 新增能力：账号 / 分组 / 积分 / 素材 / 审计 */}
+              {/* 2026-05-26 Slices 2/4/5 新增能力：账号 / 分组 / 创作点数 / 素材 / 审计 */}
               <button
                 onClick={() => setActiveTab("features")}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
@@ -886,7 +886,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 {activeTab === "stats" && "生成数据与趋势分析"}
                 {activeTab === "results" && "全局生成结果审计"}
                 {activeTab === "system" && "集群节点状态监控"}
-                {activeTab === "features" && "新功能管理（账号 / 分组 / 积分 / 素材 / 审计）"}
+                {activeTab === "features" && "新功能管理（账号 / 分组 / 创作点数 / 素材 / 审计）"}
               </h3>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2 text-xs text-n300 bg-n0 px-3 py-1.5 rounded-full border border-n40">

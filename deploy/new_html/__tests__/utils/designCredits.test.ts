@@ -3,6 +3,7 @@ import {
   DESIGN_CREDIT_DEFAULTS,
   DESIGN_CREDIT_FEATURES,
   designImageCreditParams,
+  designImageFallbackCost,
   designOperationCreditParams,
   designPromptRefinementCreditParams,
   designPromptRefinementFallbackCost,
@@ -19,13 +20,23 @@ describe('designCredits', () => {
       upscaleHd: 'design_upscale_hd',
     });
     expect(DESIGN_CREDIT_DEFAULTS).toEqual({
-      imageGenerationPerImage: 40,
+      imageGenerationPerImage: 8,
       onlineImageOperation: 60,
       promptRefinement: 1,
       angleAdjustment: 5,
       multiAngleGeneration: 60,
       upscaleHd: 5,
     });
+  });
+
+  it('uses the public model-tier and resolution point matrix for fallback quotes', () => {
+    expect(designImageFallbackCost('image_tier_1', '1K', 1)).toBe(8);
+    expect(designImageFallbackCost('image_tier_2', '1K', 1)).toBe(12);
+    expect(designImageFallbackCost('image_tier_2', '2K', 1)).toBe(18);
+    expect(designImageFallbackCost('image_tier_2', '4K', 2)).toBe(52);
+    expect(designImageFallbackCost('image_tier_3', '1K', 1)).toBe(5);
+    expect(designImageFallbackCost('image_tier_3', '2K', 1)).toBe(10);
+    expect(designImageFallbackCost('image_tier_3', '4K', 1)).toBe(15);
   });
 
   it('keeps prompt refinement within four credits across public writing tiers', () => {

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEpisode } from '../contexts/EpisodeContext';
+import { useProject } from '../contexts/ProjectContext';
 import { ArrowRight, Film, Loader, Image as ImageIcon, Upload, RefreshCw } from 'lucide-react';
 import type { SeedanceParams, ShotType, VideoModel } from '../services/videoModelService';
 import type { TaskGroup, UploadedImage } from '../services/videoTaskTypes';
@@ -24,6 +25,7 @@ import { secureApiUrl } from '../services/httpClient';
 import { runWhenIdle } from '../utils/idleScheduler';
 import { buildStoryboardVideoPrompt } from '../utils/storyboardVideoPrompt';
 import { buildVideoStoryboardShotLookup } from '../utils/videoTaskMerge';
+import { projectDefaultAspectRatio } from '../utils/projectCreationPreferences';
 
 const VIDEO_INITIAL_STORYBOARD_COUNT = 10;
 const VideoPage = React.lazy(() => import('../components/VideoPage').then(m => ({ default: m.VideoPage })));
@@ -97,6 +99,8 @@ function isPrimaryStoryboardImageMedia(media: any): boolean {
 
 export const VideoGenPage: React.FC = () => {
   const navigate = useNavigate();
+  const { project } = useProject();
+  const projectAspectRatio = projectDefaultAspectRatio(project?.settings, '16:9');
   const {
     episodeId,
     projectId,
@@ -724,6 +728,7 @@ export const VideoGenPage: React.FC = () => {
             projectId={projectId || ''}
             episodeId={episodeId || ''}
             storyboardItems={allStoryboardItems}
+            defaultAspectRatio={projectAspectRatio}
             onRequestReimport={handleImportAll}
             key={`${sessionScope}-${importDone}-${syncNonce}`}
           /> : <WorkflowChunkFallback label="合并本集视频工作区..." />}

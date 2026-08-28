@@ -203,6 +203,8 @@ interface VideoPageProps {
     storyboardItems?: any[];
     /** Task 6：full_reset 后回到上层重新触发 handleImportAll。 */
     onRequestReimport?: () => void | Promise<void>;
+    /** 新卡片默认跟随项目创建时选择的画面方向；卡片内仍允许单独覆盖。 */
+    defaultAspectRatio?: '16:9' | '9:16';
 }
 
 // 2026-05-25 (Task B2)：手工在 storyboard 卡片之间插入空卡的小按钮。
@@ -306,6 +308,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     episodeId,
     storyboardItems = [],
     onRequestReimport,
+    defaultAspectRatio = '16:9',
 }) => {
     // 状态管理
     const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -752,7 +755,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 : legacyPrompt,
             media_inputs: seedMedia,
             resolution: '720p',
-            ratio: 'adaptive',
+            ratio: defaultAspectRatio,
             duration: dur,
             seed: -1,
             watermark: false,
@@ -760,7 +763,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             camera_fixed: false,
         };
         return group ? applyPreferredReferenceAudio(group, nextParams) : nextParams;
-    }, [seedanceParamsByUuid, taskGroups, uploadedImages, imagePrompts, storyboardMetaByItemId, applyPreferredReferenceAudio, getStoryboardPromptSourcesForGroup, resolveSeedanceDurationForGroup, syncSeedanceDuration]);
+    }, [seedanceParamsByUuid, taskGroups, uploadedImages, imagePrompts, storyboardMetaByItemId, applyPreferredReferenceAudio, defaultAspectRatio, getStoryboardPromptSourcesForGroup, resolveSeedanceDurationForGroup, syncSeedanceDuration]);
 
     const setSeedanceParams = useCallback((uuid: string, next: SeedanceParams) => {
         const group = taskGroups.find(g => g.uuid === uuid);
@@ -835,8 +838,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         }
 
         const seedPrompt = getEffectiveGroupPrompt(group);
-        return makeDefaultDashScopeParams(model, seedPrompt, seedMedia);
-    }, [dashScopeParamsByUuid, taskGroups, uploadedImages, getEffectiveGroupPrompt, getStoryboardPromptSourcesForGroup]);
+        return makeDefaultDashScopeParams(model, seedPrompt, seedMedia, defaultAspectRatio);
+    }, [dashScopeParamsByUuid, taskGroups, uploadedImages, defaultAspectRatio, getEffectiveGroupPrompt, getStoryboardPromptSourcesForGroup]);
 
     const setDashScopeParams = useCallback((uuid: string, next: DashScopeVideoParams) => {
         setDashScopeParamsByUuid(prev => ({ ...prev, [uuid]: next }));

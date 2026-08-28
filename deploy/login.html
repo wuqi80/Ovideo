@@ -441,6 +441,8 @@
         }
 
         .input-group input[type="text"],
+        .input-group input[type="tel"],
+        .input-group input[type="email"],
         .input-group input[type="password"] {
             width: 100%;
             height: 48px;
@@ -600,6 +602,91 @@
             .login-panel {
                 min-height: 100vh;
             }
+        }
+
+        .auth-tabs {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 4px;
+            padding: 4px;
+            margin: 0 0 28px;
+            border-radius: 11px;
+            background: #F3F2FA;
+        }
+
+        .auth-tab {
+            height: 36px;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--n300);
+            font: inherit;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .auth-tab.active {
+            background: var(--n0);
+            color: var(--primary);
+            font-weight: 600;
+            box-shadow: 0 1px 6px rgba(20, 20, 25, 0.08);
+        }
+
+        .code-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 124px;
+            gap: 10px;
+        }
+
+        .code-button {
+            height: 48px;
+            border: 1px solid rgba(91,73,240,0.3);
+            border-radius: 9px;
+            background: #F8F7FF;
+            color: var(--primary);
+            font: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .code-button:disabled {
+            cursor: not-allowed;
+            color: var(--n200);
+            border-color: var(--n40);
+            background: #F6F7FA;
+        }
+
+        .auth-footer {
+            margin-top: 20px;
+            color: var(--n300);
+            text-align: center;
+            font-size: 13px;
+        }
+
+        .auth-footer button,
+        .text-button {
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: var(--primary);
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .field-hint {
+            margin: -16px 0 0;
+            color: var(--n200);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .success {
+            margin-top: 16px;
+            min-height: 18px;
+            color: #19A966;
+            text-align: center;
+            font-size: 14px;
         }
 
         @media (min-width: 993px) and (max-width: 1240px) {
@@ -774,35 +861,19 @@
                     <img class="brand-lockup" src="/static/branding/chuangju-logo-on-light.svg?v=20260824-chuangju-v1" alt="创剧" />
                 </div>
 
-                <h2>欢迎回来</h2>
-                <p class="subtitle">登录后继续完成你的故事</p>
+                <h2 id="authTitle">欢迎回来</h2>
+                <p id="authSubtitle" class="subtitle">登录后继续完成你的故事</p>
 
-                <form onsubmit="handleLogin(event)">
-                    <div class="input-group">
-                        <input id="username" type="text" autocomplete="username" placeholder=" " required>
-                        <label for="username">账号 / Email</label>
-                    </div>
+                <div id="authTabs" class="auth-tabs">
+                    <button type="button" class="auth-tab active" data-method="password">密码登录</button>
+                    <button type="button" class="auth-tab" data-method="sms_code">验证码登录</button>
+                </div>
 
-                    <div class="input-group">
-                        <input id="password" type="password" autocomplete="current-password" placeholder=" " required>
-                        <label for="password">密码</label>
-                    </div>
+                <form id="authForm" onsubmit="handleSubmit(event)"></form>
 
-                    <div class="form-row">
-                        <label class="remember">
-                            <input type="checkbox">
-                            <span>记住我</span>
-                        </label>
-                        <a href="#" class="link">忘记密码?</a>
-                    </div>
-
-                    <button id="loginBtn" type="submit" class="login-button">
-                        <span>进入创剧</span>
-                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                    </button>
-                </form>
-
-                <div id="errorMessage" class="error hidden"></div>
+                <div id="errorMessage" class="error hidden" role="alert"></div>
+                <div id="successMessage" class="success hidden" role="status"></div>
+                <div id="authFooter" class="auth-footer"></div>
             </div>
         </section>
     </main>
@@ -811,72 +882,220 @@
         const TOKEN_KEY = 'auth_token';
         const USERNAME_KEY = 'username';
         const USER_ID_KEY = 'user_id';
-        const defaultButtonContent = document.getElementById('loginBtn').innerHTML;
+        const BINDING_TOKEN_KEY = 'legacy_phone_binding_token';
+        const authForm = document.getElementById('authForm');
+        const authTabs = document.getElementById('authTabs');
+        const authTitle = document.getElementById('authTitle');
+        const authSubtitle = document.getElementById('authSubtitle');
+        const authFooter = document.getElementById('authFooter');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const state = {
+            view: location.pathname === '/register' ? 'register'
+                : location.pathname === '/legacy-login' ? 'legacy'
+                : location.pathname === '/bind-phone' ? 'bind'
+                : location.pathname === '/password-reset' ? 'reset'
+                : 'login',
+            method: 'password',
+            countdown: 0,
+            timer: null,
+        };
 
-        if (localStorage.getItem(TOKEN_KEY)) {
-            window.location.href = '/projects';
+        if (localStorage.getItem(TOKEN_KEY)) window.location.href = '/projects';
+
+        function input(id, type, label, autocomplete, required = true) {
+            return `<div class="input-group"><input id="${id}" type="${type}" autocomplete="${autocomplete}" placeholder=" " ${required ? 'required' : ''}><label for="${id}">${label}</label></div>`;
         }
 
-        async function login(username, password) {
-            const response = await fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
-
-            let payload = null;
-            try {
-                payload = await response.json();
-            } catch (error) {
-                payload = null;
-            }
-
-            if (!response.ok) {
-                const message = payload && (payload.detail || payload.error);
-                throw new Error(message || '\u767b\u5f55\u5931\u8d25');
-            }
-
-            if (payload && payload.token) {
-                localStorage.setItem(TOKEN_KEY, payload.token);
-                localStorage.setItem(USERNAME_KEY, payload.username || username);
-                localStorage.setItem(USER_ID_KEY, payload.user_id || payload.username || username);
-            }
-
-            return payload || {};
+        function codeInput() {
+            return `<div class="code-row">${input('code', 'text', '6 位验证码', 'one-time-code')}<button id="sendCodeBtn" class="code-button" type="button" onclick="sendCode()">获取验证码</button></div>`;
         }
 
-        async function handleLogin(event) {
-            if (event) event.preventDefault();
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value.trim();
-            const loginBtn = document.getElementById('loginBtn');
-            const errorMsg = document.getElementById('errorMessage');
+        function submitButton(label) {
+            return `<button id="loginBtn" type="submit" class="login-button"><span>${label}</span><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></button>`;
+        }
 
-            if (!username || !password) {
-                errorMsg.textContent = '\u8bf7\u8f93\u5165\u7528\u6237\u540d\u548c\u5bc6\u7801';
-                errorMsg.classList.remove('hidden');
+        function footerButton(label, view) {
+            return `<button type="button" onclick="setView('${view}')">${label}</button>`;
+        }
+
+        function render() {
+            clearMessage();
+            authTabs.classList.toggle('hidden', state.view !== 'login');
+            authTabs.querySelectorAll('.auth-tab').forEach(button => button.classList.toggle('active', button.dataset.method === state.method));
+            if (state.view === 'login') {
+                authTitle.textContent = '欢迎回来';
+                authSubtitle.textContent = '使用手机号继续完成你的故事';
+                authForm.innerHTML = input('phone', 'tel', '手机号', 'tel')
+                    + (state.method === 'password' ? input('password', 'password', '密码', 'current-password') : codeInput())
+                    + `<div class="form-row"><span></span>${footerButton('忘记密码？', 'reset')}</div>`
+                    + submitButton('进入创剧');
+                authFooter.innerHTML = `还没有账号？ ${footerButton('创建账号', 'register')}<br><br>${footerButton('旧账号登录', 'legacy')}`;
+            } else if (state.view === 'register') {
+                authTitle.textContent = '创建账号';
+                authSubtitle.textContent = '手机号是登录身份，邮箱可以稍后绑定';
+                authForm.innerHTML = input('phone', 'tel', '手机号', 'tel') + codeInput()
+                    + input('password', 'password', '密码（至少 8 位）', 'new-password')
+                    + input('confirmPassword', 'password', '确认密码', 'new-password')
+                    + input('email', 'email', '邮箱（选填）', 'email', false)
+                    + `<p class="field-hint">填写邮箱后将发送验证邮件；未验证前不会接收系统通知。</p>`
+                    + submitButton('创建账号');
+                authFooter.innerHTML = `已有账号？ ${footerButton('登录', 'login')}`;
+            } else if (state.view === 'legacy') {
+                authTitle.textContent = '旧账号登录';
+                authSubtitle.textContent = '登录后需先绑定手机号，再进入创剧';
+                authForm.innerHTML = input('username', 'text', '原账号', 'username')
+                    + input('password', 'password', '密码', 'current-password')
+                    + submitButton('验证旧账号');
+                authFooter.innerHTML = footerButton('返回手机号登录', 'login');
+            } else if (state.view === 'bind') {
+                authTitle.textContent = '绑定手机号';
+                authSubtitle.textContent = '为了账号安全，请先完成手机号验证';
+                authForm.innerHTML = input('phone', 'tel', '手机号', 'tel') + codeInput() + submitButton('绑定并进入创剧');
+                authFooter.innerHTML = footerButton('重新登录旧账号', 'legacy');
+            } else {
+                authTitle.textContent = '重置密码';
+                authSubtitle.textContent = '验证注册手机号后设置新密码';
+                authForm.innerHTML = input('phone', 'tel', '手机号', 'tel') + codeInput()
+                    + input('password', 'password', '新密码（至少 8 位）', 'new-password')
+                    + input('confirmPassword', 'password', '确认新密码', 'new-password')
+                    + submitButton('重置并登录');
+                authFooter.innerHTML = footerButton('返回登录', 'login');
+            }
+            updateCodeButton();
+        }
+
+        function setView(view) {
+            state.view = view;
+            if (view !== 'login') state.method = 'password';
+            history.replaceState(null, '', view === 'login' ? '/login' : `/${view === 'legacy' ? 'legacy-login' : view === 'bind' ? 'bind-phone' : view === 'reset' ? 'password-reset' : 'register'}`);
+            render();
+        }
+
+        authTabs.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-method]');
+            if (!button) return;
+            state.method = button.dataset.method;
+            render();
+        });
+
+        function field(id) {
+            return (document.getElementById(id)?.value || '').trim();
+        }
+
+        function clearMessage() {
+            errorMessage.classList.add('hidden');
+            successMessage.classList.add('hidden');
+        }
+
+        function showError(message) {
+            successMessage.classList.add('hidden');
+            errorMessage.textContent = message;
+            errorMessage.classList.remove('hidden');
+        }
+
+        function showSuccess(message) {
+            errorMessage.classList.add('hidden');
+            successMessage.textContent = message;
+            successMessage.classList.remove('hidden');
+        }
+
+        async function api(url, body) {
+            const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            let payload = {};
+            try { payload = await response.json(); } catch (_) { payload = {}; }
+            if (!response.ok) throw new Error(payload.detail || payload.error || '请求失败，请稍后重试');
+            return payload;
+        }
+
+        function saveSession(payload) {
+            if (!payload?.token) throw new Error('登录响应缺少会话凭证');
+            localStorage.setItem(TOKEN_KEY, payload.token);
+            localStorage.setItem(USERNAME_KEY, payload.username || payload.user_id);
+            localStorage.setItem(USER_ID_KEY, payload.user_id);
+            sessionStorage.removeItem(BINDING_TOKEN_KEY);
+        }
+
+        async function sendCode() {
+            clearMessage();
+            const phone = field('phone');
+            if (!/^((\+?86)|0086)?1[3-9]\d{9}$/.test(phone.replace(/[\s-]/g, ''))) {
+                showError('请输入正确的中国大陆手机号');
                 return;
             }
-
-            errorMsg.classList.add('hidden');
-            loginBtn.disabled = true;
-            loginBtn.innerHTML = '<span>\u767b\u5f55\u4e2d...</span><span class="loader" aria-hidden="true"></span>';
-
+            const purpose = state.view === 'register' ? 'register' : state.view === 'bind' ? 'bind_phone' : state.view === 'reset' ? 'password_reset' : 'login';
+            const body = { phone, purpose };
+            if (purpose === 'bind_phone') body.binding_token = sessionStorage.getItem(BINDING_TOKEN_KEY) || '';
             try {
-                const result = await login(username, password);
-                if (result.success || result.token) {
-                    window.location.href = '/projects';
-                } else {
-                    throw new Error(result.error || '\u767b\u5f55\u5931\u8d25');
-                }
+                const result = await api('/api/auth/sms-code', body);
+                state.countdown = Number(result.resend_in || 60);
+                startCountdown();
+                showSuccess(result.development_code ? `开发模式验证码：${result.development_code}` : '验证码已发送，请注意查收');
             } catch (error) {
-                console.error('\u767b\u5f55\u5931\u8d25:', error);
-                errorMsg.textContent = error.message || '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7528\u6237\u540d\u548c\u5bc6\u7801';
-                errorMsg.classList.remove('hidden');
-                loginBtn.disabled = false;
-                loginBtn.innerHTML = defaultButtonContent;
+                showError(error.message);
             }
         }
+
+        function startCountdown() {
+            if (state.timer) clearInterval(state.timer);
+            updateCodeButton();
+            state.timer = setInterval(() => {
+                state.countdown -= 1;
+                updateCodeButton();
+                if (state.countdown <= 0) clearInterval(state.timer);
+            }, 1000);
+        }
+
+        function updateCodeButton() {
+            const button = document.getElementById('sendCodeBtn');
+            if (!button) return;
+            button.disabled = state.countdown > 0;
+            button.textContent = state.countdown > 0 ? `${state.countdown} 秒后重发` : '获取验证码';
+        }
+
+        async function handleSubmit(event) {
+            event.preventDefault();
+            clearMessage();
+            const button = document.getElementById('loginBtn');
+            const original = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<span>处理中...</span><span class="loader" aria-hidden="true"></span>';
+            try {
+                let result;
+                if (state.view === 'login') {
+                    result = await api('/api/auth/phone/login', {
+                        phone: field('phone'), method: state.method,
+                        password: state.method === 'password' ? field('password') : undefined,
+                        code: state.method === 'sms_code' ? field('code') : undefined,
+                    });
+                } else if (state.view === 'register') {
+                    if (field('password') !== field('confirmPassword')) throw new Error('两次输入的密码不一致');
+                    result = await api('/api/auth/phone/register', { phone: field('phone'), code: field('code'), password: field('password'), email: field('email') || null });
+                } else if (state.view === 'legacy') {
+                    result = await api('/api/login', { username: field('username'), password: field('password') });
+                    if (result.requires_phone_binding && result.binding_token) {
+                        sessionStorage.setItem(BINDING_TOKEN_KEY, result.binding_token);
+                        setView('bind');
+                        showSuccess('旧账号验证成功，请绑定手机号');
+                        return;
+                    }
+                } else if (state.view === 'bind') {
+                    result = await api('/api/auth/legacy/bind-phone', { binding_token: sessionStorage.getItem(BINDING_TOKEN_KEY) || '', phone: field('phone'), code: field('code') });
+                } else {
+                    if (field('password') !== field('confirmPassword')) throw new Error('两次输入的密码不一致');
+                    result = await api('/api/auth/phone/password-reset', { phone: field('phone'), code: field('code'), new_password: field('password') });
+                }
+                saveSession(result);
+                window.location.href = '/projects';
+            } catch (error) {
+                showError(error.message || '操作失败，请稍后重试');
+                button.disabled = false;
+                button.innerHTML = original;
+            }
+        }
+
+        if (state.view === 'bind' && !sessionStorage.getItem(BINDING_TOKEN_KEY)) state.view = 'legacy';
+        render();
     </script>
 </body>
 </html>

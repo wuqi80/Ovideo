@@ -147,7 +147,7 @@ async def test_get_profile_summary_uses_canonical_user_scope():
 
 
 @pytest.mark.asyncio
-async def test_update_profile_validates_unique_username_and_phone_code():
+async def test_update_profile_validates_unique_username_and_keeps_phone_identity_immutable():
     with pytest.raises(svc.UsernameAlreadyExists):
         await svc.update_profile(
             "user_1",
@@ -157,18 +157,27 @@ async def test_update_profile_validates_unique_username_and_phone_code():
             user_dao=_UserDAO,
         )
 
+    with pytest.raises(svc.PhoneIdentityImmutable):
+        await svc.update_profile(
+            "user_1",
+            username=None,
+            phone_number="13800138000",
+            verification_code="888888",
+            user_dao=_UserDAO,
+        )
+
     result = await svc.update_profile(
         "user_1",
         username="new_name",
-        phone_number="13800138000",
-        verification_code=svc.PHONE_VERIFICATION_CODE,
+        phone_number=None,
+        verification_code=None,
         user_dao=_UserDAO,
     )
 
     assert result["success"] is True
     assert result["username_changed"] is True
     assert result["profile"]["username"] == "new_name"
-    assert result["profile"]["phone_verified"] is True
+    assert result["profile"]["phone_verified"] is False
     assert _UserDAO.updates[-1]["user_id"] == "user_1"
 
 

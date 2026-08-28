@@ -7,61 +7,62 @@ export interface StoryboardGenerationModelOption {
   hint: string;
   requiresCluster: boolean;
 }
-// Public names describe product capabilities while keeping stable operation IDs internal.
+// Creator-facing labels expose the actual model/version while stable operation
+// IDs remain internal so existing projects and queued tasks stay compatible.
 export const STORYBOARD_GENERATION_MODEL_OPTIONS: readonly StoryboardGenerationModelOption[] = [
   {
     value: 'nanobanana',
-    label: '一阶 · 快速生图模型',
-    shortLabel: '一阶 · 快速',
+    label: 'Gemini 3.1 Flash Image Preview · 快速生图模型',
+    shortLabel: 'Gemini 3.1 Flash · 快速',
     hint: '速度优先，适合快速预览和批量出图',
     requiresCluster: false,
   },
   {
     value: 'qwen',
-    label: '二阶 · 多参考图模型',
-    shortLabel: '二阶 · 多参考',
+    label: 'Qwen Image Edit 2509 · 多参考图模型',
+    shortLabel: 'Qwen Image Edit 2509 · 多参考',
     hint: '多参考图一致性优先，适合人物与场景组合',
     requiresCluster: true,
   },
   {
     value: 'qwen_lora',
-    label: '二阶 · 风格强化模型',
-    shortLabel: '二阶 · 风格',
+    label: 'Qwen Image Edit 2509 + Lightning LoRA · 风格强化模型',
+    shortLabel: 'Qwen 2509 + LoRA · 风格',
     hint: '风格表现优先，适合统一视觉风格',
     requiresCluster: true,
   },
   {
     value: 'kontext',
-    label: '三阶 · 高质量生图模型',
-    shortLabel: '三阶 · 高质量',
+    label: 'Kontext v2 · 高质量生图模型',
+    shortLabel: 'Kontext v2 · 高质量',
     hint: '质量优先，适合正式分镜画面',
     requiresCluster: true,
   },
   {
     value: 'qwenN',
-    label: '三阶 · 连贯编辑模型',
-    shortLabel: '三阶 · 连贯',
+    label: 'Qwen Image Edit 2509 · 连贯编辑模型',
+    shortLabel: 'Qwen Image Edit 2509 · 连贯',
     hint: '上下文连贯优先，适合基于单图延续画面',
     requiresCluster: true,
   },
   {
     value: 'qwenN_lora',
-    label: '三阶 · 风格增强模型',
-    shortLabel: '三阶 · 风格增强',
+    label: 'Qwen Image Edit 2509 + Lightning LoRA · 风格增强模型',
+    shortLabel: 'Qwen 2509 + LoRA · 风格增强',
     hint: '兼顾画面质量与风格一致性',
     requiresCluster: true,
   },
   {
     value: 'gpt_image_vip',
-    label: '四阶 · 高清生图模型',
-    shortLabel: '四阶 · 高清',
+    label: 'GPT Image 2 VIP · 高清生图模型',
+    shortLabel: 'GPT Image 2 VIP · 高清',
     hint: '高清输出优先，支持比例和分辨率设置',
     requiresCluster: false,
   },
   {
     value: 'gpt_image_official',
-    label: '四阶 · 全能生图模型',
-    shortLabel: '四阶 · 全能',
+    label: 'GPT Image 2 · 全能生图模型',
+    shortLabel: 'GPT Image 2 · 全能',
     hint: '综合能力优先，支持比例、分辨率和质量设置',
     requiresCluster: false,
   },

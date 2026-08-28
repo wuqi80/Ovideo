@@ -134,6 +134,6 @@ def test_studio_build_toolchain_is_pinned_for_the_production_host():
     )
     dev_dependencies = package["devDependencies"]
 
-    assert dev_dependencies["vite"] == "6.4.1"
+    assert dev_dependencies["vite"] == "6.4.3"
     assert dev_dependencies["vitest"] == "4.1.0"
-    assert dev_dependencies["rollup"] == "4.53.3"
+    assert dev_dependencies["rollup"] == "4.63.1"

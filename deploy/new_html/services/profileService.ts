@@ -6,6 +6,8 @@ export interface MyProfile {
   user_id: string;
   username: string;
   email?: string | null;
+  email_verified?: boolean;
+  email_verified_at?: string | null;
   avatar_url?: string | null;
   phone_number?: string | null;
   phone_verified: boolean;
@@ -18,6 +20,9 @@ export interface MyProfile {
 export interface ProfileCredits {
   account_id?: string | null;
   available_credits: number;
+  account_credits?: number;
+  gift_credits?: number;
+  gift_expires_at?: string | null;
   frozen_credits: number;
   total_used_credits: number;
 }
@@ -55,8 +60,20 @@ export interface MyProfileResponse {
 
 export interface ProfileUpdatePayload {
   username?: string;
-  phone_number?: string;
-  verification_code?: string;
+}
+
+export interface EmailNotificationPreferences {
+  task_success: boolean;
+  task_failure: boolean;
+  credit_alert: boolean;
+  sharing: boolean;
+}
+
+export interface EmailPreferencesResponse {
+  success: boolean;
+  email?: string | null;
+  email_verified: boolean;
+  preferences: EmailNotificationPreferences;
 }
 
 export interface ProfileUpdateResponse {
@@ -93,4 +110,31 @@ export async function changeMyPassword(payload: {
     method: 'POST',
     body: JSON.stringify(payload),
   }, 'changeMyPassword');
+}
+
+export async function sendMyEmailVerification(email: string): Promise<{ success: boolean; expires_in: number; resend_in: number }> {
+  return apiJson('/api/me/email/send-code', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  }, 'sendMyEmailVerification');
+}
+
+export async function verifyMyEmail(email: string, code: string): Promise<{ success: boolean; email: string; email_verified: boolean }> {
+  return apiJson('/api/me/email/verify', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
+  }, 'verifyMyEmail');
+}
+
+export async function getMyEmailPreferences(): Promise<EmailPreferencesResponse> {
+  return apiJson('/api/me/email-preferences', { method: 'GET' }, 'getMyEmailPreferences');
+}
+
+export async function updateMyEmailPreferences(
+  preferences: Partial<EmailNotificationPreferences>,
+): Promise<{ success: boolean; preferences: EmailNotificationPreferences }> {
+  return apiJson('/api/me/email-preferences', {
+    method: 'PUT',
+    body: JSON.stringify(preferences),
+  }, 'updateMyEmailPreferences');
 }

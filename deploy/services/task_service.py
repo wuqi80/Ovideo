@@ -171,7 +171,7 @@ class TaskService:
             user_id:   触发用户
             priority:  优先级（默认 2）
             prepare:   是否调用 _prepare_for_agent 构建工作流 JSON 和文件下载列表
-            task_id:   可选的预分配任务 ID；用于在入队前完成积分冻结等关联操作
+            task_id:   可选的预分配任务 ID；用于在入队前完成创作点数冻结等关联操作
         """
         task_id = task_id or allocate_task_id()
         from services.task_credit_billing_service import (
@@ -190,7 +190,7 @@ class TaskService:
                     user_id=user_id,
                 ))
             except InsufficientCreditsError as exc:
-                raise HTTPException(status_code=402, detail=f"积分不足：{exc}") from exc
+                raise HTTPException(status_code=402, detail=f"创作点数不足：{exc}") from exc
 
             if prepare:
                 await self._prepare_for_agent(task_type, task_data, user_id)
@@ -216,7 +216,7 @@ class TaskService:
                         reason="enqueue_failed",
                     )
                 except Exception as release_error:
-                    logger.error("释放未入队任务积分失败 %s: %s", task_id, release_error)
+                    logger.error("释放未入队任务创作点数失败 %s: %s", task_id, release_error)
             raise
 
         logger.info(f"✅ 任务已提交: {task_id} (type={task_type}, user={user_id})")

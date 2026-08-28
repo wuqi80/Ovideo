@@ -42,4 +42,10 @@ describe('makeDefaultDashScopeParams', () => {
         expect(k.duration).toBe(5);
         expect(k.aspect_ratio).toBe('16:9');
     });
+
+    it('项目为竖屏时把各视频厂商的初始比例统一为 9:16', () => {
+        expect(makeDefaultDashScopeParams('Kling', '', [], '9:16').aspect_ratio).toBe('9:16');
+        expect(makeDefaultDashScopeParams('Vidu', '', [], '9:16').vidu_size).toBe('720*1280');
+        expect(makeDefaultDashScopeParams('HappyHorse', '', [], '9:16').hh_ratio).toBe('9:16');
+    });
 });

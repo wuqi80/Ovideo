@@ -114,6 +114,8 @@ class DoubaoImageRequest(BaseModel):
     file_role: Optional[str] = Field(None)
     project_id: Optional[str] = Field(None)
     episode_id: Optional[str] = Field(None)
+    source_page: Optional[str] = Field(None)
+    source_item_id: Optional[str] = Field(None)
 
 
 class GeminiTextRequest(BaseModel):
@@ -161,14 +163,16 @@ class GeminiImageRequest(BaseModel):
     file_role: Optional[str] = Field(None)
     project_id: Optional[str] = Field(None)
     episode_id: Optional[str] = Field(None)
+    source_page: Optional[str] = Field(None)
+    source_item_id: Optional[str] = Field(None)
 
 
 class GptImageRequest(BaseModel):
     """2026-05-21：分镜页 GPT Image 2 系列统一入口。
     
     tier 决定路由 → 模型 + laozhang 令牌分组：
-    - "vip"      → gpt-image-2-vip   + GPT_IMAGE_API_KEY      （天劫一阶 / 默认分组）
-    - "official" → gpt-image-2       + SORA2_GPT_IMAGE_API_KEY（天劫二阶 / Sora2Official 分组）
+    - "vip"      → gpt-image-2-vip + GPT_IMAGE_API_KEY（默认分组）
+    - "official" → gpt-image-2 + SORA2_GPT_IMAGE_API_KEY（Sora2Official 分组）
     
     references 为空 → /v1/images/generations（文生图，JSON）
     references 非空 → /v1/images/edits      （图改图，multipart/form-data）
@@ -188,6 +192,8 @@ class GptImageRequest(BaseModel):
     file_role: Optional[str] = Field(None)
     project_id: Optional[str] = Field(None)
     episode_id: Optional[str] = Field(None)
+    source_page: Optional[str] = Field(None)
+    source_item_id: Optional[str] = Field(None)
 
 
 class ImageGenerationRequest(BaseModel):

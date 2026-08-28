@@ -174,7 +174,7 @@ def test_minimax_provider_catalog_exposes_domestic_and_international_channels():
     assert "text" in minimax["capabilities"]
     assert get_provider_model_binding_options("minimax")[-1] == {
         "operation": "minimax-m3",
-        "label": "练气 (MiniMax M3 文本)",
+        "label": "MiniMax M3 文本",
         "model_name": "MiniMax-M3",
     }
 
@@ -260,12 +260,12 @@ def test_gemini_image_binding_options_match_frontend_image_controls():
     assert options == [
         {
             "operation": "gemini-2.5-flash-image",
-            "label": "化神1阶（快速）",
+            "label": "Gemini 2.5 Flash Image",
             "model_name": "gemini-2.5-flash-image",
         },
         {
             "operation": "gemini-3-pro-image-preview",
-            "label": "化神2阶（高质量）",
+            "label": "Gemini 3.1 Flash Image Preview",
             "model_name": "gemini-3.1-flash-image-preview",
         },
     ]
@@ -297,7 +297,7 @@ def test_doubao_binding_label_matches_frontend_image_control():
     assert get_provider_model_binding_options("doubao") == [
         {
             "operation": "generate",
-            "label": "筑基境界",
+            "label": "Doubao Seedream 5.0 Lite",
             "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
         }
     ]

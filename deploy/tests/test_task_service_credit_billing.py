@@ -107,5 +107,5 @@ async def test_submit_maps_insufficient_credits_to_payment_required(monkeypatch)
         )
 
     assert exc_info.value.status_code == 402
-    assert "积分不足" in str(exc_info.value.detail)
+    assert "创作点数不足" in str(exc_info.value.detail)
     assert service.queue.tasks == []

@@ -179,7 +179,7 @@ async def test_get_active_tasks_enriches_context_from_task_data():
                     "user_id": user_id,
                     "status": "processing",
                     "task_type": "doubao_image",
-                    "task_data": '{"project_id": "proj_1", "episode_id": "ep_1", "source_page": "design", "source_item_id": "asset_1", "entity_type": "asset", "entity_id": "asset_1", "file_role": "reference_image", "display_name": "豆包图像生成", "category": "image"}',
+                    "task_data": '{"project_id": "proj_1", "episode_id": "ep_1", "source_page": "design", "source_item_id": "asset_1", "entity_type": "asset", "entity_id": "asset_1", "file_role": "reference_image", "display_name": "豆包图像生成", "category": "image", "provider": "doubao", "model": "doubao-seedream-5-0-250428"}',
                 }
             ]
 
@@ -198,6 +198,8 @@ async def test_get_active_tasks_enriches_context_from_task_data():
     assert task["file_role"] == "reference_image"
     assert task["display_name"] == "豆包图像生成"
     assert task["category"] == "image"
+    assert task["provider"] == "doubao"
+    assert task["model"] == "doubao-seedream-5-0-250428"
 
 
 async def test_get_active_tasks_hides_internal_notification_suppressed_text_tasks():

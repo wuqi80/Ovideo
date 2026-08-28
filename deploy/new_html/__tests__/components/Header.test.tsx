@@ -37,25 +37,25 @@ describe('Header model display and credit balance', () => {
     (getCreditBalance as any).mockResolvedValue({ available_credits: 1280 });
   });
 
-  it('shows public script model names without leaking runtime model names', () => {
+  it('shows public script model versions with capability suffixes', () => {
     render(<Header {...baseProps} aiModel={AiModel.Gemini} />);
-    expect(screen.getByText('四阶 · 全能写作模型')).toBeTruthy();
+    expect(screen.getByText('gemini-2.5-flash · 全能写作模型')).toBeTruthy();
 
     render(<Header {...baseProps} aiModel={AiModel.DeepseekChat} />);
-    expect(screen.getByText('二阶 · 快速写作模型')).toBeTruthy();
+    expect(screen.getByText('deepseek-v4-flash · 快速写作模型')).toBeTruthy();
 
     render(<Header {...baseProps} aiModel={AiModel.Deepseek} />);
-    expect(screen.getByText('三阶 · 推理写作模型')).toBeTruthy();
+    expect(screen.getByText('deepseek-v4-pro · 推理写作模型')).toBeTruthy();
   });
 
-  it('keeps public labels even when backend-resolved runtime metadata is supplied', () => {
+  it('keeps backend-resolved labels when runtime metadata is supplied', () => {
     render(
       <Header
         {...baseProps}
         aiModel={AiModel.DeepseekChat}
         modelOptions={[{
           value: AiModel.DeepseekChat,
-          label: '二阶 · 快速写作模型',
+          label: 'deepseek-v4-flash-admin · 快速写作模型',
           hint: '速度优先',
           operation: 'deepseek-chat',
           requestedProvider: 'deepseek',
@@ -66,8 +66,7 @@ describe('Header model display and credit balance', () => {
         }]}
       />,
     );
-    expect(screen.getByText('二阶 · 快速写作模型')).toBeTruthy();
-    expect(screen.queryByText(/deepseek-v4-flash-admin/)).toBeNull();
+    expect(screen.getByText('deepseek-v4-flash-admin · 快速写作模型')).toBeTruthy();
   });
 
   it('loads and renders the available credit balance', async () => {

@@ -1,18 +1,18 @@
 export const STUDIO_TEXT_MODEL_CONFIGURED = 'gemini-2.5-flash';
-export const STUDIO_TEXT_MODEL_LABEL = 'Gemini 文本 · 后台配置';
+export const STUDIO_TEXT_MODEL_LABEL = 'gemini-2.5-flash · 全能写作模型';
 
 export const STUDIO_IMAGE_MODEL_CONFIGURED = 'gemini-2.5-flash-image';
-export const STUDIO_IMAGE_MODEL_LABEL = 'Gemini 图像 · 后台配置';
-export const STUDIO_IMAGE_MODEL_SHORT_LABEL = 'Gemini 图像';
-export const STUDIO_IMAGE_MODEL_POSE_LABEL = 'Gemini 姿态 · 后台配置';
+export const STUDIO_IMAGE_MODEL_LABEL = 'Gemini 2.5 Flash Image · 快速生图模型';
+export const STUDIO_IMAGE_MODEL_SHORT_LABEL = 'Gemini 2.5 Flash Image';
+export const STUDIO_IMAGE_MODEL_POSE_LABEL = 'Gemini 2.5 Flash Image · 姿态生图模型';
 
 export const STUDIO_VIDEO_MODEL_STANDARD = 'standard';
 export const STUDIO_VIDEO_MODEL_FAST = 'fast';
-export const STUDIO_VIDEO_MODEL_STANDARD_LABEL = '飞升 · Seedance 标准';
-export const STUDIO_VIDEO_MODEL_FAST_LABEL = '渡劫 · Seedance 极速';
+export const STUDIO_VIDEO_MODEL_STANDARD_LABEL = 'doubao-seedance-2-0-260128 · 多模态标准视频模型';
+export const STUDIO_VIDEO_MODEL_FAST_LABEL = 'doubao-seedance-2-0-fast-260128 · 多模态快速视频模型';
 
 export const STUDIO_AUDIO_MODEL_SPEECH_HD = 'speech-hd';
-export const STUDIO_AUDIO_MODEL_LABEL = 'MiniMax 语音 · 后台配置';
+export const STUDIO_AUDIO_MODEL_LABEL = 'speech-2.8-hd · 高清语音模型';
 
 export const STUDIO_TEXT_MODEL_OPTIONS = [
   { l: STUDIO_TEXT_MODEL_LABEL, v: STUDIO_TEXT_MODEL_CONFIGURED },

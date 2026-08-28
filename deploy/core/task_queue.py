@@ -266,7 +266,7 @@ class TaskQueue:
             except Exception as billing_error:
                 # The amount remains frozen (not spendable), so a transient
                 # ledger error cannot turn into free usage or lose the result.
-                logger.error("任务 %s 积分结算待重试: %s", task_id, billing_error, exc_info=True)
+                logger.error("任务 %s 创作点数结算待重试: %s", task_id, billing_error, exc_info=True)
             
             task.status = TaskStatus.COMPLETED
             task.completed_at = datetime.now().isoformat()
@@ -305,6 +305,13 @@ class TaskQueue:
             display_name = task.data.get("display_name", "") if task.data else ""
             project_id = task.data.get("project_id", "") if task.data else ""
             source_page = task.data.get("source_page", "") if task.data else ""
+            source_item_id = task.data.get("source_item_id", "") if task.data else ""
+            entity_type = task.data.get("entity_type", "") if task.data else ""
+            entity_id = task.data.get("entity_id", "") if task.data else ""
+            file_role = task.data.get("file_role", "") if task.data else ""
+            episode_id = task.data.get("episode_id", "") if task.data else ""
+            provider = task.data.get("provider", "") if task.data else ""
+            model = task.data.get("model", "") if task.data else ""
             try:
                 await self.redis.publish(
                     f"task_complete:{task.user_id}",
@@ -316,10 +323,13 @@ class TaskQueue:
                         "display_name": display_name,
                         "project_id": project_id,
                         "source_page": source_page,
-                        "entity_type": task.data.get("entity_type", "") if task.data else "",
-                        "entity_id": task.data.get("entity_id", "") if task.data else "",
-                        "file_role": task.data.get("file_role", "") if task.data else "",
-                        "episode_id": task.data.get("episode_id", "") if task.data else "",
+                        "source_item_id": source_item_id or entity_id,
+                        "entity_type": entity_type,
+                        "entity_id": entity_id,
+                        "file_role": file_role,
+                        "episode_id": episode_id,
+                        "provider": provider,
+                        "model": model,
                     })
                 )
             except Exception:
@@ -337,6 +347,19 @@ class TaskQueue:
                     target_view="Video",
                     target_project_id=project_id,
                     target_page=source_page,
+                    target_item_id=source_item_id or entity_id or None,
+                    metadata={
+                        "task_type": task_type,
+                        "project_id": project_id,
+                        "source_page": source_page,
+                        "source_item_id": source_item_id or entity_id,
+                        "entity_type": entity_type,
+                        "entity_id": entity_id,
+                        "file_role": file_role,
+                        "episode_id": episode_id,
+                        "provider": provider,
+                        "model": model,
+                    },
                 )
             except Exception as ne:
                 logger.debug(f"创建通知记录失败(不影响任务): {ne}")
@@ -388,7 +411,7 @@ class TaskQueue:
                 await self._save_task(task)
 
                 # 终态任务绝不能继续留在待处理集合。否则 SQL 已失败但 Agent
-                # 恢复后仍会再次领取同一任务，造成重复生成和状态/积分错乱。
+                # 恢复后仍会再次领取同一任务，造成重复生成和状态/创作点数错乱。
                 await self._remove_pending_task_members(task_id)
 
                 try:
@@ -400,7 +423,7 @@ class TaskQueue:
                         reason="task_failed",
                     )
                 except Exception as billing_error:
-                    logger.error("任务 %s 失败后释放积分异常: %s", task_id, billing_error, exc_info=True)
+                    logger.error("任务 %s 失败后释放创作点数异常: %s", task_id, billing_error, exc_info=True)
 
                 # 同步到 SQL，避免 Redis 已终态但 /api/tasks/active 从 DB 继续读到 processing。
                 try:
@@ -430,6 +453,13 @@ class TaskQueue:
                 fail_display_name = task.data.get("display_name", "") if task.data else ""
                 fail_project_id = task.data.get("project_id", "") if task.data else ""
                 fail_source_page = task.data.get("source_page", "") if task.data else ""
+                fail_source_item_id = task.data.get("source_item_id", "") if task.data else ""
+                fail_entity_type = task.data.get("entity_type", "") if task.data else ""
+                fail_entity_id = task.data.get("entity_id", "") if task.data else ""
+                fail_file_role = task.data.get("file_role", "") if task.data else ""
+                fail_episode_id = task.data.get("episode_id", "") if task.data else ""
+                fail_provider = task.data.get("provider", "") if task.data else ""
+                fail_model = task.data.get("model", "") if task.data else ""
                 try:
                     await self.redis.publish(
                         f"task_failed:{task.user_id}",
@@ -442,6 +472,13 @@ class TaskQueue:
                             "display_name": fail_display_name,
                             "project_id": fail_project_id,
                             "source_page": fail_source_page,
+                            "source_item_id": fail_source_item_id or fail_entity_id,
+                            "entity_type": fail_entity_type,
+                            "entity_id": fail_entity_id,
+                            "file_role": fail_file_role,
+                            "episode_id": fail_episode_id,
+                            "provider": fail_provider,
+                            "model": fail_model,
                         })
                     )
                 except Exception:
@@ -459,6 +496,19 @@ class TaskQueue:
                         target_view="Video",
                         target_project_id=fail_project_id,
                         target_page=fail_source_page,
+                        target_item_id=fail_source_item_id or fail_entity_id or None,
+                        metadata={
+                            "task_type": fail_task_type,
+                            "project_id": fail_project_id,
+                            "source_page": fail_source_page,
+                            "source_item_id": fail_source_item_id or fail_entity_id,
+                            "entity_type": fail_entity_type,
+                            "entity_id": fail_entity_id,
+                            "file_role": fail_file_role,
+                            "episode_id": fail_episode_id,
+                            "provider": fail_provider,
+                            "model": fail_model,
+                        },
                     )
                 except Exception as ne:
                     logger.debug(f"创建失败通知记录失败(不影响任务): {ne}")
@@ -605,7 +655,7 @@ class TaskQueue:
                 reason="task_cancelled",
             )
         except Exception as billing_error:
-            logger.error("任务 %s 取消后释放积分异常: %s", task_id, billing_error, exc_info=True)
+            logger.error("任务 %s 取消后释放创作点数异常: %s", task_id, billing_error, exc_info=True)
         return True
     
     async def delete_task(self, task_id: str) -> bool:

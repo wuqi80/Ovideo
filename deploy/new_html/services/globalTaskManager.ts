@@ -122,13 +122,17 @@ export class GlobalTaskManager {
                 message: `${data.display_name || data.task_type || '任务'} ${data.type === 'task_complete' ? '已完成' : '失败'}`,
                 targetView: 'Video' as any,
                 targetProjectId: data.project_id,
-                targetPage: data.source_page,
+                targetPage: this.normalizeTaskSourcePage(data.source_page, data.entity_type),
                 timestamp: Date.now(),
                 taskId: data.task_id,
+                taskType: data.task_type || undefined,
                 entityType: data.entity_type || undefined,
                 entityId: data.entity_id || undefined,
                 fileRole: data.file_role || undefined,
                 episodeId: data.episode_id || undefined,
+                targetItemId: data.source_item_id || data.entity_id || undefined,
+                provider: data.provider || undefined,
+                modelName: data.model || data.model_name || undefined,
             };
             if (this.rememberNotificationId(notification.id)) {
                 this.emit('notification', { notification });
@@ -184,11 +188,18 @@ export class GlobalTaskManager {
                 this.activeTasks = activeRes.tasks.map((t: any) => ({
                     id: t.task_id,
                     category: t.category || t.task_type,
+                    taskType: t.task_type || undefined,
                     status: t.status === 'processing' ? 'running' : t.status,
                     displayName: t.display_name || t.task_type,
                     projectId: t.project_id || '',
-                    sourcePage: t.source_page || 'editor',
+                    sourcePage: this.normalizeTaskSourcePage(t.source_page, t.entity_type),
                     sourceItemId: t.source_item_id || t.entity_id,
+                    entityType: t.entity_type || undefined,
+                    entityId: t.entity_id || undefined,
+                    fileRole: t.file_role || undefined,
+                    episodeId: t.episode_id || undefined,
+                    provider: t.provider || undefined,
+                    modelName: t.model || undefined,
                     progress: normalizeProgress(t.progress),
                     createdAt: new Date(t.created_at).getTime()
                 }));
@@ -199,11 +210,18 @@ export class GlobalTaskManager {
                 const terminalTasks = notifRes.notifications.map((n: any) => ({
                     id: n.task_id,
                     category: n.category || n.task_type,
+                    taskType: n.task_type || undefined,
                     status: n.status === 'completed' ? 'completed' : 'failed',
                     displayName: n.display_name || n.task_type,
                     projectId: n.project_id || '',
-                    sourcePage: n.source_page || 'editor',
+                    sourcePage: this.normalizeTaskSourcePage(n.source_page, n.entity_type),
                     sourceItemId: n.source_item_id || n.entity_id,
+                    entityType: n.entity_type || undefined,
+                    entityId: n.entity_id || undefined,
+                    fileRole: n.file_role || undefined,
+                    episodeId: n.episode_id || undefined,
+                    provider: n.provider || undefined,
+                    modelName: n.model || undefined,
                     createdAt: new Date(n.created_at).getTime(),
                     completedAt: new Date(n.completed_at).getTime(),
                     error: n.error_message || undefined,
@@ -226,14 +244,17 @@ export class GlobalTaskManager {
                         message: `${n.display_name || n.task_type} ${n.status === 'completed' ? '已完成' : '失败'}`,
                         targetView: 'Editor' as any,
                         targetProjectId: n.project_id,
-                        targetPage: n.source_page,
-                        targetItemId: n.source_item_id,
+                        targetPage: this.normalizeTaskSourcePage(n.source_page, n.entity_type),
+                        targetItemId: n.source_item_id || n.entity_id,
                         timestamp: new Date(n.completed_at).getTime(),
                         taskId: n.task_id,
+                        taskType: n.task_type || undefined,
                         entityType: n.entity_type || undefined,
                         entityId: n.entity_id || undefined,
                         fileRole: n.file_role || undefined,
                         episodeId: n.episode_id || undefined,
+                        provider: n.provider || undefined,
+                        modelName: n.model || undefined,
                     };
                     if (this.rememberNotificationId(notification.id)) {
                         this.emit('notification', { notification });
@@ -261,10 +282,21 @@ export class GlobalTaskManager {
     }
 
     private mapTaskType(taskType: string): 'video' | 'image' | 'material' | 'text' {
-        if (taskType.includes('video') || taskType.includes('i2v') || taskType.includes('morph') || taskType.includes('upscale')) return 'video';
-        if (taskType.includes('text') || taskType.includes('rewrite') || taskType.includes('storyboard')) return 'text';
-        if (taskType.includes('material')) return 'material';
+        const normalized = taskType.toLowerCase();
+        if (normalized.includes('video') || normalized.includes('i2v') || normalized.includes('morph') || normalized.includes('upscale')) return 'video';
+        if (normalized.includes('text') || normalized.includes('rewrite') || normalized.includes('storyboard')) return 'text';
+        if (normalized.includes('material')) return 'material';
         return 'image';
+    }
+
+    private normalizeTaskSourcePage(sourcePage?: string, entityType?: string): string {
+        const normalizedPage = sourcePage || 'editor';
+        // Older storyboard image tasks persisted `design`, even though their
+        // generated assets belong to a shot in the generation workspace.
+        if (entityType === 'storyboard_item' && normalizedPage === 'design') {
+            return 'generation';
+        }
+        return normalizedPage;
     }
 
     isSSEConnected(): boolean {

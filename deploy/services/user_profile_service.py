@@ -1,10 +1,10 @@
 """Current-user profile and account settings service."""
 from __future__ import annotations
 
-import hashlib
 import re
-from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
+
+from services.password_service import verify_password_hash
 
 
 class UserProfileError(RuntimeError):
@@ -31,13 +31,15 @@ class InvalidVerificationCode(UserProfileError):
     pass
 
 
+class PhoneIdentityImmutable(UserProfileError):
+    pass
+
+
 class InvalidPassword(UserProfileError):
     pass
 
 
-PHONE_VERIFICATION_CODE = "888888"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_\-\u4e00-\u9fff]{2,40}$")
-PHONE_RE = re.compile(r"^1\d{10}$")
 
 
 def _get(record: Any, key: str, default: Any = None) -> Any:
@@ -159,6 +161,8 @@ async def get_profile_summary(
     profile.setdefault("phone_number", None)
     profile.setdefault("phone_verified", False)
     profile["phone_verified"] = bool(profile.get("phone_verified"))
+    profile.setdefault("email_verified", False)
+    profile["email_verified"] = bool(profile.get("email_verified"))
 
     return {
         "success": True,
@@ -166,6 +170,9 @@ async def get_profile_summary(
         "credits": {
             "account_id": _get(credit_account, "account_id"),
             "available_credits": int(_get(credit_account, "available_credits", 0) or 0),
+            "account_credits": int(_get(credit_account, "account_credits", 0) or 0),
+            "gift_credits": int(_get(credit_account, "gift_credits", 0) or 0),
+            "gift_expires_at": _serialize(_get(credit_account, "gift_expires_at")),
             "frozen_credits": int(_get(credit_account, "frozen_credits", 0) or 0),
             "total_used_credits": int(_get(credit_account, "total_used_credits", 0) or 0),
         },
@@ -208,23 +215,9 @@ async def update_profile(
 
     if phone_number is not None:
         next_phone = phone_number.strip()
-        if not next_phone:
-            fields["phone_number"] = None
-            fields["phone_verified"] = False
-            fields["phone_verified_at"] = None
-        else:
-            if not PHONE_RE.match(next_phone):
-                raise InvalidPhoneNumber("phone number is invalid")
-            phone_changed = next_phone != (_get(current, "phone_number") or "")
-            fields["phone_number"] = next_phone
-            if verification_code is not None:
-                if verification_code.strip() != PHONE_VERIFICATION_CODE:
-                    raise InvalidVerificationCode("verification code is invalid")
-                fields["phone_verified"] = True
-                fields["phone_verified_at"] = datetime.now()
-            elif phone_changed:
-                fields["phone_verified"] = False
-                fields["phone_verified_at"] = None
+        if next_phone != (_get(current, "phone_number") or "") or verification_code:
+            # 手机号已经是唯一登录身份，不能再通过个人资料接口绕过短信校验修改。
+            raise PhoneIdentityImmutable("phone identity must be changed through verified auth flow")
 
     if fields:
         await user_dao.update_self_profile(user_id, **fields)
@@ -256,8 +249,8 @@ async def change_password(
     if not user:
         raise UserProfileNotFound("user not found")
 
-    current_hash = hashlib.sha256(current_password.encode()).hexdigest()
-    if _get(user, "password_hash") != current_hash:
+    valid, _needs_upgrade = verify_password_hash(current_password, _get(user, "password_hash") or "")
+    if not valid:
         raise InvalidPassword("current password is incorrect")
 
     await user_dao.reset_password(user_id, new_password)

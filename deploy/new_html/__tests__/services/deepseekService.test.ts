@@ -90,7 +90,7 @@ describe('deepseekService retry handling', () => {
     }));
 
     const promise = callDeepseekChatWithRetry('prompt', undefined, () => undefined);
-    const assertion = expect(promise).rejects.toThrow('本次未扣积分');
+    const assertion = expect(promise).rejects.toThrow('本次未扣创作点数');
     await vi.advanceTimersByTimeAsync(90_000 + 50);
     await assertion;
 

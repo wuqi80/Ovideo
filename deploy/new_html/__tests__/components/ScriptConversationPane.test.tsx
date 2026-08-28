@@ -56,8 +56,8 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain("estimateCredits('script_model_call', creditEstimateParams)");
     expect(source).toContain('input_tokens: estimateTextTokens(billingInput)');
     expect(source).toContain('output_tokens: forecastOutputTokens');
-    expect(source).toContain('每次生成都会扣除一定数量的积分');
-    expect(source).toContain("预计消耗积分：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}");
+    expect(source).toContain('每次生成都会扣除一定数量的创作点数');
+    expect(source).toContain("预计消耗创作点数：{isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}");
   });
 
   it('uploads a text file into the current draft without creating or sending a task', () => {

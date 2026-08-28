@@ -20,6 +20,7 @@ class ProjectDAO:
         project_name: str,
         description: str = "",
         visibility: str = "private",
+        settings: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """创建新项目
 
@@ -33,11 +34,19 @@ class ProjectDAO:
         if visibility not in ('private', 'org-default'):
             visibility = 'private'
         query = """
-            INSERT INTO projects (project_id, user_id, project_name, description, visibility)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, project_id, project_name, description, visibility, created_at
+            INSERT INTO projects (project_id, user_id, project_name, description, visibility, settings)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+            RETURNING id, project_id, project_name, description, visibility, settings, created_at
         """
-        return await db.fetchrow(query, project_id, user_id, project_name, description, visibility)
+        return await db.fetchrow(
+            query,
+            project_id,
+            user_id,
+            project_name,
+            description,
+            visibility,
+            json.dumps(settings or {}, ensure_ascii=False),
+        )
     
     @staticmethod
     async def get_user_projects(user_id: str, include_archived: bool = False) -> List[Dict[str, Any]]:

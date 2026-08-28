@@ -328,14 +328,14 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
             <Coins className="h-3.5 w-3.5 flex-shrink-0" />
             <div className="min-w-0 space-y-0.5">
               {completedActualCreditCost > 0 && (
-                <div title="当前版本剧本生成与镜头设计生成合计扣除积分">
+                <div title="当前版本剧本生成与镜头设计生成合计扣除创作点数">
                   <span>{`本次合计消耗：${completedActualCreditCost}`}</span>
-                  <span className="ml-1 text-n100">积分</span>
+                  <span className="ml-1 text-n100">创作点数</span>
                 </div>
               )}
               <div title="按当前输入、所选模型和预计镜头规模估算，实际以成功生成后的用量为准">
                 <span>
-                  {completedActualCreditCost > 0 ? '再次生成预计消耗积分：' : '预计消耗积分：'}
+                  {completedActualCreditCost > 0 ? '再次生成预计消耗创作点数：' : '预计消耗创作点数：'}
                   {isEstimatingCredits ? '计算中…' : (estimatedCreditCost ?? '--')}
                 </span>
                 <span className="ml-1 text-n100">· 成功后扣除</span>

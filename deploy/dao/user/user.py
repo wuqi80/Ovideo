@@ -8,7 +8,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from db_manager import get_db_manager
-import hashlib
+from services.password_service import hash_password, verify_password_hash
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +43,11 @@ class UserDAO:
         
         # 如果没有提供password_hash，则从password生成
         if not password_hash:
-            password_hash = hashlib.sha256(password.encode()).hexdigest()
+            password_hash = hash_password(password)
         
         query = """
-            INSERT INTO users (user_id, username, password_hash, email)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO users (user_id, username, password_hash, email, legacy_login_enabled)
+            VALUES ($1, $2, $3, $4, TRUE)
             RETURNING id, user_id, username, email, created_at
         """
         return await db.fetchrow(query, user_id, username, password_hash, email)
@@ -80,6 +80,8 @@ class UserDAO:
                 """
                 SELECT id, user_id, username, email, avatar_url,
                        phone_number, phone_verified, phone_verified_at,
+                       email_verified, email_verified_at,
+                       email_notification_preferences,
                        storage_quota_gb, used_storage_bytes, created_at,
                        updated_at, last_login_at, is_active
                 FROM users
@@ -106,6 +108,9 @@ class UserDAO:
             data.setdefault("phone_number", None)
             data.setdefault("phone_verified", False)
             data.setdefault("phone_verified_at", None)
+            data.setdefault("email_verified", False)
+            data.setdefault("email_verified_at", None)
+            data.setdefault("email_notification_preferences", {})
             return data
 
     @staticmethod
@@ -176,6 +181,8 @@ class UserDAO:
                 """
                 SELECT user_id, username, email, avatar_url, role, status,
                        disabled_reason, disabled_at, disabled_by, plan_tier,
+                       phone_number, phone_verified, phone_verified_at,
+                       email_verified, email_verified_at, legacy_login_enabled,
                        storage_quota_gb, used_storage_bytes, created_at,
                        last_login_at, is_active, permissions
                 FROM users
@@ -213,7 +220,10 @@ class UserDAO:
                 SELECT id, user_id, username, password_hash, email, avatar_url,
                        storage_quota_gb, used_storage_bytes, created_at,
                        last_login_at, is_active,
-                       role, status, disabled_reason
+                       role, status, disabled_reason,
+                       phone_number, phone_verified, phone_verified_at,
+                       legacy_login_enabled, email_verified, email_verified_at,
+                       email_notification_preferences
                 FROM users
                 WHERE username = $1 AND is_active = TRUE
             """
@@ -251,6 +261,157 @@ class UserDAO:
         return dict(row) if row else None
 
     @staticmethod
+    async def get_user_by_phone(phone_number: str) -> Optional[Dict[str, Any]]:
+        """Return an active user by the verified, normalized phone login identity."""
+        db = get_db_manager()
+        if not db:
+            return None
+        row = await db.fetchrow(
+            """
+            SELECT id, user_id, username, password_hash, email, role, status,
+                   disabled_reason, phone_number, phone_verified, phone_verified_at,
+                   legacy_login_enabled, email_verified, email_verified_at,
+                   email_notification_preferences
+            FROM users
+            WHERE phone_number = $1 AND phone_verified = TRUE AND is_active = TRUE
+            """,
+            phone_number,
+        )
+        return dict(row) if row else None
+
+    @staticmethod
+    async def get_user_by_verified_email(email: str) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return None
+        row = await db.fetchrow(
+            """
+            SELECT user_id, username, email
+            FROM users
+            WHERE lower(email) = lower($1) AND email_verified = TRUE AND is_active = TRUE
+            """,
+            email,
+        )
+        return dict(row) if row else None
+
+    @staticmethod
+    async def get_user_auth_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return None
+        row = await db.fetchrow(
+            """
+            SELECT user_id, username, password_hash, email, role, status,
+                   disabled_reason, phone_number, phone_verified,
+                   legacy_login_enabled, email_verified,
+                   email_notification_preferences
+            FROM users
+            WHERE user_id = $1 AND is_active = TRUE
+            """,
+            user_id,
+        )
+        return dict(row) if row else None
+
+    @staticmethod
+    async def create_phone_user(
+        *,
+        phone_number: str,
+        username: str,
+        password: str,
+        email: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Create a phone-first account with a stable opaque user id."""
+        db = get_db_manager()
+        if not db:
+            return None
+        stable_user_id = user_id or f"user_{uuid.uuid4().hex[:16]}"
+        row = await db.fetchrow(
+            """
+            INSERT INTO users (
+                user_id, username, password_hash, email,
+                phone_number, phone_verified, phone_verified_at,
+                legacy_login_enabled, email_verified
+            )
+            VALUES ($1, $2, $3, $4, $5, TRUE, CURRENT_TIMESTAMP, FALSE, FALSE)
+            RETURNING user_id, username, email, phone_number, phone_verified,
+                      email_verified, created_at
+            """,
+            stable_user_id,
+            username,
+            hash_password(password),
+            email,
+            phone_number,
+        )
+        return dict(row) if row else None
+
+    @staticmethod
+    async def bind_verified_phone(user_id: str, phone_number: str) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return None
+        row = await db.fetchrow(
+            """
+            UPDATE users
+            SET phone_number = $2,
+                phone_verified = TRUE,
+                phone_verified_at = CURRENT_TIMESTAMP,
+                legacy_login_enabled = FALSE,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $1 AND is_active = TRUE
+            RETURNING user_id, username, phone_number, phone_verified,
+                      legacy_login_enabled, email, email_verified
+            """,
+            user_id,
+            phone_number,
+        )
+        return dict(row) if row else None
+
+    @staticmethod
+    async def set_email_binding(
+        user_id: str,
+        email: Optional[str],
+        *,
+        verified: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return None
+        row = await db.fetchrow(
+            """
+            UPDATE users
+            SET email = $2,
+                email_verified = $3,
+                email_verified_at = CASE WHEN $3 THEN CURRENT_TIMESTAMP ELSE NULL END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $1 AND is_active = TRUE
+            RETURNING user_id, email, email_verified, email_verified_at,
+                      email_notification_preferences
+            """,
+            user_id,
+            email,
+            verified,
+        )
+        return dict(row) if row else None
+
+    @staticmethod
+    async def update_email_notification_preferences(user_id: str, preferences: Dict[str, bool]) -> bool:
+        db = get_db_manager()
+        if not db:
+            return False
+        result = await db.execute(
+            """
+            UPDATE users
+            SET email_notification_preferences = $2::jsonb,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = $1 AND is_active = TRUE
+            """,
+            user_id,
+            json.dumps(preferences),
+        )
+        return result == "UPDATE 1"
+
+    @staticmethod
     async def is_admin_user(username: str) -> bool:
         """Return whether a username has platform-admin privileges."""
         if not username:
@@ -268,8 +429,10 @@ class UserDAO:
         if not user:
             return None
         
-        password_hash = hashlib.sha256(password.encode()).hexdigest()
-        if user['password_hash'] == password_hash:
+        valid, needs_upgrade = verify_password_hash(password, user['password_hash'])
+        if valid:
+            if needs_upgrade:
+                await UserDAO.update_password_hash(user['user_id'], hash_password(password))
             # 更新最后登录时间
             await UserDAO.update_last_login(user['user_id'])
             return user
@@ -405,6 +568,8 @@ class UserDAO:
                 f"""
                 SELECT user_id, username, email, avatar_url, role, status,
                        disabled_reason, disabled_at, disabled_by, plan_tier,
+                       phone_number, phone_verified, phone_verified_at,
+                       email_verified, email_verified_at, legacy_login_enabled,
                        storage_quota_gb, used_storage_bytes, created_at, last_login_at, is_active,
                        permissions
                 FROM users
@@ -521,10 +686,23 @@ class UserDAO:
     async def reset_password(user_id: str, new_password: str) -> bool:
         """重置密码（管理员用）。"""
         db = get_db_manager()
-        new_hash = hashlib.sha256(new_password.encode()).hexdigest()
+        new_hash = hash_password(new_password)
         result = await db.execute(
             "UPDATE users SET password_hash = $2, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1",
             user_id, new_hash,
+        )
+        return result == "UPDATE 1"
+
+    @staticmethod
+    async def update_password_hash(user_id: str, password_hash: str) -> bool:
+        """Persist a precomputed password hash during transparent legacy upgrades."""
+        db = get_db_manager()
+        if not db:
+            return False
+        result = await db.execute(
+            "UPDATE users SET password_hash=$2, updated_at=CURRENT_TIMESTAMP WHERE user_id=$1",
+            user_id,
+            password_hash,
         )
         return result == "UPDATE 1"
 

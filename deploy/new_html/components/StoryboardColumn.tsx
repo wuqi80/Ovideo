@@ -451,8 +451,8 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
             <Film className="w-4 h-4" />
             <span>共 {segmentGroups.length} 个分段 · {selectedFile.storyboard.items.filter(i => !i.isPlaceholder).length} 个镜头</span>
             {Number.isFinite(generationCreditCost) && Number(generationCreditCost) > 0 && (
-              <span className="ml-auto inline-flex items-center gap-1 rounded border border-warning/30 bg-y50 px-2 py-1 text-[10px] font-medium text-warning" title="当前版本剧本生成与镜头设计生成合计扣除积分">
-                <Coins className="h-3.5 w-3.5" /> 本次消耗 {generationCreditCost} 积分
+              <span className="ml-auto inline-flex items-center gap-1 rounded border border-warning/30 bg-y50 px-2 py-1 text-[10px] font-medium text-warning" title="当前版本剧本生成与镜头设计生成合计扣除创作点数">
+                <Coins className="h-3.5 w-3.5" /> 本次消耗 {generationCreditCost} 创作点数
               </span>
             )}
           </div>

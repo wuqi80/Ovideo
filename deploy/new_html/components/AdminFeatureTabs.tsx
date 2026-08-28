@@ -3,9 +3,10 @@
  * 2026-05-26 Slices 2/4/5 — 后台新增能力的子标签集合：
  *  - 账号管理（Slice 4）
  *  - 项目分组（Slice 4）
- *  - 积分规则（Slice 2 admin）
- *  - 积分账户（Slice 5 占位 + adjust）
- *  - 积分流水（Slice 5）
+ *  - 创作点数规则（Slice 2 admin）
+ *  - 创作点数账户（Slice 5 占位 + adjust）
+ *  - 创作点数台账（Slice 5）
+ *  - 充值台账（微信支付）
  *  - 素材库（Slice 5）
  *  - 审计日志（Slice 5）
  *
@@ -81,15 +82,16 @@ function useAdminUsers() {
   return users;
 }
 
-type SubTab = 'accounts' | 'groups' | 'organizations' | 'credit_rules' | 'credit_accounts' | 'credit_transactions' | 'media' | 'audit';
+type SubTab = 'accounts' | 'groups' | 'organizations' | 'credit_rules' | 'credit_accounts' | 'credit_transactions' | 'recharge_orders' | 'media' | 'audit';
 
 const SUB_TABS: { key: SubTab; label: string; icon: React.ReactNode }[] = [
   { key: 'accounts',            label: '账号管理',    icon: <Users size={14} /> },
   { key: 'groups',              label: '项目分组',    icon: <FolderTree size={14} /> },
   { key: 'organizations',       label: '组织管理',    icon: <Building2 size={14} /> },
-  { key: 'credit_rules',        label: '积分规则',    icon: <Coins size={14} /> },
-  { key: 'credit_accounts',     label: '积分账户',    icon: <Coins size={14} /> },
-  { key: 'credit_transactions', label: '积分流水',    icon: <ScrollText size={14} /> },
+  { key: 'credit_rules',        label: '创作点数规则',    icon: <Coins size={14} /> },
+  { key: 'credit_accounts',     label: '创作点数账户',    icon: <Coins size={14} /> },
+  { key: 'credit_transactions', label: '创作点数台账',    icon: <ScrollText size={14} /> },
+  { key: 'recharge_orders',     label: '充值台账',        icon: <Coins size={14} /> },
   { key: 'media',               label: '素材库管理',  icon: <ImageIcon size={14} /> },
   { key: 'audit',               label: '审计日志',    icon: <ShieldCheck size={14} /> },
 ];
@@ -128,6 +130,7 @@ export const AdminFeatureTabs: React.FC<{ embedTab?: SubTab }> = ({ embedTab }) 
         {tab === 'credit_rules' && <CreditRulesTab />}
         {tab === 'credit_accounts' && <CreditAccountsTab />}
         {tab === 'credit_transactions' && <CreditTransactionsTab />}
+        {tab === 'recharge_orders' && <RechargeOrdersTab />}
         {tab === 'media' && <MediaLibraryAdminTab />}
         {tab === 'audit' && <AuditLogsTab />}
       </div>
@@ -513,7 +516,7 @@ const GroupsTab: React.FC = () => {
 
 
 // ============================================
-// 3. 积分规则 (Slice 2 admin)
+// 3. 创作点数规则 (Slice 2 admin)
 // ============================================
 const CreditRulesTab: React.FC = () => {
   const [rules, setRules] = useState<CreditRule[]>([]);
@@ -545,7 +548,7 @@ const CreditRulesTab: React.FC = () => {
     if (!fk) return;
     const fn = await crmPrompt({ title: '新建规则', label: '显示名称', defaultValue: fk });
     if (fn === null) return;
-    const baseStr = await crmPrompt({ title: '新建规则', label: 'base_cost（积分）', inputType: 'number', defaultValue: '10' });
+    const baseStr = await crmPrompt({ title: '新建规则', label: 'base_cost（创作点数）', inputType: 'number', defaultValue: '10' });
     if (baseStr === null) return;
     try {
       await adminCreateCreditRule({ feature_key: fk, feature_name: fn || fk, base_cost: Number(baseStr || 10) });
@@ -556,7 +559,7 @@ const CreditRulesTab: React.FC = () => {
   return (
     <div>
       <CrmToolbar
-        title="积分规则"
+        title="创作点数规则"
         count={rules.length}
         actions={<CrmPrimaryButton onClick={handleCreate}><Plus size={13} /> 新建规则</CrmPrimaryButton>}
       />
@@ -672,7 +675,7 @@ const CreditRuleRow: React.FC<{
 
 
 // ============================================
-// 4. 积分账户 (Slice 5)
+// 4. 创作点数账户 (Slice 5)
 // ============================================
 const CreditAccountsTab: React.FC = () => {
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -714,12 +717,14 @@ const CreditAccountsTab: React.FC = () => {
 
   return (
     <div>
-      <CrmToolbar title="积分账户" count={accounts.length} />
+      <CrmToolbar title="创作点数账户" count={accounts.length} />
       <CrmTable headers={
         <tr>
           <th className="text-left font-medium p-2.5">账户</th>
           <th className="text-left font-medium p-2.5">归属</th>
           <th className="text-right font-medium p-2.5">可用</th>
+          <th className="text-right font-medium p-2.5">账户点数</th>
+          <th className="text-right font-medium p-2.5">赠送点数</th>
           <th className="text-right font-medium p-2.5">冻结</th>
           <th className="text-right font-medium p-2.5">累计消耗</th>
           <th className="text-right font-medium p-2.5">操作</th>
@@ -730,6 +735,8 @@ const CreditAccountsTab: React.FC = () => {
             <td className="p-2.5 font-mono text-[10px]">{a.account_id}</td>
             <td className="p-2.5 text-n800">{a.owner_type}/{a.owner_id}</td>
             <td className="p-2.5 text-right font-mono text-success">{a.available_credits}</td>
+            <td className="p-2.5 text-right font-mono text-n700">{a.account_credits ?? a.available_credits}</td>
+            <td className="p-2.5 text-right font-mono text-warning">{a.gift_credits ?? 0}</td>
             <td className="p-2.5 text-right font-mono text-warning">{a.frozen_credits}</td>
             <td className="p-2.5 text-right font-mono text-n300">{a.total_used_credits}</td>
             <td className="p-2.5 text-right">
@@ -741,7 +748,7 @@ const CreditAccountsTab: React.FC = () => {
             </td>
           </tr>
         ))}
-        {!pageRows.length && <tr><td colSpan={6} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无账户'}</td></tr>}
+        {!pageRows.length && <tr><td colSpan={8} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无账户'}</td></tr>}
       </CrmTable>
 
       <CrmPagination total={accounts.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
@@ -784,7 +791,7 @@ const CreditAccountsTab: React.FC = () => {
 
 
 // ============================================
-// 5. 积分流水 (Slice 5)
+// 5. 创作点数台账 (Slice 5)
 // ============================================
 const CreditTransactionsTab: React.FC = () => {
   const [txns, setTxns] = useState<any[]>([]);
@@ -816,7 +823,7 @@ const CreditTransactionsTab: React.FC = () => {
   return (
     <div>
       <CrmToolbar
-        title="积分流水"
+        title="创作点数台账"
         count={txns.length}
         filters={
           <>
@@ -859,7 +866,103 @@ const CreditTransactionsTab: React.FC = () => {
 
 
 // ============================================
-// 6. 素材库管理 (Slice 5)
+// 6. 充值台账（微信支付 Native）
+// ============================================
+const RechargeOrdersTab: React.FC = () => {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [userFilter, setUserFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [orderFilter, setOrderFilter] = useState('');
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const sp = new URLSearchParams();
+      if (userFilter.trim()) sp.set('user_id', userFilter.trim());
+      if (statusFilter) sp.set('status', statusFilter);
+      if (orderFilter.trim()) sp.set('out_trade_no', orderFilter.trim());
+      sp.set('limit', '300');
+      const result = await apiGet<{ orders: any[] }>(`/api/admin/wechat-recharge-orders?${sp.toString()}`);
+      setOrders(result.orders || []);
+      setPage(1);
+    } catch (e: any) {
+      crmMessage.error(`充值台账加载失败：${await readApiError(e)}`);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [orderFilter, statusFilter, userFilter]);
+
+  useEffect(() => { void reload(); }, [reload]);
+
+  const statusText: Record<string, string> = {
+    pending: '待支付', paid: '已支付', closed: '已关闭', expired: '已过期', failed: '失败',
+  };
+  const statusType = (status: string) => status === 'paid' ? 'success' : status === 'pending' ? 'warning' : 'default';
+  const formatFen = (value: number) => `¥${(Number(value || 0) / 100).toFixed(2)}`;
+  const pageRows = orders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  return (
+    <div>
+      <CrmToolbar
+        title="充值台账"
+        count={orders.length}
+        filters={
+          <>
+            <input value={userFilter} onChange={event => setUserFilter(event.target.value)} placeholder="user_id" className="w-36 rounded border border-n40 bg-n0 px-2 py-1.5 text-xs focus:border-primary focus:outline-none" />
+            <input value={orderFilter} onChange={event => setOrderFilter(event.target.value)} placeholder="商户订单号" className="w-44 rounded border border-n40 bg-n0 px-2 py-1.5 text-xs focus:border-primary focus:outline-none" />
+            <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="rounded border border-n40 bg-n0 px-2 py-1.5 text-xs focus:border-primary focus:outline-none">
+              <option value="">全部状态</option>
+              <option value="pending">待支付</option>
+              <option value="paid">已支付</option>
+              <option value="closed">已关闭</option>
+              <option value="expired">已过期</option>
+              <option value="failed">失败</option>
+            </select>
+          </>
+        }
+        actions={<button type="button" onClick={() => void reload()} className="rounded border border-n40 bg-n0 p-1.5 hover:bg-n20"><RefreshCw size={13} className={loading ? 'animate-spin text-primary' : 'text-n300'} /></button>}
+      />
+      <CrmTable headers={
+        <tr>
+          <th className="p-2.5 text-left font-medium">创建时间</th>
+          <th className="p-2.5 text-left font-medium">商户订单号</th>
+          <th className="p-2.5 text-left font-medium">用户</th>
+          <th className="p-2.5 text-right font-medium">点数</th>
+          <th className="p-2.5 text-right font-medium">原价</th>
+          <th className="p-2.5 text-right font-medium">实付</th>
+          <th className="p-2.5 text-right font-medium">折扣</th>
+          <th className="p-2.5 text-left font-medium">状态</th>
+          <th className="p-2.5 text-left font-medium">微信交易号</th>
+          <th className="p-2.5 text-left font-medium">支付时间</th>
+        </tr>
+      }>
+        {pageRows.map(order => (
+          <tr key={order.payment_order_id} className="hover:bg-n10">
+            <td className="p-2.5 text-[10px] text-n300">{new Date(order.created_at).toLocaleString('zh-CN')}</td>
+            <td className="p-2.5 font-mono text-[10px] text-n700">{order.out_trade_no}</td>
+            <td className="p-2.5 text-xs text-n700">{order.username || order.phone_number || order.user_id}</td>
+            <td className="p-2.5 text-right font-mono text-n800">{Number(order.point_amount).toLocaleString()}</td>
+            <td className="p-2.5 text-right font-mono text-n300">{formatFen(order.base_amount_fen)}</td>
+            <td className="p-2.5 text-right font-mono text-success">{formatFen(order.amount_fen)}</td>
+            <td className="p-2.5 text-right font-mono text-n700">{Number(order.discount_bps) / 100}%</td>
+            <td className="p-2.5"><CrmTag type={statusType(order.status)}>{statusText[order.status] || order.status}</CrmTag></td>
+            <td className="max-w-40 truncate p-2.5 font-mono text-[10px] text-n300" title={order.transaction_id || ''}>{order.transaction_id || '-'}</td>
+            <td className="p-2.5 text-[10px] text-n300">{order.paid_at ? new Date(order.paid_at).toLocaleString('zh-CN') : '-'}</td>
+          </tr>
+        ))}
+        {!pageRows.length && <tr><td colSpan={10} className="py-8 text-center text-n100">{loading ? '加载中…' : '暂无充值订单'}</td></tr>}
+      </CrmTable>
+      <CrmPagination total={orders.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
+    </div>
+  );
+};
+
+
+// ============================================
+// 7. 素材库管理 (Slice 5)
 // ============================================
 const MediaLibraryAdminTab: React.FC = () => {
   const [items, setItems] = useState<any[]>([]);

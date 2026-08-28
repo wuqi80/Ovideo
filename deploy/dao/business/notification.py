@@ -2,11 +2,15 @@
 通知 DAO -- notifications 表的增删改查
 """
 import json
+import logging
 import uuid
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from db_manager import get_db_manager
+
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationDAO:
@@ -37,12 +41,30 @@ class NotificationDAO:
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
             RETURNING *
         """
-        return await db.fetchrow(
+        row = await db.fetchrow(
             query, nid, user_id, task_id, notification_type, category,
             title, message or '', target_view, target_project_id,
             target_page, target_item_id,
             json.dumps(metadata) if metadata else '{}'
         )
+        if row:
+            # 邮件只是站内通知的异步副本；排队失败不得回滚或阻塞站内通知。
+            try:
+                from dao_user import UserDAO
+                from services.email_delivery_service import enqueue_notification_email
+
+                await enqueue_notification_email(
+                    user_id=user_id,
+                    title=title,
+                    message=message or '',
+                    notification_type=notification_type,
+                    category=category,
+                    notification_id=nid,
+                    user_dao=UserDAO,
+                )
+            except Exception as exc:
+                logger.warning("Notification email enqueue failed notification_id=%s: %s", nid, exc)
+        return row
 
     @staticmethod
     async def get_unread_count(user_id: str) -> int:

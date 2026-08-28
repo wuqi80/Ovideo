@@ -42,7 +42,7 @@ export const generateMaterialImage = async (
 export const generateFinalIllustration = async (
     prompt: string,
     referenceImages: string[],
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; projectId?: string; episodeId?: string },
+    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; projectId?: string; episodeId?: string; sourcePage?: string; sourceItemId?: string },
     imageOptions?: { aspectRatio?: string; imageSize?: '1K' | '2K' | '4K' },
     referenceMetadata?: GeminiImageReferenceMetadata[],
 ): Promise<string> => {
@@ -53,12 +53,16 @@ export const generateFinalIllustration = async (
 export const generateFinalIllustrationResult = async (
     prompt: string,
     referenceImages: string[],
-    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; projectId?: string; episodeId?: string },
+    entityOptions?: { entityType?: string; entityId?: string; fileRole?: string; projectId?: string; episodeId?: string; sourcePage?: string; sourceItemId?: string },
     imageOptions?: { aspectRatio?: string; imageSize?: '1K' | '2K' | '4K' },
     referenceMetadata?: GeminiImageReferenceMetadata[],
 ): Promise<GeneratedFileResult> => {
     return callWithRetry(async () => {
         const results = await generateGeminiImageVariant({
+            // The storyboard's public `nanobanana` option is the stable alias
+            // for Gemini 3.1 Flash Image Preview. Sending it explicitly also
+            // lets task notifications retain the selected model/version.
+            model: 'nanobanana',
             prompt: `${prompt}\n\nVisual style rule: Preserve the visual style explicitly stated above and do not substitute a different house style. Keep the image high detail with coherent lighting and composition.`,
             references: referenceImages,
             referenceMetadata,
@@ -69,6 +73,8 @@ export const generateFinalIllustrationResult = async (
             fileRole: entityOptions?.fileRole,
             projectId: entityOptions?.projectId,
             episodeId: entityOptions?.episodeId,
+            sourcePage: entityOptions?.sourcePage,
+            sourceItemId: entityOptions?.sourceItemId,
         });
 
         if (!results || results.length === 0) {

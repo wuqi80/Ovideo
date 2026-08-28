@@ -12,7 +12,7 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const isRetryableMinimaxError = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error || '');
-  if (/未登录|未配置|endpoint\s*未配置|api\s*key|401|403|unauthor|未扣积分|手动重试/i.test(message)) {
+  if (/未登录|未配置|endpoint\s*未配置|api\s*key|401|403|unauthor|未扣创作点数|手动重试/i.test(message)) {
     return false;
   }
   return /请求失败|调用失败|超时|timeout|network|failed to fetch|fetch failed|econn|socket|stream|流式|空内容|429|500|502|503|504|rate|busy|overload|temporar/i.test(message);
@@ -122,7 +122,7 @@ const callMinimaxM3Once = async (
       || error instanceof MinimaxTimeoutError
       || (error as { name?: string } | null)?.name === 'AbortError'
     ) {
-      throw new Error('MiniMax 生成超时或连接中断，本次未扣积分，请手动重试');
+      throw new Error('MiniMax 生成超时或连接中断，本次未扣创作点数，请手动重试');
     }
     throw error;
   } finally {

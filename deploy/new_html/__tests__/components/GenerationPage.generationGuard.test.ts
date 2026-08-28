@@ -26,9 +26,10 @@ describe('GenerationPage duplicate generation guards', () => {
 });
 
 describe('GenerationPage image output settings', () => {
-  it('defaults every storyboard image model to 16:9 and 1K', () => {
+  it('defaults every storyboard image model to the project ratio and 1K', () => {
     expect(source).toContain("page: 'GenerationPage:imageRatio'");
-    expect(source).toContain("defaultValue: '16:9'");
+    expect(source).toContain("defaultImageRatio = '16:9'");
+    expect(source).toContain('defaultValue: defaultImageRatio');
     expect(source).toContain("page: 'GenerationPage:imageK'");
     expect(source).toContain("defaultValue: '1K'");
   });
@@ -192,5 +193,14 @@ describe('GenerationPage result card actions', () => {
     expect(source).toContain('inline-flex h-7 min-w-0 items-center justify-center');
     expect(source).toContain('<span className="sr-only">14 视角</span>');
     expect(source).toContain('<span className="sr-only">单角度</span>');
+  });
+
+  it('selects and scrolls to a shot opened from a notification', () => {
+    expect(source).toContain('focusShotId?: string | null');
+    expect(source).toContain('pendingNotificationFocusRef');
+    expect(source).toContain("target.scrollIntoView({ block: 'center', behavior: 'smooth' })");
+    expect(source).toContain('data-storyboard-shot-id={item.id}');
+    expect(storyboardPageSource).toContain("searchParams.get('shotId')");
+    expect(storyboardPageSource).toContain('focusShotId={notificationShotId}');
   });
 });

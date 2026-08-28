@@ -9,11 +9,16 @@ import {
 } from '../../utils/designImageModels';
 
 describe('design image model capabilities', () => {
-  it('maps the three product levels to their runtime models', () => {
-    expect(DESIGN_IMAGE_MODEL_OPTIONS.map(option => `${option.label} · ${option.runtime}`)).toEqual([
-      '一阶 · 快速生图模型 · Gemini 2.5 Flash Image',
-      '二阶 · 高质量生图模型 · Gemini 3 Pro Image',
-      '三阶 · 参考图生图模型 · Doubao-Seedream-5.0-lite',
+  it('exposes the three runtime models with their capability suffixes', () => {
+    expect(DESIGN_IMAGE_MODEL_OPTIONS.map(option => option.label)).toEqual([
+      'Gemini 2.5 Flash Image · 快速生图模型',
+      'Gemini 3.1 Flash Image Preview · 高质量生图模型',
+      'Doubao-Seedream-5.0-lite · 参考图生图模型',
+    ]);
+    expect(DESIGN_IMAGE_MODEL_OPTIONS.map(option => option.runtime)).toEqual([
+      'Gemini 2.5 Flash Image',
+      'Gemini 3.1 Flash Image Preview',
+      'Doubao-Seedream-5.0-lite',
     ]);
     expect(DESIGN_IMAGE_MODEL_OPTIONS.map(option => option.hint)).toEqual([
       '速度优先',

@@ -28,20 +28,20 @@ def format_public_text_task_name(
     provider: str = "",
     model: Optional[str] = None,
 ) -> str:
-    """Translate provider/runtime text names to the public selector labels."""
+    """Translate provider/runtime text names to creator-facing model labels."""
 
     provider_key = str(provider or "").strip().lower()
     model_key = str(model or "").strip().lower()
     if provider_key == "deepseek":
         public_label = (
-            "三阶 · 推理写作模型"
+            "deepseek-v4-pro · 推理写作模型"
             if any(token in model_key for token in ("reasoner", "r1", "v4-pro", "v4_pro"))
-            else "二阶 · 快速写作模型"
+            else "deepseek-v4-flash · 快速写作模型"
         )
     elif provider_key == "minimax":
-        public_label = "一阶 · 连续写作模型"
+        public_label = "MiniMax-M3 · 连续写作模型"
     elif provider_key == "gemini":
-        public_label = "四阶 · 全能写作模型"
+        public_label = "gemini-2.5-flash · 全能写作模型"
     else:
         public_label = "AI 文本生成"
 
@@ -56,19 +56,19 @@ def format_public_text_task_name(
     )
     if exact_text_generation:
         if re.search(r"deepseek[\s_-]*(?:reasoner|r1|v4[\s_-]*pro)", text, flags=re.IGNORECASE):
-            return "三阶 · 推理写作模型"
+            return "deepseek-v4-pro · 推理写作模型"
         if re.search(r"minimax[\s_-]*m3", text, flags=re.IGNORECASE):
-            return "一阶 · 连续写作模型"
+            return "MiniMax-M3 · 连续写作模型"
         if re.search(r"gemini", text, flags=re.IGNORECASE):
-            return "四阶 · 全能写作模型"
+            return "gemini-2.5-flash · 全能写作模型"
         return public_label
 
     replacements = (
-        (r"deepseek[\s_-]*(?:reasoner|r1|v4[\s_-]*pro)", "三阶 · 推理写作模型"),
-        (r"deepseek[\s_-]*(?:chat|v4[\s_-]*flash)", "二阶 · 快速写作模型"),
-        (r"deepseek", public_label if provider_key == "deepseek" else "二阶 · 快速写作模型"),
-        (r"minimax[\s_-]*m3", "一阶 · 连续写作模型"),
-        (r"gemini", "四阶 · 全能写作模型"),
+        (r"deepseek[\s_-]*(?:reasoner|r1|v4[\s_-]*pro)", "deepseek-v4-pro · 推理写作模型"),
+        (r"deepseek[\s_-]*(?:chat|v4[\s_-]*flash)", "deepseek-v4-flash · 快速写作模型"),
+        (r"deepseek", public_label if provider_key == "deepseek" else "deepseek-v4-flash · 快速写作模型"),
+        (r"minimax[\s_-]*m3", "MiniMax-M3 · 连续写作模型"),
+        (r"gemini", "gemini-2.5-flash · 全能写作模型"),
     )
     for pattern, replacement in replacements:
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)

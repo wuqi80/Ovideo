@@ -36,22 +36,22 @@ const SCRIPT_MODEL_PUBLIC_META: Record<AiModel, {
   billingModel: string;
 }> = {
   [AiModel.MinimaxM3]: {
-    label: '一阶 · 连续写作模型',
+    label: 'MiniMax-M3 · 连续写作模型',
     hint: '适合持续',
     billingModel: 'script_tier_1',
   },
   [AiModel.DeepseekChat]: {
-    label: '二阶 · 快速写作模型',
+    label: 'deepseek-v4-flash · 快速写作模型',
     hint: '速度优先',
     billingModel: 'script_tier_2',
   },
   [AiModel.Deepseek]: {
-    label: '三阶 · 推理写作模型',
+    label: 'deepseek-v4-pro · 推理写作模型',
     hint: '推理优先',
     billingModel: 'script_tier_3',
   },
   [AiModel.Gemini]: {
-    label: '四阶 · 全能写作模型',
+    label: 'gemini-2.5-flash · 全能写作模型',
     hint: '综合全能',
     billingModel: 'script_tier_4',
   },
@@ -128,7 +128,7 @@ export function normalizeScriptModelOptions(
     const publicMeta = SCRIPT_MODEL_PUBLIC_META[fallback.value];
     return {
       value: fallback.value,
-      label: publicMeta.label,
+      label: String(row.label || publicMeta.label).trim() || publicMeta.label,
       hint: String(row.hint || publicMeta.hint).trim() || publicMeta.hint,
       operation: String(row.operation || fallback.operation).trim(),
       requestedProvider: String(row.requested_provider || fallback.requestedProvider).trim(),

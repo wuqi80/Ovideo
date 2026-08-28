@@ -24,34 +24,34 @@ describe('scriptModelCatalogService', () => {
     vi.clearAllMocks();
   });
 
-  it('uses public frontend labels without requiring backend runtime metadata', async () => {
+  it('uses backend-resolved model names with capability suffixes', async () => {
     vi.mocked(apiJson).mockResolvedValue({
       success: true,
       models: [
         {
           value: 'minimax-m3',
-          label: '一阶 · 连续写作模型',
+          label: 'MiniMax-M3 · 连续写作模型',
           hint: '适合持续',
           billing_model: 'script_tier_1',
           failover_active: false,
         },
         {
           value: 'deepseek-chat',
-          label: '二阶 · 快速写作模型',
+          label: 'deepseek-v4-flash · 快速写作模型',
           hint: '速度优先',
           billing_model: 'script_tier_2',
           failover_active: false,
         },
         {
           value: 'deepseek',
-          label: '三阶 · 推理写作模型',
+          label: 'deepseek-v4-pro · 推理写作模型',
           hint: '推理优先',
           billing_model: 'script_tier_3',
           failover_active: false,
         },
         {
           value: 'gemini',
-          label: '四阶 · 全能写作模型',
+          label: 'gemini-2.5-flash · 全能写作模型',
           hint: '综合全能',
           billing_model: 'script_tier_4',
           failover_active: true,
@@ -68,21 +68,21 @@ describe('scriptModelCatalogService', () => {
       AiModel.Gemini,
     ]);
     expect(getScriptModelOption(AiModel.DeepseekChat, options)).toMatchObject({
-      label: '二阶 · 快速写作模型',
+      label: 'deepseek-v4-flash · 快速写作模型',
       hint: '速度优先',
       operation: 'deepseek-chat',
       runtime: 'deepseek-v4-flash',
       billingModel: 'script_tier_2',
     });
     expect(getScriptModelOption(AiModel.Deepseek, options)).toMatchObject({
-      label: '三阶 · 推理写作模型',
+      label: 'deepseek-v4-pro · 推理写作模型',
       hint: '推理优先',
       operation: 'deepseek-reasoner',
       runtime: 'deepseek-v4-pro',
       billingModel: 'script_tier_3',
     });
     expect(getScriptModelOption(AiModel.Gemini, options)).toMatchObject({
-      label: '四阶 · 全能写作模型',
+      label: 'gemini-2.5-flash · 全能写作模型',
       hint: '综合全能',
       provider: 'gemini-text',
       runtime: 'gemini-2.5-flash',
@@ -90,16 +90,16 @@ describe('scriptModelCatalogService', () => {
       failoverActive: true,
     });
     expect(getScriptModelOption(AiModel.MinimaxM3, options)).toMatchObject({
-      label: '一阶 · 连续写作模型',
+      label: 'MiniMax-M3 · 连续写作模型',
       hint: '适合持续',
       operation: 'minimax-m3',
       runtime: 'MiniMax-M3',
       billingModel: 'script_tier_1',
     });
     expect(formatScriptModelDisplay(getScriptModelOption(AiModel.MinimaxM3, options)))
-      .toBe('一阶 · 连续写作模型');
+      .toBe('MiniMax-M3 · 连续写作模型');
     expect(formatScriptModelSelectLabel(getScriptModelOption(AiModel.MinimaxM3, options)))
-      .toBe('一阶 · 连续写作模型');
+      .toBe('MiniMax-M3 · 连续写作模型');
     expect(getScriptModelBillingKey(getScriptModelOption(AiModel.Gemini, options)))
       .toBe('script_tier_4');
     expect(resolveScriptAiModel('MiniMax-M3', options)).toBe(AiModel.MinimaxM3);
@@ -127,7 +127,7 @@ describe('scriptModelCatalogService', () => {
     expect(resolveScriptAiModel('deepseek-v4-pro')).toBe(AiModel.Deepseek);
     expect(resolveScriptAiModel('deepseek-chat')).toBe(AiModel.DeepseekChat);
     expect(resolveScriptAiModel('deepseek-v4-flash')).toBe(AiModel.DeepseekChat);
-    expect(formatScriptModelHistoryLabel('deepseek-v4-flash', 'DK金丹')).toBe('二阶 · 快速写作模型');
+    expect(formatScriptModelHistoryLabel('deepseek-v4-flash', 'DK金丹')).toBe('deepseek-v4-flash · 快速写作模型');
     expect(formatScriptModelHistoryLabel('legacy', '历史版本')).toBe('历史版本');
     expect(formatScriptModelHistoryLabel('experimental-runtime', 'GPT 高阶')).toBe('写作模型');
   });

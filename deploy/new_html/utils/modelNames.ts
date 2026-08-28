@@ -1,44 +1,39 @@
-/**
- * 模型名称映射 - 使用修真境界命名
- */
+/** Creator-facing model names. Stable operation keys remain unchanged. */
 
 export const aiModelNames = {
-  'deepseek': 'DK筑基',
-  'gemini': 'GI化神'
+  'deepseek': 'DeepSeek V4 Pro',
+  'gemini': 'Gemini 2.5 Flash'
 };
 
 export const imageModelNames = {
-  'gemini-2.5-flash-image': '化神1阶',
-  'gemini-3.1-flash-image-preview': '化神2阶',
-  'gemini-3.0-pro-image': '化神2阶',
-  'nanobanana': '化神进阶',
-  'doubao': '筑基境界'
+  'gemini-2.5-flash-image': 'Gemini 2.5 Flash Image',
+  'gemini-3.1-flash-image-preview': 'Gemini 3.1 Flash Image Preview',
+  'gemini-3-pro-image-preview': 'Gemini 3.1 Flash Image Preview',
+  'gemini-3.0-pro-image': 'Gemini 3.0 Pro Image',
+  'nanobanana': 'Gemini 3.1 Flash Image Preview',
+  'doubao': 'Doubao-Seedream-5.0-lite'
 };
 
-// 分镜页(GenerationPage)模型选择按钮显示名。
-// 后端 ID 用前端键即可（'gpt_image_vip'/'gpt_image_official'/'nanobanana' 等），
-// 前端按钮上只显示"修真境界"别名隐藏真实模型名。
-// 2026-05-21：新增 gpt_image_vip / gpt_image_official；nano3→nano2 不改 key 'nanobanana'。
+// 分镜页仍使用稳定 key，按钮显示实际模型和版本。
 export const generationModelNames = {
-  'qwen': '练气一阶',
-  'qwenN': '练气一阶',
-  'qwen_lora': '筑基',
-  'qwenN_lora': '筑基',
-  'kontext': '练气二阶',
-  'nanobanana': '化神',
-  'gpt_image_vip': '天劫一阶',
-  'gpt_image_official': '天劫二阶'
+  'qwen': 'Qwen Image Edit 2509',
+  'qwenN': 'Qwen Image Edit 2509',
+  'qwen_lora': 'Qwen Image Edit 2509 + Lightning LoRA',
+  'qwenN_lora': 'Qwen Image Edit 2509 + Lightning LoRA',
+  'kontext': 'Kontext v2',
+  'nanobanana': 'Gemini 3.1 Flash Image Preview',
+  'gpt_image_vip': 'GPT Image 2 VIP',
+  'gpt_image_official': 'GPT Image 2'
 };
 
 export const videoModelNames = {
-  'wan2': '练气',
-  'sora2': '金丹',
-  'veo': '化神',
-  'mini': '筑基',
-  // 2026-05-24 DashScope 共享 API 三家
-  'kling': '合体',
-  'vidu': '大乘',
-  'happyhorse': '炼虚'
+  'wan2': 'Wan 2.6',
+  'sora2': 'Sora Video 2',
+  'veo': 'Veo 3.1',
+  'mini': 'MiniMax Hailuo 2.3',
+  'kling': 'Kling V3',
+  'vidu': 'Vidu Q3',
+  'happyhorse': 'HappyHorse 1.0'
 };
 
 // 通用获取显示名称的函数

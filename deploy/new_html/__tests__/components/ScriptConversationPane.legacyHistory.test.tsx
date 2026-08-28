@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   buildConversationTurns,
+  orderConversationMessages,
   ScriptConversationPane,
   StoryboardVersionBody,
 } from '../../components/ScriptConversationPane';
@@ -17,6 +18,72 @@ import {
 afterEach(cleanup);
 
 describe('ScriptConversationPane legacy history', () => {
+  it('renders the initial script before V1 even when migrated timestamps are reversed', () => {
+    const messages: ScriptConversation['messages'] = [
+      { id: 'msg-v1', role: 'assistant', content: 'V1 分镜脚本', status: 'completed', replyToMessageId: 'msg-initial', createdAt: 1, updatedAt: 1 },
+      { id: 'msg-initial', role: 'user', content: '初始剧本', status: 'completed', createdAt: 10, updatedAt: 10 },
+      { id: 'msg-v2', role: 'assistant', content: 'V2 分镜脚本', status: 'completed', replyToMessageId: 'msg-revision', createdAt: 12, updatedAt: 12 },
+      { id: 'msg-revision', role: 'user', content: '第二轮修改要求', status: 'completed', createdAt: 11, updatedAt: 11 },
+    ];
+    const versions: ScriptStoryboardVersion[] = [
+      {
+        id: 'ver-2', scriptId: 'script-1', messageId: 'msg-v2', versionNo: 2,
+        content: 'V2 分镜脚本', storyboardItems: [], source: 'ai', status: 'ready', createdAt: 12, updatedAt: 12,
+      },
+      {
+        id: 'ver-1', scriptId: 'script-1', messageId: 'msg-v1', versionNo: 1,
+        content: 'V1 分镜脚本', storyboardItems: [], source: 'ai', status: 'ready', createdAt: 1, updatedAt: 1,
+      },
+    ];
+
+    expect(orderConversationMessages(messages, versions).map(message => message.id)).toEqual([
+      'msg-initial',
+      'msg-v1',
+      'msg-revision',
+      'msg-v2',
+    ]);
+
+    const conversation: ScriptConversation = {
+      scriptId: 'script-1',
+      currentVersionId: 'ver-2',
+      messages,
+      versions,
+    };
+    const selectedFile: ProjectFile = {
+      id: 'script-1',
+      name: '分集剧本',
+      originalContent: '初始剧本',
+      scriptContent: 'V2 分镜脚本',
+      storyboard: null,
+      extractedCharacters: [],
+      extractedScenes: [],
+      status: FileStatus.Completed,
+      lastUpdated: 12,
+      versions: [],
+    };
+    render(
+      <ScriptConversationPane
+        selectedFile={selectedFile}
+        conversation={conversation}
+        aiModel={AiModel.DeepseekChat}
+        isWorkflowScript
+        isLoading={false}
+        isSending={false}
+        onChangeModel={() => undefined}
+        onSend={async () => undefined}
+        onGenerateDesign={() => undefined}
+        onEditVersion={async () => undefined}
+        onExportVersion={() => undefined}
+        onOpenStoryboard={() => undefined}
+        storyboardItemCount={0}
+      />,
+    );
+
+    const initialCard = screen.getByText('输入文字剧本').closest('article')!;
+    const v1Card = screen.getByText(/^V1 ·/).closest('article')!;
+    expect(initialCard.compareDocumentPosition(v1Card) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
   it('keeps the initial input unversioned and orders real generated versions after it', () => {
     const messages: ScriptConversation['messages'] = [
       { id: 'msg-user-1', role: 'user', content: '初始文字剧本', status: 'completed', createdAt: 1, updatedAt: 1 },

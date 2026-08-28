@@ -1245,7 +1245,7 @@ async def cleanup_stale_tasks(hours: int = 24):
 
 
 # ============================================
-# 2026-05-26 Slice 2: 积分规则 CRUD
+# 2026-05-26 Slice 2: 创作点数规则 CRUD
 # ============================================
 from dao_credit import CreditRuleDAO  # noqa: E402
 
@@ -1725,13 +1725,14 @@ async def admin_move_project(project_id: str, body: ProjectMoveBody, request: Re
 
 
 # ============================================
-# 2026-05-26 Slice 5: 管理员素材库 / 积分账户 / 积分流水 / 审计日志
+# 2026-05-26 Slice 5: 管理员素材库 / 创作点数账户 / 创作点数流水 / 审计日志
 # ============================================
 from dao_media_library import MediaLibraryDAO  # noqa: E402
 from dao_credit import CreditAccountDAO, CreditTransactionDAO  # noqa: E402
 from dao_admin_audit import AdminAuditLogDAO  # noqa: E402
 import admin_audit_service  # noqa: E402
 import credit_service  # noqa: E402
+from services.wechat_recharge_service import list_recharge_orders  # noqa: E402
 
 
 @router.get("/media-library/items", dependencies=[Depends(require_admin)])
@@ -1822,7 +1823,7 @@ async def admin_list_credit_accounts(limit: int = 50, offset: int = 0, search: O
 
 
 class AdminCreditAdjustBody(BaseModel):
-    delta: int  # 正/负，单位：积分（最小单位）
+    delta: int  # 正/负，单位：创作点数（最小单位）
     reason: str = ''
     business_id: Optional[str] = None
 
@@ -1860,6 +1861,7 @@ async def admin_list_credit_transactions(
     user_id: Optional[str] = None,
     tx_type: Optional[str] = None,
     operated_by: Optional[str] = None,
+    feature_key: Optional[str] = None,
     business_type: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
@@ -1869,11 +1871,32 @@ async def admin_list_credit_transactions(
         user_id=user_id,
         tx_type=tx_type,
         operated_by=operated_by,
+        feature_key=feature_key,
         business_type=business_type,
         limit=limit,
         offset=offset,
     )
     return {"success": True, "transactions": [_row_to_jsonable(r) for r in rows]}
+
+
+@router.get("/wechat-recharge-orders", dependencies=[Depends(require_admin)])
+async def admin_list_wechat_recharge_orders(
+    user_id: Optional[str] = None,
+    status: Optional[str] = None,
+    out_trade_no: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """List server-authoritative WeChat creation-point recharge orders."""
+    _require_db()
+    rows = await list_recharge_orders(
+        user_id=user_id or '',
+        status=status or '',
+        out_trade_no=out_trade_no or '',
+        limit=limit,
+        offset=offset,
+    )
+    return {"success": True, "orders": [_row_to_jsonable(row) for row in rows]}
 
 
 @router.get("/audit-logs", dependencies=[Depends(require_admin)])

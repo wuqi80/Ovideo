@@ -2,8 +2,8 @@
  * GPT Image 2 系列前端服务
  * 
  * 单一入口 generateGptImage：
- * - tier="vip"      → 默认分组 GPT_IMAGE_API_KEY → 模型 gpt-image-2-vip   （天劫一阶）
- * - tier="official" → Sora2Official 分组 SORA2_GPT_IMAGE_API_KEY → 模型 gpt-image-2 （天劫二阶）
+ * - tier="vip"      → 默认分组 GPT_IMAGE_API_KEY → 模型 gpt-image-2-vip
+ * - tier="official" → Sora2Official 分组 SORA2_GPT_IMAGE_API_KEY → 模型 gpt-image-2
  * 
  * references 为空 → 文生图 (后端 /v1/images/generations)
  * references 非空 → 图改图 (后端 /v1/images/edits, multipart)
@@ -39,6 +39,8 @@ export interface GenerateGptImageOptions {
   fileRole?: string;
   projectId?: string;
   episodeId?: string;
+  sourcePage?: string;
+  sourceItemId?: string;
 }
 
 export interface GptImageResult {
@@ -85,6 +87,8 @@ export async function generateGptImage(
     file_role: opts.fileRole,
     project_id: opts.projectId,
     episode_id: opts.episodeId,
+    source_page: opts.sourcePage,
+    source_item_id: opts.sourceItemId,
   };
 
   const data = await apiJson<GenerateGptImageResponse>('/api/gpt-image/generate', {

@@ -18,7 +18,7 @@ describe('publicTaskTerminology', () => {
     expect(formatPublicTaskText('豆包图像生成', 'doubao-image'))
       .toBe(DESIGN_IMAGE_MODEL_OPTIONS[2].label);
     expect(formatPublicTaskText('Doubao SeedDream 5.0 Lite image failed', 'doubao-image'))
-      .not.toMatch(/doubao|seedream/i);
+      .toContain('Doubao-Seedream-5.0-lite');
   });
 
   it('uses the public video aliases shown by the selector', () => {

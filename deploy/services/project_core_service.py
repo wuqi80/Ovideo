@@ -35,6 +35,7 @@ async def create_project(
     description: Optional[str],
     visibility: Optional[str],
     member_usernames: Optional[List[str]],
+    settings: Optional[Dict[str, Any]],
     project_dao: Any,
     version_dao: Any,
     project_member_dao: Any,
@@ -46,6 +47,7 @@ async def create_project(
         project_name=project_name,
         description=description,
         visibility=visibility or "private",
+        settings=settings or {},
     )
     project_id = project["project_id"]
 

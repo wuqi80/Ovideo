@@ -1138,11 +1138,11 @@ export const App = () => {
         type="button"
         onClick={() => { window.location.href = '/credits'; }}
         className="studio-header-button fixed right-5 top-5 z-[160] inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold backdrop-blur-xl transition"
-        title="查看积分明细"
-        aria-label={`可用积分 ${creditBalance ?? '加载中'}`}
+        title="查看创作点数明细"
+        aria-label={`可用创作点数 ${creditBalance ?? '加载中'}`}
       >
         <Coins size={15} />
-        <span>可用积分</span>
+        <span>可用创作点数</span>
         <strong className="font-mono text-[13px]">{creditBalance ?? '--'}</strong>
       </button>
       <div

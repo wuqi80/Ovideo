@@ -6,7 +6,7 @@ import {
 } from '../../utils/storyboardGenerationModels';
 
 describe('storyboard generation model catalog', () => {
-  it('keeps all stable operation identifiers while exposing capability names', () => {
+  it('keeps all stable operation identifiers while exposing model versions and capabilities', () => {
     expect(STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => option.value)).toEqual([
       'nanobanana',
       'qwen',
@@ -18,14 +18,14 @@ describe('storyboard generation model catalog', () => {
       'gpt_image_official',
     ]);
     expect(STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => option.label)).toEqual([
-      '一阶 · 快速生图模型',
-      '二阶 · 多参考图模型',
-      '二阶 · 风格强化模型',
-      '三阶 · 高质量生图模型',
-      '三阶 · 连贯编辑模型',
-      '三阶 · 风格增强模型',
-      '四阶 · 高清生图模型',
-      '四阶 · 全能生图模型',
+      'Gemini 3.1 Flash Image Preview · 快速生图模型',
+      'Qwen Image Edit 2509 · 多参考图模型',
+      'Qwen Image Edit 2509 + Lightning LoRA · 风格强化模型',
+      'Kontext v2 · 高质量生图模型',
+      'Qwen Image Edit 2509 · 连贯编辑模型',
+      'Qwen Image Edit 2509 + Lightning LoRA · 风格增强模型',
+      'GPT Image 2 VIP · 高清生图模型',
+      'GPT Image 2 · 全能生图模型',
     ]);
   });
 

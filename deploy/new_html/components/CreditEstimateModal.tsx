@@ -1,6 +1,6 @@
 /**
  * CreditEstimateModal.tsx
- * 2026-05-26 Slice 2 — 通用积分估算弹窗
+ * 2026-05-26 Slice 2 — 通用创作点数估算弹窗
  *
  * 用法:
  *   <CreditEstimateModal
@@ -30,7 +30,7 @@ interface CreditEstimateModalProps {
 }
 
 export const CreditEstimateModal: React.FC<CreditEstimateModalProps> = ({
-  open, featureKey, params, title = '积分预估',
+  open, featureKey, params, title = '创作点数预估',
   description, confirmLabel = '确认并继续', cancelLabel = '取消',
   onCancel, onConfirm,
 }) => {
@@ -80,13 +80,13 @@ export const CreditEstimateModal: React.FC<CreditEstimateModalProps> = ({
             <div className="space-y-2.5">
               {!estimate.enabled && (
                 <div className="p-3 bg-g50 border border-g75 rounded text-xs text-success">
-                  该功能未配置积分规则，可免费使用
+                  该功能未配置创作点数规则，可免费使用
                 </div>
               )}
 
               {estimate.enabled && (
                 <>
-                  <Row label="预计消耗" value={`${estimate.estimated_cost} 积分`} highlight />
+                  <Row label="预计消耗" value={`${estimate.estimated_cost} 创作点数`} highlight />
                   <Row label="规则版本" value={estimate.rule_version || '-'} mono />
                   {estimate.base_cost !== undefined && (
                     <Row label="基础消耗" value={`${estimate.base_cost} (${estimate.billing_unit || 'task'})`} />
@@ -96,7 +96,7 @@ export const CreditEstimateModal: React.FC<CreditEstimateModalProps> = ({
                   )}
                   <Row
                     label="账户余额"
-                    value={estimate.balance != null ? `${estimate.balance} 积分` : '-'}
+                    value={estimate.balance != null ? `${estimate.balance} 创作点数` : '-'}
                     valueClass={estimate.enough ? 'text-success' : 'text-danger'}
                   />
                   {!estimate.enough && (

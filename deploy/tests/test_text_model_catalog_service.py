@@ -6,7 +6,16 @@ from services import text_model_catalog_service
 
 
 @pytest.mark.asyncio
-async def test_catalog_returns_public_model_tiers_without_runtime_metadata(monkeypatch):
+async def test_catalog_returns_runtime_model_names_without_secret_metadata(monkeypatch):
+    def fake_resolve_provider(provider, model=None, usage_scope="workflow"):
+        assert usage_scope == "studio"
+        runtime_models = {
+            ("minimax", "minimax-m3"): "MiniMax-M3",
+            ("deepseek", "deepseek-chat"): "deepseek-v4-flash",
+            ("deepseek", "deepseek-reasoner"): "deepseek-v4-pro",
+        }
+        return SimpleNamespace(model_name=runtime_models[(provider, model)])
+
     async def fake_resolve_ai_proxy_provider(provider, model=None, usage_scope="workflow"):
         assert provider == "gemini-text"
         assert model is None
@@ -21,6 +30,7 @@ async def test_catalog_returns_public_model_tiers_without_runtime_metadata(monke
         "resolve_ai_proxy_provider",
         fake_resolve_ai_proxy_provider,
     )
+    monkeypatch.setattr(text_model_catalog_service, "resolve_provider", fake_resolve_provider)
 
     models = await text_model_catalog_service.build_text_model_catalog("studio")
 
@@ -31,10 +41,10 @@ async def test_catalog_returns_public_model_tiers_without_runtime_metadata(monke
         "gemini",
     ]
     assert [item["label"] for item in models] == [
-        "一阶 · 连续写作模型",
-        "二阶 · 快速写作模型",
-        "三阶 · 推理写作模型",
-        "四阶 · 全能写作模型",
+        "MiniMax-M3 · 连续写作模型",
+        "deepseek-v4-flash · 快速写作模型",
+        "deepseek-v4-pro · 推理写作模型",
+        "fallback-v4 · 全能写作模型",
     ]
     assert [item["hint"] for item in models] == [
         "适合持续",

@@ -41,7 +41,7 @@ export const InlineCreditEstimate: React.FC<InlineCreditEstimateProps> = ({
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs text-warning ${className}`}>
       <Coins size={compact ? 11 : 14} />
-      {compact ? `预计 ${cost} 积分` : `预计消耗 ${cost} 积分`}
+      {compact ? `预计 ${cost} 创作点数` : `预计消耗 ${cost} 创作点数`}
       {!compact && <span className="text-n100">· 成功后扣除</span>}
     </span>
   );

@@ -52,14 +52,14 @@ export const Header: React.FC<HeaderProps> = ({
   const username = getStoredUsername('User');
   const isAdmin = username === 'admin' || username === 'lllsdhr';
 
-  // 积分余额：与 WorkflowLayout 同一刷新模式（挂载 + 60s 轮询 + focus + credits:updated 事件）
+  // 创作点数余额：与 WorkflowLayout 同一刷新模式（挂载 + 60s 轮询 + focus + credits:updated 事件）
   const [availableCredits, setAvailableCredits] = useState<number | null>(null);
   const refreshCredits = useCallback(async () => {
     try {
       const balance = await getCreditBalance();
       setAvailableCredits(balance.available_credits);
     } catch (error) {
-      console.warn('获取用户积分失败:', error);
+      console.warn('获取用户创作点数失败:', error);
       setAvailableCredits(null);
     }
   }, []);
@@ -270,19 +270,19 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </span>
 
-          {/* 积分余额：点击跳转积分页，消费后通过 credits:updated 事件即时刷新 */}
+          {/* 创作点数余额：点击跳转创作点数页，消费后通过 credits:updated 事件即时刷新 */}
           <button
             type="button"
             onClick={() => { window.location.href = '/credits'; }}
             className="flex items-center gap-1 rounded px-1.5 py-1 hover:bg-n20 transition-colors"
-            title="当前可用积分，点击查看积分明细"
+            title="当前可用创作点数，点击查看创作点数明细"
             data-testid="header-credit-balance"
           >
             <Coins className="w-3.5 h-3.5 text-warning" />
             <span className="text-xs font-semibold text-n700">
               {availableCredits === null ? '--' : availableCredits.toLocaleString()}
             </span>
-            <span className="hidden sm:inline text-[10px] text-n100">积分</span>
+            <span className="hidden sm:inline text-[10px] text-n100">创作点数</span>
           </button>
           
           {/* 用户菜单 */}

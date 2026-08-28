@@ -48,18 +48,18 @@ describe('notificationMapping', () => {
 
         it('strips "已完成" suffix from title', () => {
             const t = mapNotificationToTask(row({ title: 'Seedance 视频生成 已完成' }));
-            expect(t!.title).toBe('四阶 · 多模态标准视频模型 视频生成');
+            expect(t!.title).toBe('doubao-seedance-2-0-260128 · 多模态标准视频模型 视频生成');
         });
 
         it('translates legacy provider titles to current public model labels', () => {
             expect(mapNotificationToTask(row({
                 category: 'text',
                 title: 'DeepSeek 文本生成 已完成',
-            }))!.title).toBe('二阶 · 快速写作模型');
+            }))!.title).toBe('deepseek-v4-flash · 快速写作模型');
             expect(mapNotificationToTask(row({
                 category: 'image',
                 title: '豆包图像生成 已完成',
-            }))!.title).toBe('三阶 · 参考图生图模型');
+            }))!.title).toBe('Doubao-Seedream-5.0-lite · 参考图生图模型');
         });
 
         it('strips "失败" suffix and sets status=failed + error', () => {
@@ -129,6 +129,55 @@ describe('notificationMapping', () => {
             expect(t!.kind).toBe('qwen-image');
         });
 
+        it('classifies the legacy generic Gemini title without calling it a node image', () => {
+            const t = mapNotificationToTask(row({
+                category: 'image',
+                title: 'AI 生图任务 已完成',
+            }));
+            expect(t!.kind).toBe('gemini-image');
+        });
+
+        it('uses persisted task metadata to restore image kind and shot navigation context', () => {
+            const t = mapNotificationToTask(row({
+                category: 'image',
+                title: '图片任务 已完成',
+                target_project_id: null,
+                target_page: null,
+                target_item_id: null,
+                metadata: {
+                    task_type: 'gemini_image',
+                    provider: 'gemini',
+                    model: 'gemini-3.1-flash-image-preview',
+                    project_id: 'proj_meta',
+                    episode_id: 'ep_meta',
+                    source_page: 'design',
+                    source_item_id: 'shot_meta',
+                    entity_type: 'storyboard_item',
+                    entity_id: 'shot_meta',
+                    file_role: 'generated_image',
+                },
+            }));
+            expect(t).toMatchObject({
+                kind: 'gemini-image',
+                targetProjectId: 'proj_meta',
+                episodeId: 'ep_meta',
+                targetPage: 'generation',
+                targetItemId: 'shot_meta',
+                targetEntityType: 'storyboard_item',
+                targetEntityId: 'shot_meta',
+                fileRole: 'generated_image',
+                metadata: expect.objectContaining({
+                    provider: 'gemini',
+                    model: 'gemini-3.1-flash-image-preview',
+                }),
+            });
+        });
+
+        it('does not assume an unknown generic image task used a node', () => {
+            const t = mapNotificationToTask(row({ category: 'image', title: '图片任务 已完成' }));
+            expect(t!.kind).toBe('other');
+        });
+
         it('infers kind=auto-storyboard from category=text + "分镜"', () => {
             const t = mapNotificationToTask(row({ category: 'text', title: '自动分镜 已完成' }));
             expect(t!.kind).toBe('auto-storyboard');
@@ -165,7 +214,7 @@ describe('notificationMapping', () => {
 
             expect(t).toMatchObject({
                 taskId: 'task_new',
-                title: '二阶 · 快速写作模型 剧本分镜',
+                title: 'deepseek-v4-flash · 快速写作模型 剧本分镜',
                 kind: 'auto-storyboard',
                 status: 'completed',
                 targetPage: 'script',
@@ -188,6 +237,34 @@ describe('notificationMapping', () => {
             expect(t!.notificationId).toBe('notif_new');
             expect(t!.taskId).toBe('task_new');
             expect(t!.status).toBe('failed');
+        });
+
+        it('uses the runtime task type and id to identify Gemini image tasks', () => {
+            const t = mapRuntimeNotificationToTask({
+                id: 'gemini_img_42',
+                taskId: 'gemini_img_42',
+                taskType: 'gemini_image',
+                type: 'image',
+                status: 'completed',
+                message: 'AI 生图任务 已完成',
+                targetView: 'Video' as any,
+                targetPage: 'generation',
+                targetProjectId: 'proj_1',
+                targetItemId: 'shot_06',
+                episodeId: 'ep_1',
+                provider: 'gemini',
+                modelName: 'nanobanana',
+                timestamp: Date.now(),
+            });
+            expect(t).toMatchObject({
+                kind: 'gemini-image',
+                targetItemId: 'shot_06',
+                episodeId: 'ep_1',
+                metadata: {
+                    provider: 'gemini',
+                    modelName: 'nanobanana',
+                },
+            });
         });
     });
 

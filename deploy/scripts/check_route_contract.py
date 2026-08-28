@@ -21,9 +21,9 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 295
-DEFAULT_EXPECTED_OPERATIONS = 356
-DEFAULT_EXPECTED_FRONTEND_ROUTES = 32
+DEFAULT_EXPECTED_PATHS = 313
+DEFAULT_EXPECTED_OPERATIONS = 375
+DEFAULT_EXPECTED_FRONTEND_ROUTES = 36
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -42,6 +42,15 @@ EXPECTED_ENDPOINTS = {
     ("/api/public/final-products/{share_token}/feedback", "POST"): ("final_product_share_routes", "create_public_feedback"),
     ("/share/final/{share_token}", "GET"): ("routers.frontend_pages", "final_product_share_spa"),
     ("/api/login", "POST"): ("routers.auth", "login"),
+    ("/api/auth/sms-code", "POST"): ("routers.phone_auth", "send_sms_code"),
+    ("/api/auth/phone/register", "POST"): ("routers.phone_auth", "register"),
+    ("/api/auth/phone/login", "POST"): ("routers.phone_auth", "phone_login"),
+    ("/api/auth/legacy/bind-phone", "POST"): ("routers.phone_auth", "bind_phone"),
+    ("/api/auth/phone/password-reset", "POST"): ("routers.phone_auth", "reset_password"),
+    ("/api/payments/wechat/options", "GET"): ("routers.wechat_pay", "options"),
+    ("/api/payments/wechat/quote", "POST"): ("routers.wechat_pay", "quote"),
+    ("/api/payments/wechat/orders", "POST"): ("routers.wechat_pay", "create_order"),
+    ("/api/payments/wechat/notify", "POST"): ("routers.wechat_pay", "notify"),
     ("/api/auth/register", "POST"): ("routers.auth_legacy", "register_user"),
     ("/api/auth/login", "POST"): ("routers.auth_legacy", "login_user"),
     ("/api/user/profile", "GET"): ("routers.auth_legacy", "get_user_profile"),
@@ -85,6 +94,10 @@ EXPECTED_ENDPOINTS = {
     ("/health", "GET"): ("routers.cluster_status", "health_check"),
     ("/", "GET"): ("routers.frontend_pages", "root"),
     ("/login", "GET"): ("routers.frontend_pages", "login_page"),
+    ("/register", "GET"): ("routers.frontend_pages", "login_page"),
+    ("/legacy-login", "GET"): ("routers.frontend_pages", "login_page"),
+    ("/bind-phone", "GET"): ("routers.frontend_pages", "login_page"),
+    ("/password-reset", "GET"): ("routers.frontend_pages", "login_page"),
     ("/favicon.ico", "GET"): ("routers.frontend_pages", "favicon"),
     ("/favicon.png", "GET"): ("routers.frontend_pages", "favicon_png"),
     ("/editor", "GET"): ("routers.frontend_pages", "editor_page"),
@@ -751,6 +764,10 @@ def check_frontend_pages_routes_extracted(root: Path) -> int:
     route_paths = {
         "/",
         "/login",
+        "/register",
+        "/legacy-login",
+        "/bind-phone",
+        "/password-reset",
         "/favicon.ico",
         "/favicon.png",
         "/editor",
@@ -6338,7 +6355,7 @@ def check_frontend_dependency_contract(root: Path) -> int:
             '--font-mono: "Space Mono", Inconsolata, ui-monospace',
             new_html / "styles" / "design-tokens.css",
         ),
-        (login_html, "fetch('/api/login'", root / "login.html"),
+        (login_html, "api('/api/login'", root / "login.html"),
         (login_html, "localStorage.setItem(TOKEN_KEY", root / "login.html"),
     ]
     for text, snippet, path in required_frontend_build_snippets:

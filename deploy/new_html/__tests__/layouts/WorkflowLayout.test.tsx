@@ -103,7 +103,10 @@ describe('WorkflowLayout template pipeline shell', () => {
     expect(createSource).toContain("navigate(`/projects/${newProjectId}/ep/${newEpisodeId}/workflow/script`)");
     expect(createSource).toContain('开始创作');
     expect(createSource).toContain('<details');
-    expect(createSource).toContain('可选：调整故事类型和成片时长');
+    expect(createSource).toContain('可选：调整故事类型、成片时长和画面方向');
+    expect(createSource).toContain("'校园'");
+    expect(createSource).toContain('自定义故事类型');
+    expect(createSource).toContain('projectCreationSettings');
     expect(createSource).toContain('只需说清楚“谁、发生了什么”');
     expect(createSource).toContain('<AppSidebar');
   });

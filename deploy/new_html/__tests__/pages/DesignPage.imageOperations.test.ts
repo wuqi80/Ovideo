@@ -50,10 +50,17 @@ describe('DesignPage image operation modals', () => {
 
   it('keeps image-to-image controls on a stable second row', () => {
     expect(source).toContain('mt-3 grid min-h-[44px]');
-    expect(source).toContain('xl:min-w-[556px] xl:justify-start xl:pl-[84px]');
+    expect(source).toContain('xl:w-[556px] xl:justify-start');
+    expect(source).not.toContain('xl:pl-[84px]');
     expect(source).toContain('invisible pointer-events-none');
     expect(source).toContain('生成张数');
     expect(source).toContain('参考图 + 生成图 ≤ 15');
+  });
+
+  it('keeps white-background turnaround sheets visibly fixed to 16:9', () => {
+    expect(source).toContain("if (enabled) setAspectRatio('16:9')");
+    expect(source).toContain('disabled={standardTurnaround && supportsStandardTurnaround(asset.assetType)}');
+    expect(source).toContain('固定使用 16:9');
   });
 
   it('only enables and submits selected references in image-to-image mode', () => {

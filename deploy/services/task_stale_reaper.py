@@ -9,7 +9,7 @@ from services import credit_service
 
 logger = logging.getLogger(__name__)
 
-STALE_TASK_MESSAGE = "任务执行已中断，请重新生成；本次未扣积分"
+STALE_TASK_MESSAGE = "任务执行已中断，请重新生成；本次未扣创作点数"
 
 
 async def reap_stale_tasks(

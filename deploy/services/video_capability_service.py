@@ -30,6 +30,11 @@ MINIMAX_H3_PREFERRED_PORT = 8188
 GPU2_ROUTING_NAME = "GPU2"
 
 
+def _video_model_label(model_name: Optional[str], capability: str) -> str:
+    runtime = str(model_name or "").strip() or "视频模型"
+    return f"{runtime} · {capability}"
+
+
 def _is_seedance_omni_model(model_name: str) -> bool:
     normalized = (model_name or "").lower()
     return "2-0" in normalized or "2.0" in normalized
@@ -229,8 +234,8 @@ def _seedance_manifest(
 def _minimax_h3_video_manifest(
     *,
     key: str = "MiniMaxH3",
-    label: str = "一阶 · 节点标准模型",
-    model_name: str = "MiniMax-H3 FL2VA",
+    label: str = "MiniMax H3 · 节点标准模型",
+    model_name: str = "MiniMax H3",
     profile: str = "standard",
     available: bool,
     target: Optional[Dict[str, Any]] = None,
@@ -338,7 +343,10 @@ def build_video_model_manifest(
             _seedance_manifest(
                 standard_seedance_model or SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"],
                 key="Seedance15",
-                label="Seedance 1.5",
+                label=_video_model_label(
+                    standard_seedance_model or SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"],
+                    "首尾帧视频模型",
+                ),
                 omni=False,
                 available=is_available("Seedance15"),
             )
@@ -348,21 +356,21 @@ def build_video_model_manifest(
             _seedance_manifest(
                 standard_seedance_model,
                 key="Seedance2",
-                label="四阶 · 多模态标准视频模型",
+                label=_video_model_label(standard_seedance_model, "多模态标准视频模型"),
                 omni=seedance_omni and _is_seedance_omni_model(standard_seedance_model),
                 available=is_available("Seedance2"),
             ),
             _seedance_manifest(
                 fast_seedance_model,
                 key="Seedance2Fast",
-                label="五阶 · 多模态快速视频模型",
+                label=_video_model_label(fast_seedance_model, "多模态快速视频模型"),
                 omni=seedance_omni and _is_seedance_omni_model(fast_seedance_model),
                 available=is_available("Seedance2Fast"),
             ),
             _seedance_manifest(
                 mini_seedance_model,
                 key="Seedance2Mini",
-                label="六阶 · 多模态简化视频模型",
+                label=_video_model_label(mini_seedance_model, "多模态简化视频模型"),
                 omni=seedance_omni and _is_seedance_omni_model(mini_seedance_model),
                 available=is_available("Seedance2Mini"),
                 resolutions=["480p", "720p"],
@@ -370,7 +378,7 @@ def build_video_model_manifest(
         ]
 
     return {
-        "manifest_version": "2026-08-21.1",
+        "manifest_version": "2026-08-28.1",
         "model_scope": model_scope,
         "models": [
             *[
@@ -387,28 +395,31 @@ def build_video_model_manifest(
                     target=minimax_h3_target,
                 )
                 for key, label, model_name, profile in (
-                    ("MiniMaxH3", "一阶 · 节点标准模型", "MiniMax-H3 FL2VA", "standard"),
-                    ("MiniMaxH3Fast", "二阶 · 节点快速模型", "MiniMax-H3 FL2VA + SageAttention", "fast"),
-                    ("MiniMaxH3Mini", "三阶 · 节点简化模型", "MiniMax-H3 FL2VA + Qwen3-VL-4B ClipProj", "mini"),
+                    ("MiniMaxH3", "MiniMax H3 · 节点标准模型", "MiniMax H3", "standard"),
+                    ("MiniMaxH3Fast", "MiniMax H3 Fast · 节点快速模型", "MiniMax H3 Fast", "fast"),
+                    ("MiniMaxH3Mini", "MiniMax H3 Mini · 节点简化模型", "MiniMax H3 Mini", "mini"),
                 )
             ],
             _fixed_api_video_manifest(
                 "Veo",
-                "八阶 · 高质量快速视频模型",
+                _video_model_label(runtime_model("Veo", VEO_DEFAULT_VIDEO_MODEL), "高质量快速视频模型"),
                 "veo",
                 runtime_model("Veo", VEO_DEFAULT_VIDEO_MODEL),
                 available=is_available("Veo"),
             ),
             _fixed_api_video_manifest(
                 "Sora2",
-                "九阶 · 长镜头视频模型",
+                _video_model_label(runtime_model("Sora2", SORA2_DEFAULT_VIDEO_MODEL), "长镜头视频模型"),
                 "sora2",
                 runtime_model("Sora2", SORA2_DEFAULT_VIDEO_MODEL),
                 available=is_available("Sora2"),
             ),
             {
                 "key": "大能",
-                "label": "十阶 · 镜头叙事视频模型",
+                "label": _video_model_label(
+                    runtime_model("大能", DASHSCOPE_DEFAULT_MODEL_MAP["wan26"]),
+                    "镜头叙事视频模型",
+                ),
                 "provider": "dashscope",
                 "model_name": runtime_model("大能", DASHSCOPE_DEFAULT_MODEL_MAP["wan26"]),
                 "available": is_available("大能"),
@@ -428,7 +439,10 @@ def build_video_model_manifest(
             *seedance_models,
             {
                 "key": "MINI",
-                "label": "七阶 · 首尾帧标准视频模型",
+                "label": _video_model_label(
+                    runtime_model("MINI", MINIMAX_DEFAULT_VIDEO_MODEL),
+                    "首尾帧标准视频模型",
+                ),
                 "provider": "minimax",
                 "model_name": runtime_model("MINI", MINIMAX_DEFAULT_VIDEO_MODEL),
                 "model_options": runtime_options(
@@ -455,7 +469,10 @@ def build_video_model_manifest(
             },
             {
                 "key": "Kling",
-                "label": "十一阶 · 全能音画视频模型",
+                "label": _video_model_label(
+                    runtime_model("Kling", DASHSCOPE_DEFAULT_MODEL_MAP["kling-standard"]),
+                    "全能音画视频模型",
+                ),
                 "provider": "dashscope",
                 "model_name": runtime_model("Kling"),
                 "model_options": runtime_options("Kling"),
@@ -476,7 +493,10 @@ def build_video_model_manifest(
             },
             {
                 "key": "Vidu",
-                "label": "十二阶 · 多参考视频模型",
+                "label": _video_model_label(
+                    runtime_model("Vidu", DASHSCOPE_DEFAULT_MODEL_MAP["vidu-reference-q3"]),
+                    "多参考视频模型",
+                ),
                 "provider": "dashscope",
                 "model_name": runtime_model("Vidu"),
                 "model_options": runtime_options("Vidu"),
@@ -495,7 +515,10 @@ def build_video_model_manifest(
             },
             {
                 "key": "HappyHorse",
-                "label": "十三阶 · 角色一致性视频模型",
+                "label": _video_model_label(
+                    runtime_model("HappyHorse", DASHSCOPE_DEFAULT_MODEL_MAP["happyhorse"]),
+                    "角色一致性视频模型",
+                ),
                 "provider": "dashscope",
                 "model_name": runtime_model("HappyHorse", DASHSCOPE_DEFAULT_MODEL_MAP["happyhorse"]),
                 "available": is_available("HappyHorse"),

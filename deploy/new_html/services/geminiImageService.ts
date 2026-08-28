@@ -35,6 +35,8 @@ export interface GeminiImageOptions {
     fileRole?: string;
     projectId?: string;
     episodeId?: string;
+    sourcePage?: string;
+    sourceItemId?: string;
 }
 
 interface GeminiImageProxyResponse {
@@ -73,6 +75,8 @@ export const generateGeminiImageViaProxy = async (options: GeminiImageOptions): 
                 file_role: options.fileRole,
                 project_id: options.projectId,
                 episode_id: options.episodeId,
+                source_page: options.sourcePage,
+                source_item_id: options.sourceItemId,
             })
         }, 'Gemini 图像生成');
 
