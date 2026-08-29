@@ -893,7 +893,6 @@
         const successMessage = document.getElementById('successMessage');
         const state = {
             view: location.pathname === '/register' ? 'register'
-                : location.pathname === '/legacy-login' ? 'legacy'
                 : location.pathname === '/bind-phone' ? 'bind'
                 : location.pathname === '/password-reset' ? 'reset'
                 : 'login',
@@ -901,6 +900,8 @@
             countdown: 0,
             timer: null,
         };
+
+        if (location.pathname === '/legacy-login') history.replaceState(null, '', '/login');
 
         const hasPendingPhoneBinding = state.view === 'bind' && Boolean(sessionStorage.getItem(BINDING_TOKEN_KEY));
         if (localStorage.getItem(TOKEN_KEY) && !hasPendingPhoneBinding) window.location.href = '/projects';
@@ -927,12 +928,17 @@
             authTabs.querySelectorAll('.auth-tab').forEach(button => button.classList.toggle('active', button.dataset.method === state.method));
             if (state.view === 'login') {
                 authTitle.textContent = '欢迎回来';
-                authSubtitle.textContent = '使用手机号继续完成你的故事';
-                authForm.innerHTML = input('phone', 'tel', '手机号', 'tel')
+                authSubtitle.textContent = '使用手机号或原账号继续完成你的故事';
+                authForm.innerHTML = input(
+                    'identity',
+                    state.method === 'password' ? 'text' : 'tel',
+                    state.method === 'password' ? '手机号或原账号' : '手机号',
+                    state.method === 'password' ? 'username' : 'tel'
+                )
                     + (state.method === 'password' ? input('password', 'password', '密码', 'current-password') : codeInput())
                     + `<div class="form-row"><span></span>${footerButton('忘记密码？', 'reset')}</div>`
                     + submitButton('进入创剧');
-                authFooter.innerHTML = `还没有账号？ ${footerButton('创建账号', 'register')}<br><br>${footerButton('旧账号登录', 'legacy')}`;
+                authFooter.innerHTML = `还没有账号？ ${footerButton('创建账号', 'register')}`;
             } else if (state.view === 'register') {
                 authTitle.textContent = '创建账号';
                 authSubtitle.textContent = '手机号是登录身份，邮箱可以稍后绑定';
@@ -943,18 +949,11 @@
                     + `<p class="field-hint">填写邮箱后将发送验证邮件；未验证前不会接收系统通知。</p>`
                     + submitButton('创建账号');
                 authFooter.innerHTML = `已有账号？ ${footerButton('登录', 'login')}`;
-            } else if (state.view === 'legacy') {
-                authTitle.textContent = '旧账号登录';
-                authSubtitle.textContent = '登录后需先绑定手机号，再进入创剧';
-                authForm.innerHTML = input('username', 'text', '原账号', 'username')
-                    + input('password', 'password', '密码', 'current-password')
-                    + submitButton('验证旧账号');
-                authFooter.innerHTML = footerButton('返回手机号登录', 'login');
             } else if (state.view === 'bind') {
                 authTitle.textContent = '绑定手机号';
                 authSubtitle.textContent = '为了账号安全，请先完成手机号验证';
                 authForm.innerHTML = input('phone', 'tel', '手机号', 'tel') + codeInput() + submitButton('绑定并进入创剧');
-                authFooter.innerHTML = footerButton('重新登录旧账号', 'legacy');
+                authFooter.innerHTML = footerButton('返回登录', 'login');
             } else {
                 authTitle.textContent = '重置密码';
                 authSubtitle.textContent = '验证注册手机号后设置新密码';
@@ -970,7 +969,7 @@
         function setView(view) {
             state.view = view;
             if (view !== 'login') state.method = 'password';
-            history.replaceState(null, '', view === 'login' ? '/login' : `/${view === 'legacy' ? 'legacy-login' : view === 'bind' ? 'bind-phone' : view === 'reset' ? 'password-reset' : 'register'}`);
+            history.replaceState(null, '', view === 'login' ? '/login' : `/${view === 'bind' ? 'bind-phone' : view === 'reset' ? 'password-reset' : 'register'}`);
             render();
         }
 
@@ -983,6 +982,14 @@
 
         function field(id) {
             return (document.getElementById(id)?.value || '').trim();
+        }
+
+        function isMainlandPhone(value) {
+            return /^((\+?86)|0086)?1[3-9]\d{9}$/.test(value.replace(/[\s-]/g, ''));
+        }
+
+        function phoneFieldValue() {
+            return state.view === 'login' ? field('identity') : field('phone');
         }
 
         function clearMessage() {
@@ -1020,8 +1027,8 @@
 
         async function sendCode() {
             clearMessage();
-            const phone = field('phone');
-            if (!/^((\+?86)|0086)?1[3-9]\d{9}$/.test(phone.replace(/[\s-]/g, ''))) {
+            const phone = phoneFieldValue();
+            if (!isMainlandPhone(phone)) {
                 showError('请输入正确的中国大陆手机号');
                 return;
             }
@@ -1065,22 +1072,28 @@
             try {
                 let result;
                 if (state.view === 'login') {
-                    result = await api('/api/auth/phone/login', {
-                        phone: field('phone'), method: state.method,
-                        password: state.method === 'password' ? field('password') : undefined,
-                        code: state.method === 'sms_code' ? field('code') : undefined,
-                    });
-                } else if (state.view === 'register') {
-                    if (field('password') !== field('confirmPassword')) throw new Error('两次输入的密码不一致');
-                    result = await api('/api/auth/phone/register', { phone: field('phone'), code: field('code'), password: field('password'), email: field('email') || null });
-                } else if (state.view === 'legacy') {
-                    result = await api('/api/login', { username: field('username'), password: field('password') });
+                    const identity = field('identity');
+                    const phoneLogin = isMainlandPhone(identity);
+                    if (state.method === 'sms_code' && !phoneLogin) {
+                        throw new Error('验证码登录请输入正确的中国大陆手机号');
+                    }
+                    result = state.method === 'password' && !phoneLogin
+                        ? await api('/api/login', { username: identity, password: field('password') })
+                        : await api('/api/auth/phone/login', {
+                            phone: identity,
+                            method: state.method,
+                            password: state.method === 'password' ? field('password') : undefined,
+                            code: state.method === 'sms_code' ? field('code') : undefined,
+                        });
                     if (result.requires_phone_binding && result.binding_token) {
                         sessionStorage.setItem(BINDING_TOKEN_KEY, result.binding_token);
                         setView('bind');
-                        showSuccess('旧账号验证成功，请绑定手机号');
+                        showSuccess('账号验证成功，请绑定手机号');
                         return;
                     }
+                } else if (state.view === 'register') {
+                    if (field('password') !== field('confirmPassword')) throw new Error('两次输入的密码不一致');
+                    result = await api('/api/auth/phone/register', { phone: field('phone'), code: field('code'), password: field('password'), email: field('email') || null });
                 } else if (state.view === 'bind') {
                     result = await api('/api/auth/legacy/bind-phone', { binding_token: sessionStorage.getItem(BINDING_TOKEN_KEY) || '', phone: field('phone'), code: field('code') });
                 } else {
@@ -1110,7 +1123,10 @@
             }
         }
 
-        if (state.view === 'bind' && !sessionStorage.getItem(BINDING_TOKEN_KEY)) state.view = 'legacy';
+        if (state.view === 'bind' && !sessionStorage.getItem(BINDING_TOKEN_KEY)) {
+            state.view = 'login';
+            history.replaceState(null, '', '/login');
+        }
         render();
     </script>
 </body>
