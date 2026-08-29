@@ -883,6 +883,7 @@
         const USERNAME_KEY = 'username';
         const USER_ID_KEY = 'user_id';
         const BINDING_TOKEN_KEY = 'legacy_phone_binding_token';
+        const BINDING_RETURN_KEY = 'legacy_phone_binding_return_to';
         const authForm = document.getElementById('authForm');
         const authTabs = document.getElementById('authTabs');
         const authTitle = document.getElementById('authTitle');
@@ -901,7 +902,8 @@
             timer: null,
         };
 
-        if (localStorage.getItem(TOKEN_KEY)) window.location.href = '/projects';
+        const hasPendingPhoneBinding = state.view === 'bind' && Boolean(sessionStorage.getItem(BINDING_TOKEN_KEY));
+        if (localStorage.getItem(TOKEN_KEY) && !hasPendingPhoneBinding) window.location.href = '/projects';
 
         function input(id, type, label, autocomplete, required = true) {
             return `<div class="input-group"><input id="${id}" type="${type}" autocomplete="${autocomplete}" placeholder=" " ${required ? 'required' : ''}><label for="${id}">${label}</label></div>`;
@@ -1085,8 +1087,22 @@
                     if (field('password') !== field('confirmPassword')) throw new Error('两次输入的密码不一致');
                     result = await api('/api/auth/phone/password-reset', { phone: field('phone'), code: field('code'), new_password: field('password') });
                 }
-                saveSession(result);
-                window.location.href = '/projects';
+                const bindingReturn = state.view === 'bind' ? sessionStorage.getItem(BINDING_RETURN_KEY) : '';
+                const adminBindingReturn = /^\/admin(?:\/|\?|#|$)/.test(bindingReturn || '')
+                    && !/^\/admin\/login(?:\/|\?|#|$)/.test(bindingReturn || '');
+                if (adminBindingReturn) {
+                    if (!result?.token) throw new Error('登录响应缺少会话凭证');
+                    sessionStorage.setItem('admin_session_token', result.token);
+                    sessionStorage.setItem('admin_session_username', result.username || result.user_id);
+                    sessionStorage.setItem('admin_session_login_at', String(Date.now()));
+                    sessionStorage.removeItem(BINDING_TOKEN_KEY);
+                    sessionStorage.removeItem(BINDING_RETURN_KEY);
+                    window.location.href = bindingReturn;
+                } else {
+                    saveSession(result);
+                    sessionStorage.removeItem(BINDING_RETURN_KEY);
+                    window.location.href = '/projects';
+                }
             } catch (error) {
                 showError(error.message || '操作失败，请稍后重试');
                 button.disabled = false;

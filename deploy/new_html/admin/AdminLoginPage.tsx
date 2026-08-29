@@ -22,6 +22,13 @@ import { apiJson } from '../services/httpClient';
 import { apiJsonWithToken } from '../services/httpClient';
 import { BrandLogo } from '../components/BrandLogo';
 
+const LEGACY_PHONE_BINDING_TOKEN_KEY = 'legacy_phone_binding_token';
+const LEGACY_PHONE_BINDING_RETURN_KEY = 'legacy_phone_binding_return_to';
+
+function isMainlandPhoneLogin(value: string): boolean {
+    return /^((\+?86)|0086)?1[3-9]\d{9}$/.test(value.replace(/[\s-]/g, ''));
+}
+
 function getLoginRedirect(location: ReturnType<typeof useLocation>): string {
     const redirect = new URLSearchParams(location.search).get('redirect');
     const from = (location.state as any)?.from;
@@ -103,10 +110,20 @@ export const AdminLoginPage: React.FC = () => {
             //   不存在 /api/auth/login —— 旧 URL 会 404，res.ok=false → setError 但不写 token，
             //   用户感觉"登录成功"实际未登录，点"生成管理"时 AdminOperationsRoute 看 token=null → 弹回登录页。
             // 后端响应格式 { success, message, token, username } 完全匹配下面的解构。
-            const data = await apiJson<any>('/api/login', {
+            const identity = username.trim();
+            const phoneLogin = isMainlandPhoneLogin(identity);
+            const data = await apiJson<any>(phoneLogin ? '/api/auth/phone/login' : '/api/login', {
                 method: 'POST',
-                body: JSON.stringify({ username: username.trim(), password }),
+                body: JSON.stringify(phoneLogin
+                    ? { phone: identity, method: 'password', password }
+                    : { username: identity, password }),
             }, '登录', { requireAuth: false });
+            if (data.requires_phone_binding && data.binding_token) {
+                sessionStorage.setItem(LEGACY_PHONE_BINDING_TOKEN_KEY, data.binding_token);
+                sessionStorage.setItem(LEGACY_PHONE_BINDING_RETURN_KEY, getLoginRedirect(location));
+                window.location.assign('/bind-phone');
+                return;
+            }
             if (!data.success || !data.token) {
                 setError(data?.detail || data?.message || '登录失败');
                 return;
@@ -175,7 +192,7 @@ export const AdminLoginPage: React.FC = () => {
                                     autoComplete="username"
                                     value={username}
                                     onChange={e => setUsername(e.target.value)}
-                                    placeholder="管理员账号"
+                                    placeholder="管理员账号或已绑定手机号"
                                     className="w-full bg-n0 border border-n40 hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/20 rounded-md pl-10 pr-3 py-2.5 text-sm transition-all outline-none placeholder:text-n100"
                                 />
                             </div>

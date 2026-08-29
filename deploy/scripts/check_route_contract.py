@@ -5263,7 +5263,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (voice_sidebar, "from '../../services/audioGenerationService'"),
         (music_modal, "from '../../services/audioGenerationService'"),
         (admin_login_page, "import { apiJson } from '../services/httpClient'"),
-        (admin_login_page, "apiJson<any>('/api/login'"),
+        (admin_login_page, "phoneLogin ? '/api/auth/phone/login' : '/api/login'"),
         (admin_login_page, "{ requireAuth: false }"),
         (design_page, "import { apiBlob, secureApiUrl } from '../services/httpClient'"),
         (design_page, "secureApiUrl(normalized, { absolute: true })"),

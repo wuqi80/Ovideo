@@ -9,6 +9,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from services.binding_token_service import create_binding_token
+
 
 class UserRegister(BaseModel):
     username: str
@@ -79,6 +81,18 @@ def create_auth_legacy_router(
             if user_status and user_status != 'active':
                 reason = (user.get('disabled_reason') if isinstance(user, dict) else None) or '账户已被管理员禁用'
                 raise HTTPException(status_code=403, detail=f"账户已被禁用：{reason}")
+
+            if isinstance(user, dict):
+                if not bool(user.get('legacy_login_enabled')):
+                    raise HTTPException(status_code=401, detail="该账号已切换为手机号登录")
+                if not bool(user.get('phone_verified')):
+                    return {
+                        "success": True,
+                        "requires_phone_binding": True,
+                        "binding_token": create_binding_token(str(user['user_id'])),
+                        "username": user['username'],
+                        "user_id": user['user_id'],
+                    }
 
             await ActivityLogDAO.log_activity(
                 user_id=user['user_id'],

@@ -70,9 +70,7 @@ def create_auth_router(
             logger.warning("User %s login rejected: %s - %s", request.username, user_status, reason)
             raise HTTPException(status_code=403, detail=f"账号已被禁用：{reason}")
 
-        role = record_value(auth_record, "role")
-        is_admin = request.username == "admin" or role in {"admin", "super_admin"}
-        if auth_record and not is_admin:
+        if auth_record:
             if not bool(record_value(auth_record, "legacy_login_enabled")):
                 raise HTTPException(status_code=401, detail="该账号已切换为手机号登录")
             if not bool(record_value(auth_record, "phone_verified")):

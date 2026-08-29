@@ -72,6 +72,34 @@ async def test_built_in_legacy_login_must_bind_phone_before_session():
 
 
 @pytest.mark.asyncio
+async def test_super_admin_legacy_login_must_also_bind_phone_before_session():
+    FakeUserDAO.row.update(
+        user_id="admin",
+        username="admin",
+        role="super_admin",
+        legacy_login_enabled=True,
+        phone_verified=False,
+    )
+
+    async def resolve(*_args, **_kwargs):
+        return "admin"
+
+    async with AsyncClient(transport=ASGITransport(app=app()), base_url="http://test") as client:
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr(auth_router, "resolve_authenticated_user_id", resolve)
+            response = await client.post("/api/login", json={"username": "legacy", "password": "secret"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "requires_phone_binding": True,
+        "binding_token": "bind:admin",
+        "username": "legacy",
+        "user_id": "admin",
+    }
+
+
+@pytest.mark.asyncio
 async def test_verified_legacy_account_receives_session():
     FakeUserDAO.row["phone_verified"] = True
     async with AsyncClient(transport=ASGITransport(app=app()), base_url="http://test") as client:
