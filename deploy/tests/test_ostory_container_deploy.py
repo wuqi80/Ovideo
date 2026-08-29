@@ -31,6 +31,10 @@ def test_ostory_pod_exposes_only_https_ingress_and_persists_state():
     assert "ostory-postgres:/var/lib/postgresql/data" in script
     assert "ostory-storage:/app/persistent_storage" in script
     assert "ostory-workflows:/app/workflows" in script
+    assert 'SECRETS_DIR="${3:-/opt/ostory/secrets}"' in script
+    assert 'OSTORY_WECHAT_PAY_ENABLED' in script
+    assert '$SECRETS_DIR:/run/secrets:ro,Z' in script
+    assert '"${app_secret_volume[@]}"' in script
     assert "systemctl enable" in script
     assert "--privileged" not in script
 

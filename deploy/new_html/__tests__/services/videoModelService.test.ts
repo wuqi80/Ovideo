@@ -22,9 +22,9 @@ describe('public video model labels', () => {
     expect(getModelDisplayName('MiniMaxH3')).toBe('MiniMax H3 · 节点标准模型');
     expect(getModelDisplayName('MiniMaxH3Fast')).toBe('MiniMax H3 Fast · 节点快速模型');
     expect(getModelDisplayName('MiniMaxH3Mini')).toBe('MiniMax H3 Mini · 节点简化模型');
-    expect(getModelDisplayName('Seedance2')).toBe('doubao-seedance-2-0-260128 · 多模态标准视频模型');
-    expect(getModelDisplayName('Seedance2Fast')).toBe('doubao-seedance-2-0-fast-260128 · 多模态快速视频模型');
-    expect(getModelDisplayName('Seedance2Mini')).toBe('doubao-seedance-2-0-mini-260615 · 多模态简化视频模型');
+    expect(getModelDisplayName('Seedance2')).toBe('Seedance 2.0 · 多模态标准视频模型');
+    expect(getModelDisplayName('Seedance2Fast')).toBe('Seedance 2.0 Fast · 多模态快速视频模型');
+    expect(getModelDisplayName('Seedance2Mini')).toBe('Seedance 2.0 Mini · 多模态简化视频模型');
     expect(getModelDisplayName('Wan2')).toBe('历史视频模型');
     expect(getModelDisplayName('一阶')).toBe('历史视频模型');
   });
@@ -222,7 +222,7 @@ describe('buildVideoModelOptions', () => {
     expect(SELECTABLE_MODELS).not.toContain('一阶');
   });
 
-  it('keeps only available models and exposes runtime labels', () => {
+  it('keeps only available models and exposes one concise preferred runtime label', () => {
     const options = buildVideoModelOptions([
       {
         key: 'LTXNode1',
@@ -300,12 +300,47 @@ describe('buildVideoModelOptions', () => {
     expect(options.every(option => option.available)).toBe(true);
     expect(options.some(option => option.label.includes('当前不可用'))).toBe(false);
     expect(options.some(option => option.label.includes('MiniMax H3'))).toBe(true);
-    expect(options.some(option => option.label.includes('doubao-seedance'))).toBe(true);
-    expect(options.some(option => option.label.includes('happyhorse-1.0'))).toBe(true);
+    expect(options.some(option => option.label.includes('Seedance 2.0'))).toBe(true);
+    expect(options.some(option => option.label.includes('HappyHorse 1.0'))).toBe(true);
     expect(options.find(option => option.value === 'MiniMaxH3')?.label).toBe('MiniMax H3 · 节点标准模型');
-    expect(options.find(option => option.value === 'Seedance2Mini')?.label).toBe('doubao-seedance-2-0-mini-260615 · 多模态简化视频模型');
-    expect(options.find(option => option.value === 'MINI')?.label).toBe('MiniMax-Hailuo-2.3 / MiniMax-Hailuo-2.3-Fast · 首尾帧标准视频模型');
-    expect(options.find(option => option.value === 'MINI')?.runtimeLabel).toContain('MiniMax-Hailuo-2.3');
+    expect(options.find(option => option.value === 'Seedance2Mini')?.label).toBe('Seedance 2.0 Mini · 多模态简化视频模型');
+    expect(options.find(option => option.value === 'MINI')?.label).toBe('MiniMax Hailuo 2.3 · 首尾帧标准视频模型');
+    expect(options.find(option => option.value === 'MINI')?.runtimeLabel).toBe('MiniMax-Hailuo-2.3');
+    expect(options.find(option => option.value === 'MINI')?.capability?.model_options).toEqual([
+      'MiniMax-Hailuo-2.3',
+      'MiniMax-Hailuo-2.3-Fast',
+    ]);
+  });
+
+  it('does not concatenate Kling and Vidu routing alternatives into the selector label', () => {
+    const options = buildVideoModelOptions([
+      {
+        key: 'Kling',
+        provider: 'dashscope',
+        model_options: [
+          'kling/kling-v3-video-generation',
+          'kling/kling-v3-omni-video-generation',
+        ],
+        available: true,
+      },
+      {
+        key: 'Vidu',
+        provider: 'dashscope',
+        model_options: [
+          'vidu/viduq3-mix_reference2video',
+          'vidu/viduq3_reference2video',
+          'vidu/viduq3-turbo_reference2video',
+        ],
+        available: true,
+      },
+    ], ['Kling', 'Vidu']);
+
+    expect(options.map(option => option.label)).toEqual([
+      'Kling V3 · 全能音画视频模型',
+      'Vidu Q3 · 多参考视频模型',
+    ]);
+    expect(options[0].capability?.model_options).toHaveLength(2);
+    expect(options[1].capability?.model_options).toHaveLength(3);
   });
 
   it('uses backend Plan-mode manifest to expose only Seedance 1.5', () => {
@@ -320,7 +355,7 @@ describe('buildVideoModelOptions', () => {
     ], ['Seedance15']);
 
     expect(options.map(option => option.value)).toEqual(['Seedance15']);
-    expect(options[0].label).toBe('doubao-seedance-1.5-pro · 首尾帧视频模型');
+    expect(options[0].label).toBe('Seedance 1.5 Pro · 首尾帧视频模型');
     expect(options[0].runtimeLabel).toBe('doubao-seedance-1.5-pro');
   });
 

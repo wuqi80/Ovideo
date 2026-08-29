@@ -78,11 +78,14 @@ describe('WechatCreationPointRecharge', () => {
 
     await waitFor(() => expect(mocks.quoteAmount).toHaveBeenCalledWith(1234));
     expect(await screen.findByText('到账：125 创作点数')).toBeInTheDocument();
+    expect(screen.getByText('¥24.68')).toHaveClass('line-through');
+    expect(screen.getByText('¥12.34')).toHaveClass('font-semibold', 'text-success');
     expect(screen.getByText('自定义金额精确到分，到账点数按整点向下取整。')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '微信扫码充值' }));
     await waitFor(() => expect(mocks.createOrder).toHaveBeenCalledWith(1234));
     expect(await screen.findByRole('dialog', { name: '微信充值' })).toBeInTheDocument();
+    expect(screen.getAllByText('¥24.68').some(element => element.classList.contains('line-through'))).toBe(true);
     await waitFor(() => expect(mocks.toDataURL).toHaveBeenCalledWith(
       'weixin://wxpay/example',
       expect.any(Object),

@@ -12,6 +12,7 @@ import {
 } from '../services/creditService';
 
 const formatFen = (value: number) => `¥${(Number(value || 0) / 100).toFixed(2)}`;
+const referencePriceFen = (payAmountFen: number) => Math.max(0, Math.round(Number(payAmountFen || 0) * 2));
 
 export const WechatCreationPointRecharge: React.FC<{
   onPaymentSuccess: () => void | Promise<void>;
@@ -165,7 +166,10 @@ export const WechatCreationPointRecharge: React.FC<{
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-n800">{item.point_amount.toLocaleString()} 点</span>
-                  <span className="font-semibold text-success">{formatFen(item.amount_fen)}</span>
+                  <span className="flex items-baseline gap-1.5">
+                    <span className="text-[11px] text-n100 line-through" aria-label="参考原价">{formatFen(referencePriceFen(item.amount_fen))}</span>
+                    <span className="font-semibold text-success">{formatFen(item.amount_fen)}</span>
+                  </span>
                 </div>
                 <div className="mt-1 text-[11px] text-n200">{item.discount_label} · 节省 {formatFen(item.saved_amount_fen)}</div>
               </button>
@@ -190,7 +194,8 @@ export const WechatCreationPointRecharge: React.FC<{
               <div>基础比例：1 元 = 10 创作点数</div>
               <div className="mt-1">优惠：{quote?.discount_label || '-'}</div>
               <div className="mt-1 text-sm font-semibold text-n800">到账：{quote ? `${quote.point_amount.toLocaleString()} 创作点数` : '-'}</div>
-              <div className="mt-1">应付：{quote ? formatFen(quote.amount_fen) : '-'}</div>
+              <div className="mt-1">参考原价：{quote ? <span className="line-through text-n100">{formatFen(referencePriceFen(quote.amount_fen))}</span> : '-'}</div>
+              <div className="mt-1">实付：{quote ? <span className="font-semibold text-success">{formatFen(quote.amount_fen)}</span> : '-'}</div>
               <div className="mt-1 text-[11px] text-n100">自定义金额精确到分，到账点数按整点向下取整。</div>
             </div>
             <button
@@ -218,7 +223,11 @@ export const WechatCreationPointRecharge: React.FC<{
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-base font-semibold text-n800">微信支付</h3>
-                <p className="mt-1 text-xs text-n200">{order.point_amount.toLocaleString()} 创作点数 · {formatFen(order.amount_fen)}</p>
+                <p className="mt-1 text-xs text-n200">
+                  {order.point_amount.toLocaleString()} 创作点数 · 参考原价{' '}
+                  <span className="line-through">{formatFen(referencePriceFen(order.amount_fen))}</span>{' '}
+                  · 实付 <span className="font-semibold text-success">{formatFen(order.amount_fen)}</span>
+                </p>
               </div>
               <button type="button" onClick={() => setOrder(null)} className="rounded p-1 text-n200 hover:bg-n20"><X size={17} /></button>
             </div>

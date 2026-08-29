@@ -4,6 +4,8 @@ import type { CreditTransaction } from '../../services/creditService';
 import {
   collapseSettledFreezeRows,
   formatCreditBillingDetail,
+  formatCreditChangeTypeLabel,
+  formatCreditFeatureLabel,
 } from '../../pages/CreditsPage';
 
 function transaction(overrides: Partial<CreditTransaction>): CreditTransaction {
@@ -62,5 +64,13 @@ describe('CreditsPage transaction presentation', () => {
   it('explains the batch count, model version, resolution and aspect ratio', () => {
     expect(formatCreditBillingDetail(transaction({})))
       .toBe('11 张 · Doubao-Seedream-5.0-lite · 1K · 16:9');
+  });
+
+  it('shows user-facing Chinese labels instead of internal feature keys', () => {
+    expect(formatCreditChangeTypeLabel('signup_grant')).toBe('注册赠送');
+    expect(formatCreditFeatureLabel('image_generation')).toBe('图片生成');
+    expect(formatCreditFeatureLabel('video_generation')).toBe('视频生成');
+    expect(formatCreditFeatureLabel('design_prompt_refinement')).toBe('提示词优化');
+    expect(formatCreditFeatureLabel('future_internal_key')).toBe('其他功能');
   });
 });

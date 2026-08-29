@@ -329,17 +329,17 @@ export function getModelDisplayName(model: VideoModel): string {
     MiniMaxH3: 'MiniMax H3 · 节点标准模型',
     MiniMaxH3Fast: 'MiniMax H3 Fast · 节点快速模型',
     MiniMaxH3Mini: 'MiniMax H3 Mini · 节点简化模型',
-    Veo: 'veo-3.1-landscape-fast-fl · 高质量快速视频模型',
-    MINI: 'MiniMax-Hailuo-2.3 · 首尾帧标准视频模型',
-    Sora2: 'sora_video2-landscape-15s · 长镜头视频模型',
-    '大能': 'wan2.6-i2v · 镜头叙事视频模型',
-    Seedance15: 'doubao-seedance-1.5-pro · 首尾帧视频模型',
-    Seedance2: 'doubao-seedance-2-0-260128 · 多模态标准视频模型',
-    Seedance2Fast: 'doubao-seedance-2-0-fast-260128 · 多模态快速视频模型',
-    Seedance2Mini: 'doubao-seedance-2-0-mini-260615 · 多模态简化视频模型',
-    Kling: 'kling/kling-v3-video-generation · 全能音画视频模型',
-    Vidu: 'vidu/viduq3_reference2video · 多参考视频模型',
-    HappyHorse: 'happyhorse-1.0-r2v · 角色一致性视频模型',
+    Veo: 'Veo 3.1 Fast · 高质量快速视频模型',
+    MINI: 'MiniMax Hailuo 2.3 · 首尾帧标准视频模型',
+    Sora2: 'Sora 2 · 长镜头视频模型',
+    '大能': 'Wan 2.6 · 镜头叙事视频模型',
+    Seedance15: 'Seedance 1.5 Pro · 首尾帧视频模型',
+    Seedance2: 'Seedance 2.0 · 多模态标准视频模型',
+    Seedance2Fast: 'Seedance 2.0 Fast · 多模态快速视频模型',
+    Seedance2Mini: 'Seedance 2.0 Mini · 多模态简化视频模型',
+    Kling: 'Kling V3 · 全能音画视频模型',
+    Vidu: 'Vidu Q3 · 多参考视频模型',
+    HappyHorse: 'HappyHorse 1.0 · 角色一致性视频模型',
   };
   return modelNameMap[model] || model;
 }
@@ -460,33 +460,20 @@ export function getVideoModelRuntimeNames(capability?: VideoCapabilityModelLike 
 
 export function formatVideoModelRuntimeLabel(capability?: VideoCapabilityModelLike | null): string {
   const names = getVideoModelRuntimeNames(capability);
-  if (names.length <= 2) return names.join(' / ');
-  return `${names[0]} / ${names[1]} / +${names.length - 2}`;
+  // A capability may route to several compatible provider models internally.
+  // The selector names the preferred model only; the complete model_options
+  // array remains on the capability for routing and parameter decisions.
+  return names[0] || '';
 }
 
 export function formatVideoModelOptionLabel(
   model: VideoModel,
-  capability?: VideoCapabilityModelLike | null,
+  _capability?: VideoCapabilityModelLike | null,
 ): string {
-  const suffixes: Partial<Record<VideoModel, string>> = {
-    MiniMaxH3: '节点标准模型',
-    MiniMaxH3Fast: '节点快速模型',
-    MiniMaxH3Mini: '节点简化模型',
-    Veo: '高质量快速视频模型',
-    MINI: '首尾帧标准视频模型',
-    Sora2: '长镜头视频模型',
-    '大能': '镜头叙事视频模型',
-    Seedance15: '首尾帧视频模型',
-    Seedance2: '多模态标准视频模型',
-    Seedance2Fast: '多模态快速视频模型',
-    Seedance2Mini: '多模态简化视频模型',
-    Kling: '全能音画视频模型',
-    Vidu: '多参考视频模型',
-    HappyHorse: '角色一致性视频模型',
-  };
-  const runtime = formatVideoModelRuntimeLabel(capability);
-  const suffix = suffixes[model];
-  return runtime && suffix ? `${runtime} · ${suffix}` : getModelDisplayName(model);
+  // Provider identifiers often contain namespaces, task modes and build dates.
+  // Keep those raw values in runtimeLabel/capability, while the selector uses
+  // a stable public model name plus its existing capability description.
+  return getModelDisplayName(model);
 }
 
 export function buildVideoModelOptions(

@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 SOURCE_DIR="${1:-/opt/ostory/source}"
 ENV_FILE="${2:-/opt/ostory/.env}"
+SECRETS_DIR="${3:-/opt/ostory/secrets}"
 POD_NAME="ostory-pod"
 SERVICE_NAME="ostory-pod.service"
 
@@ -24,6 +25,14 @@ if grep -q 'change-me-' "$ENV_FILE"; then
 fi
 
 chmod 600 "$ENV_FILE"
+app_secret_volume=()
+if grep -Eiq '^OSTORY_WECHAT_PAY_ENABLED[[:space:]]*=[[:space:]]*true[[:space:]]*$' "$ENV_FILE"; then
+  if [[ ! -d "$SECRETS_DIR" ]]; then
+    echo "missing WeChat Pay secrets directory: $SECRETS_DIR" >&2
+    exit 1
+  fi
+  app_secret_volume=(--volume "$SECRETS_DIR:/run/secrets:ro,Z")
+fi
 GIT_SHA="$(git -C "$SOURCE_DIR" rev-parse HEAD)"
 IMAGE="localhost/ostory-app:${GIT_SHA}"
 RELEASED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -83,6 +92,7 @@ podman run --detach \
   --volume ostory-logs:/app/logs:Z \
   --volume ostory-history:/app/history:Z \
   --volume /opt/ostory/release_metadata.json:/app/release_metadata.json:ro,Z \
+  "${app_secret_volume[@]}" \
   "$IMAGE" >/dev/null
 
 podman run --detach \

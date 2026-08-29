@@ -24,15 +24,29 @@ const CHANGE_TYPE_LABEL: Record<string, { label: string; color: string; sign: 1 
   admin_debit:   { label: '管理员扣减', color: 'text-danger',   sign: -1 },
   recharge:      { label: '充值',       color: 'text-success', sign:  1 },
   gift:          { label: '赠送',       color: 'text-success', sign:  1 },
+  signup_grant:  { label: '注册赠送',   color: 'text-success', sign:  1 },
   expire:        { label: '过期',       color: 'text-n300',  sign: -1 },
 };
 
 const FEATURE_LABEL: Record<string, string> = {
+  image_generation: '图片生成',
+  video_generation: '视频生成',
   design_image_generation: 'AI 生图',
+  design_prompt_refinement: '提示词优化',
   storyboard_image_generation: '分镜生图',
   storyboard_design_generation: '分镜设计',
   script_model_call: '剧本 AI',
 };
+
+export function formatCreditChangeTypeLabel(changeType: string | null | undefined): string {
+  const key = String(changeType || '').trim();
+  return CHANGE_TYPE_LABEL[key]?.label || (key ? '其他变动' : '-');
+}
+
+export function formatCreditFeatureLabel(featureKey: string | null | undefined): string {
+  const key = String(featureKey || '').trim();
+  return FEATURE_LABEL[key] || (key ? '其他功能' : '-');
+}
 
 const IMAGE_TIER_LABEL: Record<string, string> = {
   image_tier_1: 'Gemini 2.5 Flash Image',
@@ -108,7 +122,7 @@ export const CreditsPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-n0 text-n800">
-      <div className="max-w-5xl mx-auto p-6 space-y-6">
+      <div className="mx-auto w-full max-w-[1680px] space-y-6 p-4 sm:p-6 lg:px-8">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-sm text-n300 hover:text-n800">← 返回</button>
           <h1 className="text-xl font-semibold flex items-center gap-2">
@@ -186,7 +200,7 @@ export const CreditsPage: React.FC = () => {
             <input
               value={filterFeature}
               onChange={e => setFilterFeature(e.target.value)}
-              placeholder="按功能筛选 (feature_key)"
+              placeholder="按功能筛选"
               className="order-last w-full text-xs bg-n0 border border-n40 rounded px-2 py-1 sm:order-none sm:w-56"
             />
             <span className="ml-auto text-xs text-n100">
@@ -198,42 +212,42 @@ export const CreditsPage: React.FC = () => {
           </div>
 
           <div className="overflow-auto">
-            <table className="w-full min-w-[900px] text-xs">
+            <table className="w-full min-w-[1120px] text-xs">
               <thead className="text-n100 bg-n20">
                 <tr>
-                  <th className="text-left py-2 px-3">时间</th>
-                  <th className="text-left py-2 px-3">类型</th>
-                  <th className="text-left py-2 px-3">功能</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left">时间</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left">类型</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-left">功能</th>
                   <th className="text-left py-2 px-3">计费详情</th>
-                  <th className="text-right py-2 px-3">金额</th>
-                  <th className="text-right py-2 px-3">余额前</th>
-                  <th className="text-right py-2 px-3">余额后</th>
+                  <th className="w-24 whitespace-nowrap px-3 py-2 text-right">金额</th>
+                  <th className="w-24 whitespace-nowrap px-3 py-2 text-right">余额前</th>
+                  <th className="w-24 whitespace-nowrap px-3 py-2 text-right">余额后</th>
                   <th className="text-left py-2 px-3">任务</th>
                 </tr>
               </thead>
               <tbody>
                 {visibleTransactions.map(t => {
-                  const meta = CHANGE_TYPE_LABEL[t.change_type] || { label: t.change_type, color: 'text-n700', sign: 0 as const };
+                  const meta = CHANGE_TYPE_LABEL[t.change_type] || { label: formatCreditChangeTypeLabel(t.change_type), color: 'text-n700', sign: 0 as const };
                   const sign = meta.sign;
                   return (
                     <tr key={t.transaction_id} className="border-t border-n40">
                       <td className="py-2 px-3 text-n300">
                         {new Date(t.created_at).toLocaleString('zh-CN')}
                       </td>
-                      <td className={`py-2 px-3 ${meta.color}`}>{meta.label}</td>
-                      <td className="py-2 px-3 text-n700">
-                        {FEATURE_LABEL[t.feature_key || ''] || t.feature_key || '-'}
+                      <td className={`whitespace-nowrap px-3 py-2 ${meta.color}`}>{meta.label}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-n700" title={t.feature_key || undefined}>
+                        {formatCreditFeatureLabel(t.feature_key)}
                       </td>
                       <td className="py-2 px-3 whitespace-nowrap text-n300">
                         {formatCreditBillingDetail(t)}
                       </td>
-                      <td className={`py-2 px-3 text-right font-mono ${meta.color}`}>
+                      <td className={`whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums ${meta.color}`}>
                         {t.change_type === 'freeze'
                           ? `暂占 ${t.amount}`
                           : `${sign === 1 ? '+' : sign === -1 ? '-' : ''}${t.amount}`}
                       </td>
-                      <td className="py-2 px-3 text-right font-mono text-n300">{t.balance_before}</td>
-                      <td className="py-2 px-3 text-right font-mono text-n700">{t.balance_after}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums text-n300">{t.balance_before}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums text-n700">{t.balance_after}</td>
                       <td className="py-2 px-3 text-n100 font-mono truncate max-w-[200px]">
                         {t.task_id || '-'}
                       </td>
