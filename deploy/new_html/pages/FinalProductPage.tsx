@@ -264,7 +264,7 @@ export const FinalProductPage: React.FC = () => {
           还没有成品视频 —— 在「视频 / 美化」阶段合成整片后，会自动出现在这里。
         </div>
       ) : (
-        <div className="space-y-6 max-w-6xl min-w-0">
+        <div data-testid="final-product-content" className="min-w-0 space-y-6">
           <div className="flex items-end justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-n800">合成历史</h2>

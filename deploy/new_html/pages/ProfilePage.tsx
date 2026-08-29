@@ -225,7 +225,10 @@ export const ProfilePage: React.FC = () => {
 
   return (
     <div className="layout-safe min-h-screen bg-n20 text-n800">
-      <div className="min-h-screen w-full max-w-[1320px] mx-auto bg-n0 md:border-x md:border-n40">
+      <div
+        data-testid="profile-page-shell"
+        className="min-h-screen w-full max-w-[1680px] mx-auto bg-n0 md:border-x md:border-n40"
+      >
         <header className="border-b border-n40 bg-n0">
           <div className="flex min-h-[72px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
             <div className="flex min-w-0 items-center gap-4">
@@ -254,7 +257,7 @@ export const ProfilePage: React.FC = () => {
               加载个人信息...
             </div>
           ) : (
-            <div className="mx-auto max-w-6xl space-y-6">
+            <div data-testid="profile-page-content" className="space-y-6">
               <section className="overflow-hidden rounded-lg border border-n40 bg-n0 shadow-card">
                 <div className="flex flex-col gap-5 border-l-4 border-primary px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-center gap-5">

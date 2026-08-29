@@ -13,6 +13,16 @@ import {
 
 const formatFen = (value: number) => `¥${(Number(value || 0) / 100).toFixed(2)}`;
 const referencePriceFen = (payAmountFen: number) => Math.max(0, Math.round(Number(payAmountFen || 0) * 2));
+const giftedPointAmount = (
+  pointAmount: number,
+  amountFen: number,
+  baseRatio?: { cny_yuan: number; creation_points: number },
+) => {
+  const cnyYuan = Math.max(1, Number(baseRatio?.cny_yuan || 1));
+  const creationPoints = Math.max(1, Number(baseRatio?.creation_points || 10));
+  const basePoints = Math.floor((Number(amountFen || 0) * creationPoints) / (100 * cnyYuan));
+  return Math.max(0, Math.floor(Number(pointAmount || 0)) - basePoints);
+};
 
 export const WechatCreationPointRecharge: React.FC<{
   onPaymentSuccess: () => void | Promise<void>;
@@ -171,7 +181,9 @@ export const WechatCreationPointRecharge: React.FC<{
                     <span className="font-semibold text-success">{formatFen(item.amount_fen)}</span>
                   </span>
                 </div>
-                <div className="mt-1 text-[11px] text-n200">{item.discount_label} · 节省 {formatFen(item.saved_amount_fen)}</div>
+                <div className="mt-1 text-[11px] text-n200">
+                  {item.discount_label} · 赠送 {giftedPointAmount(item.point_amount, item.amount_fen, options.base_ratio).toLocaleString()} 点
+                </div>
               </button>
             ))}
           </div>
@@ -193,6 +205,7 @@ export const WechatCreationPointRecharge: React.FC<{
             <div className="min-w-52 text-xs text-n200">
               <div>基础比例：1 元 = 10 创作点数</div>
               <div className="mt-1">优惠：{quote?.discount_label || '-'}</div>
+              <div className="mt-1">赠送：{quote ? `${giftedPointAmount(quote.point_amount, quote.amount_fen, options.base_ratio).toLocaleString()} 创作点数` : '-'}</div>
               <div className="mt-1 text-sm font-semibold text-n800">到账：{quote ? `${quote.point_amount.toLocaleString()} 创作点数` : '-'}</div>
               <div className="mt-1">参考原价：{quote ? <span className="line-through text-n100">{formatFen(referencePriceFen(quote.amount_fen))}</span> : '-'}</div>
               <div className="mt-1">实付：{quote ? <span className="font-semibold text-success">{formatFen(quote.amount_fen)}</span> : '-'}</div>

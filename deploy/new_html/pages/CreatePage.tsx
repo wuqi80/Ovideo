@@ -108,7 +108,7 @@ export const CreatePage: React.FC = () => {
     <div className="layout-safe flex min-h-screen bg-n20 text-n800">
       <AppSidebar className="sticky top-0 hidden h-screen lg:flex" />
       <main className="min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[820px] px-8 pb-16 pt-[6vh]">
+        <div data-testid="create-page-content" className="mx-auto w-full max-w-[1440px] px-5 pb-16 pt-[6vh] sm:px-8">
           {/* 徽章 */}
           <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-primary-light px-3.5 py-1.5 font-mono text-xs font-bold tracking-[0.03em] text-primary">
             <span className="h-[7px] w-[7px] animate-pulse rounded-full bg-primary" />

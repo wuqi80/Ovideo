@@ -59,6 +59,7 @@ describe('FinalProductPage', () => {
       'min-h-0',
       'overflow-y-auto',
     );
+    expect(screen.getByTestId('final-product-content')).not.toHaveClass('max-w-6xl');
     expect(listMediaItems).toHaveBeenCalledWith(expect.objectContaining({ source: 'composed_final' }));
 
     fireEvent.click(screen.getAllByRole('button', { name: '意见' })[0]);

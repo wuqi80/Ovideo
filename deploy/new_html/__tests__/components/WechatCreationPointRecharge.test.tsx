@@ -73,11 +73,14 @@ describe('WechatCreationPointRecharge', () => {
     });
 
     render(<WechatCreationPointRecharge onPaymentSuccess={vi.fn()} />);
+    expect(await screen.findByText('9.8 折 · 赠送 2 点')).toBeInTheDocument();
+    expect(screen.queryByText(/节省/)).not.toBeInTheDocument();
     const amount = await screen.findByLabelText('自定义充值金额');
     fireEvent.change(amount, { target: { value: '12.34' } });
 
     await waitFor(() => expect(mocks.quoteAmount).toHaveBeenCalledWith(1234));
     expect(await screen.findByText('到账：125 创作点数')).toBeInTheDocument();
+    expect(screen.getByText('赠送：2 创作点数')).toBeInTheDocument();
     expect(screen.getByText('¥24.68')).toHaveClass('line-through');
     expect(screen.getByText('¥12.34')).toHaveClass('font-semibold', 'text-success');
     expect(screen.getByText('自定义金额精确到分，到账点数按整点向下取整。')).toBeInTheDocument();

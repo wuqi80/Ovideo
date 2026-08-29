@@ -58,7 +58,7 @@ const PostProcessPage: React.FC = () => {
             {/* 内容区 */}
             <div className="flex-1 overflow-auto p-6">
                 {activeTab === 'upscale' ? (
-                    <div className="max-w-4xl mx-auto">
+                    <div data-testid="post-process-content" className="mx-auto w-full max-w-[1680px]">
                         <div className="bg-n0 rounded-md p-8 border border-n40 text-center shadow-card">
                             <ArrowUpCircle className="w-16 h-16 text-n100 mx-auto mb-4" />
                             <h3 className="text-lg font-medium mb-2">视频放大</h3>
@@ -71,7 +71,7 @@ const PostProcessPage: React.FC = () => {
                         </div>
                     </div>
                 ) : (
-                    <div className="max-w-4xl mx-auto">
+                    <div data-testid="post-process-content" className="mx-auto w-full max-w-[1680px]">
                         <div className="bg-n0 rounded-md p-8 border border-n40 text-center shadow-card">
                             <Volume2 className="w-16 h-16 text-n100 mx-auto mb-4" />
                             <h3 className="text-lg font-medium mb-2">配音</h3>

@@ -33,6 +33,7 @@ describe('FinalProductSharePage', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByText('漫剧成品 V3')).toBeInTheDocument();
+    expect(screen.getByTestId('final-product-share-content')).toHaveClass('max-w-[1680px]');
     fireEvent.change(screen.getByPlaceholderText('称呼（选填）'), { target: { value: '导演' } });
     fireEvent.change(screen.getByPlaceholderText(/请说明需要调整/), { target: { value: '结尾停留两秒' } });
     fireEvent.click(screen.getByRole('button', { name: '提交意见' }));

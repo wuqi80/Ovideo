@@ -33,6 +33,7 @@ describe('CreatePage project preferences', () => {
       </MemoryRouter>,
     );
 
+    expect(screen.getByTestId('create-page-content')).toHaveClass('max-w-[1440px]');
     expect(screen.getByRole('button', { name: '校园' })).toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: '转学生发现旧教学楼每天重置同一天。' },

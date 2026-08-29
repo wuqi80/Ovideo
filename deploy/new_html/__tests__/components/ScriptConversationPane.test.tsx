@@ -152,7 +152,7 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('aria-expanded={!isCollapsed}');
     expect(source).not.toContain('toggleCollapsed');
     expect(source).toContain('fixed inset-0 z-[100]');
-    expect(source).toContain('max-w-[1600px]');
+    expect(source).toContain('max-w-[1680px]');
   });
 
   it('edits storyboard scripts beside a collapsible initial-script reference', () => {
@@ -192,6 +192,9 @@ describe('ScriptConversationPane workflow', () => {
 
   it('aligns the floating composer with the center conversation column', () => {
     expect(source).toContain('data-testid="conversation-composer-grid"');
+    expect(source).toContain('max-w-[1680px]');
+    expect(source).not.toContain('max-w-[1540px]');
+    expect(source).not.toContain('max-w-[1600px]');
     expect(source).toContain('lg:grid-cols-[172px_minmax(0,1fr)_172px]');
     expect(source).toContain('xl:grid-cols-[196px_minmax(0,1fr)_196px]');
     expect(source).toContain('min-w-0 lg:col-start-2');

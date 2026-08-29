@@ -943,7 +943,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
             <LoaderCircle className="h-4 w-4 animate-spin text-primary" /> 正在加载对话
           </div>
         ) : (conversation?.messages || []).length > 0 ? (
-          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 py-4 lg:grid-cols-[172px_minmax(0,1fr)_172px] xl:grid-cols-[196px_minmax(0,1fr)_196px]">
+          <div className="mx-auto grid w-full max-w-[1680px] grid-cols-1 gap-3 px-3 py-4 lg:grid-cols-[172px_minmax(0,1fr)_172px] xl:grid-cols-[196px_minmax(0,1fr)_196px]">
             <aside className="hidden min-w-0 lg:block" data-testid="conversation-turn-rail">
               <div className="sticky top-4 border-r border-n40 pr-3">
                 <div className="mb-2 flex h-7 min-w-0 items-center gap-1">
@@ -1049,7 +1049,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
           className="pointer-events-none absolute inset-x-0 z-40"
           style={{ bottom: composerHeight + 28 }}
         >
-          <div className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 lg:grid-cols-[172px_minmax(0,1fr)_172px] xl:grid-cols-[196px_minmax(0,1fr)_196px]">
+          <div className="mx-auto grid w-full max-w-[1680px] grid-cols-1 gap-3 px-3 lg:grid-cols-[172px_minmax(0,1fr)_172px] xl:grid-cols-[196px_minmax(0,1fr)_196px]">
             <div className="flex min-w-0 justify-center lg:col-start-2">
               <button
                 type="button"
@@ -1068,7 +1068,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
 
       <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30" data-testid="floating-conversation-composer">
         <div
-          className="mx-auto grid w-full max-w-[1540px] grid-cols-1 gap-3 px-3 lg:grid-cols-[172px_minmax(0,1fr)_172px] xl:grid-cols-[196px_minmax(0,1fr)_196px]"
+          className="mx-auto grid w-full max-w-[1680px] grid-cols-1 gap-3 px-3 lg:grid-cols-[172px_minmax(0,1fr)_172px] xl:grid-cols-[196px_minmax(0,1fr)_196px]"
           data-testid="conversation-composer-grid"
         >
           <div className="min-w-0 lg:col-start-2">
@@ -1299,7 +1299,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
 
       {editingVersion && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-n900/45 p-3 sm:p-5">
-          <div className="flex h-full w-full max-w-[1600px] flex-col rounded-md border border-n40 bg-n0 shadow-bottom">
+          <div className="flex h-full w-full max-w-[1680px] flex-col rounded-md border border-n40 bg-n0 shadow-bottom">
             <div className="flex h-12 flex-shrink-0 items-center border-b border-n40 px-4">
               <div>
                 <div className="text-sm font-semibold text-n800">编辑分镜脚本</div>

@@ -67,7 +67,7 @@ export const FinalProductSharePage: React.FC = () => {
           <div className="text-[11px] text-n100">通过分享链接查看并提出修改意见</div>
         </div>
       </header>
-      <main className="max-w-6xl mx-auto px-4 md:px-8 py-7 grid lg:grid-cols-[minmax(0,1fr)_340px] gap-5">
+      <main data-testid="final-product-share-content" className="mx-auto grid w-full max-w-[1680px] gap-5 px-4 py-7 md:px-8 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section className="bg-n0 border border-n40 rounded-xl overflow-hidden shadow-card self-start">
           <div className="px-4 py-3 border-b border-n40">
             <h1 className="text-base font-semibold">{final.title || '漫剧成品'}</h1>

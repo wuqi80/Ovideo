@@ -96,4 +96,16 @@ describe('ProfilePage', () => {
     expect(screen.getByText('创作点数详情')).toBeInTheDocument();
     expect(screen.getByText('屏幕录制')).toBeInTheDocument();
   });
+
+  it('uses the same wide desktop container as the credits center', async () => {
+    render(
+      <MemoryRouter>
+        <ProfilePage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(getMyProfile).toHaveBeenCalled());
+    expect(screen.getByTestId('profile-page-shell')).toHaveClass('max-w-[1680px]');
+    expect(screen.getByTestId('profile-page-content')).not.toHaveClass('max-w-6xl');
+  });
 });
