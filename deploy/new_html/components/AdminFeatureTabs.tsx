@@ -572,9 +572,9 @@ const CreditRulesTab: React.FC = () => {
           <th className="text-left font-medium p-2.5">feature_key</th>
           <th className="text-left font-medium p-2.5">名称</th>
           <th className="text-left font-medium p-2.5">启用</th>
-          <th className="text-right font-medium p-2.5">base</th>
-          <th className="text-right font-medium p-2.5">min</th>
-          <th className="text-right font-medium p-2.5">max</th>
+          <th className="w-24 text-center font-medium p-2.5">base</th>
+          <th className="w-24 text-center font-medium p-2.5">min</th>
+          <th className="w-24 text-center font-medium p-2.5">max</th>
           <th className="text-left font-medium p-2.5">version</th>
           <th className="text-right font-medium p-2.5">操作</th>
         </tr>
@@ -636,9 +636,9 @@ const CreditRuleRow: React.FC<{
             {rule.enabled ? <ToggleRight size={20} className="text-success" /> : <ToggleLeft size={20} className="text-n100" />}
           </button>
         </td>
-        <td className="p-2.5"><input type="number" value={base} onChange={e => setBase(Number(e.target.value))} className="w-16 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
-        <td className="p-2.5"><input type="number" value={min_} onChange={e => setMin(Number(e.target.value))} className="w-14 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
-        <td className="p-2.5"><input type="number" value={max_ ?? ''} placeholder="∞" onChange={e => setMax(e.target.value ? Number(e.target.value) : null)} className="w-14 bg-n0 border border-n40 rounded px-1 py-0.5 text-right text-xs focus:border-primary focus:outline-none" /></td>
+        <td className="w-24 p-2.5 text-center"><input type="number" value={base} onChange={e => setBase(Number(e.target.value))} className="mx-auto block w-16 bg-n0 border border-n40 rounded px-1 py-0.5 text-center text-xs focus:border-primary focus:outline-none" /></td>
+        <td className="w-24 p-2.5 text-center"><input type="number" value={min_} onChange={e => setMin(Number(e.target.value))} className="mx-auto block w-16 bg-n0 border border-n40 rounded px-1 py-0.5 text-center text-xs focus:border-primary focus:outline-none" /></td>
+        <td className="w-24 p-2.5 text-center"><input type="number" value={max_ ?? ''} placeholder="∞" onChange={e => setMax(e.target.value ? Number(e.target.value) : null)} className="mx-auto block w-16 bg-n0 border border-n40 rounded px-1 py-0.5 text-center text-xs focus:border-primary focus:outline-none" /></td>
         <td className="p-2.5 text-n100 text-[10px]">{rule.rule_version}</td>
         <td className="p-2.5 text-right whitespace-nowrap">
           <button type="button" onClick={() => setAdvancedOpen(value => !value)} className="inline-flex items-center gap-1 text-[11px] text-n500 hover:text-primary">
