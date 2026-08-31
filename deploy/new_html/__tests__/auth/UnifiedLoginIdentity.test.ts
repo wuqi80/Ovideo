@@ -26,4 +26,13 @@ describe('unified account and phone login contract', () => {
     expect(loginHtml).toContain("location.pathname === '/legacy-login'");
     expect(loginHtml).toContain("history.replaceState(null, '', '/login')");
   });
+
+  it('validates new passwords locally and renders structured API errors readably', () => {
+    expect(loginHtml).toContain('minlength="8" maxlength="128"');
+    expect(loginHtml).toContain("if (field('password').length < 8) throw new Error('密码至少需要 8 位')");
+    expect(loginHtml).toContain('function validationErrorMessage(payload');
+    expect(loginHtml).toContain("item.type === 'string_too_short'");
+    expect(loginHtml).toContain('throw new Error(validationErrorMessage(payload))');
+    expect(loginHtml).not.toContain("throw new Error(payload.detail || payload.error || '请求失败，请稍后重试')");
+  });
 });

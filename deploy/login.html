@@ -906,8 +906,8 @@
         const hasPendingPhoneBinding = state.view === 'bind' && Boolean(sessionStorage.getItem(BINDING_TOKEN_KEY));
         if (localStorage.getItem(TOKEN_KEY) && !hasPendingPhoneBinding) window.location.href = '/projects';
 
-        function input(id, type, label, autocomplete, required = true) {
-            return `<div class="input-group"><input id="${id}" type="${type}" autocomplete="${autocomplete}" placeholder=" " ${required ? 'required' : ''}><label for="${id}">${label}</label></div>`;
+        function input(id, type, label, autocomplete, required = true, attributes = '') {
+            return `<div class="input-group"><input id="${id}" type="${type}" autocomplete="${autocomplete}" placeholder=" " ${required ? 'required' : ''} ${attributes}><label for="${id}">${label}</label></div>`;
         }
 
         function codeInput() {
@@ -943,8 +943,8 @@
                 authTitle.textContent = '创建账号';
                 authSubtitle.textContent = '手机号是登录身份，邮箱可以稍后绑定';
                 authForm.innerHTML = input('phone', 'tel', '手机号', 'tel') + codeInput()
-                    + input('password', 'password', '密码（至少 8 位）', 'new-password')
-                    + input('confirmPassword', 'password', '确认密码', 'new-password')
+                    + input('password', 'password', '密码（至少 8 位）', 'new-password', true, 'minlength="8" maxlength="128"')
+                    + input('confirmPassword', 'password', '确认密码', 'new-password', true, 'minlength="8" maxlength="128"')
                     + input('email', 'email', '邮箱（选填）', 'email', false)
                     + `<p class="field-hint">填写邮箱后将发送验证邮件；未验证前不会接收系统通知。</p>`
                     + submitButton('创建账号');
@@ -958,8 +958,8 @@
                 authTitle.textContent = '重置密码';
                 authSubtitle.textContent = '验证注册手机号后设置新密码';
                 authForm.innerHTML = input('phone', 'tel', '手机号', 'tel') + codeInput()
-                    + input('password', 'password', '新密码（至少 8 位）', 'new-password')
-                    + input('confirmPassword', 'password', '确认新密码', 'new-password')
+                    + input('password', 'password', '新密码（至少 8 位）', 'new-password', true, 'minlength="8" maxlength="128"')
+                    + input('confirmPassword', 'password', '确认新密码', 'new-password', true, 'minlength="8" maxlength="128"')
                     + submitButton('重置并登录');
                 authFooter.innerHTML = footerButton('返回登录', 'login');
             }
@@ -1009,11 +1009,41 @@
             successMessage.classList.remove('hidden');
         }
 
+        function validationErrorMessage(payload, fallback = '请求失败，请稍后重试') {
+            const detail = payload?.detail ?? payload?.error ?? payload?.message;
+            if (typeof detail === 'string' && detail.trim()) return detail;
+            if (Array.isArray(detail)) {
+                const messages = detail.map(item => {
+                    if (!item || typeof item !== 'object') return String(item || '');
+                    const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : '';
+                    const label = {
+                        password: '密码',
+                        new_password: '密码',
+                        code: '验证码',
+                        phone: '手机号',
+                        email: '邮箱',
+                    }[field] || '输入内容';
+                    if (item.type === 'string_too_short' && item.ctx?.min_length) {
+                        return `${label}至少需要 ${item.ctx.min_length} 位`;
+                    }
+                    if (item.type === 'string_too_long' && item.ctx?.max_length) {
+                        return `${label}不能超过 ${item.ctx.max_length} 位`;
+                    }
+                    return item.msg || item.message || '';
+                }).filter(Boolean);
+                if (messages.length) return [...new Set(messages)].join('；');
+            }
+            if (detail && typeof detail === 'object') {
+                return detail.message || detail.error || fallback;
+            }
+            return fallback;
+        }
+
         async function api(url, body) {
             const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             let payload = {};
             try { payload = await response.json(); } catch (_) { payload = {}; }
-            if (!response.ok) throw new Error(payload.detail || payload.error || '请求失败，请稍后重试');
+            if (!response.ok) throw new Error(validationErrorMessage(payload));
             return payload;
         }
 
@@ -1092,11 +1122,13 @@
                         return;
                     }
                 } else if (state.view === 'register') {
+                    if (field('password').length < 8) throw new Error('密码至少需要 8 位');
                     if (field('password') !== field('confirmPassword')) throw new Error('两次输入的密码不一致');
                     result = await api('/api/auth/phone/register', { phone: field('phone'), code: field('code'), password: field('password'), email: field('email') || null });
                 } else if (state.view === 'bind') {
                     result = await api('/api/auth/legacy/bind-phone', { binding_token: sessionStorage.getItem(BINDING_TOKEN_KEY) || '', phone: field('phone'), code: field('code') });
                 } else {
+                    if (field('password').length < 8) throw new Error('密码至少需要 8 位');
                     if (field('password') !== field('confirmPassword')) throw new Error('两次输入的密码不一致');
                     result = await api('/api/auth/phone/password-reset', { phone: field('phone'), code: field('code'), new_password: field('password') });
                 }

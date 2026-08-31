@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -305,11 +305,13 @@ def _normalize_admin_user(row: Any) -> Dict[str, Any]:
         "id": d.get("user_id") or d.get("id") or "",
         "username": d.get("username") or "",
         "email": d.get("email") or "",
+        "phone_number": d.get("phone_number") or "",
         "role": d.get("role") or "editor",
         "isActive": bool(is_active),
         # 后端目前没有真实在线状态；用最近登录 5 分钟内作为近似（生产环境可换成 session/SSE 心跳）
-        "isOnline": (last_login_ms > 0 and (datetime.utcnow().timestamp() * 1000 - last_login_ms) < 5 * 60 * 1000),
+        "isOnline": (last_login_ms > 0 and (datetime.now(timezone.utc).timestamp() * 1000 - last_login_ms) < 5 * 60 * 1000),
         "lastLogin": last_login_ms,
+        "last_login_at": last_login_iso,
         "permissions": perm,
         "stats": {"todayCount": 0, "totalCount": 0, "byModel": {}},
         # 透传原始字段（前端可读 raw 字段做扩展，不强制依赖）

@@ -22,4 +22,11 @@ describe('admin username management contract', () => {
     expect(loginSource).toContain("verifyAdminSession(data.token)");
     expect(loginSource).toContain("'/api/admin/session'");
   });
+
+  it('shows phone numbers and accepts both normalized and raw recent-login fields', () => {
+    expect(accountsSource).toContain('>手机号</th>');
+    expect(accountsSource).toContain("placeholder: '搜索用户名 / 手机号 / 邮箱'");
+    expect(accountsSource).toContain("{u.phone_number || '-'}");
+    expect(accountsSource).toContain('u.last_login_at || u.lastLogin');
+  });
 });

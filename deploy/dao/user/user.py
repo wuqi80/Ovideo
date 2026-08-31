@@ -556,7 +556,7 @@ class UserDAO:
         params: List[Any] = []
         idx = 1
         if keyword:
-            where.append(f"(username ILIKE ${idx} OR email ILIKE ${idx})")
+            where.append(f"(username ILIKE ${idx} OR email ILIKE ${idx} OR phone_number ILIKE ${idx})")
             params.append(f"%{keyword}%"); idx += 1
         if role:
             where.append(f"role = ${idx}"); params.append(role); idx += 1
@@ -621,7 +621,7 @@ class UserDAO:
         params: List[Any] = []
         idx = 1
         if keyword:
-            where.append(f"(username ILIKE ${idx} OR email ILIKE ${idx})")
+            where.append(f"(username ILIKE ${idx} OR email ILIKE ${idx} OR phone_number ILIKE ${idx})")
             params.append(f"%{keyword}%"); idx += 1
         if role:
             where.append(f"role = ${idx}"); params.append(role); idx += 1

@@ -265,13 +265,14 @@ const AccountsTab: React.FC = () => {
             <option value="disabled">disabled</option>
           </select>
         }
-        search={{ value: keyword, onChange: setKeyword, placeholder: '搜索用户名 / 邮箱', onSearch: reload }}
+        search={{ value: keyword, onChange: setKeyword, placeholder: '搜索用户名 / 手机号 / 邮箱', onSearch: reload }}
         actions={<CrmPrimaryButton onClick={() => setCreateOpen(true)}><Plus size={13} /> 新建用户</CrmPrimaryButton>}
       />
 
       <CrmTable headers={
         <tr>
           <th className="text-left font-medium p-2.5">用户</th>
+          <th className="text-left font-medium p-2.5">手机号</th>
           <th className="text-left font-medium p-2.5">邮箱</th>
           <th className="text-left font-medium p-2.5">角色</th>
           <th className="text-left font-medium p-2.5">状态</th>
@@ -287,6 +288,7 @@ const AccountsTab: React.FC = () => {
                 <div className="text-n800">{u.username}</div>
                 <div className="text-[10px] text-n100 font-mono">{u.user_id}</div>
               </td>
+              <td className="p-2.5 text-n300 font-mono text-xs whitespace-nowrap">{u.phone_number || '-'}</td>
               <td className="p-2.5 text-n300">{u.email || '-'}</td>
               <td className="p-2.5">
                 <select value={u.role || 'user'} onChange={e => handleSetRole(u.user_id, e.target.value)}
@@ -301,7 +303,9 @@ const AccountsTab: React.FC = () => {
                 {u.disabled_reason && <div className="text-[10px] text-danger mt-0.5">{u.disabled_reason}</div>}
               </td>
               <td className="p-2.5 text-n100 text-[11px]">
-                {u.last_login_at ? new Date(u.last_login_at).toLocaleString('zh-CN') : '-'}
+                {(u.last_login_at || u.lastLogin)
+                  ? new Date(u.last_login_at || u.lastLogin).toLocaleString('zh-CN')
+                  : '-'}
               </td>
               <td className="p-2.5 text-right whitespace-nowrap">
                 <CrmActionLink
@@ -321,7 +325,7 @@ const AccountsTab: React.FC = () => {
           );
         })}
         {!pageRows.length && (
-          <tr><td colSpan={6} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无数据'}</td></tr>
+          <tr><td colSpan={7} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无数据'}</td></tr>
         )}
       </CrmTable>
 

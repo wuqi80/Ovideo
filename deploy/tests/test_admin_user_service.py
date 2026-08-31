@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -115,3 +116,22 @@ async def test_admin_rename_of_current_uuid_account_refreshes_session_and_audits
     }
     assert audit.await_args.kwargs["admin_user_id"] == "user_uuid_1"
     assert audit.await_args.kwargs["target_id"] == "user_uuid_1"
+
+
+def test_admin_user_normalization_preserves_phone_and_recent_login():
+    import admin_routes
+
+    last_login = datetime(2026, 8, 31, 9, 30, tzinfo=timezone.utc)
+    user = admin_routes._normalize_admin_user(
+        {
+            "user_id": "user_phone",
+            "username": "creator",
+            "phone_number": "13800138000",
+            "last_login_at": last_login,
+            "status": "active",
+        }
+    )
+
+    assert user["phone_number"] == "13800138000"
+    assert user["last_login_at"] == last_login.isoformat()
+    assert user["lastLogin"] == int(last_login.timestamp() * 1000)
