@@ -38,7 +38,8 @@ def test_design_image_credit_tier_migration_mirror_and_manifest():
     assert '"value":"image_tier_1","multiplier":1' in sql
     assert '"value":"image_tier_2","multiplier":2.5' in sql
     assert '"value":"image_tier_3","multiplier":1.5' in sql
-    assert "失败不扣创作点数" in sql
+    # Applied migrations are immutable: keep the original ledger checksum and wording.
+    assert "失败不扣积分" in sql
 
 
 def test_design_image_credit_tiers_cost_40_to_100_per_image():
