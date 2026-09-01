@@ -44,6 +44,8 @@ describe('latest three-step script prompts', () => {
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(VISUAL_STYLE_REFERENCE);
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(STABILITY_CONSTRAINT_REFERENCE);
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('每个风格词必须能从当前分段或用户要求中找到依据');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('用户在具体分镜中主动填写、追加或确认的提示词属于用户要求');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('必须原样保留');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).not.toContain('赛博朋克冷蓝紫色调');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).not.toContain('冷峻战争写实');
   });

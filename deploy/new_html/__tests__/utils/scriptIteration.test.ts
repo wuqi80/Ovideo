@@ -128,4 +128,11 @@ describe('script iteration helpers', () => {
     expect(text).not.toContain('---CUT---');
     expect(text).not.toContain('<<<CONTINUE_FROM');
   });
+
+  it('preserves style prompts explicitly inserted by the user into a concrete shot', () => {
+    const text = `${GENERATE_STORYBOARD_SCRIPT.system || ''}\n${GENERATE_STORYBOARD_SCRIPT.user}`;
+    expect(text).toContain('用户已经在具体分镜中主动填写、追加或确认的提示词属于用户原始内容');
+    expect(text).toContain('必须原样保留');
+    expect(text).toContain('不得以清理风格词为由删除、替换或改写');
+  });
 });
