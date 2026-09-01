@@ -64,7 +64,11 @@ export const SonicStudio: React.FC<SonicStudioProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-[100] bg-[#0a0a0c] text-slate-200 transition-all duration-300 ${
+      role="dialog"
+      aria-modal="true"
+      aria-label="创剧声音工厂"
+      aria-hidden={!isOpen}
+      className={`fixed inset-0 z-[180] bg-[#0a0a0c] text-slate-200 transition-all duration-300 ${
         isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
       }`}
     >

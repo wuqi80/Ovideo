@@ -335,14 +335,16 @@ export const SidebarDock: React.FC<SidebarDockProps> = ({
                         <button
                             onMouseEnter={() => handleSidebarHover(item.id)}
                             onClick={() => item.action ? item.action() : setActivePanel(item.id as any)}
+                            title={item.tooltip || (item.id === 'chat' ? 'AI 创意助手' : undefined)}
+                            aria-label={item.tooltip || (item.id === 'chat' ? 'AI 创意助手' : item.id)}
                             className={`relative group w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 ${activePanel === item.id || item.active ? 'bg-white text-black shadow-lg' : 'hover:bg-white/10 text-slate-300 hover:text-white'}`}
                         >
                             <item.icon size={20} strokeWidth={2} />
                         </button>
                         {/* Tooltip for Sidebar Icons */}
-                        {(item.id === 'smart_sequence' || item.id === 'sonic_studio') && (
+                        {(item.id === 'smart_sequence' || item.id === 'sonic_studio' || item.id === 'chat') && (
                             <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-black/80 backdrop-blur-md rounded border border-white/10 text-[10px] text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                                {item.tooltip || (item.id === 'smart_sequence' ? '智能多帧' : '音频中心')}
+                                {item.tooltip || (item.id === 'smart_sequence' ? '智能多帧' : item.id === 'chat' ? 'AI 创意助手' : '音频中心')}
                             </div>
                         )}
                     </div>

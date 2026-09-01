@@ -19,8 +19,9 @@ import {
 } from '../../utils/scriptPromptStandards';
 
 describe('findVideoScriptShotBlock', () => {
-    it('locks the production reference examples to the agreed 26 and 203 characters', () => {
-        expect(countPromptCharacters(VISUAL_STYLE_REFERENCE)).toBe(26);
+    it('keeps the production references complete without a genre-specific fallback', () => {
+        expect(countPromptCharacters(VISUAL_STYLE_REFERENCE)).toBeGreaterThanOrEqual(MIN_VISUAL_STYLE_CHARACTERS);
+        expect(VISUAL_STYLE_REFERENCE).not.toMatch(/古风|战争|赛博朋克|日漫|校园/);
         expect(countPromptCharacters(STABILITY_CONSTRAINT_REFERENCE)).toBe(203);
     });
 

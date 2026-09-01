@@ -349,6 +349,8 @@ export const EnhancePage: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [processProgress, setProcessProgress] = useState(0);
   const [processStage, setProcessStage] = useState('处理集群正在执行，可能需要数分钟');
+  const [enhanceError, setEnhanceError] = useState('');
+  const [enhanceNotice, setEnhanceNotice] = useState('');
   // All enhancement modes are dispatched through a selected GPU Agent.
   const [clusterNodes, setClusterNodes] = useState<ClusterNodeOption[]>([]);
   const [clusterNodesLoading, setClusterNodesLoading] = useState(false);
@@ -797,6 +799,7 @@ export const EnhancePage: React.FC = () => {
         },
         onComplete: () => {
           setProcessProgress(100);
+          setEnhanceNotice(`${failureLabel}处理完成，结果已更新。`);
           window.setTimeout(() => { setProcessing(false); setProcessProgress(0); setProcessStage('处理中'); }, 800);
           reload();
         },
@@ -804,7 +807,7 @@ export const EnhancePage: React.FC = () => {
           setProcessing(false);
           setProcessProgress(0);
           setProcessStage('处理中');
-          alert(`${failureLabel}失败：${err}`);
+          setEnhanceError(`${failureLabel}失败：${err}`);
         },
       });
       setProcessing(true);
@@ -812,27 +815,29 @@ export const EnhancePage: React.FC = () => {
   }, [reload]);
 
   const applyEnhancement = useCallback(async () => {
+    setEnhanceError('');
+    setEnhanceNotice('');
     // GPU enhancement actions require an online ComfyUI Agent.
     // 按钮已禁用，这里防止意外触发）。
     if (!selectedClusterNodeUsable) {
-      alert('该功能需要处理集群节点。当前没有可用节点，暂不可用。\n\n请在后台“集群节点监控”确认处理节点在线，或稍后重试。');
+      setEnhanceError('该功能需要处理集群节点。当前没有可用节点，请刷新节点状态或稍后重试。');
       return;
     }
     const targetClip = videoClips.find(c => c.id === selectedClipId) || videoUnderPlayhead || videoClips[0];
     if (!targetClip || !targetClip.url) {
-      alert('请先在时间线上选择一个视频片段。');
+      setEnhanceError('请先在时间线上选择一个视频片段。');
       return;
     }
 
     if (enhancementKind === 'lipSync' || enhancementKind === 'dub') {
       const audioClip = audioClips.find(clip => clip.id === lipSyncAudioClipId);
       if (!audioClip) {
-        alert('请选择参考配音或上传配音演员录音。');
+        setEnhanceError('请选择参考配音或上传配音演员录音。');
         return;
       }
       const referenceImage = targetClip.referenceImageUrl || targetClip.thumbnailUrl;
       if (!referenceImage) {
-        alert('当前视频片段缺少首帧图片，无法发起对嘴任务。请先为对应分镜生成图片。');
+        setEnhanceError('当前视频片段缺少首帧图片，无法发起对嘴任务。请先为对应分镜生成图片。');
         return;
       }
 
@@ -865,6 +870,8 @@ export const EnhancePage: React.FC = () => {
           { duration: targetClip.duration },
         );
         const pollerUuid = `enhance-${isDub ? 'dub' : 'lipsync'}:${targetClip.id}`;
+        setProcessStage('排队中');
+        setEnhanceNotice(`${isDub ? '视频配音' : '配音对嘴'}任务已进入处理队列。`);
         startVideoPoll(pollerUuid, {
           taskId: result.task_id,
           title: `${isDub ? '视频配音' : '配音对嘴'} · ${audioClip.sourceLabel || '音频轨道'}`,
@@ -890,6 +897,7 @@ export const EnhancePage: React.FC = () => {
                 }).catch(() => {});
               }
               setProcessProgress(100);
+              setEnhanceNotice(`${isDub ? '视频配音' : '配音对嘴'}处理完成，结果已更新。`);
               window.setTimeout(() => { setProcessing(false); setProcessProgress(0); setProcessStage('处理中'); }, 800);
               reloadEnhanceData();
             },
@@ -897,7 +905,7 @@ export const EnhancePage: React.FC = () => {
               setProcessing(false);
               setProcessProgress(0);
               setProcessStage('处理中');
-              alert(`${isDub ? '视频配音' : '配音对嘴'}失败：${err}`);
+              setEnhanceError(`${isDub ? '视频配音' : '配音对嘴'}失败：${err}`);
             },
           },
         });
@@ -905,7 +913,7 @@ export const EnhancePage: React.FC = () => {
         setProcessing(false);
         setProcessProgress(0);
         setProcessStage('处理中');
-        alert(`提交${enhancementKind === 'dub' ? '视频配音' : '配音对嘴'}任务失败：${error?.message || error}`);
+        setEnhanceError(`提交${enhancementKind === 'dub' ? '视频配音' : '配音对嘴'}任务失败：${error?.message || error}`);
       }
       return;
     }
@@ -925,6 +933,8 @@ export const EnhancePage: React.FC = () => {
           preferred_node_id: selectedClusterNode?.nodeId || selectedClusterNode?.id,
         });
         const pollerUuid = `enhance-interpolate:${targetClip.id}`;
+        setProcessStage('排队中');
+        setEnhanceNotice('智能补帧任务已进入处理队列。');
         startVideoPoll(pollerUuid, {
           taskId: result.task_id,
           title: `智能补帧 · ${targetFps} FPS`,
@@ -950,6 +960,7 @@ export const EnhancePage: React.FC = () => {
                 }).catch(() => {});
               }
               setProcessProgress(100);
+              setEnhanceNotice('智能补帧处理完成，结果已更新。');
               window.setTimeout(() => { setProcessing(false); setProcessProgress(0); setProcessStage('处理中'); }, 800);
               reloadEnhanceData();
             },
@@ -957,7 +968,7 @@ export const EnhancePage: React.FC = () => {
               setProcessing(false);
               setProcessProgress(0);
               setProcessStage('处理中');
-              alert(`智能补帧失败：${err}`);
+              setEnhanceError(`智能补帧失败：${err}`);
             },
           },
         });
@@ -965,7 +976,7 @@ export const EnhancePage: React.FC = () => {
         setProcessing(false);
         setProcessProgress(0);
         setProcessStage('处理中');
-        alert(`提交智能补帧任务失败：${error?.message || error}`);
+        setEnhanceError(`提交智能补帧任务失败：${error?.message || error}`);
       }
       return;
     }
@@ -973,7 +984,7 @@ export const EnhancePage: React.FC = () => {
     // === upscale：真后端任务 + taskRegistry ===
     const filename = targetClip.url;
     if (!filename) {
-      alert('无法从视频 URL 解析文件名，无法发起放大任务。');
+      setEnhanceError('无法从视频 URL 解析文件名，无法发起放大任务。');
       return;
     }
 
@@ -993,6 +1004,8 @@ export const EnhancePage: React.FC = () => {
       });
       const backendTaskId = result.task_id;
       const pollerUuid = `enhance-upscale:${targetClip.id}`;
+      setProcessStage('排队中');
+      setEnhanceNotice('视频放大任务已进入处理队列。');
       startVideoPoll(pollerUuid, {
         taskId: backendTaskId,
         title: `视频放大 · ${targetResolution}`,
@@ -1010,6 +1023,7 @@ export const EnhancePage: React.FC = () => {
           },
           onComplete: () => {
             setProcessProgress(100);
+            setEnhanceNotice('视频放大处理完成，结果已更新。');
             window.setTimeout(() => { setProcessing(false); setProcessProgress(0); setProcessStage('处理中'); }, 800);
             // 拉新数据让用户看到 upscaled 视频
             reload();
@@ -1018,7 +1032,7 @@ export const EnhancePage: React.FC = () => {
             setProcessing(false);
             setProcessProgress(0);
             setProcessStage('处理中');
-            alert(`视频放大失败：${err}`);
+            setEnhanceError(`视频放大失败：${err}`);
           },
         },
       });
@@ -1026,7 +1040,7 @@ export const EnhancePage: React.FC = () => {
       setProcessing(false);
       setProcessProgress(0);
       setProcessStage('处理中');
-      alert(`提交放大任务失败：${e?.message || e}`);
+      setEnhanceError(`提交放大任务失败：${e?.message || e}`);
     }
   }, [
     enhancementKind,
@@ -1334,6 +1348,16 @@ export const EnhancePage: React.FC = () => {
                   fallbackCost={5}
                   className="mb-2 justify-center"
                 />
+                {enhanceError && (
+                  <div role="alert" className="mb-2 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-xs leading-5 text-danger">
+                    {enhanceError}
+                  </div>
+                )}
+                {enhanceNotice && !enhanceError && (
+                  <div role="status" aria-live="polite" className="mb-2 rounded-lg border border-success/20 bg-success-light px-3 py-2 text-xs leading-5 text-success">
+                    {enhanceNotice}
+                  </div>
+                )}
                 <button
                   onClick={() => void applyEnhancement()}
                   disabled={processing || !selectedClusterNodeUsable || ((enhancementKind === 'lipSync' || enhancementKind === 'dub') && !lipSyncAudioClipId)}

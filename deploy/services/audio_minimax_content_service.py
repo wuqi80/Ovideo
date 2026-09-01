@@ -58,4 +58,10 @@ async def generate_minimax_music_response(
 
 async def generate_minimax_lyrics_response(*, client: Any, text: str, language: str) -> dict[str, Any]:
     result = await client.lyrics_generate(text=text, language=language)
-    return {"success": True, "lyrics": result.get("data", {}).get("lyrics", "")}
+    lyrics = result.get("lyrics") or result.get("data", {}).get("lyrics", "")
+    return {
+        "success": True,
+        "lyrics": lyrics,
+        "song_title": result.get("song_title", ""),
+        "style_tags": result.get("style_tags", ""),
+    }

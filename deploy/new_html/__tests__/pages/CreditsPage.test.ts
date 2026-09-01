@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CreditTransaction } from '../../services/creditService';
 import {
   collapseSettledFreezeRows,
+  formatCreditBalanceMovement,
   formatCreditBillingDetail,
   formatCreditChangeTypeLabel,
   formatCreditFeatureLabel,
@@ -46,6 +47,19 @@ describe('CreditsPage transaction presentation', () => {
     });
 
     expect(collapseSettledFreezeRows([consume, freeze])).toEqual([consume]);
+    expect(formatCreditBalanceMovement(consume)).toEqual({
+      before: '冻结时已扣',
+      after: '133',
+      settledFromFreeze: true,
+    });
+  });
+
+  it('keeps actual before/after values for balance-changing rows', () => {
+    expect(formatCreditBalanceMovement(transaction({ change_type: 'recharge' }))).toEqual({
+      before: '793',
+      after: '133',
+      settledFromFreeze: false,
+    });
   });
 
   it('keeps raw freeze rows when the user explicitly filters for them', () => {

@@ -16,6 +16,8 @@ describe('ScriptConversationPane workflow', () => {
     expect(workspace).toContain('const scriptModelOptions = useScriptModelOptions()');
     expect(workspace).toContain('modelOptions={scriptModelOptions}');
     expect(source).toContain('继续输入修改意见');
+    expect(source).toContain('data-testid="script-generation-status"');
+    expect(source).toContain('正在校验创作点数并生成分镜脚本');
   });
 
   it('keeps the single model selector beside the send action', () => {

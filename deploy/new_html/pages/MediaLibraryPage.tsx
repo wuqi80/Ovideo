@@ -111,6 +111,14 @@ export const MediaLibraryPage: React.FC = () => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [uploadTargetFolderId, setUploadTargetFolderId] = useState<string>('');
+  const [folderEditor, setFolderEditor] = useState<{
+    mode: 'create' | 'rename';
+    value: string;
+    parentFolderId: string | null;
+    folder?: MediaFolder;
+  } | null>(null);
+  const [folderSaving, setFolderSaving] = useState(false);
+  const [folderEditorError, setFolderEditorError] = useState('');
 
   // 切到某个真实文件夹时，上传目标默认跟随当前文件夹
   useEffect(() => {
@@ -268,27 +276,44 @@ export const MediaLibraryPage: React.FC = () => {
   };
 
   // ── 文件夹操作 ──
-  const handleCreateFolder = async (parentFolderId: string | null) => {
+  const handleCreateFolder = (parentFolderId: string | null) => {
     if (!projectId) return;
-    const name = window.prompt(parentFolderId ? '新建子文件夹名称（如：主角 / 反派）' : '新建文件夹名称（如：人物 / 场景 / 道具）');
-    if (!name || !name.trim()) return;
-    try {
-      await createMediaFolder({ project_id: projectId, name: name.trim(), parent_folder_id: parentFolderId });
-      await loadFolders();
-      if (parentFolderId) setExpandedFolders(prev => new Set(prev).add(parentFolderId));
-    } catch (e: any) {
-      setError(e?.message || String(e));
-    }
+    setFolderEditorError('');
+    setFolderEditor({ mode: 'create', value: '', parentFolderId });
   };
 
-  const handleRenameFolder = async (folder: MediaFolder) => {
-    const name = window.prompt('重命名文件夹', folder.name);
-    if (!name || !name.trim() || name.trim() === folder.name) return;
+  const handleRenameFolder = (folder: MediaFolder) => {
+    setFolderEditorError('');
+    setFolderEditor({ mode: 'rename', value: folder.name, parentFolderId: folder.parent_folder_id || null, folder });
+  };
+
+  const submitFolderEditor = async () => {
+    if (!folderEditor || !projectId || !folderEditor.value.trim()) return;
+    const name = folderEditor.value.trim();
+    if (folderEditor.mode === 'rename' && name === folderEditor.folder?.name) {
+      setFolderEditor(null);
+      return;
+    }
+    setFolderSaving(true);
+    setError(null);
+    setFolderEditorError('');
     try {
-      await updateMediaFolder(folder.folder_id, { name: name.trim() });
+      if (folderEditor.mode === 'create') {
+        await createMediaFolder({ project_id: projectId, name, parent_folder_id: folderEditor.parentFolderId });
+        if (folderEditor.parentFolderId) {
+          setExpandedFolders(prev => new Set(prev).add(folderEditor.parentFolderId as string));
+        }
+      } else if (folderEditor.folder) {
+        await updateMediaFolder(folderEditor.folder.folder_id, { name });
+      }
       await loadFolders();
+      setFolderEditor(null);
     } catch (e: any) {
-      setError(e?.message || String(e));
+      const message = e?.message || String(e);
+      setError(message);
+      setFolderEditorError(message);
+    } finally {
+      setFolderSaving(false);
     }
   };
 
@@ -618,6 +643,79 @@ export const MediaLibraryPage: React.FC = () => {
           onClose={() => setShareTarget(null)}
           onChange={() => reload()}
         />
+      )}
+      {folderEditor && (
+        <div className="app-modal-backdrop fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="关闭文件夹编辑"
+            className="absolute inset-0 bg-n900/50"
+            onClick={() => !folderSaving && setFolderEditor(null)}
+          />
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="media-folder-editor-title"
+            className="app-modal-surface relative z-10 w-full max-w-md rounded-xl border border-n40 bg-n0 p-5 shadow-xl"
+            onSubmit={event => { event.preventDefault(); void submitFolderEditor(); }}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-success-light text-success">
+                {folderEditor.mode === 'create' ? <FolderPlus size={18} /> : <Pencil size={18} />}
+              </div>
+              <div>
+                <h2 id="media-folder-editor-title" className="text-base font-semibold text-n800">
+                  {folderEditor.mode === 'create'
+                    ? folderEditor.parentFolderId ? '新建子文件夹' : '新建文件夹'
+                    : '重命名文件夹'}
+                </h2>
+                <p className="mt-1 text-xs text-n100">文件夹用于整理素材，不会移动或删除文件本体。</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFolderEditor(null)}
+                disabled={folderSaving}
+                className="ml-auto rounded p-1 text-n100 hover:bg-n20 hover:text-n700 disabled:opacity-50"
+                aria-label="关闭"
+              >
+                <XIcon size={18} />
+              </button>
+            </div>
+            <label className="mt-5 block">
+              <span className="mb-1.5 block text-xs font-medium text-n500">文件夹名称</span>
+              <input
+                autoFocus
+                value={folderEditor.value}
+                onChange={event => setFolderEditor(current => current ? { ...current, value: event.target.value } : current)}
+                placeholder={folderEditor.parentFolderId ? '例如：主角 / 反派' : '例如：人物 / 场景 / 道具'}
+                maxLength={80}
+                className="h-10 w-full rounded-lg border border-n40 bg-n0 px-3 text-sm text-n800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+              />
+            </label>
+            {folderEditorError && (
+              <p role="alert" className="mt-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-xs text-danger">
+                文件夹保存失败：{folderEditorError}
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setFolderEditor(null)}
+                disabled={folderSaving}
+                className="h-9 rounded-lg border border-n40 px-4 text-sm text-n500 hover:bg-n20 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                disabled={folderSaving || !folderEditor.value.trim()}
+                className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {folderSaving ? '保存中…' : folderEditor.mode === 'create' ? '创建文件夹' : '保存名称'}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

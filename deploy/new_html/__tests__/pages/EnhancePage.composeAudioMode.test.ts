@@ -40,4 +40,11 @@ describe('EnhancePage compose audio mode', () => {
     expect(source).toContain('开始时间（秒）');
     expect(source).toContain('使用时长（秒）');
   });
+
+  it('shows queue acceptance and processing failures inside the page', () => {
+    expect(source).toContain('任务已进入处理队列');
+    expect(source).toContain('role="alert"');
+    expect(source).toContain('aria-live="polite"');
+    expect(source).toContain('setEnhanceError(`提交');
+  });
 });

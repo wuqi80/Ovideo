@@ -9,6 +9,7 @@ import {
   GENERATE_STORYBOARD_SCRIPT,
   ITERATE_FULL_SCRIPT,
 } from '../../prompts/scriptPrompts';
+import { VISUAL_STYLE_REFERENCE } from '../../utils/scriptPromptStandards';
 
 describe('script iteration helpers', () => {
   it('keeps recent conversation instructions in a compact context', () => {
@@ -121,7 +122,8 @@ describe('script iteration helpers', () => {
   it('uses the complete reference constraints and hierarchical shot numbers without output markers', () => {
     const text = `${GENERATE_STORYBOARD_SCRIPT.system || ''}\n${GENERATE_STORYBOARD_SCRIPT.user}`;
     expect(text).toContain('镜头1-1');
-    expect(text).toContain('古风写实，暖黄暗调，室内光影层次丰富，略带神秘氛围。');
+    expect(text).toContain(VISUAL_STYLE_REFERENCE);
+    expect(text).not.toContain('古风写实，暖黄暗调');
     expect(text).toContain('同一场景内，所有镜头的摄影机机位、人物朝向');
     expect(text).not.toContain('---CUT---');
     expect(text).not.toContain('<<<CONTINUE_FROM');

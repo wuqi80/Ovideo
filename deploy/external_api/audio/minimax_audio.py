@@ -708,13 +708,15 @@ class MinimaxAudioClient:
     async def lyrics_generate(
         self,
         text: str,
-        model: str = "music-01",
         language: str = "zh",
     ) -> Dict[str, Any]:
+        # Current MiniMax lyrics API uses mode + prompt.  Keep ``language`` in
+        # the public client signature for callers that still pass it, but do
+        # not send the removed legacy field to the provider.
+        del language
         payload = {
-            "model": model,
-            "text": text,
-            "language": language,
+            "mode": "write_full_song",
+            "prompt": text,
         }
         return await self._request_json(
             "post",

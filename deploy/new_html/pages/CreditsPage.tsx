@@ -87,6 +87,20 @@ export function formatCreditBillingDetail(transaction: CreditTransaction): strin
   return parts.join(' · ') || '-';
 }
 
+export function formatCreditBalanceMovement(transaction: CreditTransaction): {
+  before: string;
+  after: string;
+  settledFromFreeze: boolean;
+} {
+  const settledFromFreeze = transaction.change_type === 'consume'
+    && Number(transaction.balance_before) === Number(transaction.balance_after);
+  return {
+    before: settledFromFreeze ? '冻结时已扣' : String(transaction.balance_before),
+    after: String(transaction.balance_after),
+    settledFromFreeze,
+  };
+}
+
 export const CreditsPage: React.FC = () => {
   const navigate = useNavigate();
   const [balance, setBalance] = useState<CreditBalance | null>(null);
@@ -183,6 +197,7 @@ export const CreditsPage: React.FC = () => {
             <Info size={14} className="mt-0.5 shrink-0 text-primary" />
             <span>
               任务提交时会先暂时冻结预估创作点数；成功后从冻结额结算为消耗，不会再扣一次，失败则自动退还。
+              “冻结时已扣”表示成功结算时可用余额不再发生第二次变化。
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-n40 text-sm">
@@ -220,8 +235,8 @@ export const CreditsPage: React.FC = () => {
                   <th className="whitespace-nowrap px-3 py-2 text-left">功能</th>
                   <th className="text-left py-2 px-3">计费详情</th>
                   <th className="w-24 whitespace-nowrap px-3 py-2 text-right">金额</th>
-                  <th className="w-24 whitespace-nowrap px-3 py-2 text-right">余额前</th>
-                  <th className="w-24 whitespace-nowrap px-3 py-2 text-right">余额后</th>
+                  <th className="w-28 whitespace-nowrap px-3 py-2 text-right">可用余额前</th>
+                  <th className="w-24 whitespace-nowrap px-3 py-2 text-right">可用余额后</th>
                   <th className="text-left py-2 px-3">任务</th>
                 </tr>
               </thead>
@@ -229,6 +244,7 @@ export const CreditsPage: React.FC = () => {
                 {visibleTransactions.map(t => {
                   const meta = CHANGE_TYPE_LABEL[t.change_type] || { label: formatCreditChangeTypeLabel(t.change_type), color: 'text-n700', sign: 0 as const };
                   const sign = meta.sign;
+                  const balanceMovement = formatCreditBalanceMovement(t);
                   return (
                     <tr key={t.transaction_id} className="border-t border-n40">
                       <td className="py-2 px-3 text-n300">
@@ -246,8 +262,13 @@ export const CreditsPage: React.FC = () => {
                           ? `暂占 ${t.amount}`
                           : `${sign === 1 ? '+' : sign === -1 ? '-' : ''}${t.amount}`}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums text-n300">{t.balance_before}</td>
-                      <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums text-n700">{t.balance_after}</td>
+                      <td
+                        className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${balanceMovement.settledFromFreeze ? 'font-sans text-n100' : 'font-mono text-n300'}`}
+                        title={balanceMovement.settledFromFreeze ? '可用点数已在任务冻结时暂占，成功结算不会重复扣减' : undefined}
+                      >
+                        {balanceMovement.before}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums text-n700">{balanceMovement.after}</td>
                       <td className="py-2 px-3 text-n100 font-mono truncate max-w-[200px]">
                         {t.task_id || '-'}
                       </td>

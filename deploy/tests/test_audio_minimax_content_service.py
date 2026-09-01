@@ -112,5 +112,35 @@ async def test_generate_minimax_lyrics_response_extracts_nested_lyrics():
 
     result = await generate_minimax_lyrics_response(client=client, text="write a chorus", language="zh")
 
-    assert result == {"success": True, "lyrics": "generated lyrics"}
+    assert result == {
+        "success": True,
+        "lyrics": "generated lyrics",
+        "song_title": "",
+        "style_tags": "",
+    }
     assert client.calls == [("lyrics_generate", {"text": "write a chorus", "language": "zh"})]
+
+
+@pytest.mark.asyncio
+async def test_generate_minimax_lyrics_response_prefers_current_top_level_contract():
+    class CurrentLyricsClient:
+        async def lyrics_generate(self, **kwargs):
+            assert kwargs == {"text": "写一首校园歌曲", "language": "zh"}
+            return {
+                "lyrics": "[Verse]\n下课铃响起",
+                "song_title": "下课以后",
+                "style_tags": "Mandopop, Campus",
+            }
+
+    result = await generate_minimax_lyrics_response(
+        client=CurrentLyricsClient(),
+        text="写一首校园歌曲",
+        language="zh",
+    )
+
+    assert result == {
+        "success": True,
+        "lyrics": "[Verse]\n下课铃响起",
+        "song_title": "下课以后",
+        "style_tags": "Mandopop, Campus",
+    }

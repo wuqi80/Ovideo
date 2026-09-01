@@ -1072,6 +1072,17 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
           data-testid="conversation-composer-grid"
         >
           <div className="min-w-0 lg:col-start-2">
+            {isSending && (
+              <div
+                role="status"
+                aria-live="polite"
+                data-testid="script-generation-status"
+                className="pointer-events-auto mb-2 flex w-full items-center gap-2 rounded border border-primary/25 bg-primary-light px-3 py-2 text-xs font-medium text-primary shadow-sm"
+              >
+                <LoaderCircle className="h-3.5 w-3.5 flex-shrink-0 animate-spin" />
+                正在校验创作点数并生成分镜脚本，完成后会自动显示在对话中…
+              </div>
+            )}
             {error && (
               <div className="pointer-events-auto mb-2 flex w-full items-center gap-3 rounded border border-danger/30 bg-r50 px-3 py-2 text-xs text-danger shadow-sm">
                 <span className="min-w-0 flex-1">{error}</span>
@@ -1185,8 +1196,9 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
               type="button"
               onClick={() => void submit()}
               disabled={!selectedFile || !draft.trim() || isSending}
-              title="发送"
+              title={isSending ? '正在生成分镜脚本' : '发送'}
               aria-label="发送"
+              aria-busy={isSending}
               className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-n800 text-white hover:bg-n700 disabled:cursor-not-allowed disabled:bg-n100"
             >
               {isSending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

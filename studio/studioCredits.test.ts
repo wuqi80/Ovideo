@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 const appSource = readFileSync(resolve(__dirname, 'App.tsx'), 'utf-8');
 const nodeSource = readFileSync(resolve(__dirname, 'components/Node.tsx'), 'utf-8');
 const assistantSource = readFileSync(resolve(__dirname, 'components/AssistantPanel.tsx'), 'utf-8');
+const sonicSource = readFileSync(resolve(__dirname, 'components/SonicStudio.tsx'), 'utf-8');
 const runtimeSource = readFileSync(resolve(__dirname, 'platform/ostoryRuntime.ts'), 'utf-8');
 
 describe('Studio credit integration', () => {
@@ -20,6 +21,13 @@ describe('Studio credit integration', () => {
     expect(nodeSource).toContain('disabled={isWorking || creditInsufficient}');
     expect(assistantSource).toContain('预计 ${creditSummary.totalCost} 创作点数 · 成功后扣除');
     expect(assistantSource).toContain('isLoading || creditInsufficient');
+  });
+
+  it('keeps assistant and sound-factory surfaces above canvas controls', () => {
+    expect(assistantSource).toContain('z-[180]');
+    expect(assistantSource).toContain('aria-label="AI 创意助手"');
+    expect(sonicSource).toContain('z-[180]');
+    expect(sonicSource).toContain('aria-label="创剧声音工厂"');
   });
 
   it('keeps success-only direct billing and validates total queued-video balance', () => {

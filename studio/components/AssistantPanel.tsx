@@ -244,7 +244,11 @@ export const AssistantPanel: React.FC<AssistantPanelProps> = ({ isOpen, onClose 
   return (
     <div
       ref={panelRef}
-      className={`fixed right-6 top-1/2 -translate-y-1/2 h-[85vh] w-[420px] bg-[#1c1c1e]/95 backdrop-blur-3xl rounded-[24px] border border-white/10 shadow-2xl z-40 flex flex-col overflow-hidden ${SPRING_ANIMATION} ${isOpen ? 'opacity-100 translate-x-0 scale-100' : 'opacity-0 translate-x-10 scale-95 pointer-events-none'}`}
+      role="dialog"
+      aria-modal="false"
+      aria-label="AI 创意助手"
+      aria-hidden={!isOpen}
+      className={`fixed right-6 top-1/2 z-[180] h-[85vh] w-[min(420px,calc(100vw-3rem))] -translate-y-1/2 rounded-[24px] border border-white/10 bg-[#1c1c1e]/95 shadow-2xl backdrop-blur-3xl flex flex-col overflow-hidden ${SPRING_ANIMATION} ${isOpen ? 'opacity-100 translate-x-0 scale-100' : 'opacity-0 translate-x-10 scale-95 pointer-events-none'}`}
       onMouseDown={(e) => e.stopPropagation()}
       onWheel={(e) => e.stopPropagation()}
     >

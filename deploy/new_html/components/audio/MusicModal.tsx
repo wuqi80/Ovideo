@@ -73,6 +73,7 @@ export const MusicModal: React.FC<MusicModalProps> = ({
   const [lyricsInput, setLyricsInput] = useState('');
   const [generatedLyrics, setGeneratedLyrics] = useState('');
   const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [lyricsError, setLyricsError] = useState('');
 
   const [musicLyrics, setMusicLyrics] = useState('');
   const [musicMode, setMusicMode] = useState<'instrumental' | 'theme'>('instrumental');
@@ -82,13 +83,16 @@ export const MusicModal: React.FC<MusicModalProps> = ({
   const [musicTaskId, setMusicTaskId] = useState('');
   const [musicProgress, setMusicProgress] = useState(0);
   const [musicResult, setMusicResult] = useState<{ url: string; durationMs: number } | null>(null);
+  const [musicError, setMusicError] = useState('');
 
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const handleUpload = useCallback(async () => {
     if (!uploadFile) return;
     setUploading(true);
+    setUploadError('');
     try {
       const durationMs = await readAudioDurationMs(uploadFile);
       const uploaded = await uploadMediaItem(uploadFile, {
@@ -112,7 +116,7 @@ export const MusicModal: React.FC<MusicModalProps> = ({
       await onCreated();
     } catch (e) {
       console.error('上传背景音乐失败:', e);
-      alert(`上传背景音乐失败: ${e instanceof Error ? e.message : String(e)}`);
+      setUploadError(e instanceof Error ? e.message : String(e));
     } finally {
       setUploading(false);
     }
@@ -122,13 +126,14 @@ export const MusicModal: React.FC<MusicModalProps> = ({
     const text = lyricsInput.trim() || (script?.adaptedScript || script?.adapted_script || '').slice(0, 500);
     if (!text) return;
     setLyricsLoading(true);
+    setLyricsError('');
     try {
       const res = await minimaxLyrics(text);
       setGeneratedLyrics(res.lyrics || '');
       setMusicLyrics(res.lyrics || '');
     } catch (e) {
       console.error('歌词生成失败:', e);
-      alert(`歌词生成失败: ${e instanceof Error ? e.message : String(e)}`);
+      setLyricsError(e instanceof Error ? e.message : String(e));
     } finally {
       setLyricsLoading(false);
     }
@@ -138,6 +143,8 @@ export const MusicModal: React.FC<MusicModalProps> = ({
     if (!musicDescription.trim() || (musicMode === 'theme' && !musicLyrics.trim())) return;
     setMusicLoading(true);
     setMusicProgress(0);
+    setMusicError('');
+    setMusicResult(null);
     try {
       const seed = Math.floor(Math.random() * 2_147_483_647);
       const submitted = await submitLocalMiniMaxMusic3({
@@ -174,7 +181,7 @@ export const MusicModal: React.FC<MusicModalProps> = ({
       await onCreated();
     } catch (e) {
       console.error('音乐生成失败:', e);
-      alert(`音乐生成失败: ${e instanceof Error ? e.message : String(e)}`);
+      setMusicError(e instanceof Error ? e.message : String(e));
     } finally {
       setMusicLoading(false);
       setMusicTaskId('');
@@ -186,7 +193,7 @@ export const MusicModal: React.FC<MusicModalProps> = ({
     try {
       await cancelLocalMiniMaxMusic3(musicTaskId);
     } catch (e) {
-      alert(`当前任务可能已经开始执行，无法取消: ${e instanceof Error ? e.message : String(e)}`);
+      setMusicError(`当前任务可能已经开始执行，无法取消：${e instanceof Error ? e.message : String(e)}`);
     }
   }, [musicTaskId]);
 
@@ -235,6 +242,11 @@ export const MusicModal: React.FC<MusicModalProps> = ({
               添加
             </button>
           </div>
+          {uploadError && (
+            <p role="alert" className="mt-3 rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-xs text-danger">
+              上传失败：{uploadError}
+            </p>
+          )}
         </div>
 
         <div className="mb-4 rounded-md border border-n40 bg-n30 p-4">
@@ -260,6 +272,11 @@ export const MusicModal: React.FC<MusicModalProps> = ({
               {lyricsLoading ? <Loader size={14} className="animate-spin" /> : <Wand2 size={14} />}
               生成歌词
             </button>
+            {lyricsError && (
+              <p role="alert" className="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-xs text-danger">
+                歌词生成失败：{lyricsError}
+              </p>
+            )}
             {generatedLyrics && (
               <div className="max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-n40 bg-n0 p-3 text-sm text-n700">
                 {generatedLyrics}
@@ -341,6 +358,11 @@ export const MusicModal: React.FC<MusicModalProps> = ({
                   </button>
                 )}
               </div>
+            )}
+            {musicError && (
+              <p role="alert" className="rounded-lg border border-danger/20 bg-danger-light px-3 py-2 text-xs text-danger">
+                音乐生成失败：{musicError}
+              </p>
             )}
             <p className="text-[11px] leading-5 text-n100">
               本地生成由 MiniMax-Music3 提供。任务与其他本地大模型共用串行队列，切换前会先卸载上一模型。
