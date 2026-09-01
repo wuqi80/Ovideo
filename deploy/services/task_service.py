@@ -149,9 +149,10 @@ def allocate_task_id() -> str:
 
 
 class TaskService:
-    def __init__(self, redis_client):
+    def __init__(self, redis_client, model_access_checker=None):
         self.queue = TaskQueue(redis_client)
         self.redis = redis_client
+        self.model_access_checker = model_access_checker
 
     async def submit(
         self,
@@ -174,6 +175,8 @@ class TaskService:
             task_id:   可选的预分配任务 ID；用于在入队前完成创作点数冻结等关联操作
         """
         task_id = task_id or allocate_task_id()
+        from dao_user import UserDAO
+        from services.model_access_service import require_user_model_access
         from services.task_credit_billing_service import (
             release_task_credits,
             reserve_task_credits,
@@ -182,6 +185,17 @@ class TaskService:
 
         reserved = False
         try:
+            # The checker is injectable so queue/billing tests never need a
+            # production database; runtime initialization uses the canonical
+            # account policy service below.
+            checker = self.model_access_checker or require_user_model_access
+            if self.redis is not None or self.model_access_checker is not None:
+                await checker(
+                    user_id,
+                    user_dao=UserDAO,
+                    task_type=task_type,
+                    task_data=task_data,
+                )
             try:
                 reserved = bool(await reserve_task_credits(
                     task_id=task_id,

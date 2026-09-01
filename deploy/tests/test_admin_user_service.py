@@ -80,7 +80,7 @@ async def test_admin_rename_of_current_uuid_account_refreshes_session_and_audits
         headers={"Authorization": "Bearer old-token"},
         client=SimpleNamespace(host="127.0.0.1"),
     )
-    caller = {"user_id": "user_uuid_1", "username": "old_admin", "role": "admin"}
+    caller = {"user_id": "user_uuid_1", "username": "old_admin", "role": "super_admin"}
 
     async def fake_load(subject):
         assert subject == "old_admin"
@@ -99,6 +99,7 @@ async def test_admin_rename_of_current_uuid_account_refreshes_session_and_audits
     audit = AsyncMock()
     monkeypatch.setattr(admin_routes, "_require_db", lambda: None)
     monkeypatch.setattr(admin_routes, "_load_admin_identity", fake_load)
+    monkeypatch.setattr(admin_routes.UserDAO, "get_user_by_id", AsyncMock(return_value=dict(caller)))
     monkeypatch.setattr(admin_routes.admin_user_service, "rename_user", fake_rename)
     monkeypatch.setattr(admin_audit_service, "record", audit)
     monkeypatch.setattr(jwt_auth, "verify_token", lambda token: "old_admin")

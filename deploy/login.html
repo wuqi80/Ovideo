@@ -928,11 +928,11 @@
             authTabs.querySelectorAll('.auth-tab').forEach(button => button.classList.toggle('active', button.dataset.method === state.method));
             if (state.view === 'login') {
                 authTitle.textContent = '欢迎回来';
-                authSubtitle.textContent = '使用手机号或原账号继续完成你的故事';
+                authSubtitle.textContent = '使用手机号继续完成你的故事';
                 authForm.innerHTML = input(
                     'identity',
                     state.method === 'password' ? 'text' : 'tel',
-                    state.method === 'password' ? '手机号或原账号' : '手机号',
+                    '手机号',
                     state.method === 'password' ? 'username' : 'tel'
                 )
                     + (state.method === 'password' ? input('password', 'password', '密码', 'current-password') : codeInput())

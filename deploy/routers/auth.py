@@ -18,6 +18,7 @@ def create_auth_router(
     verify_credentials: Any,
     create_session_token: Any,
     logger: logging.Logger,
+    mark_user_online: Any = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -83,6 +84,10 @@ def create_auth_router(
                     "user_id": user_id,
                 }
 
+        if hasattr(UserDAO, "update_last_login"):
+            await UserDAO.update_last_login(user_id)
+        if mark_user_online:
+            await mark_user_online(user_id)
         token = create_session_token(user_id)
         logger.info("User %s login succeeded", request.username)
 

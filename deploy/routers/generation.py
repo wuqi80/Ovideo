@@ -28,6 +28,8 @@ from services.generation_access_service import (
     GenerationAccessDenied,
     require_generation_request_access,
 )
+from services.model_access_service import require_user_model_access
+from dao_user import UserDAO
 from utils.image_reference import storage_path_safe
 
 
@@ -619,6 +621,14 @@ def create_generation_router(
                 "在保持与参考图一致性的同时，融入描述中的变化。确保生成的图像在视觉风格上与参考图高度相似。"
             )
             parts.append({"text": enhanced_prompt})
+
+            await require_user_model_access(
+                username,
+                user_dao=UserDAO,
+                model="gemini-image",
+                task_type="gemini_image",
+                task_data={"model": "gemini-image", "feature": "multi-grid-storyboard"},
+            )
 
             images, model = await generate_gemini_images(
                 parts=parts,

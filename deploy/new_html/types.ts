@@ -329,6 +329,7 @@ export interface CharacterIdentityAnchor {
 // --- Admin Types ---
 
 export interface UserPermissions {
+  accessMode: 'inherit' | 'restricted' | 'blocked';
   allowedModels: string[];
   priority: 'low' | 'normal' | 'high';
   canExport: boolean;
@@ -338,10 +339,16 @@ export interface UserAccount {
   id: string;
   username: string;
   email: string;
-  role: 'admin' | 'editor' | 'viewer';
+  role: 'user' | 'admin' | 'super_admin';
   isActive: boolean;
   isOnline: boolean;
+  lastActiveAt: number;
   lastLogin: number;
+  creationPoints: {
+    available: number;
+    account: number;
+    gift: number;
+  };
   permissions: UserPermissions;
   stats: {
     todayCount: number;

@@ -5151,7 +5151,7 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (script_timeline_service, "return apiJson<any>(`/api/timeline-tracks/${trackId}`"),
         (admin_compat_service, "import { apiJson } from './httpClient';"),
         (admin_compat_service, "return apiJson<any>('/api/admin/users'"),
-        (admin_compat_service, "return apiJson<any>('/api/admin/users/create'"),
+        (admin_compat_service, "return apiJson<any>('/api/admin/users'"),
         (admin_compat_service, "return apiJson<any>(`/api/admin/users/${userId}/permissions`"),
         (admin_compat_service, "return apiJson<any>(`/api/admin/users/${userId}`"),
         (admin_compat_service, "return apiJson<any>(`/api/admin/logs?limit=${limit}`"),

@@ -13,6 +13,7 @@
 export const ADMIN_TOKEN_KEY = 'admin_session_token';
 export const ADMIN_USERNAME_KEY = 'admin_session_username';
 export const ADMIN_LOGIN_AT_KEY = 'admin_session_login_at';
+export const ADMIN_ROLE_KEY = 'admin_session_role';
 export const ADMIN_POST_LOGIN_REDIRECT_KEY = 'admin_post_login_redirect';
 
 export function getAdminToken(): string | null {
@@ -31,11 +32,20 @@ export function getAdminUsername(): string | null {
     }
 }
 
-export function setAdminSession(token: string, username: string): void {
+export function getAdminRole(): string | null {
+    try {
+        return sessionStorage.getItem(ADMIN_ROLE_KEY);
+    } catch {
+        return null;
+    }
+}
+
+export function setAdminSession(token: string, username: string, role?: string): void {
     try {
         sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
         sessionStorage.setItem(ADMIN_USERNAME_KEY, username);
         sessionStorage.setItem(ADMIN_LOGIN_AT_KEY, String(Date.now()));
+        if (role) sessionStorage.setItem(ADMIN_ROLE_KEY, role);
     } catch {
         // sessionStorage 不可用时静默 fail（隐私模式 / 配额超限）
     }
@@ -46,6 +56,7 @@ export function clearAdminSession(): void {
         sessionStorage.removeItem(ADMIN_TOKEN_KEY);
         sessionStorage.removeItem(ADMIN_USERNAME_KEY);
         sessionStorage.removeItem(ADMIN_LOGIN_AT_KEY);
+        sessionStorage.removeItem(ADMIN_ROLE_KEY);
     } catch {}
 }
 

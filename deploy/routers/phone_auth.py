@@ -93,6 +93,7 @@ def create_phone_auth_router(
     require_auth_dependency: Any,
     user_dao: Any,
     logger: logging.Logger,
+    mark_user_online: Any = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -119,6 +120,10 @@ def create_phone_auth_router(
         }
 
     async def authenticated_response(user: dict[str, Any]) -> dict[str, Any]:
+        if hasattr(user_dao, "update_last_login"):
+            await user_dao.update_last_login(str(user["user_id"]))
+        if mark_user_online:
+            await mark_user_online(str(user["user_id"]))
         response = token_response(user)
         try:
             gift = await grant_daily_login_points(str(user["user_id"]))

@@ -78,7 +78,7 @@ DB_AVAILABLE = True
 
 # 🆕 导入管理后台模块
 from agent_routes import router as agent_api_router
-from admin_routes import router as admin_api_router
+from admin_routes import require_admin, require_super_admin, router as admin_api_router
 from services import admin_audit_service
 from services.api_config_runtime_loader import (
     load_api_configs_to_env as _load_api_configs_to_env_service,
@@ -799,6 +799,14 @@ jwt_auth.init()
 # 在线用户追踪（仅用于 admin 面板显示，不用于认证）
 _online_users: dict = {}
 
+from services.user_presence_service import (  # noqa: E402
+    clear_user_presence,
+    configure_presence_store,
+    touch_user_presence,
+)
+
+configure_presence_store(lambda: redis_client)
+
 def _load_builtin_users() -> dict[str, str]:
     """Load optional built-in admin credentials from explicit environment config."""
     admin_password = (os.getenv("ADMIN_PASSWORD") or "").strip()
@@ -847,7 +855,9 @@ async def require_auth(username: Optional[str] = Depends(verify_session)) -> str
 
     await ensure_authenticated_user_record(username, logger=logger)
 
-    return await resolve_authenticated_user_id(username, user_dao=UserDAO)
+    user_id = await resolve_authenticated_user_id(username, user_dao=UserDAO)
+    await touch_user_presence(user_id)
+    return user_id
 
 app.include_router(
     create_ai_proxy_router(
@@ -923,6 +933,7 @@ app.include_router(
         credit_account_dao=CreditAccountDAO,
         logger=logger,
         create_session_token=create_session_token,
+        mark_user_offline=clear_user_presence,
     )
 )
 logger.info("✅ User Session API 路由已注册 (/api/logout, /api/user/info, /api/me/organizations)")
@@ -988,6 +999,7 @@ app.include_router(
         verify_credentials=verify_credentials,
         create_session_token=create_session_token,
         logger=logger,
+        mark_user_online=touch_user_presence,
     )
 )
 logger.info("Auth API routes registered (/api/login)")
@@ -999,13 +1011,15 @@ app.include_router(
         require_auth_dependency=require_auth,
         user_dao=UserDAO,
         logger=logger,
+        mark_user_online=touch_user_presence,
     )
 )
 logger.info("Phone auth and verified-email routes registered (/api/auth/phone/*, /api/me/email/*)")
 
 app.include_router(
     create_admin_compat_router(
-        require_auth=require_auth,
+        require_auth=require_admin,
+        require_super_admin=require_super_admin,
         online_users=_online_users,
         default_users=DEFAULT_USERS,
         super_admin=SUPER_ADMIN,

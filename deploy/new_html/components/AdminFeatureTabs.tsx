@@ -24,7 +24,8 @@ import {
   CreditRule,
 } from '../services/creditService';
 import { apiJson } from '../services/httpClient';
-import { setAdminSession } from '../admin/adminAuth';
+import { getAdminRole, setAdminSession } from '../admin/adminAuth';
+import { PLATFORM_ROLE_OPTIONS, getPlatformRoleDescription } from '../utils/adminRoles';
 import AdminOrganizationsTab from '../admin/AdminOrganizationsTab';
 import {
   crmMessage, crmConfirm, crmPrompt,
@@ -145,6 +146,7 @@ export const AdminFeatureTabs: React.FC<{ embedTab?: SubTab }> = ({ embedTab }) 
 const PAGE_SIZE = 10;
 
 const AccountsTab: React.FC = () => {
+  const canManageRoles = getAdminRole() === 'super_admin';
   const [users, setUsers] = useState<any[]>([]);
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -182,9 +184,9 @@ const AccountsTab: React.FC = () => {
     catch (e: any) { crmMessage.error(`启用失败：${await readApiError(e)}`); }
   };
   const handleResetPassword = async (uid: string, uname: string) => {
-    const pw = await crmPrompt({ title: `重置密码 — ${uname}`, label: '新密码（至少 4 位）', inputType: 'text', required: true });
+    const pw = await crmPrompt({ title: `重置密码 — ${uname}`, label: '新密码（至少 8 位）', inputType: 'text', required: true });
     if (pw === null) return;
-    if (pw.length < 4) { crmMessage.error('密码至少 4 位'); return; }
+    if (pw.length < 8) { crmMessage.error('密码至少 8 位'); return; }
     try { await apiPost(`/api/admin/users/${uid}/reset-password`, { new_password: pw }); crmMessage.success('密码已重置'); }
     catch (e: any) { crmMessage.error(`重置失败：${await readApiError(e)}`); }
   };
@@ -230,10 +232,10 @@ const AccountsTab: React.FC = () => {
   };
   const handleCreate = async () => {
     if (!cu.username.trim()) { crmMessage.error('请输入用户名'); return; }
-    if (!cu.password || cu.password.length < 4) { crmMessage.error('密码至少 4 位'); return; }
+    if (!cu.password || cu.password.length < 8) { crmMessage.error('密码至少 8 位'); return; }
     setCreating(true);
     try {
-      await apiPost('/api/admin/users/create', {
+      await apiPost('/api/admin/users', {
         username: cu.username.trim(),
         password: cu.password,
         email: cu.email.trim() || undefined,
@@ -269,6 +271,15 @@ const AccountsTab: React.FC = () => {
         actions={<CrmPrimaryButton onClick={() => setCreateOpen(true)}><Plus size={13} /> 新建用户</CrmPrimaryButton>}
       />
 
+      <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-3">
+        {PLATFORM_ROLE_OPTIONS.map(item => (
+          <div key={item.value} className="rounded-md border border-n40 bg-n0 px-3 py-2">
+            <div className="text-xs font-semibold text-n700">{item.label}</div>
+            <div className="mt-1 text-[11px] leading-4 text-n200">{item.description}</div>
+          </div>
+        ))}
+      </div>
+
       <CrmTable headers={
         <tr>
           <th className="text-left font-medium p-2.5">用户</th>
@@ -292,10 +303,10 @@ const AccountsTab: React.FC = () => {
               <td className="p-2.5 text-n300">{u.email || '-'}</td>
               <td className="p-2.5">
                 <select value={u.role || 'user'} onChange={e => handleSetRole(u.user_id, e.target.value)}
-                        className="bg-n0 border border-n40 rounded px-1.5 py-1 text-xs focus:border-primary focus:outline-none">
-                  <option value="user">user</option>
-                  <option value="admin">admin</option>
-                  <option value="super_admin">super_admin</option>
+                        disabled={!canManageRoles}
+                        title={canManageRoles ? getPlatformRoleDescription(u.role) : '只有超级管理员可以调整平台角色'}
+                        className="bg-n0 border border-n40 rounded px-1.5 py-1 text-xs focus:border-primary focus:outline-none disabled:bg-n20 disabled:text-n200">
+                  {PLATFORM_ROLE_OPTIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
               </td>
               <td className="p-2.5">
@@ -310,16 +321,16 @@ const AccountsTab: React.FC = () => {
               <td className="p-2.5 text-right whitespace-nowrap">
                 <CrmActionLink
                   type="default"
-                  disabled={u.user_id === 'admin'}
-                  title={u.user_id === 'admin' ? '内置 admin 账号用户名不可修改' : '修改登录用户名'}
+                  disabled={u.user_id === 'admin' || (!canManageRoles && u.role !== 'user')}
+                  title={u.user_id === 'admin' ? '内置 admin 账号用户名不可修改' : (!canManageRoles && u.role !== 'user' ? '只有超级管理员可以管理管理员账号' : '修改登录用户名')}
                   onClick={() => handleRenameUser(u.user_id, u.username)}
                 >修改用户名</CrmActionLink>
                 <CrmActionSep />
                 {active
-                  ? <CrmActionLink type="danger" onClick={() => handleDisable(u.user_id)}>禁用</CrmActionLink>
-                  : <CrmActionLink type="primary" onClick={() => handleEnable(u.user_id)}>启用</CrmActionLink>}
+                  ? <CrmActionLink type="danger" disabled={!canManageRoles && u.role !== 'user'} onClick={() => handleDisable(u.user_id)}>禁用</CrmActionLink>
+                  : <CrmActionLink type="primary" disabled={!canManageRoles && u.role !== 'user'} onClick={() => handleEnable(u.user_id)}>启用</CrmActionLink>}
                 <CrmActionSep />
-                <CrmActionLink type="default" onClick={() => handleResetPassword(u.user_id, u.username)}>重置密码</CrmActionLink>
+                <CrmActionLink type="default" disabled={!canManageRoles && u.role !== 'user'} onClick={() => handleResetPassword(u.user_id, u.username)}>重置密码</CrmActionLink>
               </td>
             </tr>
           );
@@ -347,7 +358,7 @@ const AccountsTab: React.FC = () => {
               </div>
               <div>
                 <label className="block text-xs text-n300 mb-1">密码 *</label>
-                <input type="text" value={cu.password} onChange={e => setCu({ ...cu, password: e.target.value })} placeholder="至少 4 位"
+                <input type="text" value={cu.password} onChange={e => setCu({ ...cu, password: e.target.value })} placeholder="至少 8 位"
                        className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none" />
               </div>
               <div>
@@ -358,11 +369,11 @@ const AccountsTab: React.FC = () => {
               <div>
                 <label className="block text-xs text-n300 mb-1">角色</label>
                 <select value={cu.role} onChange={e => setCu({ ...cu, role: e.target.value })}
-                        className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none">
-                  <option value="user">user</option>
-                  <option value="admin">admin</option>
-                  <option value="super_admin">super_admin</option>
+                        disabled={!canManageRoles}
+                        className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-n20">
+                  {PLATFORM_ROLE_OPTIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
                 </select>
+                <div className="mt-1 text-[11px] text-n200">{getPlatformRoleDescription(cu.role)}</div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 pb-4">

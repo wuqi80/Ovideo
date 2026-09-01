@@ -43,7 +43,7 @@ describe('admin compatibility service', () => {
     await createUser({ username: 'new-user', password: 'test-placeholder-credential' });
 
     const [url, opts] = mockFetch.mock.calls[0];
-    expect(url).toBe('/api/admin/users/create');
+    expect(url).toBe('/api/admin/users');
     expect(opts.method).toBe('POST');
     expect(JSON.parse(opts.body).username).toBe('new-user');
   });
@@ -56,7 +56,7 @@ describe('admin compatibility service', () => {
     const [url, opts] = mockFetch.mock.calls[0];
     expect(url).toBe('/api/admin/users/user_1/permissions');
     expect(opts.method).toBe('PUT');
-    expect(JSON.parse(opts.body).can_generate).toBe(true);
+    expect(JSON.parse(opts.body).permissions.can_generate).toBe(true);
   });
 
   it('deletes users by id', async () => {

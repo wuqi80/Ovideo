@@ -331,9 +331,12 @@ class UserDAO:
             INSERT INTO users (
                 user_id, username, password_hash, email,
                 phone_number, phone_verified, phone_verified_at,
-                legacy_login_enabled, email_verified
+                legacy_login_enabled, email_verified, permissions
             )
-            VALUES ($1, $2, $3, $4, $5, TRUE, CURRENT_TIMESTAMP, FALSE, FALSE)
+            VALUES (
+                $1, $2, $3, $4, $5, TRUE, CURRENT_TIMESTAMP, FALSE, FALSE,
+                '{"accessMode":"inherit","allowedModels":[],"priority":"normal","canExport":true}'::jsonb
+            )
             RETURNING user_id, username, email, phone_number, phone_verified,
                       email_verified, created_at
             """,
@@ -529,6 +532,8 @@ class UserDAO:
             user_id: 用户ID
         """
         db = get_db_manager()
+        if not db:
+            return None
         
         query = """
             SELECT permissions FROM users WHERE user_id = $1

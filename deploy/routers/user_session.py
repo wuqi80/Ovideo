@@ -43,12 +43,16 @@ def create_user_session_router(
     credit_account_dao: Any,
     logger: logging.Logger,
     create_session_token: Any = None,
+    mark_user_offline: Any = None,
 ) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/logout")
     async def logout(username: str = Depends(require_auth_dependency)):
-        return logout_user(username, online_users=online_users)
+        result = logout_user(username, online_users=online_users)
+        if mark_user_offline:
+            await mark_user_offline(username)
+        return result
 
     @router.get("/api/user/info")
     async def get_user_info(username: str = Depends(require_auth_dependency)):

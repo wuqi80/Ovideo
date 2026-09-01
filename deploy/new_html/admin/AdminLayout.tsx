@@ -15,7 +15,9 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getAdminToken, getAdminUsername, clearAdminSession } from './adminAuth';
+import { getAdminToken, getAdminUsername, getAdminRole, setAdminSession, clearAdminSession } from './adminAuth';
+import { getPlatformRoleLabel } from '../utils/adminRoles';
+import { apiJson } from '../services/httpClient';
 import { AdminSidebar } from './AdminSidebar';
 import { getActiveTrail } from './adminMenu';
 
@@ -23,6 +25,7 @@ export const AdminLayout: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [now, setNow] = useState(() => new Date());
+    const [sessionRole, setSessionRole] = useState(() => getAdminRole());
 
     // 本地只检查独立后台会话是否存在；角色权限由后端 require_admin 统一判定。
     useEffect(() => {
@@ -34,7 +37,18 @@ export const AdminLayout: React.FC = () => {
                 replace: true,
                 state: { from },
             });
+            return;
         }
+        apiJson<any>('/api/admin/session', { method: 'GET' }, '管理员会话校验')
+            .then(session => {
+                const role = String(session?.role || 'admin');
+                setAdminSession(token, session?.username || username, role);
+                setSessionRole(role);
+            })
+            .catch(() => {
+                clearAdminSession();
+                navigate('/admin/login', { replace: true });
+            });
     }, [navigate, location.pathname, location.search, location.hash]);
 
     useEffect(() => {
@@ -43,6 +57,7 @@ export const AdminLayout: React.FC = () => {
     }, []);
 
     const adminName = getAdminUsername() || '—';
+    const adminRoleLabel = getPlatformRoleLabel(sessionRole);
     const trail = getActiveTrail(location.pathname, location.search);
 
     const handleLogout = () => {
@@ -96,6 +111,7 @@ export const AdminLayout: React.FC = () => {
                                 <div className="text-[9px] uppercase tracking-widest text-n100"
                                     style={{ fontFamily: 'var(--font-mono)' }}>SIGNED IN</div>
                                 <div className="text-xs font-semibold text-primary">{adminName}</div>
+                                <div className="text-[9px] text-n100">{adminRoleLabel}</div>
                             </div>
                             <button
                                 onClick={handleLogout}

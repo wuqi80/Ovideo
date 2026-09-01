@@ -12,6 +12,11 @@ import { getUsers, getSystemStats, getGenerationLogs, updateUserPermissions, cre
 import { apiJson } from '../services/httpClient';
 import { AdminFeatureTabs } from './AdminFeatureTabs';
 import { formatProcessingNodeName, sanitizeProcessingTerminology } from '../utils/processingTerminology';
+import { DEFAULT_SCRIPT_MODEL_OPTIONS } from '../services/scriptModelCatalogService';
+import { SELECTABLE_MODELS, getModelDisplayName } from '../services/videoModelService';
+import { STORYBOARD_GENERATION_MODEL_OPTIONS } from '../utils/storyboardGenerationModels';
+import { PLATFORM_ROLE_OPTIONS, getPlatformRoleLabel, normalizePlatformRole } from '../utils/adminRoles';
+import { getAdminRole } from '../admin/adminAuth';
 
 interface AdminPageProps {
     // 2026-05-26：改为可选 — AdminPage 既可被 WorkspaceApp 内嵌（带文件/素材库降级数据），
@@ -82,32 +87,21 @@ const mapClusterNode = ([nodeId, nodeData]: [string, any]): ServerNode => {
     };
 };
 
-// 可用模型列表（按类型分组）
-const MODELS = [
-    // 文本生成
-    'gemini-2.5-flash',
-    'deepseek-reasoner',
-    
-    // 图像生成
-    'gemini-2.5-flash-image',
-    'doubao-image',
-    'qwen',
-    'qwen-lora',
-    'kontext',
-    
-    // 视频生成
-    'wan2-i2v',
-    'wan2-morph',
-    'sora2-i2v',
-    'sora2-morph',
-    'veo-i2v',
-    'veo-morph',
-    
-    // 素材处理
-    'upscale-hd',
-    'remove-watermark',
-    'three-view'
-];
+const MODEL_OPTIONS = Array.from(new Map([
+    ...DEFAULT_SCRIPT_MODEL_OPTIONS.map(option => ({ value: String(option.value), label: option.label })),
+    ...STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+    ...SELECTABLE_MODELS.map(model => ({ value: model, label: getModelDisplayName(model) })),
+].map(option => [option.value, option])).values());
+
+const formatModelAccess = (permissions: UserPermissions): string => {
+    if (permissions.accessMode === 'blocked') return '禁止生成';
+    if (permissions.accessMode === 'restricted') return `限制为 ${permissions.allowedModels.length} 个模型`;
+    return '平台开放模型 · 按点数计费';
+};
+
+const formatTime = (value: number): string => value > 0
+    ? new Date(value).toLocaleString('zh-CN', { hour12: false })
+    : '—';
 
 // --- 图表组件 ---
 
@@ -202,6 +196,7 @@ const CyberSparkline = ({ data, color = '#5B49F0' }: { data: number[], color?: s
 const normalizeUserRow = (raw: any): UserAccount => {
     const rp = (raw && raw.permissions && typeof raw.permissions === 'object') ? raw.permissions : {};
     const rs = (raw && raw.stats && typeof raw.stats === 'object') ? raw.stats : {};
+    const rc = (raw && raw.creationPoints && typeof raw.creationPoints === 'object') ? raw.creationPoints : {};
     const lastLoginRaw = raw?.lastLogin ?? raw?.last_login_at ?? 0;
     let lastLoginMs = 0;
     if (typeof lastLoginRaw === 'number') lastLoginMs = lastLoginRaw;
@@ -210,16 +205,33 @@ const normalizeUserRow = (raw: any): UserAccount => {
         if (!isNaN(t)) lastLoginMs = t;
     }
     const isActiveRaw = raw?.isActive ?? raw?.is_active ?? (raw?.status ? raw.status !== 'disabled' : true);
+    const allowedModels = Array.isArray(rp.allowedModels) ? rp.allowedModels : (Array.isArray(rp.allowed_models) ? rp.allowed_models : []);
+    const accessMode = rp.accessMode === 'blocked' || rp.access_mode === 'blocked'
+        ? 'blocked'
+        : (rp.accessMode === 'restricted' || rp.access_mode === 'restricted' || allowedModels.length > 0)
+            ? 'restricted'
+            : 'inherit';
+    const lastActiveRaw = raw?.lastActiveAt ?? raw?.last_active_at ?? 0;
+    const lastActiveAt = typeof lastActiveRaw === 'number'
+        ? lastActiveRaw
+        : (typeof lastActiveRaw === 'string' && lastActiveRaw ? Date.parse(lastActiveRaw) : 0);
     return {
         id: String(raw?.id ?? raw?.user_id ?? ''),
         username: String(raw?.username ?? ''),
         email: String(raw?.email ?? ''),
-        role: (raw?.role ?? 'editor') as UserAccount['role'],
+        role: normalizePlatformRole(raw?.role),
         isActive: !!isActiveRaw,
-        isOnline: !!(raw?.isOnline ?? (lastLoginMs > 0 && Date.now() - lastLoginMs < 5 * 60 * 1000)),
+        isOnline: !!raw?.isOnline,
+        lastActiveAt: Number.isFinite(lastActiveAt) ? lastActiveAt : 0,
         lastLogin: lastLoginMs,
+        creationPoints: {
+            available: Number(rc.available ?? 0),
+            account: Number(rc.account ?? 0),
+            gift: Number(rc.gift ?? 0),
+        },
         permissions: {
-            allowedModels: Array.isArray(rp.allowedModels) ? rp.allowedModels : (Array.isArray(rp.allowed_models) ? rp.allowed_models : []),
+            accessMode,
+            allowedModels,
             priority: (rp.priority ?? 'normal') as UserAccount['permissions']['priority'],
             canExport: rp.canExport !== undefined ? !!rp.canExport : (rp.can_export !== undefined ? !!rp.can_export : true),
         },
@@ -232,6 +244,7 @@ const normalizeUserRow = (raw: any): UserAccount => {
 };
 
 export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrary = {} as MaterialLibrary, embedded = false, embedTab }) => {
+    const isSuperAdmin = getAdminRole() === 'super_admin';
     const [activeTab, setActiveTab] = useState<'users' | 'stats' | 'results' | 'system' | 'features'>(embedTab ?? 'users');
     // 当前架构：统一壳的菜单切换会改变 embedTab（同一路由不卸载），此处同步到内部 activeTab。
     useEffect(() => { if (embedTab) setActiveTab(embedTab); }, [embedTab]);
@@ -260,7 +273,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
     // 用户管理状态
     const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
     const [showAddUser, setShowAddUser] = useState(false);
-    const [newUserForm, setNewUserForm] = useState({ username: '', email: '', role: 'editor', password: '' });
+    const [newUserForm, setNewUserForm] = useState({ username: '', email: '', role: 'user', password: '' });
 
     // 结果查看状态
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
@@ -390,12 +403,15 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 id: '1',
                 username: currentUser,
                 email: `${currentUser}@studio.com`,
-                role: currentUser === 'admin' ? 'admin' : 'editor',
+                role: currentUser === 'admin' ? 'super_admin' : 'user',
                 isActive: true,
                 isOnline: true,
+                lastActiveAt: Date.now(),
                 lastLogin: Date.now(),
+                creationPoints: { available: 0, account: 0, gift: 0 },
                 permissions: {
-                    allowedModels: [...MODELS],
+                    accessMode: 'inherit',
+                    allowedModels: [],
                     priority: currentUser === 'admin' ? 'high' : 'normal',
                     canExport: true
                 },
@@ -579,8 +595,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
 
     // --- 处理函数 ---
 
-    const toggleUserStatus = (id: string) => {
-        setUsers(users.map(u => u.id === id ? { ...u, isActive: !u.isActive } : u));
+    const toggleUserStatus = async (user: UserAccount) => {
+        try {
+            await apiJson(`/api/admin/users/${user.id}/${user.isActive ? 'disable' : 'enable'}`, {
+                method: 'POST',
+                body: user.isActive ? JSON.stringify({ reason: '管理员操作' }) : undefined,
+            }, user.isActive ? '禁用用户' : '启用用户');
+            setUsers(users.map(item => item.id === user.id ? { ...item, isActive: !item.isActive } : item));
+        } catch (error) {
+            console.error('更新账号状态失败:', error);
+            showAlert('错误', '账号状态更新失败');
+        }
     };
 
     const handleDeleteUser = async (userId: string, username: string) => {
@@ -621,6 +646,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
             showAlert('提示', '请填写用户名和密码');
             return;
         }
+        if (newUserForm.password.length < 8) {
+            showAlert('提示', '登录密码至少需要 8 位');
+            return;
+        }
         
         setIsCreatingUser(true);
         try {
@@ -637,14 +666,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                 try {
                     const usersRes = await getUsers();
                     if (usersRes.success) {
-                        setUsers(usersRes.users);
+                        setUsers((usersRes.users || []).map(normalizeUserRow));
                     }
                 } catch (error) {
                     console.error('刷新用户列表失败:', error);
                 }
                 
                 setShowAddUser(false);
-                setNewUserForm({ username: '', email: '', role: 'editor', password: '' });
+                setNewUserForm({ username: '', email: '', role: 'user', password: '' });
                 
                 showAlert('成功', `用户 ${newUserForm.username} 创建成功！`);
             }
@@ -882,7 +911,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
             {/* Header */}
             <div className="h-[60px] border-b border-n40 bg-n0 flex items-center px-8 justify-between">
               <h3 className="text-xl font-bold text-n700">
-                {activeTab === "users" && "用户账号与模型权限"}
+                {activeTab === "users" && "用户账号与使用状态"}
                 {activeTab === "stats" && "生成数据与趋势分析"}
                 {activeTab === "results" && "全局生成结果审计"}
                 {activeTab === "system" && "集群节点状态监控"}
@@ -927,11 +956,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                     <table className="w-full text-left text-sm table-fixed">
                       <thead className="bg-n30 text-n300 uppercase font-medium text-xs">
                         <tr>
-                          <th className="px-6 py-4 w-[20%]">用户</th>
-                          <th className="px-6 py-4 w-[12%]">在线状态</th>
-                          <th className="px-6 py-4 w-[35%]">可用模型 (权限)</th>
-                          <th className="px-6 py-4 w-[18%]">今日/总生成</th>
-                          <th className="px-6 py-4 w-[15%] text-right">管理</th>
+                          <th className="px-4 py-4 w-[15%]">用户</th>
+                          <th className="px-4 py-4 w-[13%]">角色</th>
+                          <th className="px-4 py-4 w-[11%]">在线状态</th>
+                          <th className="px-4 py-4 w-[20%]">模型访问</th>
+                          <th className="px-4 py-4 w-[11%]">创作点数</th>
+                          <th className="px-4 py-4 w-[10%]">今日/累计</th>
+                          <th className="px-4 py-4 w-[12%]">最近登录</th>
+                          <th className="px-4 py-4 w-[8%] text-right">管理</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-n40">
@@ -940,7 +972,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                             key={user.id}
                             className="hover:bg-n20 transition-colors"
                           >
-                            <td className="px-6 py-4">
+                            <td className="px-4 py-4">
                               <div className="flex items-center gap-3">
                                 <div
                                   className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-n700 ${
@@ -955,64 +987,30 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                   <div className="font-bold text-n700">
                                     {user.username}
                                   </div>
-                                  <div className="text-xs text-n100">
-                                    {user.role}
-                                  </div>
+                                  <div className="max-w-[160px] truncate text-xs text-n100">{user.email || user.id}</div>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-6 py-4">
+                            <td className="px-4 py-4 text-xs text-n700">{getPlatformRoleLabel(user.role)}</td>
+                            <td className="px-4 py-4">
                               {user.isOnline ? (
                                 <div className="flex items-center gap-1.5 text-xs text-success">
                                   <span className="w-2 h-2 bg-success rounded-full animate-pulse"></span>
-                                  Online
+                                  在线
                                 </div>
                               ) : (
-                                <div className="flex items-center gap-1.5 text-xs text-n100">
-                                  <span className="w-2 h-2 bg-n40 rounded-full"></span>
-                                  Offline
+                                <div>
+                                  <div className="flex items-center gap-1.5 text-xs text-n100"><span className="w-2 h-2 bg-n40 rounded-full"></span>离线</div>
+                                  {user.lastActiveAt > 0 && <div className="mt-1 text-[10px] text-n100">活跃于 {formatTime(user.lastActiveAt)}</div>}
                                 </div>
                               )}
                             </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-2">
-                                {user.permissions.allowedModels.length === 0 ? (
-                                  <span className="text-xs text-danger">
-                                    无权限
-                                  </span>
-                                ) : user.permissions.allowedModels.length <= 3 ? (
-                                  <div className="flex flex-wrap gap-1">
-                                    {user.permissions.allowedModels.map((m) => (
-                                      <span
-                                        key={m}
-                                        className="px-1.5 py-0.5 rounded bg-primary-light text-primary text-[10px] border border-primary"
-                                      >
-                                        {m.split("-")[0]}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-2">
-                                    <div className="flex gap-1">
-                                      {user.permissions.allowedModels
-                                        .slice(0, 2)
-                                        .map((m) => (
-                                          <span
-                                            key={m}
-                                            className="px-1.5 py-0.5 rounded bg-primary-light text-primary text-[10px] border border-primary"
-                                          >
-                                            {m.split("-")[0]}
-                                          </span>
-                                        ))}
-                                    </div>
-                                    <span className="text-xs text-n100">
-                                      +{user.permissions.allowedModels.length - 2} more
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
+                            <td className="px-4 py-4"><span className={`text-xs ${user.permissions.accessMode === 'blocked' ? 'text-danger' : 'text-n700'}`}>{formatModelAccess(user.permissions)}</span></td>
+                            <td className="px-4 py-4">
+                              <div className="font-semibold tabular-nums text-n800">{user.creationPoints.available}</div>
+                              <div className="text-[10px] text-n100">账户 {user.creationPoints.account} · 赠送 {user.creationPoints.gift}</div>
                             </td>
-                            <td className="px-6 py-4">
+                            <td className="px-4 py-4">
                               <div className="flex items-baseline gap-1">
                                 <span className="text-n800 font-bold">
                                   {user.stats.todayCount}
@@ -1033,23 +1031,26 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                 ></div>
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-right">
+                            <td className="px-4 py-4 text-[11px] text-n200">{formatTime(user.lastLogin)}</td>
+                            <td className="px-4 py-4 text-right">
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   onClick={() => setEditingUser(user)}
-                                  className="p-1.5 hover:bg-n20 rounded text-primary hover:text-primary"
-                                  title="配置权限"
+                                  disabled={!isSuperAdmin && user.role !== 'user'}
+                                  className="p-1.5 hover:bg-n20 rounded text-primary hover:text-primary disabled:cursor-not-allowed disabled:text-n70"
+                                  title={!isSuperAdmin && user.role !== 'user' ? '只有超级管理员可以管理管理员账号' : '配置权限'}
                                 >
                                   <Settings className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => toggleUserStatus(user.id)}
+                                  onClick={() => toggleUserStatus(user)}
+                                  disabled={!isSuperAdmin && user.role !== 'user'}
                                   className={`p-1.5 hover:bg-n20 rounded ${
                                     user.isActive
                                       ? "text-n300"
                                       : "text-danger"
-                                  }`}
-                                  title={user.isActive ? "冻结" : "解冻"}
+                                  } disabled:cursor-not-allowed disabled:text-n70`}
+                                  title={!isSuperAdmin && user.role !== 'user' ? '只有超级管理员可以管理管理员账号' : (user.isActive ? "冻结" : "解冻")}
                                 >
                                   {user.isActive ? (
                                     <Lock className="w-4 h-4" />
@@ -1057,7 +1058,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                     <Unlock className="w-4 h-4" />
                                   )}
                                 </button>
-                                <button
+                                {isSuperAdmin && <button
                                   onClick={() =>
                                     handleDeleteUser(user.id, user.username)
                                   }
@@ -1065,7 +1066,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                   title="删除用户"
                                 >
                                   <Trash2 className="w-4 h-4" />
-                                </button>
+                                </button>}
                               </div>
                             </td>
                           </tr>
@@ -1582,31 +1583,49 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
             {/* 用户权限编辑 Modal */}
             {editingUser && (
                 <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-4">
-                    <div className="bg-n0 border border-n40 rounded-md w-[500px] shadow-bottom animate-in fade-in zoom-in-95">
+                    <div className="bg-n0 border border-n40 rounded-md w-[720px] max-w-[94vw] shadow-bottom animate-in fade-in zoom-in-95">
                         <div className="p-4 border-b border-n40 flex justify-between items-center bg-n30 rounded-t-md">
-                            <h3 className="font-bold text-n700">配置用户权限: {editingUser.username}</h3>
+                            <h3 className="font-bold text-n700">配置模型访问：{editingUser.username}</h3>
                             <button onClick={() => setEditingUser(null)}><X className="w-5 h-5 text-n100 hover:text-n800" /></button>
                         </div>
                         <div className="p-6 space-y-6">
                             <div>
-                                <label className="text-xs font-bold text-n300 block mb-2">允许使用的模型</label>
-                                <div className="space-y-2 bg-n0 p-3 rounded-lg border border-n40">
-                                    {MODELS.map(model => (
-                                        <label key={model} className="flex items-center gap-2 cursor-pointer hover:bg-n20 p-1.5 rounded transition-colors">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={editingUser.permissions.allowedModels.includes(model)}
-                                                onChange={() => {
-                                                    const newModels = handleModelToggle(model, editingUser.permissions.allowedModels);
-                                                    setEditingUser({ ...editingUser, permissions: { ...editingUser.permissions, allowedModels: newModels } });
-                                                }}
-                                                className="rounded bg-n0 border-n40 text-primary focus:ring-0"
-                                            />
-                                            <span className="text-sm text-n700">{model}</span>
+                                <label className="text-xs font-bold text-n300 block mb-2">访问方式</label>
+                                <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                                    {([
+                                        ['inherit', '平台开放模型', '默认；开放模型均可按创作点数使用'],
+                                        ['restricted', '限制模型范围', '只允许下方勾选的模型'],
+                                        ['blocked', '禁止生成', '暂停该用户调用所有生成模型'],
+                                    ] as const).map(([value, label, description]) => (
+                                        <label key={value} className={`cursor-pointer rounded-md border p-3 ${editingUser.permissions.accessMode === value ? 'border-primary bg-primary-light' : 'border-n40 bg-n0'}`}>
+                                            <input type="radio" className="mr-2" checked={editingUser.permissions.accessMode === value} onChange={() => setEditingUser({ ...editingUser, permissions: { ...editingUser.permissions, accessMode: value } })} />
+                                            <span className="text-sm font-semibold text-n700">{label}</span>
+                                            <div className="mt-1 pl-5 text-[11px] text-n200">{description}</div>
                                         </label>
                                     ))}
                                 </div>
                             </div>
+                            {editingUser.permissions.accessMode === 'restricted' && (
+                            <div>
+                                <label className="text-xs font-bold text-n300 block mb-2">允许使用的模型（至少选择 1 个）</label>
+                                <div className="grid max-h-64 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-n40 bg-n0 p-3 md:grid-cols-2">
+                                    {MODEL_OPTIONS.map(model => (
+                                        <label key={model.value} className="flex items-center gap-2 cursor-pointer hover:bg-n20 p-1.5 rounded transition-colors">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={editingUser.permissions.allowedModels.includes(model.value)}
+                                                onChange={() => {
+                                                    const newModels = handleModelToggle(model.value, editingUser.permissions.allowedModels);
+                                                    setEditingUser({ ...editingUser, permissions: { ...editingUser.permissions, allowedModels: newModels } });
+                                                }}
+                                                className="rounded bg-n0 border-n40 text-primary focus:ring-0"
+                                            />
+                                            <span className="text-sm text-n700">{model.label}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            )}
                             
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -1694,12 +1713,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ files = [], materialLibrar
                                 <select 
                                     value={newUserForm.role}
                                     onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
+                                    disabled={!isSuperAdmin}
                                     className="w-full bg-n0 border border-n40 rounded px-3 py-2 text-sm text-n800 focus:border-primary outline-none"
                                 >
-                                    <option value="editor">Editor</option>
-                                    <option value="viewer">Viewer</option>
-                                    <option value="admin">Admin</option>
+                                    {PLATFORM_ROLE_OPTIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
                                 </select>
+                                {!isSuperAdmin && <div className="mt-1 text-[11px] text-n200">管理员只能创建“创作者”账号；角色调整由超级管理员完成。</div>}
                             </div>
                         </div>
                         <div className="p-4 border-t border-n40 bg-n30 rounded-b-md flex justify-end gap-3">

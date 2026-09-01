@@ -11,7 +11,7 @@ export async function createUser(userData: any): Promise<{
   success: boolean;
   user: any;
 }> {
-  return apiJson<any>('/api/admin/users/create', {
+  return apiJson<any>('/api/admin/users', {
     method: 'POST',
     body: JSON.stringify(userData),
   }, 'createUser');
@@ -22,7 +22,7 @@ export async function updateUserPermissions(userId: string, permissions: any): P
 }> {
   return apiJson<any>(`/api/admin/users/${userId}/permissions`, {
     method: 'PUT',
-    body: JSON.stringify(permissions),
+    body: JSON.stringify({ permissions }),
   }, 'updateUserPermissions');
 }
 

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ADMIN_MENU, isToActive, MenuSection, MenuItem } from './adminMenu';
 import { BrandLogo } from '../components/BrandLogo';
+import { getAdminRole } from './adminAuth';
 
 const ICONS: Record<string, React.FC<{ className?: string }>> = {
   LayoutDashboard, Users, Coins, ImageIcon, BarChart3, Settings,
@@ -24,6 +25,11 @@ const ICONS: Record<string, React.FC<{ className?: string }>> = {
 export const AdminSidebar: React.FC = () => {
   const navigate = useNavigate();
   const { pathname, search } = useLocation();
+  const isSuperAdmin = getAdminRole() === 'super_admin';
+  const visibleMenu = useMemo(
+    () => isSuperAdmin ? ADMIN_MENU : ADMIN_MENU.filter(section => section.id !== 'settings'),
+    [isSuperAdmin],
+  );
 
   // 计算当前激活的三级/二级项 id，用于高亮 + 自动展开祖先
   const active = useMemo(() => {
@@ -32,7 +38,7 @@ export const AdminSidebar: React.FC = () => {
       return { sectionId: 'settings', itemId: 'apiconfig', leafId: undefined as string | undefined };
     }
 
-    for (const sec of ADMIN_MENU) {
+    for (const sec of visibleMenu) {
       for (const item of sec.children) {
         if (item.to && isToActive(item.to, pathname, search)) {
           return { sectionId: sec.id, itemId: item.id, leafId: undefined as string | undefined };
@@ -45,7 +51,7 @@ export const AdminSidebar: React.FC = () => {
       }
     }
     return { sectionId: 'overview', itemId: 'dashboard', leafId: undefined };
-  }, [pathname, search]);
+  }, [pathname, search, visibleMenu]);
 
   // 展开状态：默认展开激活项所在的一级 + 二级
   const [openSections, setOpenSections] = useState<Set<string>>(() => new Set([active.sectionId]));
@@ -77,7 +83,7 @@ export const AdminSidebar: React.FC = () => {
 
       {/* 层级菜单 */}
       <nav className="flex-1 overflow-y-auto py-2 scrollbar-thin">
-        {ADMIN_MENU.map((sec: MenuSection) => {
+        {visibleMenu.map((sec: MenuSection) => {
           const Icon = ICONS[sec.icon] ?? Settings;
           const open = openSections.has(sec.id);
           return (

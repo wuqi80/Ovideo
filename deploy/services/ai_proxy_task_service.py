@@ -203,6 +203,22 @@ async def create_ai_proxy_task(
 ) -> Optional[str]:
     """Create an AI proxy task row as best-effort bookkeeping."""
 
+    # Account access is authoritative and must fail closed before a billable
+    # provider call. Task-row persistence below remains best-effort.
+    from dao_user import UserDAO
+    from services.model_access_service import require_user_model_access
+
+    # Production callers use the canonical DAO resolved below. Passing an
+    # explicit task DAO is the supported isolated-test/integration seam.
+    if task_dao is None:
+        await require_user_model_access(
+            user_id,
+            user_dao=UserDAO,
+            model=str(task_data.get("model") or task_data.get("provider") or ""),
+            task_type=task_type,
+            task_data=task_data,
+        )
+
     try:
         dao = task_dao or await _default_task_dao()
         task_id = f"{task_id_prefix}_{timestamp_ms_provider()}"

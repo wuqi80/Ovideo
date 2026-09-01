@@ -15,6 +15,7 @@ import {
     ExternalLink, ChevronRight, ScrollText, Image as ImageIcon, ShieldCheck,
 } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
+import { getAdminRole } from './adminAuth';
 
 interface KPI {
     users: number;
@@ -76,6 +77,7 @@ export const AdminHubPage: React.FC = () => {
     const navigate = useNavigate();
     const [kpi, setKpi] = useState<KPI>({ users: 0, projects: 0, todayTasks: 0, pendingAudits: 0 });
     const [loading, setLoading] = useState(true);
+    const isSuperAdmin = getAdminRole() === 'super_admin';
 
     useEffect(() => {
         let alive = true;
@@ -128,8 +130,8 @@ export const AdminHubPage: React.FC = () => {
             </section>
 
             {/* 主入口 */}
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <TileBase
+            <section className={`grid grid-cols-1 gap-4 mb-4 ${isSuperAdmin ? 'md:grid-cols-2' : ''}`}>
+                {isSuperAdmin && <TileBase
                     icon={<Cpu className="w-6 h-6 text-primary" />}
                     title="生成管理"
                     subtitle="账号 · 项目分组 · 创作点数 · 素材库 · 审计日志"
@@ -144,7 +146,7 @@ export const AdminHubPage: React.FC = () => {
                         <div className="flex items-center gap-1.5"><Activity size={12} className="text-n100" />生成统计</div>
                         <div className="flex items-center gap-1.5"><ShieldCheck size={12} className="text-n100" />审计日志</div>
                     </div>
-                </TileBase>
+                </TileBase>}
 
                 <TileBase
                     icon={<SettingsIcon className="w-6 h-6 text-cyan-400" />}
@@ -162,7 +164,7 @@ export const AdminHubPage: React.FC = () => {
             </section>
 
             {/* 集群仪表盘 — 内嵌入壳（不再弹独立窗口，保持「一个后台」体验） */}
-            <section>
+            {isSuperAdmin && <section>
                 <div
                     onClick={() => navigate('/admin/settings?item=cluster')}
                     className="group flex items-center justify-between bg-n0 hover:bg-n20 border border-n40 hover:border-primary rounded-md p-5 transition-all shadow-card hover:shadow-atlas cursor-pointer"
@@ -178,7 +180,7 @@ export const AdminHubPage: React.FC = () => {
                     </div>
                     <ChevronRight className="w-4 h-4 text-n100 group-hover:text-n700 group-hover:translate-x-1 transition-all" />
                 </div>
-            </section>
+            </section>}
         </div>
     );
 };

@@ -47,6 +47,11 @@ from services.workflow_template_validation import (
     workflow_invalid_reason,
     workflow_is_executable,
 )
+from services.model_access_service import (
+    normalize_model_access_permissions,
+    validate_model_access_permissions,
+)
+from services.user_presence_service import get_users_presence
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +108,33 @@ async def require_admin(request: Request) -> str:
             return username
         raise HTTPException(status_code=403, detail=f"需要管理员权限（当前角色：{role}）")
     return username
+
+
+async def require_super_admin(request: Request) -> str:
+    """Require the system-owner role for infrastructure and policy changes."""
+    username = await require_admin(request)
+    user = await _load_admin_identity(username)
+    role = str((user or {}).get("role") or "user")
+    if role == "super_admin":
+        return username
+
+    # The explicit bootstrap account remains the installation owner before role
+    # seeding. No other admin receives this compatibility privilege.
+    import os as _os
+    bootstrap = {"admin"}
+    bootstrap.update(
+        item.strip()
+        for item in (_os.environ.get("OSTORY_SUPER_ADMIN_USERNAMES") or "").split(",")
+        if item.strip()
+    )
+    if username in bootstrap:
+        return username
+    raise HTTPException(status_code=403, detail=f"需要超级管理员权限（当前角色：{role}）")
+
+
+async def _require_super_admin_for_privileged_target(request: Request, user: Dict[str, Any]) -> None:
+    if str(user.get("role") or "user") in {"admin", "super_admin"}:
+        await require_super_admin(request)
 
 
 # 安全(C3)：全部 /api/admin/* 强制 require_admin。
@@ -261,6 +293,7 @@ def _row_to_jsonable(row: Any) -> Dict[str, Any]:
 # 历史 AdminPage 走的是 generateLocalUsers() 的本地兜底数据，从未真正消费后端原始 snake_case；
 # 把 AdminPage 提为独立 /admin 路由后第一次走 API，没人 normalize → 前端 `user.permissions.allowedModels` 崩溃。
 _DEFAULT_USER_PERMISSIONS = {
+    "accessMode": "inherit",
     "allowedModels": [],
     "priority": "normal",
     "canExport": True,
@@ -282,11 +315,7 @@ def _normalize_admin_user(row: Any) -> Dict[str, Any]:
     raw_perm = d.get("permissions")
     if not isinstance(raw_perm, dict):
         raw_perm = {}
-    perm = {
-        "allowedModels": list(raw_perm.get("allowedModels") or raw_perm.get("allowed_models") or []),
-        "priority": raw_perm.get("priority") or "normal",
-        "canExport": bool(raw_perm.get("canExport") if raw_perm.get("canExport") is not None else raw_perm.get("can_export", True)),
-    }
+    perm = normalize_model_access_permissions(raw_perm)
 
     last_login_iso = d.get("last_login_at") or d.get("lastLogin") or None
     last_login_ms = 0
@@ -306,10 +335,10 @@ def _normalize_admin_user(row: Any) -> Dict[str, Any]:
         "username": d.get("username") or "",
         "email": d.get("email") or "",
         "phone_number": d.get("phone_number") or "",
-        "role": d.get("role") or "editor",
+        "role": d.get("role") or "user",
         "isActive": bool(is_active),
-        # 后端目前没有真实在线状态；用最近登录 5 分钟内作为近似（生产环境可换成 session/SSE 心跳）
-        "isOnline": (last_login_ms > 0 and (datetime.now(timezone.utc).timestamp() * 1000 - last_login_ms) < 5 * 60 * 1000),
+        "isOnline": False,
+        "lastActiveAt": None,
         "lastLogin": last_login_ms,
         "last_login_at": last_login_iso,
         "permissions": perm,
@@ -403,7 +432,7 @@ class AgentRenameBody(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
 
 
-@router.post("/agents", status_code=status.HTTP_201_CREATED)
+@router.post("/agents", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_super_admin)])
 async def admin_create_agent(body: AgentCreateBody):
     _require_db()
     token = AgentDAO.generate_token()
@@ -444,7 +473,7 @@ async def admin_get_agent(agent_id: str):
     return {"success": True, "agent": _row_to_jsonable(row)}
 
 
-@router.put("/agents/{agent_id}/name")
+@router.put("/agents/{agent_id}/name", dependencies=[Depends(require_super_admin)])
 async def admin_rename_agent(agent_id: str, body: AgentRenameBody):
     _require_db()
     display_name = body.name.strip()
@@ -456,7 +485,7 @@ async def admin_rename_agent(agent_id: str, body: AgentRenameBody):
     return {"success": True, "agent": _row_to_jsonable(updated)}
 
 
-@router.put("/agents/{agent_id}/toggle")
+@router.put("/agents/{agent_id}/toggle", dependencies=[Depends(require_super_admin)])
 async def admin_toggle_agent(agent_id: str):
     _require_db()
     row = await AgentDAO.get_by_id(agent_id)
@@ -469,7 +498,7 @@ async def admin_toggle_agent(agent_id: str):
     return {"success": True, "agent": _row_to_jsonable(updated)}
 
 
-@router.delete("/agents/{agent_id}")
+@router.delete("/agents/{agent_id}", dependencies=[Depends(require_super_admin)])
 async def admin_delete_agent(agent_id: str):
     _require_db()
     ok = await AgentDAO.delete(agent_id)
@@ -481,7 +510,7 @@ async def admin_delete_agent(agent_id: str):
 # --- Workflow templates (static paths before /{template_id}) ---
 
 
-@router.post("/workflows/parse-json")
+@router.post("/workflows/parse-json", dependencies=[Depends(require_super_admin)])
 async def admin_parse_workflow_json(request: Request):
     """
     Parse ComfyUI workflow JSON from:
@@ -531,7 +560,7 @@ async def admin_parse_workflow_json(request: Request):
     return {"success": True, "nodes": nodes}
 
 
-@router.get("/workflows/scan-disk")
+@router.get("/workflows/scan-disk", dependencies=[Depends(require_super_admin)])
 async def admin_scan_disk_workflows():
     """Return configured workflows plus disk-only JSON workflows with DB import status."""
     from workflow_config import WORKFLOW_CONFIGS
@@ -617,7 +646,7 @@ async def admin_scan_disk_workflows():
     return {"success": True, "workflows": items, "total": len(items)}
 
 
-@router.post("/workflows/import-existing")
+@router.post("/workflows/import-existing", dependencies=[Depends(require_super_admin)])
 async def admin_import_workflows():
     _require_db()
     from workflow_config import WORKFLOW_CONFIGS
@@ -1021,7 +1050,7 @@ async def _admin_import_one_disk_workflow(workflow_key: str) -> Dict[str, Any]:
     }
 
 
-@router.post("/workflows/import-existing/{workflow_key}")
+@router.post("/workflows/import-existing/{workflow_key}", dependencies=[Depends(require_super_admin)])
 async def admin_import_one_workflow(workflow_key: str):
     _require_db()
     from workflow_config import WORKFLOW_CONFIGS
@@ -1069,7 +1098,7 @@ async def admin_list_workflows():
     return {"success": True, "workflows": [_row_to_jsonable(r) for r in rows]}
 
 
-@router.post("/workflows", status_code=status.HTTP_201_CREATED)
+@router.post("/workflows", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_super_admin)])
 async def admin_create_workflow(body: WorkflowCreateBody):
     _require_db()
     invalid_reason = workflow_invalid_reason(body.workflow_json)
@@ -1097,7 +1126,7 @@ async def admin_create_workflow(body: WorkflowCreateBody):
     return {"success": True, "workflow": _row_to_jsonable(row)}
 
 
-@router.post("/workflows/reload")
+@router.post("/workflows/reload", dependencies=[Depends(require_super_admin)])
 async def admin_reload_workflows():
     """手动重载所有工作流到内存缓存"""
     _reload_workflow_cache()
@@ -1120,7 +1149,7 @@ async def admin_get_workflow(template_id: str):
     return {"success": True, "workflow": _row_to_jsonable(row)}
 
 
-@router.put("/workflows/{template_id}")
+@router.put("/workflows/{template_id}", dependencies=[Depends(require_super_admin)])
 async def admin_update_workflow(template_id: str, body: WorkflowUpdateBody):
     _require_db()
     data = body.model_dump(exclude_unset=True)
@@ -1149,7 +1178,7 @@ async def admin_update_workflow(template_id: str, body: WorkflowUpdateBody):
     return {"success": True, "workflow": _row_to_jsonable(updated)}
 
 
-@router.delete("/workflows/{template_id}")
+@router.delete("/workflows/{template_id}", dependencies=[Depends(require_super_admin)])
 async def admin_delete_workflow(template_id: str):
     _require_db()
     row = await WorkflowTemplateDAO.get_by_id(template_id)
@@ -1168,7 +1197,7 @@ async def admin_delete_workflow(template_id: str):
 # --- API configurations ---
 
 
-router.include_router(api_config_router)
+router.include_router(api_config_router, dependencies=[Depends(require_super_admin)])
 router.include_router(recycle_bin_router)
 
 
@@ -1186,7 +1215,7 @@ async def admin_get_settings():
     return {"success": True, "settings": [_row_to_jsonable(r) for r in rows]}
 
 
-@router.put("/settings")
+@router.put("/settings", dependencies=[Depends(require_super_admin)])
 async def admin_put_settings(body: SettingsUpdateBody):
     _require_db()
     for key, value in body.settings.items():
@@ -1285,7 +1314,7 @@ async def admin_list_credit_rules():
     return {"success": True, "rules": rules}
 
 
-@router.post("/credit-rules", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin)])
+@router.post("/credit-rules", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_super_admin)])
 async def admin_create_credit_rule(body: CreditRuleCreateBody, request: Request):
     _require_db()
     rule = await CreditRuleDAO.create(
@@ -1311,7 +1340,7 @@ async def admin_create_credit_rule(body: CreditRuleCreateBody, request: Request)
     return {"success": True, "rule": rule}
 
 
-@router.put("/credit-rules/{rule_id}", dependencies=[Depends(require_admin)])
+@router.put("/credit-rules/{rule_id}", dependencies=[Depends(require_super_admin)])
 async def admin_update_credit_rule(rule_id: str, body: CreditRuleUpdateBody, request: Request):
     _require_db()
     before = await CreditRuleDAO.get(rule_id)
@@ -1330,7 +1359,7 @@ async def admin_update_credit_rule(rule_id: str, body: CreditRuleUpdateBody, req
     return {"success": True, "rule": rule}
 
 
-@router.delete("/credit-rules/{rule_id}", dependencies=[Depends(require_admin)])
+@router.delete("/credit-rules/{rule_id}", dependencies=[Depends(require_super_admin)])
 async def admin_delete_credit_rule(rule_id: str, request: Request):
     _require_db()
     before = await CreditRuleDAO.get(rule_id)
@@ -1415,13 +1444,67 @@ async def admin_list_users(
     total = await UserDAO.admin_count_users(
         keyword=keyword, role=role, status_filter=status_filter,
     )
-    # 2026-05-26：转换为前端 UserAccount 形状（permissions 兜底 + camelCase）
-    return {"success": True, "users": [_normalize_admin_user(u) for u in users], "total": total, "limit": limit, "offset": offset}
+    normalized_users = [_normalize_admin_user(u) for u in users]
+    user_ids = [str(user.get("id") or "") for user in normalized_users if user.get("id")]
+    presence = await get_users_presence(user_ids)
+
+    credit_by_user: Dict[str, Dict[str, Any]] = {}
+    stats_by_user: Dict[str, Dict[str, Any]] = {}
+    db = get_db_manager()
+    if db and user_ids:
+        try:
+            credit_rows = await db.fetch(
+                """
+                SELECT owner_id, available_credits, account_credits, gift_credits
+                FROM credit_accounts
+                WHERE owner_type = 'user' AND owner_id = ANY($1::text[])
+                """,
+                user_ids,
+            )
+            credit_by_user = {str(row["owner_id"]): dict(row) for row in credit_rows}
+            stat_rows = await db.fetch(
+                """
+                SELECT user_id,
+                       COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE)::bigint AS today_count,
+                       COUNT(*)::bigint AS total_count
+                FROM tasks
+                WHERE user_id = ANY($1::text[])
+                GROUP BY user_id
+                """,
+                user_ids,
+            )
+            stats_by_user = {str(row["user_id"]): dict(row) for row in stat_rows}
+        except Exception as exc:
+            logger.warning("admin user usage summary unavailable: %s", exc)
+
+    for user in normalized_users:
+        user_id = str(user.get("id") or "")
+        user_presence = presence.get(user_id) or {}
+        user["isOnline"] = bool(user_presence.get("is_online"))
+        user["lastActiveAt"] = user_presence.get("last_active_at")
+        credit = credit_by_user.get(user_id) or {}
+        user["creationPoints"] = {
+            "available": int(credit.get("available_credits") or 0),
+            "account": int(credit.get("account_credits") or 0),
+            "gift": int(credit.get("gift_credits") or 0),
+        }
+        task_stats = stats_by_user.get(user_id) or {}
+        user["stats"] = {
+            "todayCount": int(task_stats.get("today_count") or 0),
+            "totalCount": int(task_stats.get("total_count") or 0),
+            "byModel": {},
+        }
+
+    return {"success": True, "users": normalized_users, "total": total, "limit": limit, "offset": offset}
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin)])
 async def admin_create_user(body: AdminUserCreateBody, request: Request):
     _require_db()
+    if body.role not in {"user", "admin", "super_admin"}:
+        raise HTTPException(status_code=400, detail="无效的账号角色")
+    if body.role != "user":
+        await require_super_admin(request)
     existing = await UserDAO.get_user_by_username(body.username)
     if existing:
         raise HTTPException(status_code=400, detail="用户名已存在")
@@ -1465,7 +1548,11 @@ async def admin_update_user(user_id: str, body: AdminUserUpdateBody, request: Re
         raise HTTPException(status_code=404, detail="用户不存在")
     fields = body.model_dump(exclude_unset=True)
     if 'role' in fields:
-        await UserDAO.set_role(user_id, fields.pop('role'))
+        next_role = str(fields.pop('role') or "")
+        if next_role not in {"user", "admin", "super_admin"}:
+            raise HTTPException(status_code=400, detail="无效的账号角色")
+        await require_super_admin(request)
+        await UserDAO.set_role(user_id, next_role)
     if fields:
         await UserDAO.update_user_profile(user_id, **fields)
     # 2026-05-26 Slice 5: 审计
@@ -1488,6 +1575,11 @@ async def admin_update_username(
     """Rename a login account without changing its stable ownership key."""
     _require_db()
     import admin_audit_service
+
+    target_user = await UserDAO.get_user_by_id(user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    await _require_super_admin_for_privileged_target(request, dict(target_user))
 
     # Capture the caller before applying the rename. A JWT issued by the login
     # endpoint may still use the old username as its subject; after the write,
@@ -1549,6 +1641,7 @@ async def admin_disable_user(user_id: str, body: AdminDisableBody, request: Requ
     user = await UserDAO.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    await _require_super_admin_for_privileged_target(request, dict(user))
     ok = await UserDAO.set_status(user_id, 'disabled', disabled_reason=body.reason or '管理员禁用')
     import admin_audit_service
     await admin_audit_service.record(
@@ -1568,6 +1661,7 @@ async def admin_enable_user(user_id: str, request: Request):
     user = await UserDAO.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+    await _require_super_admin_for_privileged_target(request, dict(user))
     ok = await UserDAO.set_status(user_id, 'active')
     import admin_audit_service
     await admin_audit_service.record(
@@ -1583,6 +1677,10 @@ async def admin_enable_user(user_id: str, request: Request):
 @router.post("/users/{user_id}/reset-password", dependencies=[Depends(require_admin)])
 async def admin_reset_password(user_id: str, body: AdminResetPasswordBody, request: Request):
     _require_db()
+    user = await UserDAO.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    await _require_super_admin_for_privileged_target(request, dict(user))
     if not body.new_password or len(body.new_password) < 8:
         raise HTTPException(status_code=400, detail="new_password 至少 8 位")
     ok = await UserDAO.reset_password(user_id, body.new_password)
@@ -1598,13 +1696,21 @@ async def admin_reset_password(user_id: str, body: AdminResetPasswordBody, reque
 @router.put("/users/{user_id}/permissions", dependencies=[Depends(require_admin)])
 async def admin_update_permissions(user_id: str, body: AdminPermissionsBody, request: Request):
     _require_db()
-    ok = await UserDAO.update_user_permissions(user_id, body.permissions)
+    user = await UserDAO.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    await _require_super_admin_for_privileged_target(request, dict(user))
+    try:
+        permissions = validate_model_access_permissions(body.permissions)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    ok = await UserDAO.update_user_permissions(user_id, permissions)
     import admin_audit_service
     await admin_audit_service.record(
         request,
         admin_user_id=admin_audit_service.caller_admin_id(request),
         action='user_update_permissions', target_type='user', target_id=user_id,
-        after={'permissions': body.permissions},
+        after={'permissions': permissions},
     )
     return {"success": ok}
 

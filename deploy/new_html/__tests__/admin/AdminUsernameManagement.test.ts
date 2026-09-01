@@ -12,7 +12,7 @@ describe('admin username management contract', () => {
     expect(accountsSource).toContain('>修改用户名</CrmActionLink>');
     expect(accountsSource).toContain('`/api/admin/users/${uid}/username`');
     expect(accountsSource).toContain('setAdminSession(result.session.token, result.session.username)');
-    expect(accountsSource).toContain("disabled={u.user_id === 'admin'}");
+    expect(accountsSource).toContain("disabled={u.user_id === 'admin' || (!canManageRoles && u.role !== 'user')}");
   });
 
   it('uses the backend role gate instead of a hard-coded username whitelist', () => {

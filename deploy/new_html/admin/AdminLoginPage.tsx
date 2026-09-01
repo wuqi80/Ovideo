@@ -87,7 +87,7 @@ export const AdminLoginPage: React.FC = () => {
         verifyAdminSession(token)
             .then(session => {
                 if (!active) return;
-                setAdminSession(token, session.username);
+                setAdminSession(token, session.username, session.role);
                 navigate(getLoginRedirect(location), { replace: true });
             })
             .catch(() => {
@@ -130,7 +130,7 @@ export const AdminLoginPage: React.FC = () => {
             }
             const respUsername = data.username || username.trim();
             const session = await verifyAdminSession(data.token);
-            setAdminSession(data.token, session.username || respUsername);
+            setAdminSession(data.token, session.username || respUsername, session.role);
             navigate(getLoginRedirect(location), { replace: true });
         } catch (err: any) {
             setError(err?.message || '网络异常');

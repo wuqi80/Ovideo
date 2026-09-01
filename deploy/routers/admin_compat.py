@@ -29,6 +29,7 @@ from services.admin_compat_service import (
 def create_admin_compat_router(
     *,
     require_auth: Callable[..., Any],
+    require_super_admin: Callable[..., Any] | None = None,
     online_users: Dict[str, Any],
     default_users: Dict[str, str],
     super_admin: str,
@@ -38,6 +39,7 @@ def create_admin_compat_router(
     logger: Any,
 ) -> APIRouter:
     router = APIRouter()
+    super_admin_dependency = require_super_admin or require_auth
 
     @router.get("/api/admin/stats")
     async def get_admin_stats(
@@ -48,7 +50,7 @@ def create_admin_compat_router(
             return await get_admin_stats_response(
                 username,
                 group_by=group_by,
-                super_admin=super_admin,
+                super_admin=username,
                 active_users_count=len(online_users),
                 admin_stats_dao=admin_stats_dao,
                 logger=logger,
@@ -67,7 +69,7 @@ def create_admin_compat_router(
             return await get_admin_logs_response(
                 username,
                 limit=limit,
-                super_admin=super_admin,
+                super_admin=username,
                 admin_stats_dao=admin_stats_dao,
             )
         except AdminCompatForbidden as exc:
@@ -80,14 +82,14 @@ def create_admin_compat_router(
     async def create_user(
         user_data: dict,
         request: Request,
-        username: str = Depends(require_auth),
+        username: str = Depends(super_admin_dependency),
     ):
         try:
             return await create_admin_user_response(
                 user_data,
                 request=request,
                 admin_username=username,
-                super_admin=super_admin,
+                super_admin=username,
                 default_users=default_users,
                 user_dao=user_dao,
                 audit_record=audit_record,
@@ -104,13 +106,13 @@ def create_admin_compat_router(
     @router.delete("/api/admin/users/{user_id}")
     async def delete_user(
         user_id: str,
-        username: str = Depends(require_auth),
+        username: str = Depends(super_admin_dependency),
     ):
         try:
             return await delete_admin_user_response(
                 user_id,
                 admin_username=username,
-                super_admin=super_admin,
+                super_admin=username,
                 user_dao=user_dao,
                 logger=logger,
             )

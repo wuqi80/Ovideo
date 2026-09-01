@@ -9,7 +9,7 @@ from task_service import TaskService
 
 @pytest.mark.asyncio
 async def test_task_service_uses_preallocated_task_id():
-    service = TaskService(AsyncMock())
+    service = TaskService(AsyncMock(), model_access_checker=AsyncMock(return_value={"accessMode": "inherit"}))
     service.queue.enqueue = AsyncMock(return_value=True)
 
     task_id = await service.submit(
