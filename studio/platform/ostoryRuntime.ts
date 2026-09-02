@@ -18,9 +18,25 @@ import { callGeminiProxyWithRetry } from '@app/services/geminiProxyService';
 import { minimaxTTSSync } from '@app/services/audioGenerationService';
 import { taskRegistry } from '@app/services/taskRegistry';
 import { startVideoPoll } from '@app/services/videoTaskPoller';
-import { submitSeedanceTask } from '@app/services/videoTaskService';
+import {
+  submitDashScopeVideoTask,
+  submitSeedanceTask,
+  submitTask,
+} from '@app/services/videoTaskService';
 import { fetchVideoCapabilities } from '@app/services/videoWorkflowService';
-import type { SeedanceMediaInput } from '@app/services/videoModelService';
+import {
+  getModelDisplayName,
+  getVideoCreditEstimateParams,
+  isComfyUIModel,
+  isDashScopeVideoModel,
+  isMiniMaxH3Model,
+  isSeedanceVideoModel,
+  makeDefaultDashScopeParams,
+  seedanceSubModelForVideoModel,
+  type SeedanceMediaInput,
+  type VideoModel,
+} from '@app/services/videoModelService';
+import type { TaskKind } from '@app/types';
 import type {
   StudioChatOptions,
   StudioImageOptions,
@@ -33,7 +49,7 @@ import {
   STUDIO_AUDIO_MODEL_SPEECH_HD,
   STUDIO_IMAGE_MODEL_CONFIGURED,
   STUDIO_TEXT_MODEL_CONFIGURED,
-  STUDIO_VIDEO_MODEL_STANDARD,
+  getStudioVideoDuration,
   normalizeStudioAudioModel,
   normalizeStudioImageModel,
   normalizeStudioVideoModel,
@@ -133,6 +149,25 @@ export function assertStudioBatchCredits(
   if (quote.balance !== null && quote.balance < total) {
     throw new Error(`创作点数不足：本次预计需要 ${total} 创作点数，当前可用 ${quote.balance} 创作点数`);
   }
+}
+
+export function getStudioVideoTaskKind(model: VideoModel): TaskKind {
+  if (model === 'Seedance2Fast' || model === 'Seedance2Mini') return 'seedance-fast';
+  if (isSeedanceVideoModel(model)) return 'seedance';
+  if (model === 'Kling') return 'kling';
+  if (model === 'Vidu') return 'vidu';
+  if (model === 'HappyHorse') return 'happyhorse';
+  if (model === 'Sora2') return 'sora2';
+  if (model === 'Veo') return 'veo';
+  if (isComfyUIModel(model)) return 'video-comfy';
+  return 'video-i2v';
+}
+
+function normalizeStudioVideoResolution(value?: string): '480p' | '720p' | '1080p' {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === '480p') return '480p';
+  if (normalized === '1080p') return '1080p';
+  return '720p';
 }
 
 function makeTaskId(prefix: string): string {
@@ -434,10 +469,9 @@ export function createOstoryRuntime(input: {
     const capabilities = await fetchVideoCapabilities(STUDIO_MODEL_SCOPE);
     const normalizedModel = normalizeStudioVideoModel(model);
     const wantedModelKey = studioVideoCapabilityKey(normalizedModel);
-    const wantedSubModel = normalizedModel === STUDIO_VIDEO_MODEL_STANDARD ? 'standard' : 'fast';
-    const seedanceCapability = capabilities.models.find(item => item.key === wantedModelKey);
-    if (capabilities.models.length > 0 && seedanceCapability?.available === false) {
-      throw new Error('当前 Seedance 模型不可用，请联系管理员检查运行时模型配置');
+    const modelCapability = capabilities.models.find(item => item.key === wantedModelKey);
+    if (capabilities.models.length > 0 && modelCapability?.available !== true) {
+      throw new Error(`${getModelDisplayName(normalizedModel)}当前不可用，请联系管理员检查运行时模型配置`);
     }
 
     const rawReferences = options.referenceImages || [];
@@ -450,40 +484,105 @@ export function createOstoryRuntime(input: {
       ...item,
       url: await normalizeMediaUrl(item.url, index),
     })));
-    if (!capabilities.seedance_omni && mediaInputs.some(item => item.role === 'reference_image')) {
+    if (
+      isSeedanceVideoModel(normalizedModel)
+      && !capabilities.seedance_omni
+      && mediaInputs.some(item => item.role === 'reference_image')
+    ) {
       throw new Error('当前 Seedance 运行时模型不支持多参考图，请联系管理员启用 Seedance 2.0');
     }
-    const duration = Math.max(2, Math.min(15, Math.round(options.duration || 5)));
+    if (
+      mediaInputs.length === 0
+      && normalizedModel !== 'Kling'
+      && !isSeedanceVideoModel(normalizedModel)
+    ) {
+      throw new Error(`${getModelDisplayName(normalizedModel)}需要至少 1 张输入图片`);
+    }
+
+    const resolution = normalizeStudioVideoResolution(options.resolution);
+    const duration = getStudioVideoDuration(normalizedModel, options.duration || 5, resolution);
     const count = Math.max(1, Math.min(4, Math.round(options.count || 1)));
-    const creditParams = {
-      task_type: 'seedance_multi',
-      sub_model: wantedSubModel,
-      model: `seedance-${wantedSubModel}`,
+    const h3Upscale720p = isMiniMaxH3Model(normalizedModel) && resolution === '720p';
+    const creditParams = getVideoCreditEstimateParams(normalizedModel, {
       duration_seconds: duration,
-      resolution: '720p',
-    };
+      resolution: resolution.toUpperCase(),
+      h3_upscale_720p: h3Upscale720p,
+      ...(normalizedModel === 'MINI' ? {
+        minimax_resolution: resolution === '1080p' ? '1080P' : '768P',
+      } : {}),
+    });
     const videoQuote = await assertEnoughCredits('video_generation', creditParams);
     assertStudioBatchCredits(videoQuote, count);
 
     const urls: string[] = [];
     let lastTaskId = '';
     for (let index = 0; index < count; index += 1) {
-      const submitted = await submitSeedanceTask({
-        sub_model: wantedSubModel,
-        model_scope: STUDIO_MODEL_SCOPE,
-        prompt,
-        media_inputs: mediaInputs,
-        resolution: '720p',
-        ratio: (options.aspectRatio || 'adaptive') as any,
-        duration,
-        generate_audio: true,
-      }, {
+      const entityOptions = {
         entity_type: 'episode',
         entity_id: episodeId,
         file_role: 'studio_video',
         project_id: projectId,
         episode_id: episodeId,
-      });
+        preferred_agent_id: modelCapability?.preferred_agent_id || undefined,
+        preferred_node_id: modelCapability?.preferred_node_id || undefined,
+      };
+
+      let submitted: { task_id: string };
+      if (isSeedanceVideoModel(normalizedModel)) {
+        submitted = await submitSeedanceTask({
+          sub_model: seedanceSubModelForVideoModel(normalizedModel),
+          model_scope: STUDIO_MODEL_SCOPE,
+          prompt,
+          media_inputs: mediaInputs,
+          resolution,
+          ratio: (options.aspectRatio || 'adaptive') as any,
+          duration,
+          generate_audio: true,
+        }, entityOptions);
+      } else if (isDashScopeVideoModel(normalizedModel)) {
+        const aspectRatio = options.aspectRatio === '9:16' ? '9:16' : '16:9';
+        const dashMedia = normalizedModel === 'HappyHorse'
+          ? mediaInputs.map(item => ({ ...item, role: 'reference_image' as const }))
+          : mediaInputs;
+        const dashParams = makeDefaultDashScopeParams(
+          normalizedModel,
+          prompt,
+          dashMedia,
+          aspectRatio,
+        );
+        dashParams.duration = duration;
+        if (normalizedModel === 'Vidu') {
+          const dashResolution = resolution === '480p' ? '540P' : resolution.toUpperCase() as '720P' | '1080P';
+          dashParams.resolution = dashResolution;
+          dashParams.vidu_resolution = dashResolution;
+          dashParams.vidu_size = aspectRatio === '9:16' ? '720*1280' : '1280*720';
+        } else if (normalizedModel === 'HappyHorse') {
+          dashParams.hh_resolution = resolution === '1080p' ? '1080P' : '720P';
+          dashParams.hh_ratio = (options.aspectRatio || aspectRatio) as any;
+          dashParams.hh_duration = duration;
+        }
+        submitted = await submitDashScopeVideoTask(dashParams, entityOptions);
+      } else {
+        const firstFrame = mediaInputs.find(item => item.role === 'first_frame') || mediaInputs[0];
+        const lastFrame = mediaInputs.find(item => item.role === 'last_frame');
+        submitted = await submitTask(
+          firstFrame?.file_id || firstFrame?.url || '',
+          lastFrame?.file_id || lastFrame?.url || null,
+          prompt,
+          normalizedModel,
+          undefined,
+          undefined,
+          'multi',
+          entityOptions,
+          {
+            duration,
+            resolution: resolution.toUpperCase(),
+            minimax_resolution: resolution === '1080p' ? '1080P' : '768P',
+            minimax_prompt_optimizer: true,
+            h3_upscale_720p: h3Upscale720p,
+          },
+        );
+      }
       lastTaskId = submitted.task_id;
       if (!lastTaskId) throw new Error('视频生成接口未返回 task_id');
 
@@ -491,8 +590,8 @@ export function createOstoryRuntime(input: {
         () => new Promise<string>((resolve, reject) => {
           startVideoPoll(`studio-video:${lastTaskId}`, {
             taskId: lastTaskId,
-            title: '自由创作视频生成',
-            kind: wantedSubModel === 'fast' ? 'seedance-fast' : 'seedance',
+            title: `自由创作 · ${getModelDisplayName(normalizedModel)}`,
+            kind: getStudioVideoTaskKind(normalizedModel),
             targetPage: 'canvas',
             targetEntityType: 'episode',
             targetEntityId: episodeId,

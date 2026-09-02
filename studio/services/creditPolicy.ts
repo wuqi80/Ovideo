@@ -1,9 +1,16 @@
 import type { AppNode } from '../types';
 import { NodeType } from '../types';
 import {
+  getVideoCreditEstimateParams,
+  getVideoCreditFallbackCost,
+  isMiniMaxH3Model,
+  type VideoModel,
+} from '@app/services/videoModelService';
+import {
   STUDIO_AUDIO_MODEL_SPEECH_HD,
   STUDIO_IMAGE_MODEL_CONFIGURED,
   STUDIO_TEXT_MODEL_CONFIGURED,
+  getStudioVideoDuration,
   normalizeStudioAudioModel,
   normalizeStudioImageModel,
   normalizeStudioVideoModel,
@@ -43,9 +50,15 @@ function positiveInt(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function fallbackSeedanceUnitCost(model: string, duration: number): number {
-  const fiveSecondCost = model === 'standard' ? 95 : 75;
-  return Math.max(1, Math.round((fiveSecondCost * duration) / 5));
+function fallbackVideoUnitCost(model: VideoModel, duration: number, h3Upscale720p: boolean): number {
+  const seedanceFiveSecondCost: Partial<Record<VideoModel, number>> = {
+    Seedance2: 95,
+    Seedance2Fast: 75,
+    Seedance2Mini: 50,
+  };
+  const seedanceCost = seedanceFiveSecondCost[model];
+  if (seedanceCost) return Math.max(1, Math.round((seedanceCost * duration) / 5));
+  return getVideoCreditFallbackCost(model, { h3_upscale_720p: h3Upscale720p });
 }
 
 export function estimateStudioTextTokens(text: string): number {
@@ -90,20 +103,21 @@ export function buildStudioNodeCreditRequest(
 
   if (node.type === NodeType.VIDEO_GENERATOR) {
     const model = normalizeStudioVideoModel(node.data.model);
-    const duration = positiveInt(node.data.duration, 5);
+    const resolution = String(node.data.resolution || '720p').toLowerCase();
+    const duration = getStudioVideoDuration(model, positiveInt(node.data.duration, 5), resolution);
+    const h3Upscale720p = isMiniMaxH3Model(model) && resolution === '720p';
     return {
       featureKey: 'video_generation',
-      params: {
-        task_type: 'seedance_multi',
-        model: `seedance-${model}`,
-        sub_model: model,
+      params: getVideoCreditEstimateParams(model, {
         duration_seconds: duration,
-        // Studio currently submits Seedance at 720p; the estimate must mirror
-        // the trusted task payload instead of a display-only legacy value.
-        resolution: '720p',
-      },
+        resolution: resolution.toUpperCase(),
+        h3_upscale_720p: h3Upscale720p,
+        ...(model === 'MINI' ? {
+          minimax_resolution: resolution === '1080p' ? '1080P' : '768P',
+        } : {}),
+      }),
       quantity: positiveInt(node.data.videoCount, 1),
-      fallbackUnitCost: fallbackSeedanceUnitCost(model, duration),
+      fallbackUnitCost: fallbackVideoUnitCost(model, duration, h3Upscale720p),
     };
   }
 

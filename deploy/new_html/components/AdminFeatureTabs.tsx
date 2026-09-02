@@ -26,6 +26,8 @@ import {
 import { apiJson } from '../services/httpClient';
 import { getAdminRole, setAdminSession } from '../admin/adminAuth';
 import { PLATFORM_ROLE_OPTIONS, getPlatformRoleDescription } from '../utils/adminRoles';
+import { formatChinaDateTime } from '../utils/dateTime';
+import { getCreditTransactionReason } from '../utils/creditTransactionPresentation';
 import AdminOrganizationsTab from '../admin/AdminOrganizationsTab';
 import {
   crmMessage, crmConfirm, crmPrompt,
@@ -315,7 +317,7 @@ const AccountsTab: React.FC = () => {
               </td>
               <td className="p-2.5 text-n100 text-[11px]">
                 {(u.last_login_at || u.lastLogin)
-                  ? new Date(u.last_login_at || u.lastLogin).toLocaleString('zh-CN')
+                  ? formatChinaDateTime(u.last_login_at || u.lastLogin)
                   : '-'}
               </td>
               <td className="p-2.5 text-right whitespace-nowrap">
@@ -856,23 +858,31 @@ const CreditTransactionsTab: React.FC = () => {
           <th className="text-left font-medium p-2.5">类型</th>
           <th className="text-left font-medium p-2.5">用户</th>
           <th className="text-left font-medium p-2.5">功能</th>
+          <th className="text-left font-medium p-2.5">原因</th>
           <th className="text-right font-medium p-2.5">金额</th>
           <th className="text-right font-medium p-2.5">余额前</th>
           <th className="text-right font-medium p-2.5">余额后</th>
         </tr>
       }>
-        {pageRows.map(t => (
-          <tr key={t.transaction_id} className="hover:bg-n10">
-            <td className="p-2.5 text-n300 text-[10px]">{new Date(t.created_at).toLocaleString('zh-CN')}</td>
-            <td className="p-2.5"><CrmTag type={Number(t.amount) >= 0 ? 'success' : 'warning'}>{t.change_type}</CrmTag></td>
-            <td className="p-2.5 font-mono text-[10px] text-n300">{t.user_id || '-'}</td>
-            <td className="p-2.5 text-n700">{t.feature_key || '-'}</td>
-            <td className={`p-2.5 text-right font-mono ${Number(t.amount) >= 0 ? 'text-success' : 'text-danger'}`}>{t.amount}</td>
-            <td className="p-2.5 text-right font-mono text-n100">{t.balance_before}</td>
-            <td className="p-2.5 text-right font-mono text-n700">{t.balance_after}</td>
-          </tr>
-        ))}
-        {!pageRows.length && <tr><td colSpan={7} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无流水'}</td></tr>}
+        {pageRows.map(t => {
+          const reason = getCreditTransactionReason(t);
+          return (
+            <tr key={t.transaction_id} className="hover:bg-n10">
+              <td className="p-2.5 text-n300 text-[10px] whitespace-nowrap">{formatChinaDateTime(t.created_at)}</td>
+              <td className="p-2.5"><CrmTag type={Number(t.amount) >= 0 ? 'success' : 'warning'}>{t.change_type}</CrmTag></td>
+              <td className="p-2.5 font-mono text-[10px] text-n300">{t.user_id || '-'}</td>
+              <td className="p-2.5 text-n700">{t.feature_key || '-'}</td>
+              <td className="min-w-48 max-w-96 p-2.5 text-n500">
+                <div className="whitespace-normal break-words leading-5" title={reason}>{reason || '-'}</div>
+                {reason && t.operated_by && <div className="mt-0.5 text-[10px] text-n100">操作人：{t.operated_by}</div>}
+              </td>
+              <td className={`p-2.5 text-right font-mono ${Number(t.amount) >= 0 ? 'text-success' : 'text-danger'}`}>{t.amount}</td>
+              <td className="p-2.5 text-right font-mono text-n100">{t.balance_before}</td>
+              <td className="p-2.5 text-right font-mono text-n700">{t.balance_after}</td>
+            </tr>
+          );
+        })}
+        {!pageRows.length && <tr><td colSpan={8} className="text-center py-8 text-n100">{loading ? '加载中…' : '暂无流水'}</td></tr>}
       </CrmTable>
       <CrmPagination total={txns.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
     </div>

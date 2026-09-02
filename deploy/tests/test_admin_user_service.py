@@ -134,5 +134,21 @@ def test_admin_user_normalization_preserves_phone_and_recent_login():
     )
 
     assert user["phone_number"] == "13800138000"
-    assert user["last_login_at"] == last_login.isoformat()
+    assert user["last_login_at"] == "2026-08-31T09:30:00Z"
     assert user["lastLogin"] == int(last_login.timestamp() * 1000)
+
+
+def test_admin_user_normalization_treats_legacy_naive_login_as_utc():
+    import admin_routes
+
+    user = admin_routes._normalize_admin_user(
+        {
+            "user_id": "user_legacy_time",
+            "username": "creator",
+            "last_login_at": datetime(2026, 9, 2, 3, 14, 15),
+            "status": "active",
+        }
+    )
+
+    assert user["last_login_at"] == "2026-09-02T03:14:15Z"
+    assert user["lastLogin"] == int(datetime(2026, 9, 2, 3, 14, 15, tzinfo=timezone.utc).timestamp() * 1000)

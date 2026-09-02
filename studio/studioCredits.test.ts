@@ -33,7 +33,9 @@ describe('Studio credit integration', () => {
   it('keeps success-only direct billing and validates total queued-video balance', () => {
     expect(runtimeSource).toContain('chargeSuccessfulResult');
     expect(runtimeSource).toContain('assertStudioBatchCredits(videoQuote, count)');
-    expect(runtimeSource).toContain("task_type: 'seedance_multi'");
+    expect(runtimeSource).toContain('getVideoCreditEstimateParams(normalizedModel');
     expect(runtimeSource).toContain('duration_seconds: duration');
+    expect(runtimeSource).toContain('submitDashScopeVideoTask');
+    expect(runtimeSource).toContain('submitTask(');
   });
 });

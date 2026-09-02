@@ -4,6 +4,7 @@ import {
   assertStudioBatchCredits,
   chargeSuccessfulResult,
   extractVideoResult,
+  getStudioVideoTaskKind,
   parseStudioSnapshot,
   stripEmbeddedMedia,
 } from './ostoryRuntime';
@@ -60,5 +61,13 @@ describe('创剧 Studio runtime helpers', () => {
       estimated_cost: 75,
       balance: 150,
     }, 2)).not.toThrow();
+  });
+
+  it('maps the complete model catalog to notification task kinds', () => {
+    expect(getStudioVideoTaskKind('Seedance2Mini')).toBe('seedance-fast');
+    expect(getStudioVideoTaskKind('MiniMaxH3')).toBe('video-comfy');
+    expect(getStudioVideoTaskKind('Kling')).toBe('kling');
+    expect(getStudioVideoTaskKind('Vidu')).toBe('vidu');
+    expect(getStudioVideoTaskKind('HappyHorse')).toBe('happyhorse');
   });
 });

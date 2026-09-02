@@ -2,16 +2,18 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  STUDIO_AUDIO_MODEL_OPTIONS,
+  SELECTABLE_MODELS,
+  getModelDisplayName,
+} from '@app/services/videoModelService';
+import {
   STUDIO_AUDIO_MODEL_LABEL,
-  STUDIO_IMAGE_MODEL_OPTIONS,
   STUDIO_IMAGE_MODEL_CONFIGURED,
   STUDIO_IMAGE_MODEL_LABEL,
-  STUDIO_TEXT_MODEL_OPTIONS,
   STUDIO_TEXT_MODEL_LABEL,
   STUDIO_VIDEO_MODEL_OPTIONS,
   STUDIO_VIDEO_MODEL_FAST_LABEL,
   STUDIO_VIDEO_MODEL_STANDARD_LABEL,
+  getStudioVideoDuration,
   normalizeStudioAudioModel,
   normalizeStudioImageModel,
   normalizeStudioTextModel,
@@ -34,41 +36,39 @@ describe('Studio image model contract', () => {
 
   it('normalizes legacy Studio model ids to backend API config operation ids', () => {
     expect(normalizeStudioTextModel('gemini')).toBe('gemini-2.5-flash');
-    expect(normalizeStudioVideoModel('Seedance2Fast')).toBe('fast');
-    expect(normalizeStudioVideoModel('Seedance2')).toBe('standard');
+    expect(normalizeStudioVideoModel('fast')).toBe('Seedance2Fast');
+    expect(normalizeStudioVideoModel('standard')).toBe('Seedance2');
+    expect(normalizeStudioVideoModel('Kling')).toBe('Kling');
     expect(normalizeStudioAudioModel('minimax-speech-2.6-hd')).toBe('speech-hd');
   });
 
-  it('only exposes model ids that exist in the backend provider binding registry', () => {
-    const backendOperations = new Set([
-      'gemini-2.5-flash',
-      'gemini-2.5-flash-image',
-      'gemini-3-pro-image-preview',
-      'standard',
-      'fast',
-      'speech-hd',
-      'speech-turbo',
-    ]);
-    const exposedValues = [
-      ...STUDIO_TEXT_MODEL_OPTIONS,
-      ...STUDIO_IMAGE_MODEL_OPTIONS,
-      ...STUDIO_VIDEO_MODEL_OPTIONS,
-      ...STUDIO_AUDIO_MODEL_OPTIONS,
-    ].map(option => option.v);
-
-    expect(exposedValues).not.toContain('nanobanana');
-    expect(exposedValues).not.toContain('Seedance2Fast');
-    expect(exposedValues).not.toContain('minimax-speech-2.6-hd');
-    expect(exposedValues.every(value => backendOperations.has(value))).toBe(true);
+  it('exposes the same complete video model catalog as the main video workspace', () => {
+    expect(STUDIO_VIDEO_MODEL_OPTIONS.map(option => option.v)).toEqual(SELECTABLE_MODELS);
+    expect(STUDIO_VIDEO_MODEL_OPTIONS).toHaveLength(13);
+    expect(STUDIO_VIDEO_MODEL_OPTIONS).toContainEqual({
+      v: 'MiniMaxH3Mini',
+      l: getModelDisplayName('MiniMaxH3Mini'),
+    });
+    expect(STUDIO_VIDEO_MODEL_OPTIONS).toContainEqual({
+      v: 'HappyHorse',
+      l: getModelDisplayName('HappyHorse'),
+    });
   });
 
   it('exposes actual model versions with capability suffixes', () => {
     expect(STUDIO_TEXT_MODEL_LABEL).toBe('gemini-2.5-flash · 全能写作模型');
     expect(STUDIO_IMAGE_MODEL_LABEL).toBe('Gemini 2.5 Flash Image · 快速生图模型');
-    expect(STUDIO_VIDEO_MODEL_STANDARD_LABEL).toBe('doubao-seedance-2-0-260128 · 多模态标准视频模型');
-    expect(STUDIO_VIDEO_MODEL_FAST_LABEL).toBe('doubao-seedance-2-0-fast-260128 · 多模态快速视频模型');
+    expect(STUDIO_VIDEO_MODEL_STANDARD_LABEL).toBe('Seedance 2.0 · 多模态标准视频模型');
+    expect(STUDIO_VIDEO_MODEL_FAST_LABEL).toBe('Seedance 2.0 Fast · 多模态快速视频模型');
     expect(STUDIO_AUDIO_MODEL_LABEL).toBe('speech-2.8-hd · 高清语音模型');
     expect(readStudioFile('components/Node.tsx')).toContain('STUDIO_IMAGE_MODEL_OPTIONS');
+  });
+
+  it('uses provider-supported fixed durations for fixed-length video models', () => {
+    expect(getStudioVideoDuration('MINI', 10, '1080p')).toBe(6);
+    expect(getStudioVideoDuration('MINI', 10, '720p')).toBe(10);
+    expect(getStudioVideoDuration('Veo', 5, '720p')).toBe(8);
+    expect(getStudioVideoDuration('Sora2', 5, '720p')).toBe(15);
   });
 
   it('does not expose the migrated NanoBanana alias in Studio canvas source', () => {

@@ -321,7 +321,16 @@ def _normalize_admin_user(row: Any) -> Dict[str, Any]:
     last_login_ms = 0
     if isinstance(last_login_iso, str) and last_login_iso:
         try:
-            last_login_ms = int(datetime.fromisoformat(last_login_iso).timestamp() * 1000)
+            # users.last_login_at is a legacy TIMESTAMP (without timezone) column.
+            # Its values are stored in UTC; make that convention explicit in the API
+            # so browsers do not mistake 03:14 UTC for 03:14 local time.
+            parsed_last_login = datetime.fromisoformat(last_login_iso.replace("Z", "+00:00"))
+            if parsed_last_login.tzinfo is None:
+                parsed_last_login = parsed_last_login.replace(tzinfo=timezone.utc)
+            else:
+                parsed_last_login = parsed_last_login.astimezone(timezone.utc)
+            last_login_ms = int(parsed_last_login.timestamp() * 1000)
+            last_login_iso = parsed_last_login.isoformat().replace("+00:00", "Z")
         except Exception:
             last_login_ms = 0
 

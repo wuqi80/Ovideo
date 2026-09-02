@@ -1,3 +1,10 @@
+import {
+  SELECTABLE_MODELS,
+  getModelDisplayName,
+  isVideoModelKey,
+  type VideoModel,
+} from '@app/services/videoModelService';
+
 export const STUDIO_TEXT_MODEL_CONFIGURED = 'gemini-2.5-flash';
 export const STUDIO_TEXT_MODEL_LABEL = 'gemini-2.5-flash · 全能写作模型';
 
@@ -6,10 +13,10 @@ export const STUDIO_IMAGE_MODEL_LABEL = 'Gemini 2.5 Flash Image · 快速生图�
 export const STUDIO_IMAGE_MODEL_SHORT_LABEL = 'Gemini 2.5 Flash Image';
 export const STUDIO_IMAGE_MODEL_POSE_LABEL = 'Gemini 2.5 Flash Image · 姿态生图模型';
 
-export const STUDIO_VIDEO_MODEL_STANDARD = 'standard';
-export const STUDIO_VIDEO_MODEL_FAST = 'fast';
-export const STUDIO_VIDEO_MODEL_STANDARD_LABEL = 'doubao-seedance-2-0-260128 · 多模态标准视频模型';
-export const STUDIO_VIDEO_MODEL_FAST_LABEL = 'doubao-seedance-2-0-fast-260128 · 多模态快速视频模型';
+export const STUDIO_VIDEO_MODEL_STANDARD: VideoModel = 'Seedance2';
+export const STUDIO_VIDEO_MODEL_FAST: VideoModel = 'Seedance2Fast';
+export const STUDIO_VIDEO_MODEL_STANDARD_LABEL = getModelDisplayName(STUDIO_VIDEO_MODEL_STANDARD);
+export const STUDIO_VIDEO_MODEL_FAST_LABEL = getModelDisplayName(STUDIO_VIDEO_MODEL_FAST);
 
 export const STUDIO_AUDIO_MODEL_SPEECH_HD = 'speech-hd';
 export const STUDIO_AUDIO_MODEL_LABEL = 'speech-2.8-hd · 高清语音模型';
@@ -22,10 +29,9 @@ export const STUDIO_IMAGE_MODEL_OPTIONS = [
   { l: STUDIO_IMAGE_MODEL_LABEL, v: STUDIO_IMAGE_MODEL_CONFIGURED },
 ] as const;
 
-export const STUDIO_VIDEO_MODEL_OPTIONS = [
-  { l: STUDIO_VIDEO_MODEL_FAST_LABEL, v: STUDIO_VIDEO_MODEL_FAST },
-  { l: STUDIO_VIDEO_MODEL_STANDARD_LABEL, v: STUDIO_VIDEO_MODEL_STANDARD },
-] as const;
+export const STUDIO_VIDEO_MODEL_OPTIONS: ReadonlyArray<{ l: string; v: VideoModel }> = (
+  SELECTABLE_MODELS.map(model => ({ l: getModelDisplayName(model), v: model }))
+);
 
 export const STUDIO_AUDIO_MODEL_OPTIONS = [
   { l: STUDIO_AUDIO_MODEL_LABEL, v: STUDIO_AUDIO_MODEL_SPEECH_HD },
@@ -52,23 +58,43 @@ export function studioImageModelOverride(model?: string | null): string | undefi
   return normalized === STUDIO_IMAGE_MODEL_CONFIGURED ? undefined : normalized;
 }
 
-export function normalizeStudioVideoModel(model?: string | null): string {
+export function normalizeStudioVideoModel(model?: string | null): VideoModel {
   const value = String(model || '').trim();
   const normalized = value.toLowerCase();
-  if (!normalized || normalized === 'seedance2fast' || normalized === 'seedance-fast') {
+  if (
+    !normalized
+    || normalized === 'fast'
+    || normalized === 'seedance2fast'
+    || normalized === 'seedance-fast'
+  ) {
     return STUDIO_VIDEO_MODEL_FAST;
   }
-  if (normalized === 'seedance2' || normalized === 'seedance-standard') {
+  if (
+    normalized === 'standard'
+    || normalized === 'seedance2'
+    || normalized === 'seedance-standard'
+  ) {
     return STUDIO_VIDEO_MODEL_STANDARD;
   }
-  if (normalized === STUDIO_VIDEO_MODEL_STANDARD || normalized === STUDIO_VIDEO_MODEL_FAST) {
-    return normalized;
+  if (normalized === 'mini' || normalized === 'seedance2mini' || normalized === 'seedance-mini') {
+    return 'Seedance2Mini';
   }
+  if (isVideoModelKey(value) && SELECTABLE_MODELS.includes(value)) return value;
   return STUDIO_VIDEO_MODEL_FAST;
 }
 
-export function studioVideoCapabilityKey(model?: string | null): 'Seedance2' | 'Seedance2Fast' {
-  return normalizeStudioVideoModel(model) === STUDIO_VIDEO_MODEL_STANDARD ? 'Seedance2' : 'Seedance2Fast';
+export function studioVideoCapabilityKey(model?: string | null): VideoModel {
+  return normalizeStudioVideoModel(model);
+}
+
+export function getStudioVideoDuration(model: VideoModel, requested: number, resolution: string): number {
+  if (model === 'Sora2') return 15;
+  if (model === 'Veo') return 8;
+  if (model === 'MINI') {
+    if (resolution.toUpperCase() === '1080P') return 6;
+    return requested >= 8 ? 10 : 6;
+  }
+  return Math.max(2, Math.min(15, Math.round(requested || 5)));
 }
 
 export function normalizeStudioAudioModel(model?: string | null): string {

@@ -28,5 +28,6 @@ describe('admin username management contract', () => {
     expect(accountsSource).toContain("placeholder: '搜索用户名 / 手机号 / 邮箱'");
     expect(accountsSource).toContain("{u.phone_number || '-'}");
     expect(accountsSource).toContain('u.last_login_at || u.lastLogin');
+    expect(accountsSource).toContain('formatChinaDateTime(u.last_login_at || u.lastLogin)');
   });
 });

@@ -17,6 +17,7 @@ import { SELECTABLE_MODELS, getModelDisplayName } from '../services/videoModelSe
 import { STORYBOARD_GENERATION_MODEL_OPTIONS } from '../utils/storyboardGenerationModels';
 import { PLATFORM_ROLE_OPTIONS, getPlatformRoleLabel, normalizePlatformRole } from '../utils/adminRoles';
 import { getAdminRole } from '../admin/adminAuth';
+import { formatChinaDateTime } from '../utils/dateTime';
 
 interface AdminPageProps {
     // 2026-05-26：改为可选 — AdminPage 既可被 WorkspaceApp 内嵌（带文件/素材库降级数据），
@@ -100,7 +101,7 @@ const formatModelAccess = (permissions: UserPermissions): string => {
 };
 
 const formatTime = (value: number): string => value > 0
-    ? new Date(value).toLocaleString('zh-CN', { hour12: false })
+    ? formatChinaDateTime(value, '—')
     : '—';
 
 // --- 图表组件 ---

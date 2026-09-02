@@ -6,7 +6,7 @@ import uuid
 import json
 import logging
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from db_manager import get_db_manager
 from services.password_service import hash_password, verify_password_hash
 
@@ -453,7 +453,10 @@ class UserDAO:
             SET last_login_at = $1
             WHERE user_id = $2
         """
-        await db.execute(query, datetime.now(), user_id)
+        # The legacy column is TIMESTAMP without timezone. Persist a naive UTC value
+        # and let API serializers attach the UTC marker before sending it to clients.
+        utc_now = datetime.now(timezone.utc).replace(tzinfo=None)
+        await db.execute(query, utc_now, user_id)
     
     @staticmethod
     async def get_storage_stats(user_id: str) -> Dict[str, Any]:

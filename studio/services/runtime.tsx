@@ -26,6 +26,7 @@ export interface StudioImageOptions {
 
 export interface StudioVideoOptions {
   aspectRatio?: string;
+  resolution?: string;
   duration?: number;
   count?: number;
   nodeId?: string;

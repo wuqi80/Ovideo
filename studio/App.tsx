@@ -903,6 +903,7 @@ export const App = () => {
                   normalizeStudioVideoModel(node.data.model),
                   {
                       aspectRatio: node.data.aspectRatio || '16:9',
+                      resolution: node.data.resolution || '720p',
                       count: node.data.videoCount || 1,
                       generationMode: strategy.generationMode,
                       duration: node.data.duration || 5,

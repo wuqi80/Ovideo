@@ -31,11 +31,11 @@ describe('Studio credit policy', () => {
     expect(request).toEqual({
       featureKey: 'video_generation',
       params: {
-        task_type: 'seedance_multi',
-        model: 'seedance-standard',
+        model: 'Seedance2',
         sub_model: 'standard',
         duration_seconds: 10,
-        resolution: '720p',
+        resolution: '720P',
+        h3_upscale_720p: false,
       },
       quantity: 3,
       fallbackUnitCost: 190,
@@ -47,6 +47,24 @@ describe('Studio credit policy', () => {
       balance: 500,
       enough: true,
     })).toMatchObject({ totalCost: 570, enough: false });
+  });
+
+  it('quotes node models with the shared model key and guarded 720p upscale cost', () => {
+    expect(buildStudioNodeCreditRequest(node(NodeType.VIDEO_GENERATOR, {
+      model: 'MiniMaxH3Mini',
+      duration: 5,
+      resolution: '720p',
+    }))).toEqual({
+      featureKey: 'video_generation',
+      params: {
+        model: 'MiniMaxH3Mini',
+        duration_seconds: 5,
+        resolution: '720P',
+        h3_upscale_720p: true,
+      },
+      quantity: 1,
+      fallbackUnitCost: 10,
+    });
   });
 
   it('passes image count and audio character count to canonical rules', () => {
