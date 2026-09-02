@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { History, Download, Trash2, RefreshCw, CheckSquare, Square, Film, Image as ImageIcon, Play, Clock, AlertTriangle, X, HardDrive, ShieldAlert } from 'lucide-react';
-import { fetchUserFiles, deleteEntityFile, hardDeleteEntityFile, hardDeleteEntityFiles, type EntityFile } from '../services/entityFileService';
+import { History, Download, Trash2, RefreshCw, CheckSquare, Square, Film, Image as ImageIcon, Play, Clock, AlertTriangle, X, RotateCcw, ShieldAlert } from 'lucide-react';
+import { fetchDeletedUserFiles, fetchUserFiles, deleteEntityFile, restoreEntityFile, type EntityFile } from '../services/entityFileService';
 import { LazyVideo } from './LazyVideo';
 import { apiJson, secureApiUrl } from '../services/httpClient';
 
@@ -10,13 +10,13 @@ interface HistoryPageProps {
 
 export const HistoryPage: React.FC<HistoryPageProps> = () => {
   const [files, setFiles] = useState<EntityFile[]>([]);
+  const [activeTab, setActiveTab] = useState<'history' | 'recycle'>('history');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'video' | 'image'>('video');
   const [deleteModal, setDeleteModal] = useState<{ mode: 'single' | 'batch'; files: EntityFile[] } | null>(null);
-  const [hardDelete, setHardDelete] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number } | null>(null);
 
@@ -24,10 +24,12 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const data = await fetchUserFiles('image', 200, 0);
+      const data = activeTab === 'recycle'
+        ? await fetchDeletedUserFiles(undefined, 500, 0)
+        : await fetchUserFiles(undefined, 500, 0);
       let allFiles = data.items;
 
-      if (allFiles.length === 0) {
+      if (activeTab === 'history' && allFiles.length === 0) {
         const taskFiles = await loadTaskImages();
         allFiles = taskFiles;
       }
@@ -46,7 +48,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeTab]);
 
   const loadTaskImages = async (): Promise<EntityFile[]> => {
     let data: { tasks?: any[] };
@@ -115,7 +117,9 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
 
   // 全选/取消全选
   const toggleSelectAll = () => {
-    const completedFiles = files.filter(f => getMediaUrl(f));
+    const completedFiles = activeTab === 'recycle'
+      ? files
+      : files.filter(f => getMediaUrl(f));
     if (selectedTasks.size === completedFiles.length) {
       setSelectedTasks(new Set());
     } else {
@@ -125,7 +129,6 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
 
   const openDeleteModal = (file: EntityFile) => {
     setDeleteModal({ mode: 'single', files: [file] });
-    setHardDelete(true);
     setDeleteProgress(null);
   };
 
@@ -133,7 +136,6 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
     if (selectedTasks.size === 0) return;
     const selected = files.filter(f => selectedTasks.has(f.fileId));
     setDeleteModal({ mode: 'batch', files: selected });
-    setHardDelete(true);
     setDeleteProgress(null);
   };
 
@@ -144,19 +146,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
     const total = ids.length;
 
     try {
-      if (hardDelete) {
-        if (ids.length === 1) {
-          await hardDeleteEntityFile(ids[0]);
-        } else {
-          await hardDeleteEntityFiles(ids);
-        }
-      } else {
-        let done = 0;
-        for (const id of ids) {
-          await deleteEntityFile(id);
-          done++;
-          setDeleteProgress({ done, total });
-        }
+      let done = 0;
+      for (const id of ids) {
+        await deleteEntityFile(id);
+        done++;
+        setDeleteProgress({ done, total });
       }
       setSelectedTasks(new Set());
       setDeleteModal(null);
@@ -164,6 +158,26 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
     } catch (error: any) {
       console.error('删除失败:', error);
       alert(`删除失败: ${error?.message || '未知错误'}`);
+    } finally {
+      setIsDeleting(false);
+      setDeleteProgress(null);
+    }
+  };
+
+  const restoreFiles = async (targetFiles: EntityFile[]) => {
+    if (targetFiles.length === 0) return;
+    setIsDeleting(true);
+    try {
+      let done = 0;
+      for (const file of targetFiles) {
+        await restoreEntityFile(file.fileId);
+        done++;
+        setDeleteProgress({ done, total: targetFiles.length });
+      }
+      setSelectedTasks(new Set());
+      await loadHistory();
+    } catch (error: any) {
+      alert(`恢复失败: ${error?.message || '未知错误'}`);
     } finally {
       setIsDeleting(false);
       setDeleteProgress(null);
@@ -208,6 +222,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
 
   // 获取媒体URL（原图）
   const getMediaUrl = (file: EntityFile): string | null => {
+    if (file.isDeleted || activeTab === 'recycle') return null;
     if (!file.fileUrl) return null;
     return secureApiUrl(file.fileUrl, { absolute: true });
   };
@@ -248,8 +263,18 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
       <div className="workflow-stage-toolbar px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <History className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-bold text-n700 uppercase tracking-wider">生成历史</h2>
+          <h2 className="text-sm font-bold text-n700 uppercase tracking-wider">生成文件</h2>
           <span className="text-xs text-n100">共 {files.length} 个文件</span>
+          <div className="flex rounded-lg bg-n20 p-0.5">
+            <button
+              onClick={() => { setActiveTab('history'); setSelectedTasks(new Set()); }}
+              className={`px-3 py-1 rounded-md text-xs ${activeTab === 'history' ? 'bg-n0 text-primary shadow-sm' : 'text-n300'}`}
+            >生成历史</button>
+            <button
+              onClick={() => { setActiveTab('recycle'); setSelectedTasks(new Set()); }}
+              className={`px-3 py-1 rounded-md text-xs ${activeTab === 'recycle' ? 'bg-n0 text-primary shadow-sm' : 'text-n300'}`}
+            >回收站</button>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -262,25 +287,32 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
             {selectedTasks.size > 0 ? `已选 ${selectedTasks.size}` : '全选'}
           </button>
 
-          {/* 批量下载 */}
-          <button
-            onClick={downloadSelected}
-            disabled={selectedTasks.size === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover disabled:bg-n0 disabled:text-n100 text-white rounded text-xs font-medium transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            批量下载
-          </button>
-
-          {/* 批量删除 */}
-          <button
-            onClick={openBatchDeleteModal}
-            disabled={selectedTasks.size === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-danger hover:bg-red-500 disabled:bg-n0 disabled:text-n100 text-white rounded text-xs font-medium transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            批量删除
-          </button>
+          {activeTab === 'history' ? (
+            <>
+              <button
+                onClick={downloadSelected}
+                disabled={selectedTasks.size === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover disabled:bg-n0 disabled:text-n100 text-white rounded text-xs font-medium transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />批量下载
+              </button>
+              <button
+                onClick={openBatchDeleteModal}
+                disabled={selectedTasks.size === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-danger hover:bg-red-500 disabled:bg-n0 disabled:text-n100 text-white rounded text-xs font-medium transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />移入回收站
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => restoreFiles(files.filter(file => selectedTasks.has(file.fileId)))}
+              disabled={selectedTasks.size === 0 || isDeleting}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover disabled:bg-n0 disabled:text-n100 text-white rounded text-xs font-medium transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />批量恢复
+            </button>
+          )}
 
           {/* 刷新 */}
           <button
@@ -296,7 +328,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
 
       {/* 内容区 */}
       <div className="workflow-stage-canvas workflow-stage-scroll p-6">
-        {activeTasks.length > 0 && (
+        {activeTab === 'history' && activeTasks.length > 0 && (
           <div className="mb-4 p-3 bg-b50 border border-b75 rounded-lg">
             <h4 className="text-xs font-bold text-b400 mb-2 flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 animate-spin" />
@@ -330,8 +362,8 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
         ) : files.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-n100">
             <History className="w-16 h-16 mb-4 opacity-20" />
-            <p className="text-lg font-medium">暂无历史记录</p>
-            <p className="text-sm mt-2">开始生成你的第一个视频吧</p>
+            <p className="text-lg font-medium">{activeTab === 'recycle' ? '回收站为空' : '暂无历史记录'}</p>
+            <p className="text-sm mt-2">{activeTab === 'recycle' ? '删除的图片和视频会显示在这里' : '开始生成你的第一个作品吧'}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -340,7 +372,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
               const thumbnailUrl = getThumbnailUrl(file);
               const isVideoFile = isVideo(file);
               const isSelected = selectedTasks.has(file.fileId);
-              const canSelect = !!mediaUrl;
+              const canSelect = activeTab === 'recycle' || !!mediaUrl;
               const m = meta(file);
 
               return (
@@ -367,7 +399,12 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                     className="relative w-full aspect-video bg-n0 cursor-pointer"
                     onClick={() => canSelect && openPreview(file)}
                   >
-                    {mediaUrl ? (
+                    {activeTab === 'recycle' ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-n100 gap-2">
+                        {isVideoFile ? <Film className="w-16 h-16 opacity-20" /> : <ImageIcon className="w-16 h-16 opacity-20" />}
+                        <span className="text-xs">已移入回收站</span>
+                      </div>
+                    ) : mediaUrl ? (
                       <>
                         {isVideoFile ? (
                           <LazyVideo
@@ -407,7 +444,15 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                     </div>
 
                     <div className="flex gap-2">
-                      {mediaUrl ? (
+                      {activeTab === 'recycle' ? (
+                        <button
+                          onClick={() => restoreFiles([file])}
+                          disabled={isDeleting}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-medium transition-colors"
+                        >
+                          <RotateCcw className="w-3 h-3" />恢复
+                        </button>
+                      ) : mediaUrl ? (
                         <a
                           href={mediaUrl}
                           download
@@ -425,13 +470,14 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                           下载
                         </button>
                       )}
-                      <button
-                        onClick={() => openDeleteModal(file)}
-                        className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-danger hover:bg-red-500 text-white rounded text-xs font-medium transition-colors"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        删除
-                      </button>
+                      {activeTab === 'history' && file.fileId.startsWith('file_') && (
+                        <button
+                          onClick={() => openDeleteModal(file)}
+                          className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-danger hover:bg-red-500 text-white rounded text-xs font-medium transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3" />删除
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -459,7 +505,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                   <h3 className="text-base font-bold text-n800">
                     {deleteModal.mode === 'single' ? '确认删除' : `批量删除 ${deleteModal.files.length} 个文件`}
                   </h3>
-                  <p className="text-xs text-n100 mt-0.5">此操作不可撤销</p>
+                  <p className="text-xs text-n100 mt-0.5">文件将移入回收站，可随时恢复</p>
                 </div>
               </div>
               {!isDeleting && (
@@ -505,23 +551,6 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
               )}
             </div>
 
-            <div className="px-6 py-3">
-              <label className="flex items-center gap-3 p-3 rounded-md bg-n30 border border-n40 cursor-pointer hover:bg-n20 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={hardDelete}
-                  onChange={e => setHardDelete(e.target.checked)}
-                  disabled={isDeleting}
-                  className="w-4 h-4 rounded border-n40 bg-n0 text-danger focus:ring-red-500 focus:ring-offset-0"
-                />
-                <HardDrive className="w-4 h-4 text-n300" />
-                <div>
-                  <span className="text-sm text-n700">同时删除磁盘文件</span>
-                  <p className="text-[10px] text-n100 mt-0.5">勾选后将永久释放存储空间，文件无法恢复</p>
-                </div>
-              </label>
-            </div>
-
             <div className="flex items-center justify-end gap-3 px-6 py-4 bg-n30 border-t border-n40">
               {deleteProgress && (
                 <div className="flex-1 text-xs text-n100">
@@ -548,7 +577,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                 ) : (
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
-                    {hardDelete ? '永久删除' : '删除记录'}
+                    移入回收站
                   </>
                 )}
               </button>

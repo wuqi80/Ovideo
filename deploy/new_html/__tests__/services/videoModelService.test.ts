@@ -19,14 +19,14 @@ import {
 
 describe('public video model labels', () => {
   it('exposes runtime model versions with their capability suffixes', () => {
-    expect(getModelDisplayName('MiniMaxH3')).toBe('MiniMax H3 · 节点标准模型');
-    expect(getModelDisplayName('MiniMaxH3Fast')).toBe('MiniMax H3 Fast · 节点快速模型');
-    expect(getModelDisplayName('MiniMaxH3Mini')).toBe('MiniMax H3 Mini · 节点简化模型');
+    expect(getModelDisplayName('MiniMaxH3')).toBe('MiniMax H3 · 本地节点模型');
+    expect(getModelDisplayName('MiniMaxH3Fast')).toBe('MiniMax H3 Fast · 本地节点模型');
+    expect(getModelDisplayName('MiniMaxH3Mini')).toBe('MiniMax H3 Mini · 本地节点模型');
     expect(getModelDisplayName('Seedance2')).toBe('Seedance 2.0 · 多模态标准视频模型');
     expect(getModelDisplayName('Seedance2Fast')).toBe('Seedance 2.0 Fast · 多模态快速视频模型');
     expect(getModelDisplayName('Seedance2Mini')).toBe('Seedance 2.0 Mini · 多模态简化视频模型');
-    expect(getModelDisplayName('Wan2')).toBe('历史视频模型');
-    expect(getModelDisplayName('一阶')).toBe('历史视频模型');
+    expect(getModelDisplayName('Wan2')).toBe('Wan 2.2 · 本地节点模型');
+    expect(getModelDisplayName('一阶')).toBe('Smooth · 本地节点模型');
   });
 });
 
@@ -302,7 +302,7 @@ describe('buildVideoModelOptions', () => {
     expect(options.some(option => option.label.includes('MiniMax H3'))).toBe(true);
     expect(options.some(option => option.label.includes('Seedance 2.0'))).toBe(true);
     expect(options.some(option => option.label.includes('HappyHorse 1.0'))).toBe(true);
-    expect(options.find(option => option.value === 'MiniMaxH3')?.label).toBe('MiniMax H3 · 节点标准模型');
+    expect(options.find(option => option.value === 'MiniMaxH3')?.label).toBe('MiniMax H3 · 本地节点模型');
     expect(options.find(option => option.value === 'Seedance2Mini')?.label).toBe('Seedance 2.0 Mini · 多模态简化视频模型');
     expect(options.find(option => option.value === 'MINI')?.label).toBe('MiniMax Hailuo 2.3 · 首尾帧标准视频模型');
     expect(options.find(option => option.value === 'MINI')?.runtimeLabel).toBe('MiniMax-Hailuo-2.3');

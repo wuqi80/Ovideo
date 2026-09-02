@@ -234,7 +234,7 @@ def _seedance_manifest(
 def _minimax_h3_video_manifest(
     *,
     key: str = "MiniMaxH3",
-    label: str = "MiniMax H3 · 节点标准模型",
+    label: str = "MiniMax H3 · 本地节点模型",
     model_name: str = "MiniMax H3",
     profile: str = "standard",
     available: bool,
@@ -395,9 +395,9 @@ def build_video_model_manifest(
                     target=minimax_h3_target,
                 )
                 for key, label, model_name, profile in (
-                    ("MiniMaxH3", "MiniMax H3 · 节点标准模型", "MiniMax H3", "standard"),
-                    ("MiniMaxH3Fast", "MiniMax H3 Fast · 节点快速模型", "MiniMax H3 Fast", "fast"),
-                    ("MiniMaxH3Mini", "MiniMax H3 Mini · 节点简化模型", "MiniMax H3 Mini", "mini"),
+                    ("MiniMaxH3", "MiniMax H3 · 本地节点模型", "MiniMax H3", "standard"),
+                    ("MiniMaxH3Fast", "MiniMax H3 Fast · 本地节点模型", "MiniMax H3 Fast", "fast"),
+                    ("MiniMaxH3Mini", "MiniMax H3 Mini · 本地节点模型", "MiniMax H3 Mini", "mini"),
                 )
             ],
             _fixed_api_video_manifest(

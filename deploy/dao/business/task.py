@@ -258,6 +258,34 @@ class TaskDAO:
         return await db.fetch(query, user_id, limit)
 
     @staticmethod
+    async def get_task_ids_created_between(
+        task_types: List[str],
+        start_at: datetime,
+        end_at: datetime,
+        limit: int = 100,
+    ) -> List[str]:
+        """Return task IDs created in a UTC-naive window, regardless of terminal status."""
+        db = get_db_manager()
+        if not db or not task_types:
+            return []
+        rows = await db.fetch(
+            """
+            SELECT task_id
+            FROM tasks
+            WHERE task_type = ANY($1)
+              AND created_at >= $2
+              AND created_at < $3
+            ORDER BY created_at ASC
+            LIMIT $4
+            """,
+            task_types,
+            start_at,
+            end_at,
+            max(1, min(int(limit or 100), 1000)),
+        )
+        return [str(row["task_id"]) for row in rows if row.get("task_id")]
+
+    @staticmethod
     async def get_terminal_tasks_for_notifications(
         user_id: str,
         since_dt: Optional[datetime] = None,

@@ -9,12 +9,13 @@ import {
     STUDIO_AUDIO_MODEL_OPTIONS,
     STUDIO_IMAGE_MODEL_OPTIONS,
     STUDIO_TEXT_MODEL_OPTIONS,
-    STUDIO_VIDEO_MODEL_OPTIONS,
+    getStudioVideoModelOptions,
     normalizeStudioAudioModel,
     normalizeStudioImageModel,
     normalizeStudioTextModel,
     normalizeStudioVideoModel,
 } from '../services/modelOptions';
+import { MINIMAX_HAILUO_LIMIT_EVENT, isMiniMaxHailuoHiddenToday } from '@app/services/videoModelService';
 import {
     buildStudioNodeCreditRequest,
     summarizeStudioCreditQuote,
@@ -311,12 +312,31 @@ const NodeComponent: React.FC<NodeProps> = ({
   const [localPrompt, setLocalPrompt] = useState(node.data.prompt || '');
   const [inputHeight, setInputHeight] = useState(48);
   const [creditQuote, setCreditQuote] = useState<StudioCreditQuote | null>(null);
+  const [, setVideoModelLimitRevision] = useState(0);
   const [isCreditLoading, setIsCreditLoading] = useState(false);
   const isResizingInput = useRef(false);
   const inputStartDragY = useRef(0);
   const inputStartHeight = useRef(0);
 
   useEffect(() => { setLocalPrompt(node.data.prompt || ''); }, [node.data.prompt]);
+  useEffect(() => {
+    const refresh = () => {
+      setVideoModelLimitRevision(value => value + 1);
+      if (
+        node.type === NodeType.VIDEO_GENERATOR
+        && normalizeStudioVideoModel(node.data.model) === 'MINI'
+        && isMiniMaxHailuoHiddenToday()
+      ) {
+        onUpdate(node.id, { model: 'Seedance2Fast' });
+      }
+    };
+    window.addEventListener(MINIMAX_HAILUO_LIMIT_EVENT, refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.removeEventListener(MINIMAX_HAILUO_LIMIT_EVENT, refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [node.data.model, node.id, node.type, onUpdate]);
   const creditRequest = buildStudioNodeCreditRequest(node, localPrompt);
   const creditRequestKey = creditRequest ? JSON.stringify(creditRequest) : '';
   const creditSummary = creditRequest ? summarizeStudioCreditQuote(creditRequest, creditQuote) : null;
@@ -635,7 +655,7 @@ const NodeComponent: React.FC<NodeProps> = ({
      const isOpen = (isHovered || isInputFocused);
      let models: {l: string, v: string}[] = [];
      if (node.type === NodeType.VIDEO_GENERATOR) {
-        models = [...STUDIO_VIDEO_MODEL_OPTIONS];
+        models = [...getStudioVideoModelOptions()];
      } else if (node.type === NodeType.VIDEO_ANALYZER) {
          models = [{l: '当前版本已停用', v: 'disabled'}];
      } else if (node.type === NodeType.AUDIO_GENERATOR) {

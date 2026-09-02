@@ -75,5 +75,40 @@ async def test_final_failure_removes_task_from_pending_and_processing_queues(mon
     assert redis.zrem.await_args_list == [
         call(RedisConfig.TASK_QUEUE_KEY, task.task_id),
         call(RedisConfig.TASK_QUEUE_KEY, legacy_member),
+        call("comfyui:user_local_active:user-1", task.task_id),
         call(RedisConfig.PROCESSING_QUEUE_KEY, task.task_id),
     ]
+
+
+@pytest.mark.asyncio
+async def test_dequeue_processes_external_json_member_in_lite_worker():
+    redis = AsyncMock()
+    member = '{"task_id":"external-1","task_type":"seedance_t2v","data":{}}'
+    redis.zpopmin.return_value = [(member, 10.0)]
+    queue = TaskQueue(redis)
+    task = Task("external-1", "seedance_t2v", {}, user_id="user-1")
+    queue.get_task = AsyncMock(return_value=task)
+    queue._save_task = AsyncMock()
+
+    dequeued = await queue.dequeue()
+
+    assert dequeued is task
+    assert task.status == TaskStatus.PROCESSING
+    assert redis.zadd.await_count == 1
+    assert redis.zadd.await_args.args[0] == RedisConfig.PROCESSING_QUEUE_KEY
+    assert list(redis.zadd.await_args.args[1]) == ["external-1"]
+
+
+@pytest.mark.asyncio
+async def test_dequeue_returns_local_json_member_to_agent_queue():
+    redis = AsyncMock()
+    member = '{"task_id":"local-1","task_type":"i2v","data":{}}'
+    redis.zpopmin.return_value = [(member, 10.0)]
+    queue = TaskQueue(redis)
+    queue.get_task = AsyncMock()
+
+    dequeued = await queue.dequeue()
+
+    assert dequeued is None
+    redis.zadd.assert_awaited_once_with(RedisConfig.TASK_QUEUE_KEY, {member: 10})
+    queue.get_task.assert_not_awaited()

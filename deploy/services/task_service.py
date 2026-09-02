@@ -7,12 +7,14 @@ import logging
 import re
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from urllib.parse import urlparse
 
 from fastapi import HTTPException
 
 from task_queue import TaskQueue, Task
+from core.task_types import is_local_node_task
 
 logger = logging.getLogger(__name__)
 
@@ -182,8 +184,12 @@ class TaskService:
             reserve_task_credits,
         )
         from services.credit_service import InsufficientCreditsError
+        from dao_task import TaskDAO
 
         reserved = False
+        local_slot_reserved = False
+        daily_quota_key: Optional[str] = None
+        enqueued = False
         try:
             # The checker is injectable so queue/billing tests never need a
             # production database; runtime initialization uses the canonical
@@ -196,6 +202,56 @@ class TaskService:
                     task_type=task_type,
                     task_data=task_data,
                 )
+
+            if self.redis is not None and is_local_node_task(task_type):
+                active_rows = await TaskDAO.get_active_tasks_for_user(user_id, limit=200)
+                active_local_ids = [
+                    str(row.get("task_id"))
+                    for row in active_rows
+                    if row.get("task_id") and is_local_node_task(str(row.get("task_type") or ""))
+                ]
+                local_slot_reserved = await self.queue.reserve_local_user_slot(
+                    user_id,
+                    task_id,
+                    active_task_ids=active_local_ids,
+                    limit=2,
+                )
+                if not local_slot_reserved:
+                    raise HTTPException(
+                        status_code=429,
+                        detail={
+                            "code": "local_node_user_queue_limit",
+                            "message": "本地节点任务每位用户最多同时排队 2 个，请等待已有任务完成后再试",
+                        },
+                    )
+
+            if self.redis is not None and task_type in {"minimax_i2v", "minimax_morph"}:
+                shanghai_tz = ZoneInfo("Asia/Shanghai")
+                now_shanghai = datetime.now(shanghai_tz)
+                day_start = now_shanghai.replace(hour=0, minute=0, second=0, microsecond=0)
+                next_day = day_start + timedelta(days=1)
+                start_utc = day_start.astimezone(timezone.utc).replace(tzinfo=None)
+                end_utc = next_day.astimezone(timezone.utc).replace(tzinfo=None)
+                seed_ids = await TaskDAO.get_task_ids_created_between(
+                    ["minimax_i2v", "minimax_morph"],
+                    start_utc,
+                    end_utc,
+                    limit=10,
+                )
+                daily_quota_key = f"ostory:quota:minimax_hailuo_23:{day_start.date().isoformat()}"
+                ttl_seconds = int((next_day - now_shanghai).total_seconds()) + 3600
+                quota_reserved = await self.queue.reserve_daily_quota(
+                    daily_quota_key,
+                    task_id,
+                    seed_ids,
+                    limit=3,
+                    ttl_seconds=ttl_seconds,
+                )
+                if not quota_reserved:
+                    raise HTTPException(
+                        status_code=429,
+                        detail={"code": "minimax_hailuo_daily_limit", "message": "今日已达限额"},
+                    )
             try:
                 reserved = bool(await reserve_task_credits(
                     task_id=task_id,
@@ -220,6 +276,7 @@ class TaskService:
             success = await self.queue.enqueue(task)
             if not success:
                 raise HTTPException(status_code=500, detail="任务入队失败")
+            enqueued = True
         except Exception:
             if reserved:
                 try:
@@ -231,6 +288,16 @@ class TaskService:
                     )
                 except Exception as release_error:
                     logger.error("释放未入队任务创作点数失败 %s: %s", task_id, release_error)
+            if local_slot_reserved and not enqueued:
+                try:
+                    await self.queue.release_local_user_slot(user_id, task_id)
+                except Exception as release_error:
+                    logger.error("释放未入队任务本地节点名额失败 %s: %s", task_id, release_error)
+            if daily_quota_key and not enqueued:
+                try:
+                    await self.queue.release_daily_quota(daily_quota_key, task_id)
+                except Exception as release_error:
+                    logger.error("释放未入队任务海螺日配额失败 %s: %s", task_id, release_error)
             raise
 
         logger.info(f"✅ 任务已提交: {task_id} (type={task_type}, user={user_id})")

@@ -13,6 +13,7 @@ from datetime import datetime
 from enum import Enum
 
 from cluster_config import RedisConfig, QueueConfig
+from core.task_types import is_external_api_task
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,118 @@ class TaskQueue:
         self.redis = redis_client
 
     @staticmethod
+    def _local_user_slot_key(user_id: str) -> str:
+        return f"comfyui:user_local_active:{user_id}"
+
+    async def reserve_local_user_slot(
+        self,
+        user_id: str,
+        task_id: str,
+        active_task_ids: Optional[List[str]] = None,
+        limit: int = 2,
+    ) -> bool:
+        """Atomically reserve one of a user's shared-local-node queue slots."""
+        script = """
+        local key = KEYS[1]
+        local task_prefix = ARGV[1]
+        local current_id = ARGV[2]
+        local now = tonumber(ARGV[3])
+        local max_count = tonumber(ARGV[4])
+        for i = 5, #ARGV do
+            redis.call('ZADD', key, 'NX', now, ARGV[i])
+        end
+        local members = redis.call('ZRANGE', key, 0, -1, 'WITHSCORES')
+        for i = 1, #members, 2 do
+            local member = members[i]
+            local score = tonumber(members[i + 1]) or 0
+            local status = redis.call('HGET', task_prefix .. member, 'status')
+            if status == 'completed' or status == 'failed' or status == 'cancelled' or status == 'timeout' then
+                redis.call('ZREM', key, member)
+            elseif not status and score > 0 and score < now - 120 then
+                redis.call('ZREM', key, member)
+            end
+        end
+        if redis.call('ZSCORE', key, current_id) then
+            redis.call('EXPIRE', key, 604800)
+            return 1
+        end
+        if redis.call('ZCARD', key) >= max_count then
+            redis.call('EXPIRE', key, 604800)
+            return 0
+        end
+        redis.call('ZADD', key, now, current_id)
+        redis.call('EXPIRE', key, 604800)
+        return 1
+        """
+        seed_ids = [str(value) for value in (active_task_ids or []) if value]
+        result = await self.redis.eval(
+            script,
+            1,
+            self._local_user_slot_key(user_id),
+            RedisConfig.TASK_STATUS_PREFIX,
+            task_id,
+            int(time.time()),
+            max(1, int(limit)),
+            *seed_ids,
+        )
+        return bool(int(result or 0))
+
+    async def release_local_user_slot(self, user_id: Optional[str], task_id: str) -> None:
+        if user_id:
+            await self.redis.zrem(self._local_user_slot_key(user_id), task_id)
+
+    async def reserve_daily_quota(
+        self,
+        quota_key: str,
+        task_id: str,
+        seed_task_ids: Optional[List[str]],
+        limit: int,
+        ttl_seconds: int,
+    ) -> bool:
+        """Atomically seed and reserve a platform-wide daily submission quota."""
+        script = """
+        local key = KEYS[1]
+        local current_id = ARGV[1]
+        local max_count = tonumber(ARGV[2])
+        local ttl = tonumber(ARGV[3])
+        for i = 4, #ARGV do redis.call('SADD', key, ARGV[i]) end
+        if redis.call('SISMEMBER', key, current_id) == 1 then
+            redis.call('EXPIRE', key, ttl)
+            return 1
+        end
+        if redis.call('SCARD', key) >= max_count then
+            redis.call('EXPIRE', key, ttl)
+            return 0
+        end
+        redis.call('SADD', key, current_id)
+        redis.call('EXPIRE', key, ttl)
+        return 1
+        """
+        seeds = [str(value) for value in (seed_task_ids or []) if value]
+        result = await self.redis.eval(
+            script,
+            1,
+            quota_key,
+            task_id,
+            max(1, int(limit)),
+            max(60, int(ttl_seconds)),
+            *seeds,
+        )
+        return bool(int(result or 0))
+
+    async def release_daily_quota(self, quota_key: Optional[str], task_id: str) -> None:
+        if quota_key:
+            await self.redis.srem(quota_key, task_id)
+
+    async def _release_local_user_slot_for_task(self, task: Optional[Task]) -> None:
+        if not task:
+            return
+        try:
+            await self.release_local_user_slot(task.user_id, task.task_id)
+        except Exception as exc:
+            logger.warning("释放用户本地节点队列名额失败 %s: %s", task.task_id, exc)
+
+    @staticmethod
     def _map_task_category(task_type: str) -> str:
         if not task_type:
             return 'image'
@@ -203,6 +316,8 @@ class TaskQueue:
                 return None
             
             task_id = result[0][0] if isinstance(result[0], tuple) else result[0]
+            if isinstance(task_id, bytes):
+                task_id = task_id.decode("utf-8")
 
             # R5 防御：SmartApiRouter 投递的 api_call 任务，member 是整个 JSON dict（不写 task hash），
             # 设计上只能由 GPU agent 的 /api/agent/poll 消费。若被本地 lite worker 先 zpopmin 取到，
@@ -212,9 +327,14 @@ class TaskQueue:
             try:
                 _parsed = json.loads(task_id)
                 if isinstance(_parsed, dict) and "task_id" in _parsed:
-                    await self.redis.zadd(RedisConfig.TASK_QUEUE_KEY, {task_id: 10})
-                    logger.info("dequeue: 识别到 api_call 任务（JSON member），放回队列交给 GPU agent")
-                    return None
+                    parsed_task_type = str(_parsed.get("task_type") or "")
+                    if is_external_api_task(parsed_task_type):
+                        task_id = str(_parsed["task_id"])
+                        logger.info("dequeue: 恢复 JSON member 外部 API 任务 %s", task_id)
+                    else:
+                        await self.redis.zadd(RedisConfig.TASK_QUEUE_KEY, {task_id: 10})
+                        logger.info("dequeue: 识别到本地节点 JSON 任务，放回队列交给 GPU agent")
+                        return None
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
 
@@ -283,6 +403,7 @@ class TaskQueue:
                 RedisConfig.COMPLETED_QUEUE_KEY,
                 {task_id: int(time.time())}
             )
+            await self._release_local_user_slot_for_task(task)
             
             # 🆕 同步到数据库
             try:
@@ -445,6 +566,7 @@ class TaskQueue:
                     RedisConfig.FAILED_QUEUE_KEY,
                     {task_id: int(time.time())}
                 )
+                await self._release_local_user_slot_for_task(task)
                 
                 logger.error(f"任务 {task_id} 最终失败: {error}")
                 
@@ -635,6 +757,7 @@ class TaskQueue:
             return False
 
         logger.info(f"任务 {task_id} 已取消 (redis={redis_ok}, db={db_ok})")
+        await self._release_local_user_slot_for_task(task)
         try:
             from services.task_credit_billing_service import release_task_credits
             task_data = task.data if task else None
@@ -680,6 +803,7 @@ class TaskQueue:
             # 删除任务数据
             task_key = f"{RedisConfig.TASK_STATUS_PREFIX}{task_id}"
             await self.redis.delete(task_key)
+            await self._release_local_user_slot_for_task(task)
             
             logger.info(f"任务 {task_id} 已彻底删除")
             return True

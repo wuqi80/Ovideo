@@ -172,7 +172,7 @@ async def test_video_capabilities_expose_only_h3_processing_node_models(monkeypa
     assert h3["available"] is True
     assert h3["preferred_agent_id"] == "agent_gpu2"
     assert h3["preferred_node_id"] == "agent_gpu2"
-    assert h3["label"] == "MiniMax H3 · 节点标准模型"
+    assert h3["label"] == "MiniMax H3 · 本地节点模型"
 
 
 async def test_video_capabilities_hide_seedance_model_marked_error_in_health_cache(monkeypatch):

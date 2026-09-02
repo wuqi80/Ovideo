@@ -1,6 +1,7 @@
 import {
   SELECTABLE_MODELS,
   getModelDisplayName,
+  isMiniMaxHailuoHiddenToday,
   isVideoModelKey,
   type VideoModel,
 } from '@app/services/videoModelService';
@@ -32,6 +33,12 @@ export const STUDIO_IMAGE_MODEL_OPTIONS = [
 export const STUDIO_VIDEO_MODEL_OPTIONS: ReadonlyArray<{ l: string; v: VideoModel }> = (
   SELECTABLE_MODELS.map(model => ({ l: getModelDisplayName(model), v: model }))
 );
+
+export function getStudioVideoModelOptions(): ReadonlyArray<{ l: string; v: VideoModel }> {
+  return STUDIO_VIDEO_MODEL_OPTIONS.filter(option => (
+    option.v !== 'MINI' || !isMiniMaxHailuoHiddenToday()
+  ));
+}
 
 export const STUDIO_AUDIO_MODEL_OPTIONS = [
   { l: STUDIO_AUDIO_MODEL_LABEL, v: STUDIO_AUDIO_MODEL_SPEECH_HD },

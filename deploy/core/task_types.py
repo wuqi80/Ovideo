@@ -24,3 +24,8 @@ def is_external_api_task(task_type: str) -> bool:
     if task_type in EXTERNAL_API_TASK_TYPES_EXACT:
         return True
     return any(task_type.startswith(prefix) for prefix in EXTERNAL_API_TASK_TYPE_PREFIXES)
+
+
+def is_local_node_task(task_type: str) -> bool:
+    """Return True for work that must occupy the shared local GPU node."""
+    return bool(task_type) and not is_external_api_task(task_type)

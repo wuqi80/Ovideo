@@ -20,9 +20,12 @@ import {
     inferSeedanceTaskType,
     isDashScopeVideoModel,
     isMiniMaxH3Model,
+    isMiniMaxHailuoDailyLimitError,
+    isMiniMaxHailuoHiddenToday,
     isSeedanceAgentPlanModel,
     isSeedanceVideoModel,
     makeDefaultDashScopeParams,
+    MINIMAX_HAILUO_LIMIT_EVENT,
     normalizeMiniMaxVideoParams,
     seedanceSubModelForVideoModel,
     supportsSeedanceMultimodalModel,
@@ -98,7 +101,8 @@ import {
 import { getVideoSegments } from '../services/episodeDataService';
 import { buildVideoTaskImport } from '../utils/videoTaskImport';
 import { buildEmptyTaskGroup } from '../utils/videoTaskInsert';
-import { resolveVideoImageIdentifier } from '../utils/videoImageIdentifier';
+import { extractFileId, resolveVideoImageIdentifier } from '../utils/videoImageIdentifier';
+import { deleteEntityFile } from '../services/entityFileService';
 import { reconcileActiveVideoTasks } from '../services/videoTaskReconciliation';
 import { hasStoredVideoResult, mergeStoredVideoResult } from '../utils/videoResultPresentation';
 import {
@@ -332,6 +336,18 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     });
     const [isLoading, setIsLoading] = useState(true);
     const [videoCapabilities, setVideoCapabilities] = useState<VideoCapabilityManifest | null>(null);
+    const [miniMaxHailuoHidden, setMiniMaxHailuoHidden] = useState(isMiniMaxHailuoHiddenToday);
+    useEffect(() => {
+        const refreshLimit = () => setMiniMaxHailuoHidden(isMiniMaxHailuoHiddenToday());
+        window.addEventListener(MINIMAX_HAILUO_LIMIT_EVENT, refreshLimit);
+        window.addEventListener('focus', refreshLimit);
+        const timer = window.setInterval(refreshLimit, 60_000);
+        return () => {
+            window.removeEventListener(MINIMAX_HAILUO_LIMIT_EVENT, refreshLimit);
+            window.removeEventListener('focus', refreshLimit);
+            window.clearInterval(timer);
+        };
+    }, []);
     useEffect(() => {
         let cancelled = false;
         const refresh = () => {
@@ -349,13 +365,17 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         };
     }, []);
     const videoCapabilityModels = videoCapabilities?.models ?? null;
+    const visibleSelectableModels = useMemo(
+        () => SELECTABLE_MODELS.filter(model => !(miniMaxHailuoHidden && model === 'MINI')),
+        [miniMaxHailuoHidden],
+    );
     const selectableVideoModelOptions = useMemo(
-        () => buildVideoModelOptions(videoCapabilityModels, SELECTABLE_MODELS),
-        [videoCapabilityModels],
+        () => buildVideoModelOptions(videoCapabilityModels, visibleSelectableModels),
+        [videoCapabilityModels, visibleSelectableModels],
     );
     const allVideoModelOptions = useMemo(
-        () => buildVideoModelOptions(videoCapabilityModels, SELECTABLE_MODELS),
-        [videoCapabilityModels],
+        () => buildVideoModelOptions(videoCapabilityModels, visibleSelectableModels),
+        [videoCapabilityModels, visibleSelectableModels],
     );
     const videoCapabilityReady = Boolean(
         videoCapabilities
@@ -2280,9 +2300,20 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     }, [globalModel, saveSession]);
 
     // 删除单个视频（从多视频数组中）
-    const deleteVideo = useCallback((uuid: string, videoIndex: number) => {
-        if (!confirm('确定要删除这个视频吗？')) return;
+    const deleteVideo = useCallback(async (uuid: string, videoIndex: number) => {
+        if (!confirm('确定把这个视频移入回收站吗？')) return;
         const deletedUrl = tasksStatus[uuid]?.videos?.[videoIndex];
+        const fileId = extractFileId(deletedUrl);
+        if (!fileId) {
+            showToast('该视频缺少可恢复的存储记录，未执行删除');
+            return;
+        }
+        try {
+            await deleteEntityFile(fileId);
+        } catch (error: any) {
+            showToast(`移入回收站失败: ${error?.message || '未知错误'}`);
+            return;
+        }
         const wasBeautifyVideo = !!deletedUrl
             && !!tasksStatus[uuid]?.result
             && normVideoKey(tasksStatus[uuid]?.result) === normVideoKey(deletedUrl);
@@ -2326,7 +2357,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             };
         });
         
-        showToast(wasBeautifyVideo ? '视频已删除，请重新选择美化使用' : '视频已删除');
+        showToast(wasBeautifyVideo ? '视频已移入回收站，请重新选择美化使用' : '视频已移入回收站');
         
         // 🔧 删除视频后立即保存会话
         setTimeout(() => saveSession(), 100);
@@ -2851,7 +2882,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             
         } catch (error: any) {
             console.error('任务提交失败:', error);
-            showToast('任务提交失败: ' + error.message);
+            showToast(isMiniMaxHailuoDailyLimitError(error) ? '今日已达限额' : '任务提交失败: ' + error.message);
             setTasksStatus(prev => ({
                 ...prev,
                 [uuid]: { ...prev[uuid], state: 'failed', error: error.message }

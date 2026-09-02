@@ -26,6 +26,50 @@ class EntityFileDAO:
         return int(total or 0)
 
     @staticmethod
+    async def get_deleted_user_files(
+        user_id: str,
+        file_type: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return []
+        conditions = ["user_id = $1", "is_deleted = TRUE"]
+        params: list[Any] = [user_id]
+        if file_type:
+            conditions.append(f"file_type = ${len(params) + 1}")
+            params.append(file_type)
+        params.extend([limit, offset])
+        limit_idx = len(params) - 1
+        rows = await db.fetch(
+            f"""
+            SELECT * FROM files
+            WHERE {' AND '.join(conditions)}
+            ORDER BY deleted_at DESC NULLS LAST, created_at DESC
+            LIMIT ${limit_idx} OFFSET ${limit_idx + 1}
+            """,
+            *params,
+        )
+        return [dict(row) for row in rows]
+
+    @staticmethod
+    async def count_deleted_user_files(user_id: str, file_type: Optional[str] = None) -> int:
+        db = get_db_manager()
+        if not db:
+            return 0
+        conditions = ["user_id = $1", "is_deleted = TRUE"]
+        params: list[Any] = [user_id]
+        if file_type:
+            conditions.append("file_type = $2")
+            params.append(file_type)
+        total = await db.fetchval(
+            f"SELECT COUNT(*) FROM files WHERE {' AND '.join(conditions)}",
+            *params,
+        )
+        return int(total or 0)
+
+    @staticmethod
     async def get_entity_files(
         entity_type: str,
         entity_id: str,
@@ -209,6 +253,21 @@ class EntityFileDAO:
             file_id,
         )
         return row is not None
+
+    @staticmethod
+    async def restore(file_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return None
+        row = await db.fetchrow(
+            """UPDATE files
+               SET is_deleted = FALSE, deleted_at = NULL
+               WHERE file_id = $1 AND user_id = $2 AND is_deleted = TRUE
+               RETURNING *""",
+            file_id,
+            user_id,
+        )
+        return dict(row) if row else None
 
     @staticmethod
     async def hard_delete(file_id: str) -> Optional[Dict[str, Any]]:

@@ -7,6 +7,8 @@ export interface EntityFile {
   fileRole: string;
   isSelected: boolean;
   createdAt: string;
+  deletedAt?: string;
+  isDeleted?: boolean;
   metadata?: Record<string, unknown>;
   entityType?: string;
   entityId?: string;
@@ -20,6 +22,8 @@ function normalize(row: any): EntityFile {
     fileRole: row.file_role ?? row.fileRole ?? '',
     isSelected: !!(row.is_selected ?? row.isSelected),
     createdAt: row.created_at ?? row.createdAt ?? '',
+    deletedAt: row.deleted_at ?? row.deletedAt,
+    isDeleted: !!(row.is_deleted ?? row.isDeleted),
     metadata: row.metadata,
     entityType: row.entity_type ?? row.entityType,
     entityId: row.entity_id ?? row.entityId,
@@ -64,6 +68,26 @@ export async function fetchUserFiles(
   };
 }
 
+export async function fetchDeletedUserFiles(
+  fileType?: string,
+  limit: number = 100,
+  offset: number = 0,
+): Promise<{ items: EntityFile[]; total: number }> {
+  const params = new URLSearchParams();
+  if (fileType) params.set('file_type', fileType);
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+  const data = await apiJson<{ items?: any[]; total?: number }>(
+    `/api/user-files/recycle-bin?${params}`,
+    { method: 'GET' },
+    'fetchDeletedUserFiles',
+  );
+  return {
+    items: (data.items || []).map(normalize),
+    total: data.total ?? 0,
+  };
+}
+
 export async function selectEntityFile(
   fileId: string,
   entityType: string,
@@ -81,6 +105,13 @@ export async function deleteEntityFile(fileId: string): Promise<void> {
   await apiJson<{ success: boolean }>(`/api/entity-files/${fileId}`, {
     method: 'DELETE',
   }, 'deleteEntityFile');
+}
+
+export async function restoreEntityFile(fileId: string): Promise<EntityFile> {
+  const data = await apiJson<{ file: any }>(`/api/entity-files/${fileId}/restore`, {
+    method: 'POST',
+  }, 'restoreEntityFile');
+  return normalize(data.file);
 }
 
 export async function hardDeleteEntityFile(fileId: string): Promise<{ freed_bytes: number }> {

@@ -7,6 +7,7 @@ import {
     inferSeedanceTaskType,
     isComfyUIModel,
     isMiniMaxH3Model,
+    markMiniMaxHailuoHiddenToday,
     isSeedanceVideoModel,
     normalizeMiniMaxVideoParams,
     normalizeSeedanceMediaForSubmission,
@@ -107,7 +108,19 @@ function hasAuthHeader(): boolean {
 async function throwResponseError(response: Response, fallback: string): Promise<never> {
     const error = await response.json().catch(() => ({ detail: fallback }));
     const detail = error?.detail ?? error?.message;
-    throw new Error(typeof detail === 'string' && detail ? detail : fallback);
+    if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+        const message = String(detail.message || detail.error || fallback);
+        const result: any = new Error(message);
+        result.status = response.status;
+        Object.assign(result, detail);
+        if (detail.code === 'minimax_hailuo_daily_limit') {
+            markMiniMaxHailuoHiddenToday();
+        }
+        throw result;
+    }
+    const result: any = new Error(typeof detail === 'string' && detail ? detail : fallback);
+    result.status = response.status;
+    throw result;
 }
 
 export function normalizeVideoMediaRef(ref: string): string {

@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 import pytest
 from fastapi import HTTPException
 
@@ -14,6 +16,18 @@ class _Queue:
     async def enqueue(self, task):
         self.tasks.append(task)
         return self.result
+
+    async def reserve_local_user_slot(self, *_args, **_kwargs):
+        return True
+
+    async def release_local_user_slot(self, *_args, **_kwargs):
+        return None
+
+    async def reserve_daily_quota(self, *_args, **_kwargs):
+        return True
+
+    async def release_daily_quota(self, *_args, **_kwargs):
+        return None
 
 
 @pytest.mark.asyncio
@@ -109,3 +123,55 @@ async def test_submit_maps_insufficient_credits_to_payment_required(monkeypatch)
     assert exc_info.value.status_code == 402
     assert "创作点数不足" in str(exc_info.value.detail)
     assert service.queue.tasks == []
+
+
+@pytest.mark.asyncio
+async def test_submit_rejects_third_active_local_node_task_before_billing(monkeypatch):
+    from dao_task import TaskDAO
+
+    async def reserve_credits(**_kwargs):
+        raise AssertionError("billing must not run after queue limit rejection")
+
+    monkeypatch.setattr(
+        TaskDAO,
+        "get_active_tasks_for_user",
+        AsyncMock(return_value=[
+            {"task_id": "old-1", "task_type": "i2v"},
+            {"task_id": "old-2", "task_type": "upscale"},
+        ]),
+    )
+    monkeypatch.setattr(task_credit_billing_service, "reserve_task_credits", reserve_credits)
+
+    service = TaskService(object(), model_access_checker=AsyncMock(return_value={}))
+    service.queue = _Queue()
+    service.queue.reserve_local_user_slot = AsyncMock(return_value=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.submit("i2v", {}, "user-1", prepare=False, task_id="new-local")
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.detail["code"] == "local_node_user_queue_limit"
+
+
+@pytest.mark.asyncio
+async def test_submit_rejects_fourth_platform_hailuo_task_with_exact_message(monkeypatch):
+    from unittest.mock import AsyncMock
+    from dao_task import TaskDAO
+
+    monkeypatch.setattr(
+        TaskDAO,
+        "get_task_ids_created_between",
+        AsyncMock(return_value=["hailuo-1", "hailuo-2", "hailuo-3"]),
+    )
+    service = TaskService(object(), model_access_checker=AsyncMock(return_value={}))
+    service.queue = _Queue()
+    service.queue.reserve_daily_quota = AsyncMock(return_value=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.submit("minimax_i2v", {}, "user-1", prepare=False, task_id="hailuo-4")
+
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.detail == {
+        "code": "minimax_hailuo_daily_limit",
+        "message": "今日已达限额",
+    }

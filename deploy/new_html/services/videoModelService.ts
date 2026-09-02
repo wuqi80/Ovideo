@@ -316,19 +316,19 @@ export function inferDashScopeTaskType(
 
 export function getModelDisplayName(model: VideoModel): string {
   const modelNameMap: Record<VideoModel, string> = {
-    Wan2: '历史视频模型',
-    LTXNode1: '历史视频模型',
-    WanNode2: '历史视频模型',
-    '一阶': '历史视频模型',
-    '二阶': '历史视频模型',
-    '三阶': '历史视频模型',
-    '四阶': '历史视频模型',
-    '五阶': '历史视频模型',
-    '六阶': '历史视频模型',
-    '七阶': '历史视频模型',
-    MiniMaxH3: 'MiniMax H3 · 节点标准模型',
-    MiniMaxH3Fast: 'MiniMax H3 Fast · 节点快速模型',
-    MiniMaxH3Mini: 'MiniMax H3 Mini · 节点简化模型',
+    Wan2: 'Wan 2.2 · 本地节点模型',
+    LTXNode1: 'LTX Video · 本地节点模型',
+    WanNode2: 'Wan 2.2 · 本地节点模型',
+    '一阶': 'Smooth · 本地节点模型',
+    '二阶': 'Dawasi · 本地节点模型',
+    '三阶': 'Hunyuan Video · 本地节点模型',
+    '四阶': 'LTX Video · 本地节点模型',
+    '五阶': 'Turbo 2.2 · 本地节点模型',
+    '六阶': 'Turbo 2.1 · 本地节点模型',
+    '七阶': 'SVD Wan · 本地节点模型',
+    MiniMaxH3: 'MiniMax H3 · 本地节点模型',
+    MiniMaxH3Fast: 'MiniMax H3 Fast · 本地节点模型',
+    MiniMaxH3Mini: 'MiniMax H3 Mini · 本地节点模型',
     Veo: 'Veo 3.1 Fast · 高质量快速视频模型',
     MINI: 'MiniMax Hailuo 2.3 · 首尾帧标准视频模型',
     Sora2: 'Sora 2 · 长镜头视频模型',
@@ -357,6 +357,41 @@ export const SELECTABLE_MODELS: VideoModel[] = [
   'MINI', 'Veo', 'Sora2', '大能',
   'Kling', 'Vidu', 'HappyHorse',
 ];
+
+export const MINIMAX_HAILUO_LIMIT_EVENT = 'ostory:minimax-hailuo-limit-changed';
+const MINIMAX_HAILUO_LIMIT_STORAGE_KEY = 'ostory:minimax-hailuo-limit-date';
+
+export function getChinaDateKey(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+export function isMiniMaxHailuoHiddenToday(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(MINIMAX_HAILUO_LIMIT_STORAGE_KEY) === getChinaDateKey();
+  } catch {
+    return false;
+  }
+}
+
+export function markMiniMaxHailuoHiddenToday(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(MINIMAX_HAILUO_LIMIT_STORAGE_KEY, getChinaDateKey());
+  } catch {}
+  window.dispatchEvent(new CustomEvent(MINIMAX_HAILUO_LIMIT_EVENT));
+}
+
+export function isMiniMaxHailuoDailyLimitError(error: unknown): boolean {
+  const candidate = error as { code?: string; message?: string } | null;
+  return candidate?.code === 'minimax_hailuo_daily_limit'
+    || String(candidate?.message || '').includes('今日已达限额');
+}
 
 export function getVideoCreditEstimateParams(
   model: VideoModel,

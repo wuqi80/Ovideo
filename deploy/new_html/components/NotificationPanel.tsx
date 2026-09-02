@@ -61,7 +61,7 @@ const KIND_LABEL: Record<string, string> = {
     'seedance-fast': getModelDisplayName('Seedance2Fast'),
     'seedance-mini': getModelDisplayName('Seedance2Mini'),
     'seedance-1.5': '历史视频模型',
-    wan2: '历史视频模型', 'wan2-fast': '历史视频模型',
+    wan2: 'Wan 2.2 · 本地节点模型', 'wan2-fast': 'Wan 2.2 · 本地节点模型',
     kling: getModelDisplayName('Kling'),
     vidu: getModelDisplayName('Vidu'),
     happyhorse: getModelDisplayName('HappyHorse'),

@@ -61,6 +61,25 @@ async def list_user_files(
     return {"success": True, "items": _normalize_file_rows(rows), "total": total}
 
 
+async def list_deleted_user_files(
+    *,
+    user_id: str,
+    file_type: Optional[str],
+    limit: int,
+    offset: int,
+    entity_file_dao: Any,
+) -> Dict[str, Any]:
+    capped_limit = min(limit, 500)
+    rows = await entity_file_dao.get_deleted_user_files(
+        user_id,
+        file_type,
+        capped_limit,
+        offset,
+    )
+    total = await entity_file_dao.count_deleted_user_files(user_id, file_type)
+    return {"success": True, "items": _normalize_file_rows(rows), "total": total}
+
+
 async def list_entity_files(
     *,
     entity_type: str,
@@ -227,6 +246,18 @@ async def soft_delete_entity_file(
     if not ok:
         raise EntityFileNotFound("File not found or deleted")
     return {"success": True}
+
+
+async def restore_entity_file(
+    *,
+    file_id: str,
+    user_id: str,
+    entity_file_dao: Any,
+) -> Dict[str, Any]:
+    row = await entity_file_dao.restore(file_id, user_id)
+    if not row:
+        raise EntityFileNotFound("Deleted file not found or access denied")
+    return {"success": True, "file": row}
 
 
 async def hard_delete_entity_file(

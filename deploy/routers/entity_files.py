@@ -15,7 +15,9 @@ from services.entity_file_service import (
     hard_delete_entity_files_batch as hard_delete_entity_files_batch_service,
     link_entity_file as link_entity_file_service,
     list_entity_files,
+    list_deleted_user_files,
     list_user_files,
+    restore_entity_file as restore_entity_file_service,
     run_entity_file_migration as run_entity_file_migration_service,
     select_entity_file as select_entity_file_service,
     soft_delete_entity_file,
@@ -115,6 +117,22 @@ def create_entity_files_router(
             limit=limit,
             offset=offset,
             file_dao=FileDAO,
+            entity_file_dao=EntityFileDAO,
+        )
+
+    @router.get("/api/user-files/recycle-bin")
+    async def get_deleted_user_files(
+        file_type: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+        user_id: str = Depends(get_current_user),
+    ):
+        user_id = await canonical_user_id(user_id)
+        return await list_deleted_user_files(
+            user_id=user_id,
+            file_type=file_type,
+            limit=limit,
+            offset=offset,
             entity_file_dao=EntityFileDAO,
         )
 
@@ -229,6 +247,21 @@ def create_entity_files_router(
             return await soft_delete_entity_file(file_id=file_id, entity_file_dao=EntityFileDAO)
         except EntityFileNotFound as exc:
             raise HTTPException(404, "文件不存在或已删除") from exc
+
+    @router.post("/api/entity-files/{file_id}/restore")
+    async def restore_entity_file(
+        file_id: str,
+        user_id: str = Depends(get_current_user),
+    ):
+        canonical_id = await canonical_user_id(user_id)
+        try:
+            return await restore_entity_file_service(
+                file_id=file_id,
+                user_id=canonical_id,
+                entity_file_dao=EntityFileDAO,
+            )
+        except EntityFileNotFound as exc:
+            raise HTTPException(404, "回收站中未找到该文件") from exc
 
     @router.delete("/api/entity-files/{file_id}/hard")
     async def hard_delete_entity_file(

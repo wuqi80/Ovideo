@@ -30,6 +30,20 @@ class FakeEntityFileDAO:
     raise_sync = False
 
     @staticmethod
+    async def get_deleted_user_files(user_id, file_type, limit, offset):
+        return [{"file_id": "file_deleted", "metadata": '{"model":"Wan"}'}]
+
+    @staticmethod
+    async def count_deleted_user_files(user_id, file_type):
+        return 1
+
+    @staticmethod
+    async def restore(file_id, user_id):
+        if file_id == "missing":
+            return None
+        return {"file_id": file_id, "user_id": user_id, "is_deleted": False}
+
+    @staticmethod
     async def count_user_files(user_id, file_type):
         return 7
 
@@ -115,6 +129,25 @@ async def test_list_entity_files_caps_limit():
 
     assert result["success"] is True
     assert result["limit"] == 200
+
+
+async def test_list_deleted_user_files_and_restore():
+    result = await entity_file_service.list_deleted_user_files(
+        user_id="user_1",
+        file_type=None,
+        limit=999,
+        offset=0,
+        entity_file_dao=FakeEntityFileDAO,
+    )
+    assert result["total"] == 1
+    assert result["items"][0]["metadata"] == {"model": "Wan"}
+
+    restored = await entity_file_service.restore_entity_file(
+        file_id="file_deleted",
+        user_id="user_1",
+        entity_file_dao=FakeEntityFileDAO,
+    )
+    assert restored["file"]["is_deleted"] is False
 
 
 async def test_link_entity_file_raises_when_missing():
