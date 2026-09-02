@@ -39,7 +39,12 @@ except ImportError:  # Direct execution on the Windows GPU host.
 
 ROOT = _BOOTSTRAP_ROOT
 AGENT_DIR = ROOT / "agent"
-TOKEN_FILE = ROOT / "config" / "agent-token.txt"
+TOKEN_FILE = Path(
+    os.environ.get(
+        "OSTORY_GPU_AGENT_TOKEN_FILE",
+        str(ROOT / "config" / "agent-token.txt"),
+    )
+)
 
 GPU2_QWEN_MODEL_FILES = {
     "diffusion": "qwen_image_edit_2509_fp8_e4m3fn.safetensors",
