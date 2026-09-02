@@ -61,6 +61,17 @@ def resolve_task_billing(task_type: str, task_data: Optional[Dict[str, Any]]) ->
             "surface": "audio",
         }
 
+    if normalized_type == "image_upscale":
+        return {
+            "feature_key": "image_upscale",
+            "params": {
+                "target_long_edge": min(50000, max(4096, _non_negative_int(data.get("target_long_edge")))),
+                "text_clarity": data.get("text_clarity") is True,
+                "dpi": min(300, max(72, _non_negative_int(data.get("dpi")))),
+            },
+            "surface": "image_upscale",
+        }
+
     if normalized_type in ENHANCEMENT_TASK_TYPES:
         return {
             "feature_key": "video_enhancement",

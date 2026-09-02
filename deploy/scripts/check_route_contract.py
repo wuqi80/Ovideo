@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 313
-DEFAULT_EXPECTED_OPERATIONS = 375
+DEFAULT_EXPECTED_PATHS = 321
+DEFAULT_EXPECTED_OPERATIONS = 383
 DEFAULT_EXPECTED_FRONTEND_ROUTES = 36
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
@@ -2917,8 +2917,8 @@ def check_entity_file_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 9:
-        fail(f"routers/entity_files.py should own 9 entity-file route registrations, found {route_count}")
+    if route_count != 11:
+        fail(f"routers/entity_files.py should own 11 entity-file route registrations, found {route_count}")
 
     purity_violations = []
     for snippet in ["get_db_manager_func", "get_db_manager"]:

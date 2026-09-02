@@ -179,6 +179,7 @@ SEEDANCE_DEFAULT_MODEL_MAP: Dict[str, str] = {
 }
 
 SEEDANCE_AGENT_PLAN_MODEL_MAP: Dict[str, str] = {
+    "agent_plan": "doubao-seedance-1.5-pro",
     "standard": "doubao-seedance-1.5-pro",
     "fast": "doubao-seedance-1.5-pro",
     "mini": "doubao-seedance-1.5-pro",
@@ -208,9 +209,19 @@ SEEDANCE_ACCESS_MODES: List[Dict[str, Any]] = [
 ]
 
 SEEDANCE_SUB_MODEL_ENV_MAP: Dict[str, str] = {
+    "agent_plan": "SEEDANCE_MODEL_AGENT_PLAN",
     "standard": "SEEDANCE_MODEL_STANDARD",
     "fast": "SEEDANCE_MODEL_FAST",
     "mini": "SEEDANCE_MODEL_MINI",
+}
+
+SEEDANCE_OPERATION_API_KEY_ENV_MAP: Dict[str, str] = {
+    operation: f"SEEDANCE_{operation.upper()}_API_KEY"
+    for operation in SEEDANCE_SUB_MODEL_ENV_MAP
+}
+SEEDANCE_OPERATION_ENDPOINT_ENV_MAP: Dict[str, str] = {
+    operation: f"SEEDANCE_{operation.upper()}_ENDPOINT"
+    for operation in SEEDANCE_SUB_MODEL_ENV_MAP
 }
 
 ARK_OFFICIAL_HOST = "ark.cn-beijing.volces.com"
@@ -326,6 +337,11 @@ DEEPSEEK_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
 
 
 SEEDANCE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
+    {
+        "operation": "agent_plan",
+        "label": "Seedance 1.5 Pro · Agent Plan 首尾帧视频模型",
+        "model_name": SEEDANCE_AGENT_PLAN_MODEL_MAP["agent_plan"],
+    },
     {
         "operation": "standard",
         "label": "Seedance 2.0 · 多模态标准视频模型",
@@ -460,6 +476,14 @@ def normalize_seedance_sub_model(sub_model: Optional[str]) -> str:
 
 def get_seedance_sub_model_env_key(sub_model: Optional[str]) -> str:
     return SEEDANCE_SUB_MODEL_ENV_MAP[normalize_seedance_sub_model(sub_model)]
+
+
+def get_seedance_operation_api_key_env_key(sub_model: Optional[str]) -> str:
+    return SEEDANCE_OPERATION_API_KEY_ENV_MAP[normalize_seedance_sub_model(sub_model)]
+
+
+def get_seedance_operation_endpoint_env_key(sub_model: Optional[str]) -> str:
+    return SEEDANCE_OPERATION_ENDPOINT_ENV_MAP[normalize_seedance_sub_model(sub_model)]
 
 
 def normalize_deepseek_model_name(model_name: Optional[str]) -> str:
@@ -627,7 +651,12 @@ def normalize_seedance_model_for_endpoint(
     }
     known_models.update(item.lower() for item in SEEDANCE_LEGACY_AGENT_PLAN_MODELS)
     if not value or value.lower() in known_models:
-        return seedance_model_map_for_endpoint(endpoint)[operation]
+        if operation == "agent_plan":
+            return SEEDANCE_AGENT_PLAN_MODEL_MAP["agent_plan"]
+        return seedance_model_map_for_endpoint(endpoint).get(
+            operation,
+            SEEDANCE_DEFAULT_MODEL_MAP[operation],
+        )
     return value
 
 
@@ -997,6 +1026,11 @@ API_MODEL_PRESETS: List[dict] = [
         "model_name": "happyhorse-1.0-r2v",
     },
     {
+        "name": "Doubao Seedance 1.5 Pro · Agent Plan",
+        "provider": "seedance",
+        "model_name": "doubao-seedance-1.5-pro",
+    },
+    {
         "name": "Doubao Seedance 2.0 Standard",
         "provider": "seedance",
         "model_name": "doubao-seedance-2-0-260128",
@@ -1311,6 +1345,10 @@ def infer_model_binding_operation(provider: str, model_name: Optional[str]) -> s
     if provider_id == "doubao":
         return "generate"
     if provider_id == "seedance":
+        if normalized_model.lower() in SEEDANCE_SUB_MODEL_ENV_MAP:
+            return normalized_model.lower()
+        if normalized_model.lower() == SEEDANCE_AGENT_PLAN_MODEL_MAP["agent_plan"].lower():
+            return "agent_plan"
         if is_seedance_mini_model(normalized_model):
             return "mini"
         return "fast" if is_seedance_fast_model(normalized_model) else "standard"
@@ -1358,6 +1396,8 @@ def normalize_model_bindings(
             operation = "generate"
         elif provider_id == "gemini-image" and inferred_operation != "default" and (scope, operation) not in option_labels:
             operation = inferred_operation
+        elif provider_id == "seedance" and inferred_operation == "agent_plan":
+            operation = "agent_plan"
         elif not operation or (operation == "default" and inferred_operation != "default"):
             operation = inferred_operation
         label = str(

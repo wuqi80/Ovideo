@@ -17,6 +17,7 @@ from services.task_credit_billing_service import (
         ("interpolate", {"duration": "5.8"}, "video_enhancement"),
         ("i2v", {"duration": 5}, "video_generation"),
         ("seedance_i2v", {"duration": 10}, "video_generation"),
+        ("image_upscale", {"target_long_edge": 32000, "dpi": 300}, "image_upscale"),
         (
             "qwen_2",
             {"entity_type": "storyboard_item", "file_role": "generated_image"},
@@ -83,6 +84,24 @@ def test_resolve_task_billing_preserves_local_h3_720p_upscale_flag():
     })
     assert spec["feature_key"] == "video_generation"
     assert spec["params"]["h3_upscale_720p"] is True
+
+
+def test_resolve_image_upscale_billing_clamps_trusted_dimensions():
+    spec = resolve_task_billing("image_upscale", {
+        "target_long_edge": 99999,
+        "dpi": 600,
+        "text_clarity": True,
+    })
+
+    assert spec == {
+        "feature_key": "image_upscale",
+        "params": {
+            "target_long_edge": 50000,
+            "text_clarity": True,
+            "dpi": 300,
+        },
+        "surface": "image_upscale",
+    }
 
 
 @pytest.mark.asyncio

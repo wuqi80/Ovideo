@@ -172,8 +172,8 @@ async def main() -> int:
         presets = service.get_api_config_presets()
         preset_count = len(presets.get("presets") or [])
         provider_count = len(presets.get("providers") or [])
-        # Gemini TTS has been retired; the public preset catalog now contains 23 entries.
-        if preset_count != 23:
+        # The catalog includes independent Seedance Agent Plan and PAYG presets.
+        if preset_count != 24:
             fail(f"preset facade count changed: {preset_count}")
         if provider_count != 11:
             fail(f"provider facade count changed: {provider_count}")

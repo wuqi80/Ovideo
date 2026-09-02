@@ -364,7 +364,7 @@ class Worker:
             try:
                 # 处理图片：从SQL/本地文件读取并上传到ComfyUI
                 # 🔧 跳过已经在ComfyUI中的文件（i2i_fj, i2i_human, i2i_around, upscale_hd等任务）
-                skip_upload_tasks = ['i2i_fj', 'i2i_human', 'i2i_around', 'upscale_hd', 'remove_watermark', 'three_view']
+                skip_upload_tasks = ['i2i_fj', 'i2i_human', 'i2i_around', 'upscale_hd', 'image_upscale', 'remove_watermark', 'three_view']
                 should_skip = task.task_type in skip_upload_tasks or task.task_type.startswith('qwen_') or task.task_type.startswith('qwenN_') or task.task_type.startswith('kontext')
                 
                 if "image_path" in task.data and not should_skip:
@@ -467,7 +467,7 @@ class Worker:
                         raise ValueError("i2i_around任务缺少image_path参数")
 
                 # 素材处理任务（高清放大、去水印、三视图）
-                if task.task_type in ['upscale_hd', 'remove_watermark', 'three_view']:
+                if task.task_type in ['upscale_hd', 'image_upscale', 'remove_watermark', 'three_view']:
                     if "image_path" in task.data:
                         task.data["uploaded_image"] = task.data["image_path"]
                         logger.info(f"✅ {task.task_type}使用ComfyUI文件: {task.data['image_path']}")

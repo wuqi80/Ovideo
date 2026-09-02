@@ -43,6 +43,7 @@ const RATIO_OPTIONS = ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9'] 
 const RESOLUTION_OPTIONS = ['480p', '720p', '1080p'] as const;
 
 const SEEDANCE_TIER_LABELS: Record<SeedanceParams['sub_model'], string> = {
+    agent_plan: getModelDisplayName('Seedance15'),
     standard: getModelDisplayName('Seedance2'),
     fast: getModelDisplayName('Seedance2Fast'),
     mini: getModelDisplayName('Seedance2Mini'),
@@ -191,7 +192,9 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
         <div className="space-y-3 bg-n0 border border-n40 rounded-md p-3 shadow-card">
             <div className="flex items-center justify-between border-b border-n40 pb-2">
                 <div>
-                    <div className="text-[11px] font-semibold text-primary tracking-wide">Seedance 2.0 多模态控制台</div>
+                    <div className="text-[11px] font-semibold text-primary tracking-wide">
+                        {value.sub_model === 'agent_plan' ? 'Seedance 1.5 Pro · Agent Plan' : 'Seedance 2.0 多模态控制台'}
+                    </div>
                     <div className="text-[9px] text-n100">
                         {effectiveMode === 'reference'
                             ? '全能参考：图片 0-9 · 视频 0-3 · 音频 0-3'

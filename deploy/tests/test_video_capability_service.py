@@ -17,6 +17,7 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
         video_capability_service,
         "resolve_seedance_model_name",
         lambda sub_model, usage_scope="workflow": {
+            "agent_plan": "doubao-seedance-1.5-pro",
             "standard": "doubao-seedance-2-0-260128",
             "fast": "doubao-seedance-2-0-fast-260128",
             "mini": "doubao-seedance-2-0-mini-260615",
@@ -146,6 +147,7 @@ async def test_video_capabilities_expose_only_h3_processing_node_models(monkeypa
         video_capability_service,
         "resolve_seedance_model_name",
         lambda sub_model, usage_scope="workflow": {
+            "agent_plan": "doubao-seedance-1.5-pro",
             "standard": "doubao-seedance-2-0-260128",
             "fast": "doubao-seedance-2-0-fast-260128",
             "mini": "doubao-seedance-2-0-mini-260615",
@@ -193,6 +195,7 @@ async def test_video_capabilities_hide_seedance_model_marked_error_in_health_cac
         video_capability_service,
         "resolve_seedance_model_name",
         lambda sub_model, usage_scope="workflow": {
+            "agent_plan": "doubao-seedance-1.5-pro",
             "standard": "doubao-seedance-2-0-260128",
             "fast": "doubao-seedance-2-0-fast-260128",
             "mini": "doubao-seedance-2-0-mini-260615",
@@ -245,6 +248,7 @@ async def test_video_capabilities_expose_minimax_h3_on_unified_8188_runtime(monk
         video_capability_service,
         "resolve_seedance_model_name",
         lambda sub_model, usage_scope="workflow": {
+            "agent_plan": "doubao-seedance-1.5-pro",
             "standard": "doubao-seedance-2-0-260128",
             "fast": "doubao-seedance-2-0-fast-260128",
             "mini": "doubao-seedance-2-0-mini-260615",
@@ -318,6 +322,7 @@ async def test_video_capabilities_keep_minimax_h3_visible_when_gpu2_is_online(mo
         video_capability_service,
         "resolve_seedance_model_name",
         lambda sub_model, usage_scope="workflow": {
+            "agent_plan": "doubao-seedance-1.5-pro",
             "standard": "doubao-seedance-2-0-260128",
             "fast": "doubao-seedance-2-0-fast-260128",
             "mini": "doubao-seedance-2-0-mini-260615",
@@ -363,19 +368,24 @@ def test_video_manifest_reports_agent_plan_duration_limit_without_affecting_payg
     assert mini["parameter_rules"]["duration"]["maximum"] == 15
 
 
-def test_video_manifest_exposes_only_seedance_15_in_agent_plan_mode():
+def test_video_manifest_exposes_agent_plan_and_payg_seedance_models_together():
     manifest = video_capability_service.build_video_model_manifest(
-        standard_seedance_model="doubao-seedance-1.5-pro",
-        fast_seedance_model="doubao-seedance-1.5-pro",
-        mini_seedance_model="doubao-seedance-1.5-pro",
+        agent_plan_seedance_model="doubao-seedance-1.5-pro",
+        standard_seedance_model="doubao-seedance-2-0-260128",
+        fast_seedance_model="doubao-seedance-2-0-fast-260128",
+        mini_seedance_model="doubao-seedance-2-0-mini-260615",
         seedance_omni=True,
-        seedance_billing_mode="agent_plan",
         comfyui_available=False,
-        api_availability={"Seedance15": True},
+        api_availability={
+            "Seedance15": True,
+            "Seedance2": True,
+            "Seedance2Fast": True,
+            "Seedance2Mini": True,
+        },
     )
 
     seedance_keys = [model["key"] for model in manifest["models"] if model["provider"] == "seedance"]
-    assert seedance_keys == ["Seedance15"]
+    assert seedance_keys == ["Seedance15", "Seedance2", "Seedance2Fast", "Seedance2Mini"]
     seedance15 = next(model for model in manifest["models"] if model["key"] == "Seedance15")
     assert seedance15["model_name"] == "doubao-seedance-1.5-pro"
     assert seedance15["available"] is True

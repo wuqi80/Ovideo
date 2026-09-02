@@ -21,7 +21,10 @@ def test_comfyui_requests_preserve_preferred_agent_fields():
     matting = MattingRequest(image_filename="input.png", matting_type="subject", **common)
     material = MaterialProcessRequest(
         image_filename="input.png",
-        workflow_type="upscale_hd",
+        workflow_type="image_upscale",
+        target_long_edge=50000,
+        dpi=300,
+        text_clarity=True,
         **common,
     )
 
@@ -31,3 +34,6 @@ def test_comfyui_requests_preserve_preferred_agent_fields():
         assert payload["preferred_node_id"] == "agent_kunming"
     assert angle.model_dump()["output_width"] == 1024
     assert angle.model_dump()["output_height"] == 576
+    assert material.model_dump()["target_long_edge"] == 50000
+    assert material.model_dump()["dpi"] == 300
+    assert material.model_dump()["text_clarity"] is True

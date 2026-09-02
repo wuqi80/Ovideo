@@ -37,6 +37,9 @@ from services.api_provider_registry import (
     get_provider_env_key,
     get_proxy_mode_env_key,
     get_seedance_sub_model_env_key,
+    get_seedance_operation_api_key_env_key,
+    get_seedance_operation_endpoint_env_key,
+    infer_model_binding_operation,
     MODEL_USAGE_SCOPE_WORKFLOW,
     is_seedance_fast_model,
     normalize_doubao_image_model,
@@ -415,8 +418,11 @@ def resolve_seedance_model_name(
     """Resolve Seedance standard/fast model names without import-time env caching."""
     normalized_sub_model = normalize_seedance_sub_model(sub_model)
     provider_env = get_provider_env_key("seedance")
-    endpoint_env = get_endpoint_env_key(provider_env) if provider_env else ""
-    endpoint = (os.getenv(endpoint_env) or "").strip() if endpoint_env else ""
+    operation_endpoint_env = get_seedance_operation_endpoint_env_key(normalized_sub_model)
+    endpoint = (os.getenv(operation_endpoint_env) or "").strip()
+    if not endpoint:
+        endpoint_env = get_endpoint_env_key(provider_env) if provider_env else ""
+        endpoint = (os.getenv(endpoint_env) or "").strip() if endpoint_env else ""
     explicit_model = (model_name or "").strip()
     if explicit_model:
         return normalize_seedance_model_for_endpoint(
@@ -438,6 +444,8 @@ def resolve_seedance_model_name(
     generic_model, _generic_model_env_source = _first_env(scoped_model_env_candidates(generic_model_env, usage_scope))
     if generic_model:
         generic_is_fast = is_seedance_fast_model(generic_model)
+        if normalized_sub_model == "agent_plan" and infer_model_binding_operation("seedance", generic_model) == "agent_plan":
+            return normalize_seedance_model_for_endpoint(generic_model, endpoint, normalized_sub_model)
         if normalized_sub_model == "fast" and generic_is_fast:
             return normalize_seedance_model_for_endpoint(generic_model, endpoint, normalized_sub_model)
         if normalized_sub_model == "standard" and not generic_is_fast:
@@ -539,8 +547,18 @@ def resolve_provider(
     catalog = PROVIDER_CATALOG.get(provider_id, {})
 
     primary_env = get_provider_env_key(provider_id)
+    seedance_operation = (
+        infer_model_binding_operation(provider_id, model_name)
+        if provider_id == "seedance" and model_name
+        else ""
+    )
+    seedance_operation_key_env = (
+        get_seedance_operation_api_key_env_key(seedance_operation)
+        if seedance_operation
+        else None
+    )
     fallback_envs = list(catalog.get("fallback_env") or [])
-    key_envs = _unique([primary_env, *fallback_envs])
+    key_envs = _unique([seedance_operation_key_env, primary_env, *fallback_envs])
     api_key, api_key_env = _first_env(key_envs)
 
     # Fallback env keys are credentials only. Endpoint/proxy settings are
@@ -548,6 +566,9 @@ def resolve_provider(
     # to the wrong API surface (for example Seedance using ARK image endpoint).
     endpoint_envs = _unique(
         [
+            get_seedance_operation_endpoint_env_key(seedance_operation)
+            if seedance_operation
+            else None,
             get_endpoint_env_key(primary_env) if primary_env else None,
         ]
     )
@@ -561,6 +582,9 @@ def resolve_provider(
 
     proxy_mode_envs = _unique(
         [
+            get_proxy_mode_env_key(seedance_operation_key_env)
+            if seedance_operation_key_env
+            else None,
             get_proxy_mode_env_key(primary_env) if primary_env else None,
         ]
     )
@@ -574,6 +598,9 @@ def resolve_provider(
 
     custom_proxy_envs = _unique(
         [
+            get_custom_proxy_env_key(seedance_operation_key_env)
+            if seedance_operation_key_env
+            else None,
             get_custom_proxy_env_key(primary_env) if primary_env else None,
         ]
     )
@@ -617,6 +644,7 @@ def resolve_provider(
         resolved_model_name = normalize_seedance_model_for_endpoint(
             resolved_model_name,
             endpoint,
+            seedance_operation or None,
         )
     if deepseek_operation_request or minimax_operation_request:
         resolved_model_source = model_env or "preset"

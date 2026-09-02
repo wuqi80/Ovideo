@@ -3,8 +3,12 @@ from __future__ import annotations
 
 import json
 import math
+import mimetypes
 import os
 import random
+import re
+import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -12,8 +16,11 @@ import threading
 import time
 import urllib.request
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict
+
+import requests
 
 
 # The Windows embeddable Python runtime ignores the script directory in isolated
@@ -43,6 +50,187 @@ GPU2_QWEN_MODEL_FILES = {
 GPU2_BACKGROUND_REMOVAL_MODEL = "birefnet.safetensors"
 GPU2_IMAGE_UPSCALE_TARGET = 4096
 GPU2_IMAGE_UPSCALE_MAX_RESOLUTION = 4096
+GPU2_IMAGE_UPSCALE_MIN_LONG_EDGE = 4096
+GPU2_IMAGE_UPSCALE_MAX_LONG_EDGE = 50000
+GPU2_IMAGE_UPSCALE_MAX_PIXELS = 2_500_000_000
+GPU2_IMAGE_UPSCALE_OUTPUT_ROOT = ROOT / "outputs" / "image_upscale"
+GPU2_NODE_OUTPUT_REGISTRY = ROOT / "config" / "node-output-registry.json"
+GPU2_NODE_OUTPUT_RETENTION_DAYS = max(
+    1,
+    int(os.environ.get("OSTORY_NODE_OUTPUT_RETENTION_DAYS", "7")),
+)
+GPU2_NODE_OUTPUT_MIN_FREE_GIB = max(
+    1,
+    int(os.environ.get("OSTORY_NODE_OUTPUT_MIN_FREE_GIB", "20")),
+)
+_GPU2_NODE_OUTPUT_LOCK = threading.Lock()
+
+
+def _gpu2_load_node_output_registry() -> Dict[str, Dict[str, Any]]:
+    if not GPU2_NODE_OUTPUT_REGISTRY.is_file():
+        return {}
+    try:
+        payload = json.loads(GPU2_NODE_OUTPUT_REGISTRY.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _gpu2_save_node_output_registry(entries: Dict[str, Dict[str, Any]]) -> None:
+    GPU2_NODE_OUTPUT_REGISTRY.parent.mkdir(parents=True, exist_ok=True)
+    temporary = GPU2_NODE_OUTPUT_REGISTRY.with_suffix(".json.tmp")
+    temporary.write_text(
+        json.dumps(entries, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temporary.replace(GPU2_NODE_OUTPUT_REGISTRY)
+
+
+def _gpu2_safe_node_output_path(path_value: Any) -> Path | None:
+    try:
+        root = GPU2_IMAGE_UPSCALE_OUTPUT_ROOT.resolve()
+        candidate = Path(str(path_value or "")).resolve()
+        candidate.relative_to(root)
+    except (OSError, ValueError):
+        return None
+    return candidate
+
+
+def cleanup_gpu2_node_outputs(*, required_free_bytes: int = 0) -> Dict[str, Any]:
+    """Expire old outputs and evict oldest files below the configured free-space floor."""
+    with _GPU2_NODE_OUTPUT_LOCK:
+        GPU2_IMAGE_UPSCALE_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+        entries = _gpu2_load_node_output_registry()
+        now = datetime.now(timezone.utc)
+        removed = []
+
+        def remove_entry(output_id: str) -> None:
+            item = entries.pop(output_id, None) or {}
+            path = _gpu2_safe_node_output_path(item.get("path"))
+            if path and path.is_file():
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+            removed.append(output_id)
+
+        for output_id, item in list(entries.items()):
+            path = _gpu2_safe_node_output_path((item or {}).get("path"))
+            try:
+                expires_at = datetime.fromisoformat(str((item or {}).get("expires_at") or ""))
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+            except (TypeError, ValueError):
+                expires_at = now - timedelta(seconds=1)
+            if path is None or not path.is_file() or expires_at <= now:
+                remove_entry(output_id)
+
+        free_floor = GPU2_NODE_OUTPUT_MIN_FREE_GIB * 1024**3 + max(0, int(required_free_bytes))
+        ordered_ids = sorted(
+            entries,
+            key=lambda key: str((entries.get(key) or {}).get("created_at") or ""),
+        )
+        while ordered_ids and shutil.disk_usage(GPU2_IMAGE_UPSCALE_OUTPUT_ROOT).free < free_floor:
+            remove_entry(ordered_ids.pop(0))
+
+        _gpu2_save_node_output_registry(entries)
+        return {
+            "retained": len(entries),
+            "removed": removed,
+            "free_bytes": shutil.disk_usage(GPU2_IMAGE_UPSCALE_OUTPUT_ROOT).free,
+            "minimum_free_bytes": GPU2_NODE_OUTPUT_MIN_FREE_GIB * 1024**3,
+        }
+
+
+def retain_gpu2_node_output(task_id: str, source_value: Any) -> Dict[str, Any]:
+    source = Path(str(source_value or ""))
+    if not source.is_file():
+        raise RuntimeError("Upscaled image is unavailable for node-local retention")
+    source_size = source.stat().st_size
+    cleanup_gpu2_node_outputs(required_free_bytes=source_size)
+    free_bytes = shutil.disk_usage(GPU2_IMAGE_UPSCALE_OUTPUT_ROOT).free
+    required = GPU2_NODE_OUTPUT_MIN_FREE_GIB * 1024**3 + source_size
+    if free_bytes < required:
+        raise RuntimeError(
+            "Local output disk has insufficient free space for this upscale result"
+        )
+
+    output_id = secrets.token_urlsafe(24).replace("-", "_")
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", source.name)[-180:] or "upscaled.png"
+    target = GPU2_IMAGE_UPSCALE_OUTPUT_ROOT / f"{output_id}_{safe_name}"
+    GPU2_IMAGE_UPSCALE_OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(source), str(target))
+    created = datetime.now(timezone.utc)
+    expires = created + timedelta(days=GPU2_NODE_OUTPUT_RETENTION_DAYS)
+    metadata = {
+        "node_output_id": output_id,
+        "task_id": str(task_id or ""),
+        "filename": source.name,
+        "path": str(target),
+        "size": target.stat().st_size,
+        "mime_type": mimetypes.guess_type(source.name)[0] or "image/png",
+        "created_at": created.isoformat(),
+        "expires_at": expires.isoformat(),
+    }
+    with _GPU2_NODE_OUTPUT_LOCK:
+        entries = _gpu2_load_node_output_registry()
+        entries[output_id] = metadata
+        _gpu2_save_node_output_registry(entries)
+    return {key: value for key, value in metadata.items() if key != "path"}
+
+
+def lookup_gpu2_node_output(output_id: str) -> Dict[str, Any] | None:
+    cleanup_gpu2_node_outputs()
+    with _GPU2_NODE_OUTPUT_LOCK:
+        item = _gpu2_load_node_output_registry().get(str(output_id or ""))
+    if not isinstance(item, dict):
+        return None
+    path = _gpu2_safe_node_output_path(item.get("path"))
+    if path is None or not path.is_file():
+        return None
+    return {**item, "path": str(path)}
+
+
+def serve_gpu2_node_output_download_once(agent: Any) -> bool:
+    """Serve at most one authenticated relay request through an outbound stream."""
+    if not getattr(agent, "agent_id", None):
+        return False
+    response = requests.get(
+        f"{agent.server_url}/api/agent/node-outputs/poll",
+        headers=agent._headers(),
+        timeout=(3, 8),
+    )
+    response.raise_for_status()
+    request_data = (response.json() or {}).get("request")
+    if not isinstance(request_data, dict):
+        return False
+    relay_id = str(request_data.get("relay_id") or "")
+    output_id = str(request_data.get("output_id") or "")
+    item = lookup_gpu2_node_output(output_id)
+    if item is None:
+        requests.post(
+            f"{agent.server_url}/api/agent/node-outputs/{relay_id}/fail",
+            json={"error": "本地节点图片已过期或已被磁盘保护策略清理"},
+            headers=agent._headers(),
+            timeout=(3, 15),
+        ).raise_for_status()
+        return True
+
+    path = Path(item["path"])
+    headers = {
+        **agent._headers(),
+        "Content-Type": str(item.get("mime_type") or "application/octet-stream"),
+        "Content-Length": str(path.stat().st_size),
+    }
+    with path.open("rb") as handle:
+        streamed = requests.post(
+            f"{agent.server_url}/api/agent/node-outputs/{relay_id}/stream",
+            data=handle,
+            headers=headers,
+            timeout=(10, 60 * 60),
+        )
+        streamed.raise_for_status()
+    return True
 
 GPU2_WAN_MODEL_FILES = {
     "diffusion": r"wan2.1\Wan2_1-I2V-14B-480p_fp8_e4m3fn_scaled_KJ.safetensors",
@@ -1048,6 +1236,90 @@ def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
         "5": {
             "class_type": "SaveImage",
             "inputs": {"images": ["4", 0], "filename_prefix": "OSTORY_GPU2_upscale"},
+        },
+    }
+
+
+def postprocess_gpu2_image_upscale(
+    result: Dict[str, Any],
+    params: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Resize the AI master to the requested print dimensions and embed DPI.
+
+    The optional text mode deliberately uses deterministic edge enhancement.
+    It never asks a generative model to redraw glyphs, because that can silently
+    change Chinese characters, numbers, or brand text.
+    """
+    from PIL import Image, ImageFilter
+
+    if str(result.get("status") or "").lower() != "completed":
+        return result
+    source_path = next(
+        (
+            Path(str(value))
+            for value in (result.get("output_files") or [])
+            if value and Path(str(value)).is_file()
+            and Path(str(value)).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"}
+        ),
+        None,
+    )
+    if source_path is None:
+        raise RuntimeError("Image upscale completed without a local image output")
+
+    requested_long_edge = int(params.get("target_long_edge") or GPU2_IMAGE_UPSCALE_TARGET)
+    target_long_edge = max(
+        GPU2_IMAGE_UPSCALE_MIN_LONG_EDGE,
+        min(GPU2_IMAGE_UPSCALE_MAX_LONG_EDGE, requested_long_edge),
+    )
+    dpi = max(72, min(300, int(params.get("dpi") or 300)))
+    text_clarity = bool(params.get("text_clarity") is True)
+
+    Image.MAX_IMAGE_PIXELS = None
+    with Image.open(source_path) as source:
+        source.load()
+        width, height = source.size
+        if width <= 0 or height <= 0:
+            raise RuntimeError("Image upscale source dimensions are invalid")
+        scale = target_long_edge / float(max(width, height))
+        target_width = max(1, int(round(width * scale)))
+        target_height = max(1, int(round(height * scale)))
+        if target_width * target_height > GPU2_IMAGE_UPSCALE_MAX_PIXELS:
+            raise RuntimeError(
+                "Target image exceeds the 2.5-billion-pixel safety limit; "
+                "please use a smaller longest edge"
+            )
+
+        output = source.convert("RGBA" if "A" in source.getbands() else "RGB")
+        if output.size != (target_width, target_height):
+            output = output.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        if text_clarity:
+            output = output.filter(ImageFilter.UnsharpMask(radius=1.1, percent=115, threshold=3))
+
+        suffix = "_text-clear" if text_clarity else ""
+        target_path = source_path.with_name(
+            f"{source_path.stem}_{target_long_edge}px_{dpi}dpi{suffix}.png"
+        )
+        output.save(target_path, format="PNG", dpi=(dpi, dpi), optimize=False)
+        output.close()
+
+    if target_path != source_path:
+        try:
+            source_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return {
+        **result,
+        "status": "completed",
+        "output_files": [str(target_path)],
+        "result_payload": {
+            **(result.get("result_payload") or {}),
+            "workflow": "image_upscale",
+            "target_width": target_width,
+            "target_height": target_height,
+            "target_long_edge": target_long_edge,
+            "dpi": dpi,
+            "text_clarity": text_clarity,
+            "text_processing": "deterministic_edge_enhancement" if text_clarity else "none",
         },
     }
 
@@ -2703,9 +2975,9 @@ def prepare_gpu2_task(task: Dict[str, Any]) -> Dict[str, Any]:
             split=operation == "matting_split",
         )
         prepared["workflow_name"] = f"gpu2_{operation}_birefnet"
-    elif task_type == "upscale_hd":
+    elif task_type in {"upscale_hd", "image_upscale"}:
         prepared["workflow_json"] = build_gpu2_upscale_workflow(prepared)
-        prepared["workflow_name"] = "gpu2_upscale_hd"
+        prepared["workflow_name"] = "gpu2_image_upscale" if task_type == "image_upscale" else "gpu2_upscale_hd"
     elif task_type == "upscale":
         prepared["workflow_json"] = build_gpu2_video_upscale_workflow(prepared)
         prepared["workflow_name"] = "gpu2_video_upscale_seedvr2"
@@ -2766,6 +3038,15 @@ def main() -> None:
             return super().heartbeat()
 
         def poll(self):
+            try:
+                if serve_gpu2_node_output_download_once(self):
+                    return None
+            except Exception as exc:
+                print(
+                    f"[OSTORY] Node-local output relay failed: {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
             if gpu2_agent_maintenance_enabled():
                 print(
                     "[OSTORY] Local GPU maintenance gate is closed; no queued task will be claimed",
@@ -2892,6 +3173,23 @@ def main() -> None:
                 runtime_manager.mark_models_loaded()
                 result = super().execute_comfyui_task(prepared)
                 task_status = str(result.get("status") or "completed")
+                if str(prepared.get("task_type") or "").lower() == "image_upscale" and task_status == "completed":
+                    result = postprocess_gpu2_image_upscale(result, params)
+                    task_status = str(result.get("status") or "completed")
+                    if task_status == "completed":
+                        retained = retain_gpu2_node_output(
+                            str(prepared.get("task_id") or task.get("task_id") or ""),
+                            next(iter(result.get("output_files") or []), ""),
+                        )
+                        result = {
+                            **result,
+                            "output_files": [],
+                            "result_payload": {
+                                **(result.get("result_payload") or {}),
+                                "node_local_files": [retained],
+                                "node_local_retention_days": GPU2_NODE_OUTPUT_RETENTION_DAYS,
+                            },
+                        }
                 if upscale_720p_requested and task_status == "completed":
                     generation_result = result
                     try:
@@ -2940,6 +3238,7 @@ def main() -> None:
         raise RuntimeError(f"Agent token is empty: {TOKEN_FILE}")
 
     server_url = os.environ.get("OSTORY_SERVER_URL", "https://tv.ostory.ai")
+    cleanup_gpu2_node_outputs()
     resource_controller.start()
     try:
         Gpu2ComfyUIAgent(server_url, token, ports).run()

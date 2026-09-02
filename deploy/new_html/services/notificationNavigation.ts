@@ -35,6 +35,7 @@ export function buildNotificationTargetUrl(task: RegisteredTask): string | null 
         'media-library': `${base}/materials`,
         final: `${base}/final`,
         'video-reverse': `${base}/video-reverse`,
+        'image-upscale': `${base}/image-upscale`,
         global: null,
     };
     return map[targetPage] || null;

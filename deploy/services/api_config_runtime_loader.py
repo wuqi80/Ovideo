@@ -18,6 +18,8 @@ from services.api_provider_registry import (
     MINIMAX_OPERATION_MODEL_ENV_MAP,
     PROVIDER_EXTRA_ENV_MAP,
     PROVIDER_ENV_MAP,
+    SEEDANCE_OPERATION_API_KEY_ENV_MAP,
+    SEEDANCE_OPERATION_ENDPOINT_ENV_MAP,
     SEEDANCE_SUB_MODEL_ENV_MAP,
     SORA2_DEFAULT_VIDEO_MODEL,
     SORA2_LEGACY_VIDEO_MODELS,
@@ -38,6 +40,8 @@ from services.api_provider_registry import (
     get_proxy_mode_env_key,
     get_scoped_model_env_key,
     get_seedance_sub_model_env_key,
+    get_seedance_operation_api_key_env_key,
+    get_seedance_operation_endpoint_env_key,
     infer_model_binding_operation,
     MODEL_USAGE_SCOPES,
     MODEL_USAGE_SCOPE_WORKFLOW,
@@ -49,6 +53,7 @@ from services.api_provider_registry import (
     normalize_provider,
     normalize_seedance_endpoint,
     normalize_seedance_model_for_endpoint,
+    seedance_access_mode,
     primary_model_name_for_bindings,
 )
 from utils.config_helpers import _config_get
@@ -82,6 +87,15 @@ def managed_api_env_keys() -> set[str]:
     )
     for field_map in PROVIDER_EXTRA_ENV_MAP.values():
         keys.update(field_map.values())
+    for operation, api_key_env in SEEDANCE_OPERATION_API_KEY_ENV_MAP.items():
+        keys.update(
+            {
+                api_key_env,
+                SEEDANCE_OPERATION_ENDPOINT_ENV_MAP[operation],
+                get_proxy_mode_env_key(api_key_env),
+                get_custom_proxy_env_key(api_key_env),
+            }
+        )
     for env_key in PROVIDER_ENV_MAP.values():
         keys.update(
             {
@@ -310,6 +324,30 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                         for binding in bindings
                     ],
                 )
+                allowed_operations = (
+                    {"agent_plan"}
+                    if seedance_access_mode(endpoint) == "agent_plan"
+                    else {"standard", "fast", "mini"}
+                )
+                if allowed_operations == {"agent_plan"}:
+                    # Older Plan cards stored the three Seedance 2.0 operation
+                    # bindings.  Endpoint normalization converts those models
+                    # to the single 1.5 Pro Agent Plan binding, so carry the
+                    # explicitly configured scopes across to that operation.
+                    explicit_runtime_binding_keys = {
+                        (scope, "agent_plan")
+                        for scope, _operation in explicit_runtime_binding_keys
+                    }
+                bindings = [
+                    binding
+                    for binding in bindings
+                    if str(binding.get("operation") or "").strip().lower() in allowed_operations
+                ]
+                # Seedance credentials are selected by operation.  A Plan card
+                # and a pay-as-you-go card may therefore remain enabled at the
+                # same time without sharing or overwriting their Key/Endpoint.
+                # Keep the pre-normalization explicit keys here: synthesized
+                # defaults must not overwrite another enabled card's operation.
             model_env = get_model_env_key(env_key)
             for scope in MODEL_USAGE_SCOPES:
                 primary_model = primary_model_name_for_bindings(bindings, model_name, scope=scope)
@@ -331,6 +369,12 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                 if provider_id == "seedance" and operation in SEEDANCE_SUB_MODEL_ENV_MAP:
                     sub_model = operation
                     new_env[get_scoped_model_env_key(get_seedance_sub_model_env_key(sub_model), scope)] = bound_model
+                    operation_api_key_env = get_seedance_operation_api_key_env_key(sub_model)
+                    operation_endpoint_env = get_seedance_operation_endpoint_env_key(sub_model)
+                    new_env[operation_api_key_env] = api_key
+                    new_env[operation_endpoint_env] = endpoint or None
+                    new_env[get_proxy_mode_env_key(operation_api_key_env)] = proxy_mode
+                    new_env[get_custom_proxy_env_key(operation_api_key_env)] = custom_proxy or None
                 if provider_id == "deepseek" and operation in DEEPSEEK_OPERATION_MODEL_ENV_MAP:
                     new_env[get_scoped_model_env_key(get_deepseek_operation_model_env_key(operation), scope)] = bound_model
                 if provider_id == "minimax" and operation in MINIMAX_OPERATION_MODEL_ENV_MAP:

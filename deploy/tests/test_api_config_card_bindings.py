@@ -108,11 +108,13 @@ def test_seedance_binding_options_are_explicit():
     options = get_provider_model_binding_options("seedance")
 
     assert [(item["operation"], item["model_name"]) for item in options] == [
+        ("agent_plan", "doubao-seedance-1.5-pro"),
         ("standard", "doubao-seedance-2-0-260128"),
         ("fast", "doubao-seedance-2-0-fast-260128"),
         ("mini", "doubao-seedance-2-0-mini-260615"),
     ]
     assert [item["label"] for item in options] == [
+        "Seedance 1.5 Pro · Agent Plan 首尾帧视频模型",
         "Seedance 2.0 · 多模态标准视频模型",
         "Seedance 2.0 Fast · 多模态快速视频模型",
         "Seedance 2.0 Mini · 多模态简化视频模型",
@@ -413,6 +415,9 @@ async def test_agent_plan_card_projects_plan_endpoint_and_models(monkeypatch):
     for env_key in (
         "SEEDANCE_API_KEY",
         "SEEDANCE_ENDPOINT",
+        "SEEDANCE_MODEL_AGENT_PLAN",
+        "SEEDANCE_AGENT_PLAN_API_KEY",
+        "SEEDANCE_AGENT_PLAN_ENDPOINT",
         "SEEDANCE_MODEL_STANDARD",
         "SEEDANCE_MODEL_FAST",
         "SEEDANCE_MODEL_MINI",
@@ -446,9 +451,64 @@ async def test_agent_plan_card_projects_plan_endpoint_and_models(monkeypatch):
     assert loader.os.environ["SEEDANCE_ENDPOINT"] == (
         "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
     )
-    assert loader.os.environ["SEEDANCE_MODEL_STANDARD"] == "doubao-seedance-1.5-pro"
-    assert loader.os.environ["SEEDANCE_MODEL_FAST"] == "doubao-seedance-1.5-pro"
-    assert loader.os.environ["SEEDANCE_MODEL_MINI"] == "doubao-seedance-1.5-pro"
+    assert loader.os.environ["SEEDANCE_MODEL_AGENT_PLAN"] == "doubao-seedance-1.5-pro"
+    assert loader.os.environ["SEEDANCE_AGENT_PLAN_API_KEY"] == "plan-key"
+    assert loader.os.environ["SEEDANCE_AGENT_PLAN_ENDPOINT"] == (
+        "https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks"
+    )
+    assert "SEEDANCE_MODEL_STANDARD" not in loader.os.environ
+
+
+@pytest.mark.asyncio
+async def test_seedance_agent_plan_and_payg_cards_coexist_in_runtime(monkeypatch):
+    from services import api_config_runtime_loader as loader
+    from services.api_provider_runtime import resolve_provider
+
+    for env_key in loader.managed_api_env_keys():
+        if env_key.startswith("SEEDANCE_"):
+            monkeypatch.delenv(env_key, raising=False)
+            monkeypatch.setitem(loader._BASE_API_ENV_VALUES, env_key, None)
+
+    rows = [
+        {
+            "config_id": "agent-plan-card",
+            "provider": "seedance",
+            "endpoint": "https://ark.cn-beijing.volces.com/api/plan/",
+            "api_key_encrypted": "enc:plan-key",
+            "model_bindings": [
+                {"operation": "agent_plan", "model_name": "doubao-seedance-1.5-pro"},
+            ],
+            "enabled": True,
+        },
+        {
+            "config_id": "payg-card",
+            "provider": "seedance",
+            "endpoint": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+            "api_key_encrypted": "enc:payg-key",
+            "model_bindings": [
+                {"operation": "standard", "model_name": "doubao-seedance-2-0-260128"},
+                {"operation": "fast", "model_name": "doubao-seedance-2-0-fast-260128"},
+                {"operation": "mini", "model_name": "doubao-seedance-2-0-mini-260615"},
+            ],
+            "enabled": True,
+        },
+    ]
+    monkeypatch.setattr(loader.ApiConfigDAO, "list_enabled", AsyncMock(return_value=rows))
+    monkeypatch.setattr(
+        loader.ApiConfigDAO,
+        "decrypt_key",
+        staticmethod(lambda value: value.split(":", 1)[1]),
+    )
+
+    result = await loader.load_api_configs_to_env()
+
+    assert result["success"] is True
+    plan = resolve_provider("seedance", "doubao-seedance-1.5-pro")
+    payg = resolve_provider("seedance", "doubao-seedance-2-0-fast-260128")
+    assert plan.api_key == "plan-key"
+    assert "/api/plan/" in plan.endpoint
+    assert payg.api_key == "payg-key"
+    assert "/api/plan/" not in payg.endpoint
 
 
 @pytest.mark.asyncio
@@ -525,12 +585,8 @@ async def test_create_agent_plan_card_persists_plan_route_and_models(monkeypatch
         (item["scope"], item["operation"], item["model_name"])
         for item in captured["model_bindings"]
     } == {
-        ("workflow", "standard", "doubao-seedance-1.5-pro"),
-        ("workflow", "fast", "doubao-seedance-1.5-pro"),
-        ("workflow", "mini", "doubao-seedance-1.5-pro"),
-        ("studio", "standard", "doubao-seedance-1.5-pro"),
-        ("studio", "fast", "doubao-seedance-1.5-pro"),
-        ("studio", "mini", "doubao-seedance-1.5-pro"),
+        ("workflow", "agent_plan", "doubao-seedance-1.5-pro"),
+        ("studio", "agent_plan", "doubao-seedance-1.5-pro"),
     }
 
 
@@ -596,7 +652,7 @@ async def test_repair_merges_duplicate_key_cards_and_keeps_bindings(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_repair_absorbs_keyless_model_placeholders_into_real_card(monkeypatch):
+async def test_repair_keeps_seedance_placeholders_from_another_billing_channel(monkeypatch):
     from services import api_config_service as service
 
     rows = [
@@ -652,18 +708,7 @@ async def test_repair_absorbs_keyless_model_placeholders_into_real_card(monkeypa
         reload_api_env=AsyncMock(return_value=True),
     )
 
-    assert result["total_absorbed_placeholder_groups"] == 1
-    assert result["deleted_placeholder_config_ids"] == ["fast-placeholder"]
-    assert [row["config_id"] for row in rows] == ["plan-card"]
+    assert result["total_absorbed_placeholder_groups"] == 0
+    assert result["deleted_placeholder_config_ids"] == []
+    assert [row["config_id"] for row in rows] == ["plan-card", "fast-placeholder"]
     assert rows[0]["endpoint"] == "https://ark.cn-beijing.volces.com/api/plan/"
-    assert {
-        (item["scope"], item["operation"], item["model_name"])
-        for item in rows[0]["model_bindings"]
-    } == {
-        ("workflow", "standard", "doubao-seedance-1.5-pro"),
-        ("workflow", "fast", "doubao-seedance-1.5-pro"),
-        ("workflow", "mini", "doubao-seedance-1.5-pro"),
-        ("studio", "standard", "doubao-seedance-1.5-pro"),
-        ("studio", "fast", "doubao-seedance-1.5-pro"),
-        ("studio", "mini", "doubao-seedance-1.5-pro"),
-    }

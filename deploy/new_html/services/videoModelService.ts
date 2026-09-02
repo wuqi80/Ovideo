@@ -79,7 +79,7 @@ export interface SeedanceMediaInput {
 }
 
 export interface SeedanceParams {
-  sub_model: 'standard' | 'fast' | 'mini';
+  sub_model: 'agent_plan' | 'standard' | 'fast' | 'mini';
   model_scope?: string;
   prompt: string;
   media_inputs: SeedanceMediaInput[];
@@ -110,6 +110,7 @@ export function supportsSeedanceMultimodalModel(model: VideoModel | SeedanceVide
 }
 
 export function seedanceSubModelForVideoModel(model: SeedanceVideoModel | VideoModel): SeedanceParams['sub_model'] {
+  if (model === 'Seedance15') return 'agent_plan';
   if (model === 'Seedance2Fast') return 'fast';
   if (model === 'Seedance2Mini') return 'mini';
   return 'standard';

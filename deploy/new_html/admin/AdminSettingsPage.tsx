@@ -2293,7 +2293,7 @@ const ApiConfigCard: React.FC<{
 
     return (
         <>
-        <article className="bg-n0 border border-n40 rounded-md shadow-card px-3 py-2 min-w-0 hover:shadow-atlas hover:border-primary transition-colors">
+        <article className={`${config.enabled === false ? 'bg-n30 border-n50 opacity-70' : 'bg-n0 border-n40 hover:shadow-atlas hover:border-primary'} border rounded-md shadow-card px-3 py-2 min-w-0 transition-colors`}>
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
                     <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${view.dot}`} title={view.text} />

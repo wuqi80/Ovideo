@@ -56,6 +56,7 @@ const VideoGenPage = React.lazy(() => import('./pages/VideoGenPage').then(m => (
 const HistoryPage = React.lazy(() => import('./pages/HistoryPage').then(m => ({ default: m.HistoryPage })));
 const StudioRedirectPage = React.lazy(() => import('./pages/StudioRedirectPage').then(m => ({ default: m.StudioRedirectPage })));
 const MediaLibraryPage = React.lazy(() => import('./pages/MediaLibraryPage'));
+const ImageUpscalePage = React.lazy(() => import('./pages/ImageUpscalePage'));
 const CreditsPage = React.lazy(() => import('./pages/CreditsPage'));
 const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
 const VideoReversePage = React.lazy(() => import('./pages/VideoReversePage'));
@@ -161,6 +162,7 @@ const App: React.FC = () => {
                                 {/* 2026-05-26 Slice 1：素材库（项目级页面，挂在 workflow 下复用顶部导航） */}
                                 <Route path="media-library" element={<MediaLibraryPage />} />
                                 <Route path="history" element={<HistoryPage />} />
+                                <Route path="image-upscale" element={<ImageUpscalePage />} />
                             </Route>
 
                             {/* 自由创作 - 独立创剧画布 */}

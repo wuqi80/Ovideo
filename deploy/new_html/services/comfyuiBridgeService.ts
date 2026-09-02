@@ -1,13 +1,17 @@
 import { apiBlob, apiJson, getAuthToken, publicBlob, secureApiUrl } from './httpClient';
 import { resolveGpuTaskRouting } from './clusterNodeService';
 
-export type MaterialWorkflowType = 'upscale_hd' | 'remove_watermark' | 'three_view';
+export type MaterialWorkflowType = 'upscale_hd' | 'image_upscale' | 'remove_watermark' | 'three_view';
 
 export interface MaterialEntityOptions {
   entityType?: string;
   entityId?: string;
   fileRole?: string;
   episodeId?: string;
+  projectId?: string;
+  targetLongEdge?: number;
+  dpi?: number;
+  textClarity?: boolean;
   preferredAgentId?: string;
   preferredNodeId?: string;
 }
@@ -115,6 +119,10 @@ export async function processMaterial(
       entity_id: entityOptions?.entityId,
       file_role: entityOptions?.fileRole,
       episode_id: entityOptions?.episodeId,
+      project_id: entityOptions?.projectId,
+      target_long_edge: entityOptions?.targetLongEdge,
+      dpi: entityOptions?.dpi,
+      text_clarity: entityOptions?.textClarity ?? false,
       preferred_agent_id: entityOptions?.preferredAgentId || routing.preferredAgentId,
       preferred_node_id: entityOptions?.preferredNodeId || routing.preferredNodeId,
     }),

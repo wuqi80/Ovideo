@@ -6,7 +6,7 @@ from typing import Optional, List
 from datetime import datetime
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Header, File, UploadFile, Form
+from fastapi import APIRouter, HTTPException, Header, File, UploadFile, Form, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -94,6 +94,15 @@ async def _persist_to_db(entries: list, task_id: str, task_data: dict, user_id: 
                 "image": "generated_image",
                 "audio": "generated_audio",
             }.get(ft, "video")
+            node_output_id = str(entry.get("node_output_id") or "").strip()
+            metadata = {"task_id": task_id, "source": "comfyui_agent"}
+            if node_output_id:
+                metadata.update({
+                    "source": "node_local_output",
+                    "node_output_id": node_output_id,
+                    "node_agent_id": entry.get("node_agent_id"),
+                    "expires_at": entry.get("expires_at"),
+                })
             record = await FileDAO.create_file(
                 version_id=None,
                 user_id=user_id,
@@ -103,7 +112,7 @@ async def _persist_to_db(entries: list, task_id: str, task_data: dict, user_id: 
                 file_url=entry["url"],
                 file_size_bytes=entry["size"],
                 mime_type=entry.get("mime_type", ""),
-                metadata={"task_id": task_id, "source": "comfyui_agent"},
+                metadata=metadata,
                 entity_type=entity_type,
                 entity_id=entity_id,
                 file_role=role,
@@ -172,6 +181,10 @@ class ProgressRequest(BaseModel):
     agent_id: str = Field(min_length=1, max_length=128)
     progress: float = Field(ge=0, le=95)
     message: str = Field(default="", max_length=200)
+
+
+class NodeOutputFailureRequest(BaseModel):
+    error: str = Field(default="本地节点文件不可用", max_length=500)
 
 
 async def _verify_agent_token(authorization: str = Header(...)) -> dict:
@@ -675,6 +688,136 @@ async def agent_progress(
     }
 
 
+def _extract_node_local_entries(
+    result_payload: Optional[dict],
+    *,
+    task_id: str,
+    task_data: dict,
+    agent_id: str,
+) -> list:
+    """Validate Agent-retained image metadata without accepting arbitrary paths."""
+    if not isinstance(result_payload, dict):
+        return []
+    raw_entries = result_payload.pop("node_local_files", None)
+    if not isinstance(raw_entries, list):
+        return []
+    requested = str(
+        task_data.get("requested_workflow_type")
+        or task_data.get("task_type")
+        or ""
+    ).strip().lower()
+    if requested != "image_upscale":
+        logger.warning(
+            "Ignoring node-local outputs for non-upscale task %s (%s)",
+            task_id,
+            requested,
+        )
+        return []
+
+    entries = []
+    seen_ids = set()
+    for item in raw_entries[:3]:
+        if not isinstance(item, dict):
+            continue
+        output_id = str(item.get("node_output_id") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", output_id) or output_id in seen_ids:
+            continue
+        filename = Path(str(item.get("filename") or "upscaled-image.png")).name
+        if not filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff")):
+            continue
+        try:
+            size = max(0, int(item.get("size") or 0))
+        except (TypeError, ValueError):
+            size = 0
+        seen_ids.add(output_id)
+        entries.append({
+            "url": f"/api/node-outputs/{task_id}/{output_id}/download",
+            "filename": filename,
+            "size": size,
+            "file_type": "image",
+            "file_path": f"agent://{agent_id}/{output_id}",
+            "mime_type": str(item.get("mime_type") or "image/png"),
+            "node_output_id": output_id,
+            "node_agent_id": agent_id,
+            "created_at": item.get("created_at"),
+            "expires_at": item.get("expires_at"),
+            "storage": "node_local",
+        })
+    return entries
+
+
+@router.get("/node-outputs/poll")
+async def poll_node_output_download(authorization: str = Header(...)):
+    """Return one browser-initiated relay request for this outbound Agent."""
+    agent = await _verify_agent_token(authorization)
+    from services.node_output_relay import registry
+
+    relay = await registry.claim(str(agent.get("agent_id") or ""))
+    if relay is None:
+        return {"request": None}
+    return {
+        "request": {
+            "relay_id": relay.relay_id,
+            "task_id": relay.task_id,
+            "output_id": relay.output_id,
+            "filename": relay.filename,
+            "size": relay.size,
+        }
+    }
+
+
+@router.post("/node-outputs/{relay_id}/stream")
+async def stream_node_output_from_agent(
+    relay_id: str,
+    request: Request,
+    authorization: str = Header(...),
+):
+    """Receive a node-local file as a bounded chunk stream; never persist it."""
+    agent = await _verify_agent_token(authorization)
+    from services.node_output_relay import registry
+
+    try:
+        relay = await registry.start(relay_id, str(agent.get("agent_id") or ""))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Download relay not found") from exc
+
+    received = 0
+    try:
+        async for chunk in request.stream():
+            if not chunk:
+                continue
+            received += len(chunk)
+            await registry.put(relay, chunk)
+        if relay.size and received != relay.size:
+            await registry.finish(
+                relay,
+                f"本地节点传输不完整：预计 {relay.size} 字节，实际 {received} 字节",
+            )
+        else:
+            await registry.finish(relay)
+    except Exception as exc:
+        await registry.finish(relay, f"本地节点传输失败：{exc}")
+        raise
+    return {"success": True, "bytes_streamed": received}
+
+
+@router.post("/node-outputs/{relay_id}/fail")
+async def fail_node_output_from_agent(
+    relay_id: str,
+    body: NodeOutputFailureRequest,
+    authorization: str = Header(...),
+):
+    agent = await _verify_agent_token(authorization)
+    from services.node_output_relay import registry
+
+    try:
+        relay = await registry.start(relay_id, str(agent.get("agent_id") or ""))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Download relay not found") from exc
+    await registry.finish(relay, body.error)
+    return {"success": True}
+
+
 @router.post("/complete")
 async def agent_complete(
     task_id: str = Form(...),
@@ -766,7 +909,15 @@ async def agent_complete(
             "status": existing_status,
         }
 
-    # ---- 1. Save files to disk ----
+    result_payload = None
+    if result_json:
+        try:
+            parsed_result = json.loads(result_json)
+            result_payload = parsed_result if isinstance(parsed_result, dict) else None
+        except Exception as e:
+            logger.warning(f"agent_complete: invalid result_json for {task_id}: {e}")
+
+    # ---- 1. Save ordinary files to disk; node-retained files stay remote ----
     file_entries = []
     seen_filenames = set()
     for f in files:
@@ -781,17 +932,20 @@ async def agent_complete(
                                  f.content_type or "application/octet-stream")
         file_entries.append(entry)
 
+    file_entries.extend(
+        _extract_node_local_entries(
+            result_payload,
+            task_id=task_id,
+            task_data=task_data,
+            agent_id=str(agent.get("agent_id") or ""),
+        )
+    )
+
     # ---- 1b. Persist to DB with entity linkage ----
     if file_entries and status == "completed":
         await _persist_to_db(file_entries, task_id, task_data, user_id)
 
     result = build_task_result(file_entries, duration) if file_entries else None
-    result_payload = None
-    if result_json:
-        try:
-            result_payload = json.loads(result_json)
-        except Exception as e:
-            logger.warning(f"agent_complete: invalid result_json for {task_id}: {e}")
     if result_payload:
         if result:
             result.update(result_payload)

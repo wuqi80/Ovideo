@@ -106,6 +106,7 @@ from routers.fallback_static import create_fallback_static_router
 from routers.files import cleanup_thumbnail_cache, create_files_router
 from routers.frontend_pages import create_frontend_pages_router
 from routers.generation import create_generation_router
+from routers.node_outputs import create_node_output_router
 from routers.projects import create_projects_router
 from routers.prompts import create_prompt_router
 from routers.tasks import create_task_router
@@ -977,6 +978,13 @@ app.include_router(
     )
 )
 logger.info("✅ Generation API 路由已注册 (/api/generate/*, /api/materials/process)")
+
+app.include_router(
+    create_node_output_router(
+        require_auth_dependency=require_auth,
+    )
+)
+logger.info("✅ Node-local output download routes registered (/api/node-outputs/*)")
 
 # ============================================
 # API 路由

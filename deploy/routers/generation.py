@@ -678,7 +678,7 @@ def create_generation_router(
     async def process_material(request: MaterialProcessRequest, username: str = Depends(require_auth_dependency)):
         try:
             await _authorize(request, username, [request.image_filename])
-            if request.workflow_type not in ["upscale_hd", "remove_watermark", "three_view"]:
+            if request.workflow_type not in ["upscale_hd", "image_upscale", "remove_watermark", "three_view"]:
                 raise HTTPException(status_code=400, detail=f"不支持的工作流类型: {request.workflow_type}")
 
             actual_workflow_type, fallback_applied = resolve_executable_comfyui_workflow_type(
@@ -686,7 +686,7 @@ def create_generation_router(
                 1,
             )
 
-            if request.workflow_type == "upscale_hd":
+            if request.workflow_type in {"upscale_hd", "image_upscale"}:
                 seed = random.randint(100000, 999999)
                 seed_key = "seed_0"
             else:
@@ -705,11 +705,22 @@ def create_generation_router(
                 )
             else:
                 task_data = {"image_path": request.image_filename, seed_key: seed}
+            if request.workflow_type == "image_upscale":
+                task_data.update({
+                    "target_long_edge": int(request.target_long_edge or 4096),
+                    "dpi": int(request.dpi or 300),
+                    "text_clarity": bool(request.text_clarity),
+                    "requested_workflow_type": "image_upscale",
+                    "display_name": "图片高清放大",
+                    "category": "image",
+                    "source_page": "image-upscale",
+                })
             _attach_entity_fields(task_data, request)
             task_id = await task_service_module.get().submit(actual_workflow_type, task_data, username)
 
             workflow_names = {
                 "upscale_hd": "高清放大",
+                "image_upscale": "图片高清放大",
                 "remove_watermark": "去水印",
                 "three_view": "三视图",
             }

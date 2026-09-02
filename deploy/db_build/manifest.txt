@@ -54,6 +54,7 @@ sql/db_migration_design_image_credit_pricing_v2.sql # UPDATE tier/resolution cre
 sql/db_migration_design_prompt_refinement_credit_rule.sql # INSERT 1-4 credit prompt refinement rule
 sql/db_migration_design_multi_angle_credit_rule.sql # INSERT fixed 60-credit human multi-angle rule
 sql/db_migration_generation_credit_rules.sql # INSERT queued video enhancement credit rule
+sql/db_migration_image_upscale_credit_rule.sql # INSERT 8-50 point standalone image upscale rule
 sql/db_migration_video_credit_pricing.sql # UPDATE model-aware video generation credit rule
 sql/db_migration_video_credit_pricing_v2.sql # UPDATE local H3 720P post-upscale surcharge
 sql/db_migration_credit_onboarding.sql      # REF users, credit_accounts, credit_transactions

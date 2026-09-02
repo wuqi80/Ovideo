@@ -165,7 +165,7 @@ describe('Seedance model mapping', () => {
   it('maps frontend model IDs to backend sub_model operations', () => {
     expect(isSeedanceVideoModel('Seedance15')).toBe(true);
     expect(isSeedanceVideoModel('Seedance2Mini')).toBe(true);
-    expect(seedanceSubModelForVideoModel('Seedance15')).toBe('standard');
+    expect(seedanceSubModelForVideoModel('Seedance15')).toBe('agent_plan');
     expect(seedanceSubModelForVideoModel('Seedance2')).toBe('standard');
     expect(seedanceSubModelForVideoModel('Seedance2Fast')).toBe('fast');
     expect(seedanceSubModelForVideoModel('Seedance2Mini')).toBe('mini');

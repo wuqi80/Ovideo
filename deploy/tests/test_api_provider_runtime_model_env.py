@@ -38,6 +38,8 @@ from services.api_provider_registry import (
     get_provider_env_key,
     get_scoped_model_env_key,
     get_seedance_sub_model_env_key,
+    get_seedance_operation_api_key_env_key,
+    get_seedance_operation_endpoint_env_key,
     dashscope_vidu_reference_sub_model,
     dashscope_vidu_startend_sub_model,
     minimax_runtime_model_override,
@@ -72,15 +74,17 @@ def test_resolve_provider_uses_runtime_model_env(monkeypatch):
 
 def test_runtime_status_matches_seedance_plan_health_to_resolved_model(monkeypatch):
     api_key_env = get_provider_env_key("seedance")
-    endpoint_env = get_endpoint_env_key(api_key_env)
-    assert api_key_env and endpoint_env
+    plan_key_env = get_seedance_operation_api_key_env_key("agent_plan")
+    plan_endpoint_env = get_seedance_operation_endpoint_env_key("agent_plan")
+    assert api_key_env and plan_key_env and plan_endpoint_env
 
     monkeypatch.setenv(api_key_env, "test-seedance-key")
-    monkeypatch.setenv(endpoint_env, SEEDANCE_AGENT_PLAN_ENDPOINT)
+    monkeypatch.setenv(plan_key_env, "test-seedance-plan-key")
+    monkeypatch.setenv(plan_endpoint_env, SEEDANCE_AGENT_PLAN_ENDPOINT)
 
     health = [{
         "provider": "seedance",
-        "model_name": SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"],
+        "model_name": SEEDANCE_AGENT_PLAN_MODEL_MAP["agent_plan"],
         "status": "ok",
         "health": {
             "ok": True,
@@ -94,10 +98,10 @@ def test_runtime_status_matches_seedance_plan_health_to_resolved_model(monkeypat
         item
         for item in statuses
         if item["provider"] == "seedance"
-        and item["model_name"] == SEEDANCE_DEFAULT_MODEL_MAP["standard"]
+        and item["model_name"] == SEEDANCE_AGENT_PLAN_MODEL_MAP["agent_plan"]
     )
 
-    assert status["runtime_model_name"] == SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"]
+    assert status["runtime_model_name"] == SEEDANCE_AGENT_PLAN_MODEL_MAP["agent_plan"]
     assert status["health_status"] == "ok"
     assert "health_error" not in status["issues"]
 
@@ -1089,10 +1093,14 @@ def test_seedance_video_uses_standard_sub_model_runtime_env(monkeypatch):
     assert env_key
     endpoint_env = get_endpoint_env_key(env_key)
     standard_env = get_seedance_sub_model_env_key("standard")
+    standard_key_env = get_seedance_operation_api_key_env_key("standard")
+    standard_endpoint_env = get_seedance_operation_endpoint_env_key("standard")
     calls = []
 
     monkeypatch.setenv(env_key, "test-seedance-key")
     monkeypatch.setenv(endpoint_env, "https://seedance-runtime.example.test/tasks")
+    monkeypatch.setenv(standard_key_env, "test-seedance-standard-key")
+    monkeypatch.setenv(standard_endpoint_env, "https://seedance-runtime.example.test/tasks")
     monkeypatch.setenv(standard_env, "seedance-standard-runtime-model")
 
     def fake_request(method, url, **kwargs):
@@ -1115,10 +1123,14 @@ def test_seedance_video_uses_fast_sub_model_runtime_env(monkeypatch):
     assert env_key
     endpoint_env = get_endpoint_env_key(env_key)
     fast_env = get_seedance_sub_model_env_key("fast")
+    fast_key_env = get_seedance_operation_api_key_env_key("fast")
+    fast_endpoint_env = get_seedance_operation_endpoint_env_key("fast")
     calls = []
 
     monkeypatch.setenv(env_key, "test-seedance-key")
     monkeypatch.setenv(endpoint_env, "https://seedance-runtime.example.test/tasks")
+    monkeypatch.setenv(fast_key_env, "test-seedance-fast-key")
+    monkeypatch.setenv(fast_endpoint_env, "https://seedance-runtime.example.test/tasks")
     monkeypatch.setenv(fast_env, "seedance-fast-runtime-model")
 
     def fake_request(method, url, **kwargs):
@@ -1141,10 +1153,14 @@ def test_seedance_video_uses_mini_sub_model_runtime_env(monkeypatch):
     assert env_key
     endpoint_env = get_endpoint_env_key(env_key)
     mini_env = get_seedance_sub_model_env_key("mini")
+    mini_key_env = get_seedance_operation_api_key_env_key("mini")
+    mini_endpoint_env = get_seedance_operation_endpoint_env_key("mini")
     calls = []
 
     monkeypatch.setenv(env_key, "test-seedance-key")
     monkeypatch.setenv(endpoint_env, "https://seedance-runtime.example.test/tasks")
+    monkeypatch.setenv(mini_key_env, "test-seedance-mini-key")
+    monkeypatch.setenv(mini_endpoint_env, "https://seedance-runtime.example.test/tasks")
     monkeypatch.setenv(mini_env, "seedance-mini-runtime-model")
 
     def fake_request(method, url, **kwargs):
@@ -1167,10 +1183,14 @@ def test_seedance_video_uses_callable_default_when_runtime_model_missing(monkeyp
     assert env_key
     endpoint_env = get_endpoint_env_key(env_key)
     model_env = get_model_env_key(env_key)
+    standard_key_env = get_seedance_operation_api_key_env_key("standard")
+    standard_endpoint_env = get_seedance_operation_endpoint_env_key("standard")
     calls = []
 
     monkeypatch.setenv(env_key, "test-seedance-key")
     monkeypatch.setenv(endpoint_env, "https://seedance-runtime.example.test/tasks")
+    monkeypatch.setenv(standard_key_env, "test-seedance-standard-key")
+    monkeypatch.setenv(standard_endpoint_env, "https://seedance-runtime.example.test/tasks")
     monkeypatch.delenv(model_env, raising=False)
     monkeypatch.delenv(get_seedance_sub_model_env_key("standard"), raising=False)
     monkeypatch.delenv(get_seedance_sub_model_env_key("fast"), raising=False)
@@ -1194,12 +1214,16 @@ def test_seedance_agent_plan_expands_endpoint_and_uses_plan_model(monkeypatch):
     env_key = get_provider_env_key("seedance")
     assert env_key
     endpoint_env = get_endpoint_env_key(env_key)
-    standard_env = get_seedance_sub_model_env_key("standard")
+    plan_env = get_seedance_sub_model_env_key("agent_plan")
+    plan_key_env = get_seedance_operation_api_key_env_key("agent_plan")
+    plan_endpoint_env = get_seedance_operation_endpoint_env_key("agent_plan")
     calls = []
 
     monkeypatch.setenv(env_key, "test-agent-plan-key")
     monkeypatch.setenv(endpoint_env, "https://ark.cn-beijing.volces.com/api/plan/")
-    monkeypatch.setenv(standard_env, SEEDANCE_DEFAULT_MODEL_MAP["standard"])
+    monkeypatch.setenv(plan_key_env, "test-agent-plan-key")
+    monkeypatch.setenv(plan_endpoint_env, "https://ark.cn-beijing.volces.com/api/plan/")
+    monkeypatch.setenv(plan_env, SEEDANCE_AGENT_PLAN_MODEL_MAP["agent_plan"])
 
     def fake_request(method, url, **kwargs):
         calls.append({"method": method, "url": url, **kwargs})
@@ -1208,12 +1232,12 @@ def test_seedance_agent_plan_expands_endpoint_and_uses_plan_model(monkeypatch):
     monkeypatch.setattr(video_base.requests, "request", fake_request)
 
     client = seedance_video.SeedanceClient()
-    task_id = client.create_video_task("standard", [{"type": "text", "text": "move gently"}])
+    task_id = client.create_video_task("agent_plan", [{"type": "text", "text": "move gently"}])
     client.query_task(task_id)
 
     assert calls[0]["method"] == "POST"
     assert calls[0]["url"] == SEEDANCE_AGENT_PLAN_ENDPOINT
-    assert calls[0]["json"]["model"] == SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"]
+    assert calls[0]["json"]["model"] == SEEDANCE_AGENT_PLAN_MODEL_MAP["agent_plan"]
     assert calls[1]["method"] == "GET"
     assert calls[1]["url"] == f"{SEEDANCE_AGENT_PLAN_ENDPOINT}/{task_id}"
 

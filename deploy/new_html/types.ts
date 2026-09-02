@@ -470,6 +470,7 @@ export type SourcePage =
   | 'media-library' // 2026-05-26 Slice 1：通用素材库
   | 'final'         // 2026-06-14：成品页（汇总展示合成好的整片）
   | 'video-reverse' // 2026-05-26 Slice 3：视频反推工作台
+  | 'image-upscale' // 独立图片高清放大
   | 'global';       // 跨页/未指定
 
 // 2026-05-20 (Task System Overhaul M0)：细粒度任务类型，用于 UI 显示 + 路由 + 图标选择。
@@ -490,6 +491,7 @@ export type TaskKind =
   | 'human-multi-angle' | 'around-angle'
   | 'image-fusion' | 'panorama-360' | 'panorama-fusion'
   | 'auto-storyboard' | 'multi-grid-storyboard'
+  | 'image-upscale'
   // 音频
   | 'minimax-tts' | 'gemini-tts' | 'audio-mix'
   // 视频后处理

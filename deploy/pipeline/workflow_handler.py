@@ -211,7 +211,7 @@ class WorkflowHandler:
         workflow_name: str,
     ) -> Dict[str, Any]:
         """Keep the verified tiled GPU1 graph while enforcing the UI's 4K target."""
-        if str(workflow_name or '').lower() != 'upscale_hd':
+        if str(workflow_name or '').lower() not in {'upscale_hd', 'image_upscale'}:
             return workflow
         for node in workflow.values():
             if not isinstance(node, dict) or node.get('class_type') != 'MathExpression|pysssss':
@@ -328,6 +328,7 @@ class WorkflowHandler:
             'i2i_human': 'I2I_HUMAN',  # 多角度人物生成
             'i2i_around': 'I2I_Around',  # 🆕 全景角度生成
             'upscale_hd': 'upscale_hd',  # 图像高清放大
+            'image_upscale': 'upscale_hd',  # 独立图片放大：Agent 后处理目标尺寸/DPI
             'remove_watermark': 'remove_watermark',  # 去水印
             'three_view': 'three_view',  # 三视图
             # 🆕 抠图工作流

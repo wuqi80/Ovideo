@@ -341,7 +341,23 @@ class MultiGridStoryboardRequest(ComfyUIRoutedRequest):
 
 class MaterialProcessRequest(ComfyUIRoutedRequest):
     image_filename: str = Field(..., description="处理节点中的图片文件名")
-    workflow_type: str = Field(..., description="工作流类型: upscale_hd/remove_watermark/three_view")
+    workflow_type: str = Field(..., description="工作流类型: upscale_hd/image_upscale/remove_watermark/three_view")
+    target_long_edge: Optional[int] = Field(
+        None,
+        ge=4096,
+        le=50000,
+        description="独立图片放大任务的目标最长边像素",
+    )
+    dpi: Optional[int] = Field(
+        None,
+        ge=72,
+        le=300,
+        description="输出图片 DPI，最高 300",
+    )
+    text_clarity: bool = Field(
+        False,
+        description="启用保守的文字边缘增强；不会生成或重写文字",
+    )
     entity_type: Optional[str] = Field(None, description="实体类型: storyboard_item/asset/video_segment")
     entity_id: Optional[str] = Field(None, description="实体ID")
     file_role: Optional[str] = Field(None, description="文件角色: generated_image/reference_image/...")

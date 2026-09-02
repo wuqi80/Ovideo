@@ -42,6 +42,7 @@ const VALID_PAGES: ReadonlyArray<SourcePage> = [
     'editor', 'script', 'design', 'materials', 'audio',
     'storyboard', 'generation', 'video', 'enhance',
     'postprocess', 'canvas', 'history', 'global',
+    'image-upscale',
 ];
 
 function normalizeTargetPage(raw: string | null): SourcePage {
@@ -67,6 +68,7 @@ function inferKindFromCategoryAndTitle(
         metadata?.model,
     ].filter(value => typeof value === 'string').join(' ').toLowerCase();
     const t = context;
+    if (/image[_ -]?upscale|图片高清放大/.test(t)) return 'image-upscale';
     if (category === 'video' || /upscale|放大|i2v|视频|seedance|wan2|kling|vidu|happyhorse|sora|veo/.test(t)) {
         if (/upscale|放大/.test(t)) return 'video-upscale';
         if (/seedance/.test(t)) return 'seedance';

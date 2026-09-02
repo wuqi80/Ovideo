@@ -36,6 +36,7 @@ from services.api_provider_registry import (
     normalize_seedance_endpoint,
     normalize_seedance_model_for_endpoint,
     primary_model_name_for_bindings,
+    seedance_access_mode,
     summarize_api_provider_configs,
 )
 from services.api_provider_runtime import (
@@ -124,6 +125,14 @@ def _row_provider(row: Any) -> str:
     return str(_config_get(row, "provider", "") or "").strip()
 
 
+def _provider_runtime_channel(row: Any) -> tuple[str, str]:
+    provider = normalize_provider(_row_provider(row))
+    if provider == "seedance":
+        endpoint = str(_config_get(row, "endpoint", "") or "")
+        return provider, seedance_access_mode(endpoint)
+    return provider, "default"
+
+
 def _row_model_name(row: Any) -> str:
     if not row:
         return ""
@@ -167,6 +176,7 @@ async def _find_duplicate_api_card(
     provider: str,
     api_key: str,
     *,
+    endpoint: str = "",
     exclude_config_id: str = "",
 ) -> Optional[Any]:
     provider_id = normalize_provider(provider)
@@ -178,6 +188,10 @@ async def _find_duplicate_api_card(
             continue
         if normalize_provider(_row_provider(row)) != provider_id:
             continue
+        if provider_id == "seedance":
+            row_endpoint = str(_config_get(row, "endpoint", "") or "")
+            if seedance_access_mode(row_endpoint) != seedance_access_mode(endpoint):
+                continue
         existing_key = _row_plaintext_key(row)
         if existing_key and hmac.compare_digest(existing_key, candidate_key):
             return row
@@ -222,6 +236,16 @@ def _normalized_model_fields(
                 for binding in bindings
             ],
         )
+        allowed_operations = (
+            {"agent_plan"}
+            if seedance_access_mode(endpoint) == "agent_plan"
+            else {"standard", "fast", "mini"}
+        )
+        bindings = [
+            binding
+            for binding in bindings
+            if str(binding.get("operation") or "").strip().lower() in allowed_operations
+        ]
     return bindings, primary_model_name_for_bindings(bindings, model_name)
 
 
@@ -348,11 +372,11 @@ async def _test_api_config_row_health(
 
 
 async def _disable_conflicting_provider_configs(row: Any) -> tuple[List[str], List[Any]]:
-    """Keep at most one enabled keyed config per provider.
+    """Keep at most one enabled keyed config per provider channel.
 
-    Runtime env has one key/endpoint slot per provider, so multiple enabled
-    keyed rows cannot all be effective. Disable older siblings when a new row
-    becomes the active keyed config.
+    Seedance has separate operation-scoped runtime slots for Agent Plan and
+    pay-as-you-go.  Those two channels may coexist; rows within the same
+    channel still conflict.  Other providers retain one active keyed row.
     """
     provider = _row_provider(row)
     keep_id = _row_config_id(row)
@@ -369,6 +393,11 @@ async def _disable_conflicting_provider_configs(row: Any) -> tuple[List[str], Li
             continue
         if not _row_enabled(other) or not _row_has_key(other):
             continue
+        if normalize_provider(provider) == "seedance":
+            row_endpoint = str(_config_get(row, "endpoint", "") or "")
+            other_endpoint = str(_config_get(other, "endpoint", "") or "")
+            if seedance_access_mode(row_endpoint) != seedance_access_mode(other_endpoint):
+                continue
         await ApiConfigDAO.update(other_id, enabled=False)
         disabled.append(other_id)
         disabled_rows.append(other)
@@ -685,7 +714,7 @@ async def create_api_config(
 ) -> Dict[str, Any]:
     provider_id = provider.strip()
     normalized_endpoint = _normalized_endpoint(provider_id, endpoint)
-    duplicate = await _find_duplicate_api_card(provider_id, api_key)
+    duplicate = await _find_duplicate_api_card(provider_id, api_key, endpoint=normalized_endpoint)
     if duplicate:
         raise ApiConfigCreateFailed(
             f"This API key already has a card for provider {normalize_provider(provider_id)}: "
@@ -750,7 +779,7 @@ async def create_api_config_key_batch(
     duplicate_rows: List[Any] = []
     new_keys: List[str] = []
     for api_key in deduped_keys:
-        duplicate = await _find_duplicate_api_card(provider_id, api_key)
+        duplicate = await _find_duplicate_api_card(provider_id, api_key, endpoint=normalized_endpoint)
         if duplicate:
             duplicate_rows.append(duplicate)
         else:
@@ -876,6 +905,7 @@ async def update_api_config(
         duplicate = await _find_duplicate_api_card(
             provider,
             replacement_key,
+            endpoint=effective_endpoint,
             exclude_config_id=config_id,
         )
         if duplicate:
@@ -943,17 +973,17 @@ async def repair_api_config_provider_conflicts(
     """Merge legacy cards into real credential cards, then resolve active conflicts."""
     all_rows = list(await ApiConfigDAO.list_all())
     rows = list(all_rows)
-    credential_groups: Dict[tuple[str, str], List[Any]] = {}
+    credential_groups: Dict[tuple[str, str, str], List[Any]] = {}
     for row in rows:
-        provider = normalize_provider(_row_provider(row))
+        provider, channel = _provider_runtime_channel(row)
         api_key = _row_plaintext_key(row)
         if provider and api_key:
-            credential_groups.setdefault((provider, api_key), []).append(row)
+            credential_groups.setdefault((provider, channel, api_key), []).append(row)
 
     merged_cards: List[Dict[str, Any]] = []
     deleted_duplicate_ids: set[str] = set()
     touched_items: List[Any] = []
-    for (provider, _), duplicate_rows in credential_groups.items():
+    for (provider, _channel, _), duplicate_rows in credential_groups.items():
         if len(duplicate_rows) <= 1:
             continue
         enabled_rows = [row for row in duplicate_rows if _row_enabled(row)]
@@ -1000,15 +1030,15 @@ async def repair_api_config_provider_conflicts(
     # Older preset imports created one keyless row per model. Under the current
     # one-credential/one-card model those rows are not cards: their bindings
     # belong on every real credential card for the provider.
-    provider_rows: Dict[str, List[Any]] = {}
+    provider_rows: Dict[tuple[str, str], List[Any]] = {}
     for row in rows:
-        provider = normalize_provider(_row_provider(row))
+        provider, channel = _provider_runtime_channel(row)
         if provider:
-            provider_rows.setdefault(provider, []).append(row)
+            provider_rows.setdefault((provider, channel), []).append(row)
 
     absorbed_placeholder_groups: List[Dict[str, Any]] = []
     deleted_placeholder_ids: set[str] = set()
-    for provider, candidates in provider_rows.items():
+    for (provider, _channel), candidates in provider_rows.items():
         keyed_rows = [row for row in candidates if _row_has_key(row)]
         placeholder_rows = [row for row in candidates if not _row_has_key(row)]
         if not keyed_rows or not placeholder_rows:
@@ -1059,16 +1089,16 @@ async def repair_api_config_provider_conflicts(
                 await ApiConfigDAO.delete(placeholder_id)
 
     rows = [row for row in rows if _row_config_id(row) not in deleted_placeholder_ids]
-    grouped: Dict[str, List[Any]] = {}
+    grouped: Dict[tuple[str, str], List[Any]] = {}
     for row in rows:
-        provider = normalize_provider(_row_provider(row))
+        provider, channel = _provider_runtime_channel(row)
         if not provider or not _row_enabled(row) or not _row_has_key(row):
             continue
-        grouped.setdefault(provider, []).append(row)
+        grouped.setdefault((provider, channel), []).append(row)
 
     conflicts: List[Dict[str, Any]] = []
     total_disabled = 0
-    for provider, provider_rows in grouped.items():
+    for (provider, channel), provider_rows in grouped.items():
         if len(provider_rows) <= 1:
             continue
         keep = provider_rows[-1]
@@ -1082,6 +1112,7 @@ async def repair_api_config_provider_conflicts(
         conflicts.append(
             {
                 "provider": provider,
+                "channel": channel,
                 "kept_config_id": keep_id,
                 "disabled_config_ids": disabled_ids,
                 "keyed_enabled_count": len(provider_rows),

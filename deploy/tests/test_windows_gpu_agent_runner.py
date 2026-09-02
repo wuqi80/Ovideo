@@ -1,6 +1,9 @@
 import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
+import scripts.windows_gpu_agent_runner as gpu_runner
 
 from scripts.windows_gpu_agent_runner import (
     COMFYUI_RECOVERY_COOLDOWN_SECONDS,
@@ -69,6 +72,10 @@ from scripts.windows_gpu_agent_runner import (
     normalize_gpu2_video_seed,
     execute_gpu2_h3_post_upscale_720p,
     prepare_gpu2_task,
+    postprocess_gpu2_image_upscale,
+    retain_gpu2_node_output,
+    lookup_gpu2_node_output,
+    cleanup_gpu2_node_outputs,
     _runtime_profile_from_process,
     tune_gpu2_qwen_workflow,
 )
@@ -149,6 +156,52 @@ def test_shared_comfyui_guard_never_claims_an_external_8188_listener(queue, expe
     assert state["state"] == expected_state
     assert state["owner"] == "external"
     assert state["claim_allowed"] is False
+
+
+def test_gpu2_node_local_output_retention_moves_and_resolves_file(tmp_path, monkeypatch):
+    output_root = tmp_path / "outputs"
+    registry_path = tmp_path / "node-output-registry.json"
+    monkeypatch.setattr(gpu_runner, "GPU2_IMAGE_UPSCALE_OUTPUT_ROOT", output_root)
+    monkeypatch.setattr(gpu_runner, "GPU2_NODE_OUTPUT_REGISTRY", registry_path)
+    monkeypatch.setattr(gpu_runner, "GPU2_NODE_OUTPUT_MIN_FREE_GIB", 0)
+
+    source = tmp_path / "poster.png"
+    source.write_bytes(b"upscaled-image")
+    metadata = retain_gpu2_node_output("task-upscale", source)
+    resolved = lookup_gpu2_node_output(metadata["node_output_id"])
+
+    assert not source.exists()
+    assert resolved is not None
+    assert resolved["task_id"] == "task-upscale"
+    assert resolved["filename"] == "poster.png"
+    assert resolved["size"] == len(b"upscaled-image")
+    assert Path(resolved["path"]).read_bytes() == b"upscaled-image"
+
+
+def test_gpu2_node_local_output_cleanup_removes_expired_files(tmp_path, monkeypatch):
+    output_root = tmp_path / "outputs"
+    registry_path = tmp_path / "node-output-registry.json"
+    output_root.mkdir()
+    expired_file = output_root / "expired.png"
+    expired_file.write_bytes(b"expired")
+    registry_path.write_text(
+        json.dumps({
+            "expired_output_id": {
+                "path": str(expired_file),
+                "created_at": (datetime.now(timezone.utc) - timedelta(days=8)).isoformat(),
+                "expires_at": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
+            }
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(gpu_runner, "GPU2_IMAGE_UPSCALE_OUTPUT_ROOT", output_root)
+    monkeypatch.setattr(gpu_runner, "GPU2_NODE_OUTPUT_REGISTRY", registry_path)
+    monkeypatch.setattr(gpu_runner, "GPU2_NODE_OUTPUT_MIN_FREE_GIB", 0)
+
+    status = cleanup_gpu2_node_outputs()
+
+    assert "expired_output_id" in status["removed"]
+    assert not expired_file.exists()
 
 
 def test_shared_comfyui_guard_allows_idle_ovideo_runtime_only():
@@ -1041,6 +1094,42 @@ def test_gpu2_upscale_workflow_uses_low_vram_seedvr2_nodes():
     assert workflow["4"]["inputs"]["max_resolution"] == GPU2_IMAGE_UPSCALE_MAX_RESOLUTION
     assert GPU2_IMAGE_UPSCALE_TARGET >= 3840
     assert workflow["5"]["class_type"] == "SaveImage"
+
+
+def test_gpu2_image_upscale_reuses_ai_master_and_writes_dpi(tmp_path):
+    from PIL import Image
+
+    source = tmp_path / "master.webp"
+    Image.new("RGB", (120, 80), (200, 100, 50)).save(source, format="WEBP", lossless=True)
+
+    result = postprocess_gpu2_image_upscale(
+        {"status": "completed", "output_files": [str(source)]},
+        {"target_long_edge": 4096, "dpi": 300, "text_clarity": True},
+    )
+
+    output = result["output_files"][0]
+    with Image.open(output) as image:
+        assert image.size == (4096, 2731)
+        assert round(image.info["dpi"][0]) == 300
+        assert round(image.info["dpi"][1]) == 300
+    assert result["result_payload"]["text_processing"] == "deterministic_edge_enhancement"
+    assert result["result_payload"]["target_long_edge"] == 4096
+    assert not source.exists()
+
+
+def test_gpu2_image_upscale_task_gets_dedicated_name_and_shared_4k_master():
+    prepared = prepare_gpu2_task({
+        "task_type": "image_upscale",
+        "params": {
+            "image_path": "input.png",
+            "target_long_edge": 50000,
+            "dpi": 300,
+        },
+    })
+
+    assert prepared["workflow_name"] == "gpu2_image_upscale"
+    assert prepared["workflow_json"]["4"]["inputs"]["resolution"] == 4096
+    assert prepared["params"]["target_long_edge"] == 50000
 
 
 def test_gpu2_only_rewrites_upscale_hd_and_qwen_compatible_tasks():

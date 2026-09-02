@@ -46,6 +46,7 @@ function workflowLabelFromContext(message: string, context?: ErrorNormalizeConte
         I2I_HUMAN: '多角度人物生成',
         I2I_Around: '全景角度生成',
         upscale_hd: '高清放大',
+        image_upscale: '图片高清放大',
         remove_watermark: '去水印',
         three_view: '三视图',
     };
@@ -57,6 +58,7 @@ function workflowLabelFromContext(message: string, context?: ErrorNormalizeConte
     const kindLabels: Partial<Record<TaskKind, string>> = {
         'angle-adjust': '角度调整',
         'video-upscale': '高清放大',
+        'image-upscale': '图片高清放大',
         matting: '抠图/去水印',
     };
     if (context?.kind && kindLabels[context.kind]) return kindLabels[context.kind]!;

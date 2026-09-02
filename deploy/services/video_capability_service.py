@@ -13,7 +13,6 @@ from services.api_provider_registry import (
     SORA2_DEFAULT_VIDEO_MODEL,
     VEO_DEFAULT_VIDEO_MODEL,
     normalize_model_usage_scope,
-    seedance_access_mode as resolve_seedance_access_mode,
 )
 from services.api_provider_runtime import (
     provider_health_status,
@@ -305,6 +304,7 @@ def build_video_model_manifest(
     minimax_h3_fast_available: bool = False,
     minimax_h3_mini_available: bool = False,
     minimax_h3_target: Optional[Dict[str, Any]] = None,
+    agent_plan_seedance_model: str = "",
     seedance_billing_mode: str = "standard",
     model_scope: str = MODEL_USAGE_SCOPE_WORKFLOW,
     api_availability: Optional[Dict[str, bool]] = None,
@@ -338,44 +338,40 @@ def build_video_model_manifest(
                 out.append(value)
         return out
 
-    if seedance_billing_mode == "agent_plan":
-        seedance_models = [
-            _seedance_manifest(
-                standard_seedance_model or SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"],
-                key="Seedance15",
-                label=_video_model_label(
-                    standard_seedance_model or SEEDANCE_AGENT_PLAN_MODEL_MAP["standard"],
-                    "首尾帧视频模型",
-                ),
-                omni=False,
-                available=is_available("Seedance15"),
-            )
-        ]
-    else:
-        seedance_models = [
-            _seedance_manifest(
-                standard_seedance_model,
-                key="Seedance2",
-                label=_video_model_label(standard_seedance_model, "多模态标准视频模型"),
-                omni=seedance_omni and _is_seedance_omni_model(standard_seedance_model),
-                available=is_available("Seedance2"),
+    seedance_models = [
+        _seedance_manifest(
+            agent_plan_seedance_model or SEEDANCE_AGENT_PLAN_MODEL_MAP["agent_plan"],
+            key="Seedance15",
+            label=_video_model_label(
+                agent_plan_seedance_model or SEEDANCE_AGENT_PLAN_MODEL_MAP["agent_plan"],
+                "首尾帧视频模型",
             ),
-            _seedance_manifest(
-                fast_seedance_model,
-                key="Seedance2Fast",
-                label=_video_model_label(fast_seedance_model, "多模态快速视频模型"),
-                omni=seedance_omni and _is_seedance_omni_model(fast_seedance_model),
-                available=is_available("Seedance2Fast"),
-            ),
-            _seedance_manifest(
-                mini_seedance_model,
-                key="Seedance2Mini",
-                label=_video_model_label(mini_seedance_model, "多模态简化视频模型"),
-                omni=seedance_omni and _is_seedance_omni_model(mini_seedance_model),
-                available=is_available("Seedance2Mini"),
-                resolutions=["480p", "720p"],
-            ),
-        ]
+            omni=False,
+            available=is_available("Seedance15"),
+        ),
+        _seedance_manifest(
+            standard_seedance_model,
+            key="Seedance2",
+            label=_video_model_label(standard_seedance_model, "多模态标准视频模型"),
+            omni=seedance_omni and _is_seedance_omni_model(standard_seedance_model),
+            available=is_available("Seedance2"),
+        ),
+        _seedance_manifest(
+            fast_seedance_model,
+            key="Seedance2Fast",
+            label=_video_model_label(fast_seedance_model, "多模态快速视频模型"),
+            omni=seedance_omni and _is_seedance_omni_model(fast_seedance_model),
+            available=is_available("Seedance2Fast"),
+        ),
+        _seedance_manifest(
+            mini_seedance_model,
+            key="Seedance2Mini",
+            label=_video_model_label(mini_seedance_model, "多模态简化视频模型"),
+            omni=seedance_omni and _is_seedance_omni_model(mini_seedance_model),
+            available=is_available("Seedance2Mini"),
+            resolutions=["480p", "720p"],
+        ),
+    ]
 
     return {
         "manifest_version": "2026-08-28.1",
@@ -545,11 +541,13 @@ async def get_video_capabilities(
     """Return legacy feature flags plus a versioned model capability manifest."""
     model_scope = normalize_model_usage_scope(usage_scope)
     try:
+        agent_plan_seedance_model = resolve_seedance_model_name("agent_plan", usage_scope=model_scope)
         standard_seedance_model = resolve_seedance_model_name("standard", usage_scope=model_scope)
         fast_seedance_model = resolve_seedance_model_name("fast", usage_scope=model_scope)
         mini_seedance_model = resolve_seedance_model_name("mini", usage_scope=model_scope)
     except Exception as exc:
         logger.debug("video capability Seedance model probe failed: %s", exc)
+        agent_plan_seedance_model = ""
         standard_seedance_model = ""
         fast_seedance_model = ""
         mini_seedance_model = ""
@@ -578,26 +576,32 @@ async def get_video_capabilities(
     minimax_h3_mini_available = bool(
         minimax_h3_available and minimax_h3_capabilities.get("minimax_h3_mini") is True
     )
-    seedance_billing_mode = "standard"
-    try:
-        seedance_provider_config = resolve_provider(
-            "seedance",
-            standard_seedance_model or None,
-            usage_scope=model_scope,
-        )
-        seedance_key_available = bool(seedance_provider_config.has_key)
-        seedance_billing_mode = resolve_seedance_access_mode(seedance_provider_config.endpoint)
-    except Exception as exc:
-        logger.debug(
-            "video capability Seedance provider probe failed: model=%s error=%s",
-            standard_seedance_model,
-            exc,
-        )
-        seedance_key_available = False
+    seedance_key_available: Dict[str, bool] = {}
+    seedance_models_by_key = {
+        "Seedance15": agent_plan_seedance_model,
+        "Seedance2": standard_seedance_model,
+        "Seedance2Fast": fast_seedance_model,
+        "Seedance2Mini": mini_seedance_model,
+    }
+    for key, model_name in seedance_models_by_key.items():
+        try:
+            seedance_provider_config = resolve_provider(
+                "seedance",
+                model_name or None,
+                usage_scope=model_scope,
+            )
+            seedance_key_available[key] = bool(seedance_provider_config.has_key)
+        except Exception as exc:
+            logger.debug(
+                "video capability Seedance provider probe failed: key=%s model=%s error=%s",
+                key,
+                model_name,
+                exc,
+            )
+            seedance_key_available[key] = False
 
     seedance_omni = (
-        seedance_billing_mode != "agent_plan"
-        and any(_is_seedance_omni_model(model) for model in (
+        any(_is_seedance_omni_model(model) for model in (
             standard_seedance_model,
             fast_seedance_model,
             mini_seedance_model,
@@ -605,6 +609,7 @@ async def get_video_capabilities(
     )
     try:
         seedance_health = await list_cached_provider_health(targets=[
+            {"provider": "seedance", "model_name": agent_plan_seedance_model or None},
             {"provider": "seedance", "model_name": standard_seedance_model or None},
             {"provider": "seedance", "model_name": fast_seedance_model or None},
             {"provider": "seedance", "model_name": mini_seedance_model or None},
@@ -613,8 +618,8 @@ async def get_video_capabilities(
         logger.debug("video capability Seedance health cache probe failed: %s", exc)
         seedance_health = []
 
-    def seedance_model_available(model_name: str) -> bool:
-        if not seedance_key_available or not model_name:
+    def seedance_model_available(key: str, model_name: str) -> bool:
+        if not seedance_key_available.get(key) or not model_name:
             return False
         return provider_health_status("seedance", seedance_health, model_name=model_name) not in {"error", "no_key"}
 
@@ -661,11 +666,11 @@ async def get_video_capabilities(
         "seedance_omni": seedance_omni,
         "comfyui_available": comfyui_available,
         **build_video_model_manifest(
+            agent_plan_seedance_model=agent_plan_seedance_model,
             standard_seedance_model=standard_seedance_model,
             fast_seedance_model=fast_seedance_model,
             mini_seedance_model=mini_seedance_model,
             seedance_omni=seedance_omni,
-            seedance_billing_mode=seedance_billing_mode,
             comfyui_available=comfyui_available,
             minimax_h3_available=minimax_h3_available,
             minimax_h3_fast_available=minimax_h3_fast_available,
@@ -676,10 +681,10 @@ async def get_video_capabilities(
                 "Veo": veo_available,
                 "Sora2": sora2_available,
                 "大能": dashscope_available,
-                "Seedance2": seedance_model_available(standard_seedance_model),
-                "Seedance2Fast": seedance_model_available(fast_seedance_model),
-                "Seedance2Mini": seedance_model_available(mini_seedance_model),
-                "Seedance15": seedance_model_available(standard_seedance_model),
+                "Seedance2": seedance_model_available("Seedance2", standard_seedance_model),
+                "Seedance2Fast": seedance_model_available("Seedance2Fast", fast_seedance_model),
+                "Seedance2Mini": seedance_model_available("Seedance2Mini", mini_seedance_model),
+                "Seedance15": seedance_model_available("Seedance15", agent_plan_seedance_model),
                 "MINI": minimax_available,
                 "Kling": dashscope_available,
                 "Vidu": dashscope_available,
