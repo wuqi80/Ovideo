@@ -415,6 +415,12 @@ async def lifespan(app: FastAPI):
     # ✅ 始终初始化 TaskService（Agent 模式下 agent 通过 Redis 队列拉取任务）
     import task_service
     task_service.init(redis_client)
+    migrated_external_tasks = await task_service.get_queue().migrate_external_tasks_from_local_queue()
+    if migrated_external_tasks:
+        logger.info(
+            "已将 %s 个历史 API 任务迁移到独立 API 调度通道",
+            migrated_external_tasks,
+        )
 
     if not SystemConfig.AGENT_ONLY_MODE:
         # 🆕 初始化图像集群管理器
@@ -455,12 +461,11 @@ async def lifespan(app: FastAPI):
         logger.info(f"Workers: {WorkerConfig.NUM_WORKERS}")
         logger.info("=" * 60)
     else:
-        # Lite workers keep provider-backed HTTP tasks moving without claiming
-        # ComfyUI workflow ownership. The worker guard requeues workflow tasks so
-        # external agents can poll them.
-        lite_count = max(0, int(SystemConfig.LITE_WORKERS_COUNT))
+        # API workers consume only the independent provider channel. ComfyUI
+        # workflow tasks remain exclusively in the local-node queue for agents.
+        lite_count = max(0, int(SystemConfig.EXTERNAL_API_WORKERS_COUNT))
         if lite_count > 0:
-            logger.info(f"启动 {lite_count} 个 lite Worker（只消费外部 API 任务，ComfyUI 任务交给 agent）...")
+            logger.info(f"启动 {lite_count} 个 API Worker（独立并发，不占用本地节点队列）...")
             for i in range(lite_count):
                 worker_id = f"{WorkerConfig.WORKER_ID_PREFIX}-lite-{i+1}"
                 worker = Worker(
@@ -472,13 +477,13 @@ async def lifespan(app: FastAPI):
                 )
                 workers.append(worker)
                 _create_worker_task(worker)
-                logger.info(f"✅ lite Worker {worker_id} 已启动")
+                logger.info(f"✅ API Worker {worker_id} 已启动")
         else:
-            logger.info("ℹ️ LITE_WORKERS_COUNT=0：不启动任何 lite Worker（外部 API 任务将无消费者）")
+            logger.info("ℹ️ EXTERNAL_API_WORKERS_COUNT=0：不启动 API Worker（外部 API 任务将无消费者）")
 
         logger.info("=" * 60)
         logger.info("ℹ️ AGENT_ONLY_MODE: 本地 ComfyUI 集群管理器未启动（任务交给外部 agent）")
-        logger.info(f"ℹ️ AGENT_ONLY_MODE: {lite_count} 个 lite Worker 已就绪（外部 API 任务消费者）")
+        logger.info(f"ℹ️ AGENT_ONLY_MODE: {lite_count} 个 API Worker 已就绪（独立外部 API 调度）")
         logger.info("ℹ️ AGENT_ONLY_MODE: 集群健康检查为可选模式")
         logger.info("系统以Agent-Only + Lite Worker 模式启动完成！")
         logger.info("=" * 60)

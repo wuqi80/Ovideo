@@ -221,8 +221,11 @@ class Worker:
         """处理循环"""
         while self.running:
             try:
-                # 从队列获取任务
-                task = await self.task_queue.dequeue(timeout=5)
+                # API Worker 和本地节点 Worker 使用完全独立的 Redis 通道。
+                task = await self.task_queue.dequeue(
+                    timeout=5,
+                    external_only=self.is_lite,
+                )
                 
                 if not task:
                     await asyncio.sleep(1)

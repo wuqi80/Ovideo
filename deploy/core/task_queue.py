@@ -131,6 +131,22 @@ class TaskQueue:
         self.redis = redis_client
 
     @staticmethod
+    def _pending_queue_key(task_type: str) -> str:
+        if is_external_api_task(task_type):
+            return RedisConfig.EXTERNAL_TASK_QUEUE_KEY
+        return RedisConfig.TASK_QUEUE_KEY
+
+    @staticmethod
+    def _processing_queue_key(task_type: str) -> str:
+        if is_external_api_task(task_type):
+            return RedisConfig.EXTERNAL_PROCESSING_QUEUE_KEY
+        return RedisConfig.PROCESSING_QUEUE_KEY
+
+    async def _remove_from_processing_queues(self, task_id: str) -> None:
+        await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task_id)
+        await self.redis.zrem(RedisConfig.EXTERNAL_PROCESSING_QUEUE_KEY, task_id)
+
+    @staticmethod
     def _local_user_slot_key(user_id: str) -> str:
         return f"comfyui:user_local_active:{user_id}"
 
@@ -291,7 +307,7 @@ class TaskQueue:
                 await self.redis.expire(user_tasks_key, 30 * 86400)
             
             # 根据优先级加入队列
-            queue_key = RedisConfig.TASK_QUEUE_KEY
+            queue_key = self._pending_queue_key(task.task_type)
             priority_score = task.priority * 1000000 + int(time.time())
             
             await self.redis.zadd(
@@ -299,18 +315,28 @@ class TaskQueue:
                 {task.task_id: priority_score}
             )
             
-            logger.info(f"任务 {task.task_id} 已加入队列 (优先级: {task.priority})")
+            channel = "API 调度通道" if is_external_api_task(task.task_type) else "本地节点队列"
+            logger.info(f"任务 {task.task_id} 已加入{channel} (优先级: {task.priority})")
             return True
         
         except Exception as e:
             logger.error(f"任务入队失败: {e}")
             return False
     
-    async def dequeue(self, timeout: int = QueueConfig.QUEUE_BLOCK_TIMEOUT) -> Optional[Task]:
-        """从队列取出任务（阻塞）"""
+    async def dequeue(
+        self,
+        timeout: int = QueueConfig.QUEUE_BLOCK_TIMEOUT,
+        external_only: bool = False,
+    ) -> Optional[Task]:
+        """从本地节点队列或独立 API 调度通道取出任务。"""
         try:
+            queue_key = (
+                RedisConfig.EXTERNAL_TASK_QUEUE_KEY
+                if external_only
+                else RedisConfig.TASK_QUEUE_KEY
+            )
             # 使用有序集合按分数获取（优先级+时间戳）
-            result = await self.redis.zpopmin(RedisConfig.TASK_QUEUE_KEY, count=1)
+            result = await self.redis.zpopmin(queue_key, count=1)
             
             if not result:
                 return None
@@ -328,12 +354,17 @@ class TaskQueue:
                 _parsed = json.loads(task_id)
                 if isinstance(_parsed, dict) and "task_id" in _parsed:
                     parsed_task_type = str(_parsed.get("task_type") or "")
-                    if is_external_api_task(parsed_task_type):
+                    if external_only and is_external_api_task(parsed_task_type):
                         task_id = str(_parsed["task_id"])
                         logger.info("dequeue: 恢复 JSON member 外部 API 任务 %s", task_id)
-                    else:
+                    elif not external_only and not is_external_api_task(parsed_task_type):
                         await self.redis.zadd(RedisConfig.TASK_QUEUE_KEY, {task_id: 10})
                         logger.info("dequeue: 识别到本地节点 JSON 任务，放回队列交给 GPU agent")
+                        return None
+                    else:
+                        target_key = self._pending_queue_key(parsed_task_type)
+                        await self.redis.zadd(target_key, {task_id: 10})
+                        logger.info("dequeue: 将误投任务迁移到正确调度通道 %s", target_key)
                         return None
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
@@ -343,6 +374,14 @@ class TaskQueue:
             if not task:
                 logger.warning(f"任务 {task_id} 不存在")
                 return None
+
+            expected_external = is_external_api_task(task.task_type)
+            if expected_external != external_only:
+                target_key = self._pending_queue_key(task.task_type)
+                priority_score = task.priority * 1000000 + int(time.time())
+                await self.redis.zadd(target_key, {task_id: priority_score})
+                logger.info("dequeue: 将任务 %s 迁移到正确调度通道 %s", task_id, target_key)
+                return None
             
             # 更新状态为处理中
             task.status = TaskStatus.PROCESSING
@@ -351,7 +390,7 @@ class TaskQueue:
             
             # 加入处理队列（用于监控）
             await self.redis.zadd(
-                RedisConfig.PROCESSING_QUEUE_KEY,
+                self._processing_queue_key(task.task_type),
                 {task_id: int(time.time())}
             )
             
@@ -370,7 +409,7 @@ class TaskQueue:
                 logger.warning(f"任务 {task_id} 不存在")
                 return False
             if task.status == TaskStatus.CANCELLED:
-                await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task_id)
+                await self._remove_from_processing_queues(task_id)
                 logger.info(f"任务 {task_id} 已取消，忽略迟到的完成结果")
                 return False
 
@@ -396,7 +435,7 @@ class TaskQueue:
             await self._save_task(task)
             
             # 从处理队列移除
-            await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task_id)
+            await self._remove_from_processing_queues(task_id)
             
             # 加入完成队列
             await self.redis.zadd(
@@ -500,7 +539,7 @@ class TaskQueue:
                 logger.warning(f"任务 {task_id} 不存在")
                 return False
             if task.status == TaskStatus.CANCELLED:
-                await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task_id)
+                await self._remove_from_processing_queues(task_id)
                 logger.info(f"任务 {task_id} 已取消，忽略迟到的失败结果")
                 return False
             
@@ -522,7 +561,7 @@ class TaskQueue:
                 
                 priority_score = (task.priority - 1) * 1000000 + int(time.time())
                 await self.redis.zadd(
-                    RedisConfig.TASK_QUEUE_KEY,
+                    self._pending_queue_key(task.task_type),
                     {task_id: priority_score}
                 )
             else:
@@ -636,7 +675,7 @@ class TaskQueue:
                     logger.debug(f"创建失败通知记录失败(不影响任务): {ne}")
             
             # 从处理队列移除
-            await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task_id)
+            await self._remove_from_processing_queues(task_id)
             
             return True
         
@@ -646,21 +685,25 @@ class TaskQueue:
 
     async def _remove_pending_task_members(self, task_id: str) -> None:
         """Remove both canonical and legacy JSON queue members for one task."""
-        await self.redis.zrem(RedisConfig.TASK_QUEUE_KEY, task_id)
         pattern = f"*{task_id}*"
-        async for entry in self.redis.zscan_iter(
+        for queue_key in (
             RedisConfig.TASK_QUEUE_KEY,
-            match=pattern,
-            count=100,
+            RedisConfig.EXTERNAL_TASK_QUEUE_KEY,
         ):
-            raw_member = entry[0] if isinstance(entry, (tuple, list)) else entry
-            member = raw_member.decode("utf-8") if isinstance(raw_member, bytes) else raw_member
-            try:
-                parsed = json.loads(member)
-            except (json.JSONDecodeError, TypeError, ValueError):
-                continue
-            if isinstance(parsed, dict) and str(parsed.get("task_id") or "") == task_id:
-                await self.redis.zrem(RedisConfig.TASK_QUEUE_KEY, raw_member)
+            await self.redis.zrem(queue_key, task_id)
+            async for entry in self.redis.zscan_iter(
+                queue_key,
+                match=pattern,
+                count=100,
+            ):
+                raw_member = entry[0] if isinstance(entry, (tuple, list)) else entry
+                member = raw_member.decode("utf-8") if isinstance(raw_member, bytes) else raw_member
+                try:
+                    parsed = json.loads(member)
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    continue
+                if isinstance(parsed, dict) and str(parsed.get("task_id") or "") == task_id:
+                    await self.redis.zrem(queue_key, raw_member)
     
     async def requeue_task(self, task_id: str) -> bool:
         """
@@ -680,12 +723,12 @@ class TaskQueue:
             await self._save_task(task)
             
             # 从处理队列移除
-            await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task_id)
+            await self._remove_from_processing_queues(task_id)
             
             # 重新入队（保持原优先级）
             priority_score = task.priority * 1000000 + int(time.time())
             await self.redis.zadd(
-                RedisConfig.TASK_QUEUE_KEY,
+                self._pending_queue_key(task.task_type),
                 {task_id: priority_score}
             )
             
@@ -727,8 +770,8 @@ class TaskQueue:
                 # 其它终态（completed/failed）保持不动
 
             # 无论 Redis 中状态如何，都把任务从队列里清掉
-            await self.redis.zrem(RedisConfig.TASK_QUEUE_KEY, task_id)
-            await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task_id)
+            await self._remove_pending_task_members(task_id)
+            await self._remove_from_processing_queues(task_id)
         except Exception as e:
             logger.error(f"取消任务（Redis 阶段）失败: {e}")
 
@@ -790,8 +833,8 @@ class TaskQueue:
                 return False
             
             # 从所有队列中移除
-            await self.redis.zrem(RedisConfig.TASK_QUEUE_KEY, task_id)
-            await self.redis.zrem(RedisConfig.PROCESSING_QUEUE_KEY, task_id)
+            await self._remove_pending_task_members(task_id)
+            await self._remove_from_processing_queues(task_id)
             await self.redis.zrem(RedisConfig.COMPLETED_QUEUE_KEY, task_id)
             await self.redis.zrem(RedisConfig.FAILED_QUEUE_KEY, task_id)
             
@@ -889,6 +932,39 @@ class TaskQueue:
         except Exception as e:
             logger.error(f"保存任务失败: {e}")
             raise
+
+    async def migrate_external_tasks_from_local_queue(self, scan_limit: int = 1000) -> int:
+        """Move legacy API tasks out of the serial local-node queue on startup."""
+        moved = 0
+        members = await self.redis.zrange(
+            RedisConfig.TASK_QUEUE_KEY,
+            0,
+            max(0, int(scan_limit) - 1),
+            withscores=True,
+        )
+        for raw_member, score in members:
+            member = raw_member.decode("utf-8") if isinstance(raw_member, bytes) else str(raw_member)
+            task_id = member
+            task_type = ""
+            try:
+                parsed = json.loads(member)
+                if isinstance(parsed, dict) and parsed.get("task_id"):
+                    task_id = str(parsed["task_id"])
+                    task_type = str(parsed.get("task_type") or "")
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+            if not task_type:
+                task = await self.get_task(task_id)
+                task_type = task.task_type if task else ""
+            if not is_external_api_task(task_type):
+                continue
+            if await self.redis.zrem(RedisConfig.TASK_QUEUE_KEY, raw_member):
+                await self.redis.zadd(
+                    RedisConfig.EXTERNAL_TASK_QUEUE_KEY,
+                    {task_id: float(score)},
+                )
+                moved += 1
+        return moved
     
     async def get_queue_length(self) -> int:
         """获取队列长度"""
@@ -898,10 +974,24 @@ class TaskQueue:
             return 0
     
     async def get_processing_count(self) -> int:
-        """获取处理中的任务数"""
+        """获取本地节点处理中任务数。"""
         try:
             return await self.redis.zcard(RedisConfig.PROCESSING_QUEUE_KEY)
         except:
+            return 0
+
+    async def get_external_queue_length(self) -> int:
+        """获取等待 API Worker 接手的持久化交接任务数。"""
+        try:
+            return await self.redis.zcard(RedisConfig.EXTERNAL_TASK_QUEUE_KEY)
+        except Exception:
+            return 0
+
+    async def get_external_processing_count(self) -> int:
+        """获取正在并发调用外部 API 的任务数。"""
+        try:
+            return await self.redis.zcard(RedisConfig.EXTERNAL_PROCESSING_QUEUE_KEY)
+        except Exception:
             return 0
     
     # ---- 并发控制 ----

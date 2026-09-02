@@ -99,6 +99,8 @@ class RedisConfig:
     DECODE_RESPONSES = True
     TASK_QUEUE_KEY = "comfyui:task_queue"
     PROCESSING_QUEUE_KEY = "comfyui:processing"
+    EXTERNAL_TASK_QUEUE_KEY = "external_api:task_queue"
+    EXTERNAL_PROCESSING_QUEUE_KEY = "external_api:processing"
     COMPLETED_QUEUE_KEY = "comfyui:completed"
     FAILED_QUEUE_KEY = "comfyui:failed"
     TASK_STATUS_PREFIX = "comfyui:task:"

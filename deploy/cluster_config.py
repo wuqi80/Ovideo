@@ -114,6 +114,8 @@ class RedisConfig:
     DECODE_RESPONSES = True
     TASK_QUEUE_KEY = "comfyui:task_queue"
     PROCESSING_QUEUE_KEY = "comfyui:processing"
+    EXTERNAL_TASK_QUEUE_KEY = "external_api:task_queue"
+    EXTERNAL_PROCESSING_QUEUE_KEY = "external_api:processing"
     COMPLETED_QUEUE_KEY = "comfyui:completed"
     FAILED_QUEUE_KEY = "comfyui:failed"
     TASK_STATUS_PREFIX = "comfyui:task:"
@@ -168,6 +170,10 @@ class SystemConfig:
     # Lite workers consume provider-backed HTTP tasks when local ComfyUI is not
     # owned by this process. Workflow tasks remain available for external agents.
     LITE_WORKERS_COUNT = int(os.environ.get("LITE_WORKERS_COUNT", "2"))
+    # External-provider calls never share the serial ComfyUI queue.  A wider
+    # dispatcher pool starts them independently; the Redis handoff remains only
+    # for crash recovery, not as a GPU scheduling constraint.
+    EXTERNAL_API_WORKERS_COUNT = int(os.environ.get("EXTERNAL_API_WORKERS_COUNT", "16"))
 
     HOST = "0.0.0.0"
     PORT = 6006

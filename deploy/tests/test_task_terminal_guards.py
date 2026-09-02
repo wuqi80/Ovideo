@@ -42,7 +42,10 @@ async def test_cancelled_task_rejects_late_terminal_write(method_name):
 
     assert result is False
     queue._save_task.assert_not_awaited()
-    redis.zrem.assert_awaited_once()
+    assert redis.zrem.await_args_list == [
+        call(RedisConfig.PROCESSING_QUEUE_KEY, task.task_id),
+        call(RedisConfig.EXTERNAL_PROCESSING_QUEUE_KEY, task.task_id),
+    ]
 
 
 @pytest.mark.asyncio
@@ -75,8 +78,11 @@ async def test_final_failure_removes_task_from_pending_and_processing_queues(mon
     assert redis.zrem.await_args_list == [
         call(RedisConfig.TASK_QUEUE_KEY, task.task_id),
         call(RedisConfig.TASK_QUEUE_KEY, legacy_member),
+        call(RedisConfig.EXTERNAL_TASK_QUEUE_KEY, task.task_id),
+        call(RedisConfig.EXTERNAL_TASK_QUEUE_KEY, legacy_member),
         call("comfyui:user_local_active:user-1", task.task_id),
         call(RedisConfig.PROCESSING_QUEUE_KEY, task.task_id),
+        call(RedisConfig.EXTERNAL_PROCESSING_QUEUE_KEY, task.task_id),
     ]
 
 
@@ -90,12 +96,12 @@ async def test_dequeue_processes_external_json_member_in_lite_worker():
     queue.get_task = AsyncMock(return_value=task)
     queue._save_task = AsyncMock()
 
-    dequeued = await queue.dequeue()
+    dequeued = await queue.dequeue(external_only=True)
 
     assert dequeued is task
     assert task.status == TaskStatus.PROCESSING
     assert redis.zadd.await_count == 1
-    assert redis.zadd.await_args.args[0] == RedisConfig.PROCESSING_QUEUE_KEY
+    assert redis.zadd.await_args.args[0] == RedisConfig.EXTERNAL_PROCESSING_QUEUE_KEY
     assert list(redis.zadd.await_args.args[1]) == ["external-1"]
 
 
@@ -112,3 +118,49 @@ async def test_dequeue_returns_local_json_member_to_agent_queue():
     assert dequeued is None
     redis.zadd.assert_awaited_once_with(RedisConfig.TASK_QUEUE_KEY, {member: 10})
     queue.get_task.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_enqueue_routes_external_and_local_tasks_to_separate_channels(monkeypatch):
+    redis = AsyncMock()
+    queue = TaskQueue(redis)
+    queue._save_task = AsyncMock()
+
+    import db_manager
+    monkeypatch.setattr(db_manager, 'get_db_manager', lambda: None)
+
+    await queue.enqueue(Task("external-1", "seedance_t2v", {}, user_id="user-1"))
+    await queue.enqueue(Task("local-1", "i2v", {}, user_id="user-1"))
+
+    queue_calls = [
+        item
+        for item in redis.zadd.await_args_list
+        if item.args and item.args[0] in {
+            RedisConfig.TASK_QUEUE_KEY,
+            RedisConfig.EXTERNAL_TASK_QUEUE_KEY,
+        }
+    ]
+    assert queue_calls[0].args[0] == RedisConfig.EXTERNAL_TASK_QUEUE_KEY
+    assert list(queue_calls[0].args[1]) == ["external-1"]
+    assert queue_calls[1].args[0] == RedisConfig.TASK_QUEUE_KEY
+    assert list(queue_calls[1].args[1]) == ["local-1"]
+
+
+@pytest.mark.asyncio
+async def test_startup_migrates_legacy_external_task_out_of_local_queue():
+    redis = AsyncMock()
+    redis.zrange.return_value = [("external-1", 123.0), ("local-1", 124.0)]
+    redis.zrem.return_value = 1
+    queue = TaskQueue(redis)
+    queue.get_task = AsyncMock(side_effect=[
+        Task("external-1", "seedance_t2v", {}, user_id="user-1"),
+        Task("local-1", "i2v", {}, user_id="user-1"),
+    ])
+
+    moved = await queue.migrate_external_tasks_from_local_queue()
+
+    assert moved == 1
+    redis.zadd.assert_awaited_once_with(
+        RedisConfig.EXTERNAL_TASK_QUEUE_KEY,
+        {"external-1": 123.0},
+    )

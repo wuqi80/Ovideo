@@ -97,6 +97,7 @@ if (-not $Listening) {
         "REDIS_PORT"           = "6379"
         "AGENT_ONLY_MODE"      = "true"
         "LITE_WORKERS_COUNT"   = "1"
+        "EXTERNAL_API_WORKERS_COUNT" = "16"
         "DEEPSEEK_API_KEY"     = "<FILL_ME_DEEPSEEK_KEY>"
         "ARK_API_KEY"          = "<FILL_ME_ARK_KEY>"
         "GEMINI_TEXT_API_KEY"  = "<FILL_ME_GEMINI_TEXT_KEY>"
