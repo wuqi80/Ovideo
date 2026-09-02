@@ -110,6 +110,39 @@ export function secureMediaUrl(url: string, options: { absolute?: boolean } = {}
   return secureApiUrl(url, { absolute: options.absolute, requireAuth: false });
 }
 
+export async function readVideoDurationSeconds(file: File, timeoutMs = 5_000): Promise<number | null> {
+  if (typeof document === 'undefined' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return null;
+
+  let objectUrl: string;
+  try {
+    objectUrl = URL.createObjectURL(file);
+  } catch {
+    return null;
+  }
+
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    let settled = false;
+    const finish = (duration: number | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      URL.revokeObjectURL(objectUrl);
+      resolve(duration);
+    };
+    const timer = window.setTimeout(() => finish(null), timeoutMs);
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      const duration = Number(video.duration);
+      finish(Number.isFinite(duration) && duration > 0
+        ? Math.round(duration * 1000) / 1000
+        : null);
+    };
+    video.onerror = () => finish(null);
+    video.src = objectUrl;
+  });
+}
+
 export async function uploadImage(file: File, options?: UploadOptions): Promise<{
   file_id: string;
   filename: string;
@@ -161,8 +194,11 @@ export async function uploadVideoFile(file: File, options?: UploadOptions): Prom
   url: string;
   path: string;
   size: number;
+  duration_seconds: number | null;
 }> {
-  return uploadImage(file, options);
+  const durationPromise = readVideoDurationSeconds(file);
+  const uploaded = await uploadImage(file, options);
+  return { ...uploaded, duration_seconds: await durationPromise };
 }
 
 export async function getProjectVideoTasks(projectId: string): Promise<ProjectVideoTask[]> {

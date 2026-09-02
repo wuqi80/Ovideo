@@ -63,11 +63,13 @@ async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
     assert wan26["parameter_rules"]["resolution"] == ["720P", "1080P"]
     assert wan26["parameter_rules"]["shot_type"] == ["multi", "single"]
     seedance_mini = next(model for model in result["models"] if model["key"] == "Seedance2Mini")
+    seedance_fast = next(model for model in result["models"] if model["key"] == "Seedance2Fast")
     assert seedance_mini["available"] is True
     assert seedance_mini["model_name"] == "doubao-seedance-2-0-mini-260615"
     assert "reference_video" in seedance_mini["media_inputs"]
     assert "reference_audio" in seedance_mini["media_inputs"]
     assert seedance_mini["parameter_rules"]["resolution"] == ["480p", "720p"]
+    assert seedance_fast["parameter_rules"]["resolution"] == ["480p", "720p"]
     assert seedance_mini["parameter_rules"]["duration"]["maximum"] == 15
 
 

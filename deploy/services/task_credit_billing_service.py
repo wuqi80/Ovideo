@@ -48,6 +48,21 @@ def _non_negative_int(value: Any) -> int:
         return 0
 
 
+def _reference_video_duration_seconds(item: Dict[str, Any]) -> Optional[float]:
+    for key in ("duration_seconds", "duration"):
+        try:
+            value = float(item.get(key))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if value > 0:
+            return value
+    try:
+        duration_ms = float(item.get("duration_ms"))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return duration_ms / 1000 if duration_ms > 0 else None
+
+
 def resolve_task_billing(task_type: str, task_data: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """Return a trusted billing spec for supported queued workflow surfaces."""
     normalized_type = str(task_type or "").strip().lower()
@@ -85,6 +100,11 @@ def resolve_task_billing(task_type: str, task_data: Optional[Dict[str, Any]]) ->
         }
 
     if normalized_type in VIDEO_TASK_TYPES or normalized_type.startswith(VIDEO_TASK_PREFIXES):
+        reference_videos = [
+            item
+            for item in (data.get("media_inputs") or [])
+            if isinstance(item, dict) and str(item.get("kind") or "").strip().lower() == "video"
+        ]
         return {
             "feature_key": "video_generation",
             "params": {
@@ -110,10 +130,12 @@ def resolve_task_billing(task_type: str, task_data: Optional[Dict[str, Any]]) ->
                 "vidu_resolution": data.get("vidu_resolution"),
                 "h3_upscale_720p": data.get("h3_upscale_720p") is True,
                 "audio": bool(data.get("vidu_audio") or data.get("audio")),
-                "has_reference_video": any(
-                    isinstance(item, dict) and item.get("kind") == "video"
-                    for item in (data.get("media_inputs") or [])
-                ),
+                "has_reference_video": bool(reference_videos),
+                "reference_video_count": len(reference_videos),
+                "reference_video_durations": [
+                    _reference_video_duration_seconds(item)
+                    for item in reference_videos
+                ],
             },
             "surface": "video",
         }

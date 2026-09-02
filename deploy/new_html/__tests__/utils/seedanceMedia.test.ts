@@ -105,6 +105,24 @@ describe('insertMention (text candidate)', () => {
     });
 });
 
+describe('insertMention (video pricing metadata)', () => {
+    it('persists candidate duration for the server-owned credit estimate', () => {
+        const candidate: SeedanceAssetCandidate = {
+            id: 'cand_video_1',
+            group: 'video_segments',
+            kind: 'video',
+            label: '参考视频',
+            url: '/storage/reference.mp4',
+            durationMs: 8500,
+        };
+        const next = insertMention(baseParams(), candidate);
+        expect(next.media_inputs[0]).toMatchObject({
+            kind: 'video',
+            duration_seconds: 8.5,
+        });
+    });
+});
+
 // 2026-05-20 (Bug 1)：caret 模式 — 用户在 prompt 中间输入 @ + 搜索词后选候选，
 // 替换 [atPos, caretPos) 为 token，而不是 append 在末尾。
 describe('insertMention (caret mode)', () => {

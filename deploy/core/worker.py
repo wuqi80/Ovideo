@@ -1287,7 +1287,13 @@ class Worker:
             if not contents:
                 raise ValueError("Seedance 任务无任何 prompt 或 media，无法生成")
 
-            # 7 参数（fast / mini 不支持 1080p，自动降级 + warning）
+            # Validate again at execution time for legacy/imported queue items.
+            # Unsupported specifications must never be silently downgraded after
+            # the user has accepted a price for a different resolution.
+            from services.video_credit_pricing import validate_seedance_generation_options
+            validate_seedance_generation_options(task.data)
+
+            # 7 参数
             kwargs = dict(
                 resolution=task.data.get('resolution'),
                 ratio=task.data.get('ratio') or 'adaptive',
@@ -1298,10 +1304,6 @@ class Worker:
                 camera_fixed=bool(task.data.get('camera_fixed', False)),
                 tools=task.data.get('tools') or None,
             )
-            if sub_model in ('fast', 'mini') and kwargs.get('resolution') == '1080p':
-                logger.warning("⚠️ Seedance %s 不支持 1080p，自动降级到 720p", sub_model)
-                kwargs['resolution'] = '720p'
-
             ark_task_id = client.create_video_task(sub_model, contents, usage_scope=model_scope, **kwargs)
             await self.task_queue.update_progress(task.task_id, 5, "Seedance 任务已创建")
 

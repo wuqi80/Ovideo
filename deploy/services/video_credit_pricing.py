@@ -16,15 +16,55 @@ profile when requested.
 """
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Any, Dict, Mapping, Tuple
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
+from typing import Any, Dict, Mapping, Sequence, Tuple
 
 
-VIDEO_PRICING_VERSION = "2026-08-19-video-cost-v3"
+VIDEO_PRICING_VERSION = "2026-09-02-video-cost-v4"
 CREDITS_PER_CNY = Decimal("20")
 LOCAL_VIDEO_CREDITS = 10
 LOCAL_H3_MINI_CREDITS = 5
 LOCAL_720P_UPSCALE_CREDITS = 5
+SEEDANCE_UNKNOWN_REFERENCE_VIDEO_SECONDS = Decimal("15")
+SEEDANCE_MINIMUM_REFERENCE_VIDEO_SECONDS = Decimal("4")
+
+# Volcengine list-price examples for a 5-second, 16:9 output without video
+# input.  Fast/Mini promotion prices are deliberately excluded: the temporary
+# discount must remain a cost buffer instead of turning into a loss when it
+# expires.  Source: https://docs.volcengine.com/docs/82379/1544106
+SEEDANCE_NO_VIDEO_FIVE_SECOND_COST_CNY = {
+    "mini": {"480P": Decimal("1.16"), "720P": Decimal("2.48")},
+    "fast": {"480P": Decimal("1.86"), "720P": Decimal("4.00")},
+    "standard": {
+        "480P": Decimal("2.31"),
+        "720P": Decimal("4.97"),
+        "1080P": Decimal("12.39"),
+        "4K": Decimal("25.27"),
+    },
+}
+
+# Provider list-price cost per combined input/output second when a reference
+# video is present. Values reproduce the official 5-second output examples
+# across the four-to-fifteen-second input range without accumulating rounding.
+SEEDANCE_WITH_VIDEO_PER_SECOND_COST_CNY = {
+    "mini": {"480P": Decimal("0.1405"), "720P": Decimal("0.3024")},
+    "fast": {"480P": Decimal("0.221"), "720P": Decimal("0.4752")},
+    "standard": {
+        "480P": Decimal("0.281"),
+        "720P": Decimal("0.6048"),
+        "1080P": Decimal("1.5065"),
+        "4K": Decimal("3.1105"),
+    },
+}
+
+# Product prices for requests without reference-video input.  They are rounded
+# above provider cost * 20 credits/CNY to leave room for gift credits, storage,
+# payment fees, and operations. Reference-video requests are calculated below.
+SEEDANCE_BASE_FIVE_SECOND_CREDITS = {
+    "mini": {"480P": 35, "720P": 50},
+    "fast": {"480P": 50, "720P": 85},
+    "standard": {"480P": 65, "720P": 105, "1080P": 260, "4K": 520},
+}
 
 LOCAL_MODELS = frozenset(
     {
@@ -81,6 +121,11 @@ def _resolution(params: Mapping[str, Any], default: str = "720P") -> str:
         "768P": "768P",
         "1080": "1080P",
         "1080P": "1080P",
+        "2160": "4K",
+        "2160P": "4K",
+        "4K": "4K",
+        "3840X2160": "4K",
+        "3840*2160": "4K",
         "1280X704": "720P",
         "1280*704": "720P",
     }
@@ -91,6 +136,86 @@ def _credits_from_cny_per_second(rate: str, duration: int) -> Tuple[int, Decimal
     provider_cost = Decimal(rate) * Decimal(duration)
     credits = int((provider_cost * CREDITS_PER_CNY).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
     return max(LOCAL_VIDEO_CREDITS, credits), provider_cost
+
+
+def _positive_decimal(value: Any) -> Decimal | None:
+    try:
+        parsed = Decimal(str(value))
+    except (TypeError, ValueError, ArithmeticError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _ceil_credits_to_five(provider_cost: Decimal) -> int:
+    whole_credits = int(
+        (provider_cost * CREDITS_PER_CNY).to_integral_value(rounding=ROUND_CEILING)
+    )
+    return max(LOCAL_VIDEO_CREDITS, ((whole_credits + 4) // 5) * 5)
+
+
+def _seedance_tier(params: Mapping[str, Any]) -> str:
+    model = _lower(params.get("model"))
+    sub_model = _lower(params.get("sub_model"))
+    if "mini" in model or sub_model == "mini":
+        return "mini"
+    if "fast" in model or sub_model == "fast":
+        return "fast"
+    if model == "seedance15" or sub_model == "agent_plan":
+        return "1.5"
+    return "standard"
+
+
+def _reference_video_durations(params: Mapping[str, Any]) -> Tuple[Decimal, int, bool]:
+    raw_durations: Sequence[Any] = ()
+    explicit = params.get("reference_video_durations")
+    if isinstance(explicit, (list, tuple)):
+        raw_durations = explicit
+    else:
+        media_inputs = params.get("media_inputs")
+        if isinstance(media_inputs, (list, tuple)):
+            raw_durations = [
+                item.get("duration_seconds")
+                or item.get("duration")
+                or (
+                    Decimal(str(item.get("duration_ms"))) / Decimal("1000")
+                    if _positive_decimal(item.get("duration_ms")) is not None
+                    else None
+                )
+                for item in media_inputs
+                if isinstance(item, Mapping) and _lower(item.get("kind")) == "video"
+            ]
+
+    try:
+        requested_count = max(0, int(params.get("reference_video_count") or 0))
+    except (TypeError, ValueError, OverflowError):
+        requested_count = 0
+    count = max(requested_count, len(raw_durations))
+    if count == 0 and bool(params.get("has_reference_video")):
+        count = 1
+    if count == 0:
+        return Decimal("0"), 0, False
+
+    total = Decimal("0")
+    defaulted = False
+    for index in range(count):
+        duration = _positive_decimal(raw_durations[index]) if index < len(raw_durations) else None
+        if duration is None:
+            duration = SEEDANCE_UNKNOWN_REFERENCE_VIDEO_SECONDS
+            defaulted = True
+        total += max(duration, SEEDANCE_MINIMUM_REFERENCE_VIDEO_SECONDS)
+    return total, count, defaulted
+
+
+def validate_seedance_generation_options(params: Mapping[str, Any] | None) -> None:
+    """Reject provider-unsupported combinations before credits are frozen."""
+    data = params or {}
+    if _infer_family(data) != "seedance":
+        return
+    tier = _seedance_tier(data)
+    resolution = _resolution(data, "720P")
+    if tier in {"fast", "mini"} and resolution not in {"480P", "720P"}:
+        label = "Fast" if tier == "fast" else "Mini"
+        raise ValueError(f"Seedance 2.0 {label} 仅支持 480P 和 720P，请调整分辨率后重试")
 
 
 def _fixed_quote(
@@ -164,37 +289,53 @@ def _quote_minimax(params: Mapping[str, Any]) -> Dict[str, Any]:
 
 
 def _quote_seedance(params: Mapping[str, Any]) -> Dict[str, Any]:
-    model = _lower(params.get("model"))
-    sub_model = _lower(params.get("sub_model"))
-    if "mini" in model or sub_model == "mini":
-        tier = "mini"
-    elif "fast" in model or sub_model == "fast":
-        tier = "fast"
-    elif model == "seedance15":
-        tier = "1.5"
-    else:
-        tier = "standard"
+    tier = _seedance_tier(params)
     resolution = _resolution(params, "720P")
     duration = _positive_int(params.get("duration_seconds") or params.get("duration"), 5)
-    # Product tiers derived from the active Ark/package cost order.  They stay
-    # below HappyHorse for the same duration and are intentionally explicit
-    # because Seedance is billed in video tokens rather than CNY/second.
-    five_second_credits = {
-        "mini": {"480P": 35, "720P": 50, "1080P": 70},
-        "fast": {"480P": 50, "720P": 75, "1080P": 105},
-        # Agent Plan's Seedance 1.5 entry is intentionally priced at roughly
-        # one third of the matching Seedance 2.0 Standard tier.
-        "1.5": {"480P": 22, "720P": 32, "1080P": 45},
-        "standard": {"480P": 65, "720P": 95, "1080P": 135},
-    }
-    base = five_second_credits[tier].get(resolution, five_second_credits[tier]["720P"])
+    if tier == "1.5":
+        # Agent Plan's Seedance 1.5 entry remains roughly one third of the
+        # matching Seedance 2.0 Standard tier and does not accept video input.
+        base = {"480P": 22, "720P": 32, "1080P": 45}.get(resolution, 32)
+        credits = int(
+            (Decimal(base) * Decimal(duration) / Decimal(5)).quantize(
+                Decimal("1"), rounding=ROUND_HALF_UP
+            )
+        )
+        return _fixed_quote(
+            credits,
+            "seedance-1.5",
+            duration_seconds=duration,
+            resolution=resolution,
+            basis="agent-plan-product-tier",
+        )
+
+    supported_costs = SEEDANCE_NO_VIDEO_FIVE_SECOND_COST_CNY[tier]
+    if resolution not in supported_costs:
+        # Pricing previews normalize stale Fast/Mini 1080P state to 720P. The
+        # generation route rejects it before reservation; this branch keeps a
+        # stale browser estimate from becoming a server error.
+        resolution = "720P"
+    base = SEEDANCE_BASE_FIVE_SECOND_CREDITS[tier][resolution]
     credits = int((Decimal(base) * Decimal(duration) / Decimal(5)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    reference_seconds, reference_count, duration_defaulted = _reference_video_durations(params)
+    provider_cost = (
+        supported_costs[resolution] * Decimal(duration) / Decimal("5")
+    )
+    if reference_count:
+        combined_seconds = Decimal(duration) + reference_seconds
+        provider_cost = SEEDANCE_WITH_VIDEO_PER_SECOND_COST_CNY[tier][resolution] * combined_seconds
+        credits = max(credits, _ceil_credits_to_five(provider_cost))
     return _fixed_quote(
         credits,
         f"seedance-{tier}",
         duration_seconds=duration,
         resolution=resolution,
-        basis="ark-video-token-tier",
+        reference_video_count=reference_count,
+        reference_video_seconds=str(reference_seconds.normalize()) if reference_count else "0",
+        reference_video_duration_defaulted=duration_defaulted,
+        provider_cost_cny=str(provider_cost.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)),
+        conversion_credits_per_cny=str(CREDITS_PER_CNY),
+        basis="ark-seedance-list-price",
     )
 
 

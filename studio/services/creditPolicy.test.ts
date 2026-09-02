@@ -38,15 +38,15 @@ describe('Studio credit policy', () => {
         h3_upscale_720p: false,
       },
       quantity: 3,
-      fallbackUnitCost: 190,
+      fallbackUnitCost: 210,
     });
 
     expect(summarizeStudioCreditQuote(request!, {
       enabled: true,
-      estimatedCost: 190,
+      estimatedCost: 210,
       balance: 500,
       enough: true,
-    })).toMatchObject({ totalCost: 570, enough: false });
+    })).toMatchObject({ totalCost: 630, enough: false });
   });
 
   it('uses the reduced Seedance 1.5 Agent Plan fallback price', () => {
@@ -57,7 +57,7 @@ describe('Studio credit policy', () => {
     }))).toMatchObject({
       params: {
         model: 'Seedance15',
-        sub_model: 'standard',
+        sub_model: 'agent_plan',
         duration_seconds: 5,
         resolution: '720P',
       },

@@ -362,6 +362,7 @@ def build_video_model_manifest(
             label=_video_model_label(fast_seedance_model, "多模态快速视频模型"),
             omni=seedance_omni and _is_seedance_omni_model(fast_seedance_model),
             available=is_available("Seedance2Fast"),
+            resolutions=["480p", "720p"],
         ),
         _seedance_manifest(
             mini_seedance_model,

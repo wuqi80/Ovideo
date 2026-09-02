@@ -868,13 +868,16 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const getGroupVideoCreditEstimateParams = useCallback((group: TaskGroup): Record<string, unknown> => {
         if (isSeedanceVideoModel(group.model)) {
             const params = getSeedanceParams(group.uuid, group.model);
+            const referenceVideos = (params.media_inputs || []).filter(item => item.kind === 'video');
             return getVideoCreditEstimateParams(group.model, {
                 task_type: inferSeedanceTaskType(params.media_inputs || []),
                 duration_seconds: params.duration,
                 resolution: params.resolution,
                 sub_model: params.sub_model,
                 audio: params.generate_audio === true,
-                has_reference_video: (params.media_inputs || []).some(item => item.kind === 'video'),
+                has_reference_video: referenceVideos.length > 0,
+                reference_video_count: referenceVideos.length,
+                reference_video_durations: referenceVideos.map(item => item.duration_seconds ?? null),
             });
         }
 

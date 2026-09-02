@@ -26,6 +26,7 @@ from services.video_enhancement_service import (
 )
 from services.video_interpolation_service import prepare_video_interpolation_task
 from services.video_capability_service import resolve_minimax_h3_agent_target
+from services.video_credit_pricing import validate_seedance_generation_options
 from external_api.video.minimax import normalize_minimax_generation_options
 from services.generation_access_service import (
     GenerationAccessDenied,
@@ -237,6 +238,10 @@ def create_task_router(
                     )
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail=str(exc)) from exc
+            try:
+                validate_seedance_generation_options(task_data)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
             queue_snapshot = await _gpu_queue_snapshot(task_service_module.get_queue(), request)
             task_id = await task_service.submit(
                 request.task_type,

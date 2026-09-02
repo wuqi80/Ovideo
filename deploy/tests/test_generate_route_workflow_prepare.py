@@ -343,6 +343,50 @@ async def test_generate_route_rejects_invalid_minimax_options_before_enqueue():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("sub_model", ["fast", "mini"])
+async def test_generate_route_rejects_unsupported_seedance_1080p_before_enqueue(sub_model):
+    async def require_auth():
+        return "u-test"
+
+    service = Mock()
+    service.submit = AsyncMock(return_value="should-not-submit")
+    task_service_module = Mock()
+    task_service_module.get.return_value = service
+    task_service_module.get_queue.return_value.get_queue_length = AsyncMock(return_value=0)
+
+    router = create_task_router(
+        require_auth_dependency=require_auth,
+        jwt_auth_module=Mock(),
+        task_service_module=task_service_module,
+        task_dao=Mock(),
+        file_dao=Mock(),
+        get_pubsub_redis_client=Mock(),
+        logger=Mock(),
+    )
+    create_generate_task = next(
+        route.endpoint
+        for route in router.routes
+        if getattr(route, "path", None) == "/api/generate"
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await create_generate_task(
+            GenerateRequest(
+                task_type="seedance_i2v",
+                model=f"Seedance2{sub_model.title()}",
+                sub_model=sub_model,
+                duration=5,
+                resolution="1080P",
+            ),
+            username="u-test",
+        )
+
+    assert exc.value.status_code == 400
+    assert "仅支持 480P 和 720P" in str(exc.value.detail)
+    service.submit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("generate_request", "expected_workflow", "expected_node_type"),
     [

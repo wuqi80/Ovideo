@@ -3,6 +3,7 @@ import {
   clearProjectVideoTasks,
   cropVideo,
   getProjectVideoTasks,
+  readVideoDurationSeconds,
   reuploadVideo,
   secureMediaUrl,
 } from '../../services/videoMediaService';
@@ -26,6 +27,24 @@ beforeEach(() => {
 });
 
 describe('video media service', () => {
+  it('reads and rounds local video duration for Seedance cost estimation', async () => {
+    const createObjectURL = vi.fn(() => 'blob:duration-test');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+
+    const fakeVideo: any = { duration: 8.4321, preload: '' };
+    Object.defineProperty(fakeVideo, 'src', {
+      set: () => queueMicrotask(() => fakeVideo.onloadedmetadata?.()),
+    });
+    const createElement = vi.spyOn(document, 'createElement').mockReturnValue(fakeVideo);
+
+    await expect(readVideoDurationSeconds(new File(['x'], 'reference.mp4'))).resolves.toBe(8.432);
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:duration-test');
+    createElement.mockRestore();
+  });
+
   it('secures media URLs with the current auth token', () => {
     expect(secureMediaUrl('/uploads/a.mp4')).toBe('/uploads/a.mp4?token=test-token');
     // 旧的（可能隔天过期的）token 必须被当前 token 覆盖，否则媒体会在 JWT 过期后 401 消失。

@@ -180,7 +180,12 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
             for (const file of Array.from(files)) {
                 if (videos.length >= 3) break;
                 const r = await uploadVideoFile(file);
-                addMedia({ kind: 'video', url: r.url || (r as any).storage_url, role: 'reference_video' });
+                addMedia({
+                    kind: 'video',
+                    url: r.url || (r as any).storage_url,
+                    role: 'reference_video',
+                    duration_seconds: r.duration_seconds ?? undefined,
+                });
             }
         } finally {
             setUploadBusy(false);
@@ -498,6 +503,11 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                 <div className="text-[9px] text-n100">
                     样片任务 ID / draft 仅 1.5pro 支持，2.0 系列不开放。
                 </div>
+                {videos.length > 0 && (
+                    <div className="text-[9px] text-warning">
+                        参考视频会按总时长动态核算创作点数；无法读取时长时按每段 15 秒预估。
+                    </div>
+                )}
             </section>
 
             {!validation.ok && (

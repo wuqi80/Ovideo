@@ -133,7 +133,14 @@ export function insertMention(
     const url = candidate.arkAssetId || candidate.url;
     if (!url) return value;
 
-    const newInput: SeedanceMediaInput = { kind, url };
+    const durationSeconds = kind === 'video' && Number.isFinite(candidate.durationMs)
+        ? Math.max(0, Number(candidate.durationMs) / 1000)
+        : undefined;
+    const newInput: SeedanceMediaInput = {
+        kind,
+        url,
+        ...(durationSeconds && durationSeconds > 0 ? { duration_seconds: durationSeconds } : {}),
+    };
     const existingIdx = findExistingMediaIndex(value, kind, url);
     const hasExistingInput = existingIdx >= 0;
     const idx = hasExistingInput

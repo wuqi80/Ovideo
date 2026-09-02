@@ -69,25 +69,18 @@ describe('Seedance model scope submission', () => {
         fetchSpy.mockRestore();
     });
 
-    it('passes Seedance Mini sub_model and downgrades 1080p to 720p', async () => {
+    it('rejects unsupported Seedance Mini 1080p before calling the API', async () => {
         localStorage.setItem('auth_token', 'test-token');
-        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(
-            JSON.stringify({ task_id: 'task_seedance_mini' }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
-        ));
+        const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
-        await submitSeedanceTask({
+        await expect(submitSeedanceTask({
             sub_model: 'mini',
             prompt: 'make a low cost shot',
             media_inputs: [],
             resolution: '1080p',
-        });
+        })).rejects.toThrow('仅支持 480P 或 720P');
 
-        const [, options] = fetchSpy.mock.calls[0];
-        expect(JSON.parse(String(options?.body || '{}'))).toMatchObject({
-            sub_model: 'mini',
-            resolution: '720p',
-        });
+        expect(fetchSpy).not.toHaveBeenCalled();
         fetchSpy.mockRestore();
     });
 

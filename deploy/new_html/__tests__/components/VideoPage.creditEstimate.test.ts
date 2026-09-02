@@ -11,6 +11,8 @@ describe('VideoPage per-card credit estimates', () => {
     expect(source).toContain('data-testid="video-list-card-credit-estimate"');
     expect(source.match(/params=\{getGroupVideoCreditEstimateParams\(group\)\}/g)).toHaveLength(2);
     expect(source).toContain('h3_upscale_720p: isMiniMaxH3Model(group.model) && group.h3Upscale720p === true');
+    expect(source).toContain('reference_video_count: referenceVideos.length');
+    expect(source).toContain('reference_video_durations: referenceVideos.map(item => item.duration_seconds ?? null)');
     expect(source.match(/fallbackCost=\{getGroupVideoCreditFallbackCost\(group\)\}/g)).toHaveLength(2);
   });
 

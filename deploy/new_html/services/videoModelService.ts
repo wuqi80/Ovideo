@@ -76,6 +76,8 @@ export interface SeedanceMediaInput {
   url: string;
   role?: SeedanceMediaRole;
   file_id?: string;
+  /** Used for provider-cost estimation when kind=video. */
+  duration_seconds?: number;
 }
 
 export interface SeedanceParams {
@@ -440,6 +442,9 @@ export function getVideoCreditFallbackCost(
 ): number {
   if (model === 'HappyHorse') return 160;
   if (model === 'Seedance15') return 32;
+  if (model === 'Seedance2') return 105;
+  if (model === 'Seedance2Fast') return 85;
+  if (model === 'Seedance2Mini') return 50;
   if (model === 'MiniMaxH3Mini') {
     return 5 + (options.h3_upscale_720p === true ? 5 : 0);
   }

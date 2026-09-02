@@ -731,10 +731,9 @@ export async function submitSeedanceTask(
     draftTaskId?: string,
     agentPlanCompat: boolean = false,
 ): Promise<{ task_id: string }> {
-    // fast / mini 子型号不使用 1080p：前端兜底降级，配合后端二次校验
-    const resolution = ((params.sub_model === 'fast' || params.sub_model === 'mini') && params.resolution === '1080p')
-        ? '720p'
-        : params.resolution;
+    if ((params.sub_model === 'fast' || params.sub_model === 'mini') && params.resolution === '1080p') {
+        throw new Error('Seedance 2.0 Fast / Mini 仅支持 480P 或 720P，请调整清晰度后重试');
+    }
 
     const mediaInputs = normalizeSeedanceMediaForSubmission(params.media_inputs, agentPlanCompat);
     const taskType = inferSeedanceTaskType(mediaInputs, !!draftTaskId);
@@ -744,7 +743,7 @@ export async function submitSeedanceTask(
         model_scope: params.model_scope,
         prompt: params.prompt,
         media_inputs: mediaInputs,
-        resolution,
+        resolution: params.resolution,
         ratio: params.ratio || 'adaptive',
         duration: params.duration,
         seed: params.seed ?? -1,

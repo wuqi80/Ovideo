@@ -61,6 +61,8 @@ def test_resolve_task_billing_preserves_provider_pricing_fields():
         "h3_upscale_720p": False,
         "audio": False,
         "has_reference_video": False,
+        "reference_video_count": 0,
+        "reference_video_durations": [],
     }
 
     vidu = resolve_task_billing("vidu_r2v", {
@@ -69,11 +71,24 @@ def test_resolve_task_billing_preserves_provider_pricing_fields():
         "sub_model_vidu": "q3-turbo",
         "vidu_resolution": "720P",
         "vidu_audio": True,
-        "media_inputs": [{"kind": "video", "url": "/reference.mp4"}],
+        "media_inputs": [{"kind": "video", "url": "/reference.mp4", "duration_seconds": 8.5}],
     })
     assert vidu["params"]["sub_model"] == "q3-turbo"
     assert vidu["params"]["audio"] is True
     assert vidu["params"]["has_reference_video"] is True
+    assert vidu["params"]["reference_video_count"] == 1
+    assert vidu["params"]["reference_video_durations"] == [8.5]
+
+
+def test_resolve_seedance_billing_keeps_unknown_video_duration_for_safe_fallback():
+    spec = resolve_task_billing("seedance_multi", {
+        "model": "Seedance2",
+        "duration": 5,
+        "resolution": "720P",
+        "media_inputs": [{"kind": "video", "url": "/reference.mp4"}],
+    })
+    assert spec["params"]["reference_video_count"] == 1
+    assert spec["params"]["reference_video_durations"] == [None]
 
 
 def test_resolve_task_billing_preserves_local_h3_720p_upscale_flag():
