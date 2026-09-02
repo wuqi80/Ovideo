@@ -49,6 +49,22 @@ describe('Studio credit policy', () => {
     })).toMatchObject({ totalCost: 570, enough: false });
   });
 
+  it('uses the reduced Seedance 1.5 Agent Plan fallback price', () => {
+    expect(buildStudioNodeCreditRequest(node(NodeType.VIDEO_GENERATOR, {
+      model: 'Seedance15',
+      duration: 5,
+      resolution: '720p',
+    }))).toMatchObject({
+      params: {
+        model: 'Seedance15',
+        sub_model: 'standard',
+        duration_seconds: 5,
+        resolution: '720P',
+      },
+      fallbackUnitCost: 32,
+    });
+  });
+
   it('quotes node models with the shared model key and guarded 720p upscale cost', () => {
     expect(buildStudioNodeCreditRequest(node(NodeType.VIDEO_GENERATOR, {
       model: 'MiniMaxH3Mini',

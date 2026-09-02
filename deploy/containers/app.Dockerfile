@@ -15,10 +15,8 @@ COPY --from=web-build /source/deploy/new_html/node_modules /source/deploy/new_ht
 RUN npm run build
 
 FROM docker.io/library/python:3.12-slim-bookworm AS runtime
-ARG GIT_SHA=unknown
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    GIT_SHA=${GIT_SHA}
+    PYTHONUNBUFFERED=1
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg \
@@ -26,7 +24,12 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY deploy/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --timeout 120 --retries 10 -r requirements.txt
+
+# Keep the release identifier after the expensive dependency layers. A new
+# commit should not force apt and pip to download the same runtime again.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
 
 COPY deploy ./
 COPY --from=web-build /source/deploy/dist ./dist

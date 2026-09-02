@@ -112,6 +112,25 @@ def test_seedance_binding_options_are_explicit():
         ("fast", "doubao-seedance-2-0-fast-260128"),
         ("mini", "doubao-seedance-2-0-mini-260615"),
     ]
+    assert [item["label"] for item in options] == [
+        "Seedance 2.0 · 多模态标准视频模型",
+        "Seedance 2.0 Fast · 多模态快速视频模型",
+        "Seedance 2.0 Mini · 多模态简化视频模型",
+    ]
+
+
+def test_dashscope_binding_labels_match_frontend_model_wording():
+    from services.api_provider_registry import get_provider_model_binding_options
+
+    options = get_provider_model_binding_options("dashscope")
+    labels = {item["operation"]: item["label"] for item in options}
+
+    assert labels["wan26"] == "Wan 2.6 · 镜头叙事视频模型"
+    assert labels["kling-standard"] == "Kling V3 · 全能音画视频模型"
+    assert labels["kling-omni"] == "Kling V3 · 全能音画视频模型"
+    assert labels["vidu-reference-q3"] == "Vidu Q3 · 多参考视频模型"
+    assert labels["vidu-startend-q2-pro"] == "Vidu Q3 · 多参考视频模型"
+    assert labels["happyhorse"] == "HappyHorse 1.0 · 角色一致性视频模型"
 
 
 def test_seedance_agent_plan_normalizes_endpoint_and_builtin_models():
@@ -297,7 +316,7 @@ def test_doubao_binding_label_matches_frontend_image_control():
     assert get_provider_model_binding_options("doubao") == [
         {
             "operation": "generate",
-            "label": "Doubao Seedream 5.0 Lite",
+            "label": "Doubao-Seedream-5.0-lite · 参考图生图模型",
             "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
         }
     ]

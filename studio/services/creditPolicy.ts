@@ -52,6 +52,7 @@ function positiveInt(value: unknown, fallback: number): number {
 
 function fallbackVideoUnitCost(model: VideoModel, duration: number, h3Upscale720p: boolean): number {
   const seedanceFiveSecondCost: Partial<Record<VideoModel, number>> = {
+    Seedance15: 32,
     Seedance2: 95,
     Seedance2Fast: 75,
     Seedance2Mini: 50,

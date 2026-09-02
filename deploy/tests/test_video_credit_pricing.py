@@ -73,6 +73,8 @@ def test_happyhorse_1080p_uses_twenty_credits_per_cny_and_default():
         ({"model": "MINI", "minimax_model": "MiniMax-Hailuo-2.3-Fast", "minimax_resolution": "1080P", "duration_seconds": 6}, 46),
         ({"model": "Seedance2Mini", "sub_model": "mini", "resolution": "720P", "duration_seconds": 5}, 50),
         ({"model": "Seedance2Fast", "sub_model": "fast", "resolution": "720P", "duration_seconds": 5}, 75),
+        ({"model": "Seedance15", "sub_model": "standard", "resolution": "720P", "duration_seconds": 5}, 32),
+        ({"model": "Seedance15", "sub_model": "standard", "resolution": "1080P", "duration_seconds": 5}, 45),
         ({"model": "Seedance2", "sub_model": "standard", "resolution": "1080P", "duration_seconds": 5}, 135),
         ({"model": "Sora2"}, 120),
         ({"model": "Veo"}, 110),

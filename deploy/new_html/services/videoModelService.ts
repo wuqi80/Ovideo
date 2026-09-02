@@ -353,7 +353,7 @@ export const ALL_MODELS: VideoModel[] = [
 
 export const SELECTABLE_MODELS: VideoModel[] = [
   'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini',
-  'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
+  'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
   'MINI', 'Veo', 'Sora2', '大能',
   'Kling', 'Vidu', 'HappyHorse',
 ];
@@ -438,6 +438,7 @@ export function getVideoCreditFallbackCost(
   options: { h3_upscale_720p?: boolean } = {},
 ): number {
   if (model === 'HappyHorse') return 160;
+  if (model === 'Seedance15') return 32;
   if (model === 'MiniMaxH3Mini') {
     return 5 + (options.h3_upscale_720p === true ? 5 : 0);
   }

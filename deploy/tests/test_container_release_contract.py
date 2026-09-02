@@ -23,6 +23,13 @@ def test_release_builds_main_and_studio_frontends_from_one_revision():
     assert "COPY --from=studio-build /source/studio/dist /studio/dist" in dockerfile
 
 
+def test_release_revision_does_not_invalidate_expensive_runtime_dependencies():
+    dockerfile = (DEPLOY_DIR / "containers" / "app.Dockerfile").read_text(encoding="utf-8")
+
+    assert dockerfile.index("RUN pip install") < dockerfile.index("ARG GIT_SHA=unknown")
+    assert "--timeout 120 --retries 10" in dockerfile
+
+
 def test_release_preserves_runtime_and_uploaded_workflow_state():
     script = (DEPLOY_DIR / "scripts" / "deploy_ostory_podman.sh").read_text(encoding="utf-8")
 

@@ -182,7 +182,9 @@ def _quote_seedance(params: Mapping[str, Any]) -> Dict[str, Any]:
     five_second_credits = {
         "mini": {"480P": 35, "720P": 50, "1080P": 70},
         "fast": {"480P": 50, "720P": 75, "1080P": 105},
-        "1.5": {"480P": 55, "720P": 80, "1080P": 115},
+        # Agent Plan's Seedance 1.5 entry is intentionally priced at roughly
+        # one third of the matching Seedance 2.0 Standard tier.
+        "1.5": {"480P": 22, "720P": 32, "1080P": 45},
         "standard": {"480P": 65, "720P": 95, "1080P": 135},
     }
     base = five_second_credits[tier].get(resolution, five_second_credits[tier]["720P"])

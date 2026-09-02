@@ -150,7 +150,7 @@ DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT = "https://ark.cn-beijing.volces.com/api/plan/v
 DOUBAO_IMAGE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     {
         "operation": "generate",
-        "label": "Doubao Seedream 5.0 Lite",
+        "label": "Doubao-Seedream-5.0-lite · 参考图生图模型",
         "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
     },
 ]
@@ -328,35 +328,35 @@ DEEPSEEK_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
 SEEDANCE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     {
         "operation": "standard",
-        "label": "Doubao Seedance 2.0 Standard",
+        "label": "Seedance 2.0 · 多模态标准视频模型",
         "model_name": SEEDANCE_DEFAULT_MODEL_MAP["standard"],
     },
     {
         "operation": "fast",
-        "label": "Doubao Seedance 2.0 Fast",
+        "label": "Seedance 2.0 Fast · 多模态快速视频模型",
         "model_name": SEEDANCE_DEFAULT_MODEL_MAP["fast"],
     },
     {
         "operation": "mini",
-        "label": "Doubao Seedance 2.0 Mini",
+        "label": "Seedance 2.0 Mini · 多模态简化视频模型",
         "model_name": SEEDANCE_DEFAULT_MODEL_MAP["mini"],
     },
 ]
 
 DASHSCOPE_MODEL_BINDING_LABELS: Dict[str, str] = {
-    "wan26": "Wan 2.6 I2V",
-    "kling-standard": "Kling V3 Standard",
-    "kling-omni": "Kling V3 Omni",
-    "vidu-reference-q3-mix": "Vidu Q3 Mix 参考生视频",
-    "vidu-reference-q3": "Vidu Q3 参考生视频",
-    "vidu-reference-q3-turbo": "Vidu Q3 Turbo 参考生视频",
-    "vidu-reference-q2-pro": "Vidu Q2 Pro 参考生视频",
-    "vidu-reference-q2": "Vidu Q2 参考生视频",
-    "vidu-startend-q3-pro": "Vidu Q3 Pro 首尾帧",
-    "vidu-startend-q3-turbo": "Vidu Q3 Turbo 首尾帧",
-    "vidu-startend-q2-pro": "Vidu Q2 Pro 首尾帧",
-    "vidu-startend-q2-turbo": "Vidu Q2 Turbo 首尾帧",
-    "happyhorse": "HappyHorse 1.0",
+    "wan26": "Wan 2.6 · 镜头叙事视频模型",
+    "kling-standard": "Kling V3 · 全能音画视频模型",
+    "kling-omni": "Kling V3 · 全能音画视频模型",
+    "vidu-reference-q3-mix": "Vidu Q3 · 多参考视频模型",
+    "vidu-reference-q3": "Vidu Q3 · 多参考视频模型",
+    "vidu-reference-q3-turbo": "Vidu Q3 · 多参考视频模型",
+    "vidu-reference-q2-pro": "Vidu Q3 · 多参考视频模型",
+    "vidu-reference-q2": "Vidu Q3 · 多参考视频模型",
+    "vidu-startend-q3-pro": "Vidu Q3 · 多参考视频模型",
+    "vidu-startend-q3-turbo": "Vidu Q3 · 多参考视频模型",
+    "vidu-startend-q2-pro": "Vidu Q3 · 多参考视频模型",
+    "vidu-startend-q2-turbo": "Vidu Q3 · 多参考视频模型",
+    "happyhorse": "HappyHorse 1.0 · 角色一致性视频模型",
 }
 
 DASHSCOPE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
@@ -371,7 +371,7 @@ DASHSCOPE_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
 MINIMAX_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
     {
         "operation": "video-standard",
-        "label": "MiniMax Hailuo 2.3",
+        "label": "MiniMax Hailuo 2.3 · 首尾帧标准视频模型",
         "model_name": MINIMAX_DEFAULT_VIDEO_MODEL,
     },
     {

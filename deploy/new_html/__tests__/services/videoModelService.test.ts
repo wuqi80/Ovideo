@@ -35,6 +35,7 @@ describe('video credit estimate params', () => {
     expect(getVideoCreditFallbackCost('MiniMaxH3')).toBe(10);
     expect(getVideoCreditFallbackCost('MiniMaxH3Fast')).toBe(10);
     expect(getVideoCreditFallbackCost('MiniMaxH3Mini')).toBe(5);
+    expect(getVideoCreditFallbackCost('Seedance15')).toBe(32);
     expect(getVideoCreditFallbackCost('MiniMaxH3', { h3_upscale_720p: true })).toBe(15);
     expect(getVideoCreditFallbackCost('MiniMaxH3Fast', { h3_upscale_720p: true })).toBe(15);
     expect(getVideoCreditFallbackCost('MiniMaxH3Mini', { h3_upscale_720p: true })).toBe(10);
@@ -205,6 +206,7 @@ describe('buildVideoModelOptions', () => {
       'MiniMaxH3',
       'MiniMaxH3Fast',
       'MiniMaxH3Mini',
+      'Seedance15',
       'Seedance2',
       'Seedance2Fast',
       'Seedance2Mini',

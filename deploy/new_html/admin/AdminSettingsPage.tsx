@@ -500,6 +500,52 @@ function modelBindingOptionMatches(option: ApiModelBinding, binding: ApiModelBin
         && normalizeModelUsageScope(option.scope) === normalizeModelUsageScope(binding.scope);
 }
 
+function publicApiModelBindingLabel(providerRaw: string, binding: ApiModelBinding): string {
+    const provider = normalizeProvider(providerRaw);
+    const operation = String(binding.operation || '').trim().toLowerCase();
+    const modelName = String(binding.model_name || '').trim().toLowerCase();
+    if (provider === 'seedance') {
+        if (modelName.includes('seedance-1.5')) return 'Seedance 1.5 Pro · 首尾帧视频模型';
+        if (operation === 'fast') return 'Seedance 2.0 Fast · 多模态快速视频模型';
+        if (operation === 'mini') return 'Seedance 2.0 Mini · 多模态简化视频模型';
+        return 'Seedance 2.0 · 多模态标准视频模型';
+    }
+    if (provider === 'dashscope') {
+        if (operation === 'wan26') return 'Wan 2.6 · 镜头叙事视频模型';
+        if (operation.startsWith('kling-')) return 'Kling V3 · 全能音画视频模型';
+        if (operation.startsWith('vidu-')) return 'Vidu Q3 · 多参考视频模型';
+        if (operation === 'happyhorse') return 'HappyHorse 1.0 · 角色一致性视频模型';
+    }
+    if (provider === 'minimax' && operation === 'video-standard') {
+        return 'MiniMax Hailuo 2.3 · 首尾帧标准视频模型';
+    }
+    if (provider === 'doubao' && operation === 'generate') {
+        return 'Doubao-Seedream-5.0-lite · 参考图生图模型';
+    }
+    return String(binding.label || binding.operation || binding.model_name || '').trim();
+}
+
+function applyPublicApiModelBindingLabels(provider: string, bindings: ApiModelBinding[]): ApiModelBinding[] {
+    return bindings.map(binding => ({
+        ...binding,
+        label: publicApiModelBindingLabel(provider, binding),
+    }));
+}
+
+function uniqueModelBindingsForDisplay(bindings: ApiModelBinding[]): ApiModelBinding[] {
+    const seen = new Set<string>();
+    return bindings.filter(binding => {
+        const key = [
+            normalizeModelUsageScope(binding.scope),
+            String(binding.label || '').trim().toLowerCase(),
+            String(binding.model_name || '').trim().toLowerCase(),
+        ].join('::');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
 function runtimeStatusKey(provider: string | undefined | null, modelName?: string | null): string {
     const providerKey = normalizeProvider(provider);
     const modelKey = String(modelName || '').trim().toLowerCase();
@@ -1000,7 +1046,10 @@ function normalizeApiModelBindings(
         const normalizedScope = normalizeModelUsageScope(option?.scope || scope);
         normalized.set(`${normalizedScope}::${operation}`, {
             operation,
-            label: String(item.label || option?.label || operation),
+            // Known providers own the public model wording. Prefer their
+            // current metadata so legacy labels already stored in DB cannot
+            // drift away from the creator-facing model catalogue.
+            label: String(option?.label || item.label || operation),
             model_name: modelName,
             scope: normalizedScope,
             scope_label: item.scope_label || option?.scope_label || modelUsageScopeLabel(normalizedScope),
@@ -1037,10 +1086,10 @@ function apiConfigModelBindings(config: ApiConfig, meta?: ProviderMeta): ApiMode
         meta?.model_binding_options || [],
     );
     const provider = normalizeProvider(config.provider);
-    if (providerRequiresCompleteModelBindings(provider)) {
-        return mergeMissingKnownModelBindings(bindings, meta?.model_binding_options || []);
-    }
-    return bindings;
+    const complete = providerRequiresCompleteModelBindings(provider)
+        ? mergeMissingKnownModelBindings(bindings, meta?.model_binding_options || [])
+        : bindings;
+    return applyPublicApiModelBindingLabels(provider, complete);
 }
 
 function emptyConfigForm(): ApiConfigFormState {
@@ -1091,9 +1140,10 @@ function configToForm(
         config.model_name || '',
         bindingOptions,
     );
-    const modelBindings = providerRequiresCompleteModelBindings(config.provider)
+    const completedBindings = providerRequiresCompleteModelBindings(config.provider)
         ? mergeMissingKnownModelBindings(normalizedBindings, bindingOptions)
         : normalizedBindings;
+    const modelBindings = applyPublicApiModelBindingLabels(config.provider, completedBindings);
     return {
         config_id: config.config_id,
         name: config.name || '',
@@ -1667,10 +1717,10 @@ const ApiConfigEditorModal: React.FC<{
     };
     const selectAccessMode = (mode: ProviderAccessMode) => {
         const source = form.model_bindings.length ? form.model_bindings : defaultModelBindings(selectedMeta);
-        const nextBindings = source.map(binding => ({
+        const nextBindings = applyPublicApiModelBindingLabels(selectedProvider, source.map(binding => ({
             ...binding,
             model_name: mode.model_map?.[binding.operation] || binding.model_name,
-        }));
+        })));
         patch({
             endpoint: mode.endpoint,
             model_bindings: nextBindings,
@@ -2151,11 +2201,11 @@ const ApiConfigCard: React.FC<{
     const realGenerationBlocked = categoryView === 'video'
         || (!categoryView && Boolean(meta && categoryFromProviderMeta(meta) === 'video'));
     const cardTitle = apiConfigCardTitle(config, meta, categoryView);
-    const modelBindings = bindingsForCategory(
+    const modelBindings = uniqueModelBindingsForDisplay(bindingsForCategory(
         apiConfigModelBindings(config, meta),
         config.provider,
         categoryView,
-    ) as ApiModelBinding[];
+    ) as ApiModelBinding[]);
     const categoryModelName = modelBindings[0]?.model_name
         || config.model_name
         || runtime?.runtime_model_name
@@ -2751,7 +2801,7 @@ const ProviderQuickCard: React.FC<{
                         {sortedConfigs.map(config => {
                             const hasKey = Boolean(config.has_key ?? config.api_key_encrypted);
                             const active = config.config_id === activeConfigId;
-                            const bindings = apiConfigModelBindings(config, meta);
+                            const bindings = uniqueModelBindingsForDisplay(apiConfigModelBindings(config, meta));
                             return (
                                 <div key={config.config_id} className="px-3 py-2">
                                     <div className="flex flex-wrap items-start justify-between gap-2">

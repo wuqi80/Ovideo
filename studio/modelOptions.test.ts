@@ -44,7 +44,11 @@ describe('Studio image model contract', () => {
 
   it('exposes the same complete video model catalog as the main video workspace', () => {
     expect(STUDIO_VIDEO_MODEL_OPTIONS.map(option => option.v)).toEqual(SELECTABLE_MODELS);
-    expect(STUDIO_VIDEO_MODEL_OPTIONS).toHaveLength(13);
+    expect(STUDIO_VIDEO_MODEL_OPTIONS).toHaveLength(14);
+    expect(STUDIO_VIDEO_MODEL_OPTIONS).toContainEqual({
+      v: 'Seedance15',
+      l: getModelDisplayName('Seedance15'),
+    });
     expect(STUDIO_VIDEO_MODEL_OPTIONS).toContainEqual({
       v: 'MiniMaxH3Mini',
       l: getModelDisplayName('MiniMaxH3Mini'),

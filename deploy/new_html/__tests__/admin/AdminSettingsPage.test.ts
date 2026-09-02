@@ -34,4 +34,10 @@ describe('AdminSettingsPage category-specific model checks', () => {
     expect(cardSource).toContain('<div className="font-semibold text-n700">高级测试</div>');
     expect(cardSource).toContain('<ProviderOperationPaths meta={meta} runtime={runtime} />');
   });
+
+  it('refreshes legacy stored binding labels from the current public model metadata', () => {
+    expect(source).toContain('label: String(option?.label || item.label || operation)');
+    expect(source).toContain("if (modelName.includes('seedance-1.5')) return 'Seedance 1.5 Pro · 首尾帧视频模型'");
+    expect(source).toContain('uniqueModelBindingsForDisplay');
+  });
 });

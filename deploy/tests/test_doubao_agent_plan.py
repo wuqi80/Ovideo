@@ -87,7 +87,7 @@ def test_doubao_exposes_one_image_operation_binding() -> None:
     assert get_provider_model_binding_options("doubao") == [
         {
             "operation": "generate",
-            "label": "Doubao Seedream 5.0 Lite",
+            "label": "Doubao-Seedream-5.0-lite · 参考图生图模型",
             "model_name": DOUBAO_IMAGE_DEFAULT_MODEL,
         }
     ]
