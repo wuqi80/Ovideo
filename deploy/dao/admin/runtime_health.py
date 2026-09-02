@@ -27,20 +27,22 @@ class RuntimeHealthDAO:
                 LIMIT 1
                 """
             )
-        task_queue = await db_manager.fetchrow(
+        task_queue_rows = await db_manager.fetch(
             """
             SELECT
-                COUNT(*) FILTER (WHERE status IN ('pending', 'queued'))::INTEGER AS pending_count,
-                COUNT(*) FILTER (WHERE status = 'processing')::INTEGER AS processing_count,
-                MIN(created_at) FILTER (WHERE status IN ('pending', 'queued')) AS oldest_pending_at,
-                MIN(started_at) FILTER (WHERE status = 'processing') AS oldest_processing_at
+                task_type,
+                status,
+                COUNT(*)::INTEGER AS task_count,
+                MIN(created_at) AS oldest_created_at,
+                MIN(started_at) AS oldest_started_at
             FROM tasks
             WHERE status IN ('pending', 'queued', 'processing')
+            GROUP BY task_type, status
             """
         )
         return {
             "ping": ping,
             "ledger_exists": bool(ledger_exists),
             "latest": latest,
-            "task_queue": task_queue or {},
+            "task_queue_rows": [dict(row) for row in (task_queue_rows or [])],
         }

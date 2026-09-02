@@ -135,15 +135,20 @@ def create_cluster_status_router(
         providers = await collect_provider_health()
         release = read_release_metadata()
         database_queue = database.pop("task_queue", {})
+        database_api_tasks = database.pop("api_tasks", {})
         try:
             queue = task_service.get_queue()
             redis_queued = await queue.get_queue_length()
             redis_processing = await queue.get_processing_count()
+            api_handoff = await queue.get_external_queue_length()
+            api_processing = await queue.get_external_processing_count()
             queue_redis_status = "healthy"
         except Exception as exc:
             logger.warning("health_check: queue stats failed (%s)", exc)
             redis_queued = None
             redis_processing = None
+            api_handoff = None
+            api_processing = None
             queue_redis_status = "unhealthy"
         queue_health = {
             "redis_status": queue_redis_status,
@@ -157,6 +162,17 @@ def create_cluster_status_router(
             "oldest_processing_age_seconds": database_queue.get("oldest_processing_age_seconds"),
         }
         queue_health["status"] = _queue_health_status(queue_health)
+        api_task_health = {
+            "redis_status": queue_redis_status,
+            "redis_handoff": api_handoff,
+            "redis_processing": api_processing,
+            "database_pending": database_api_tasks.get("pending_count"),
+            "database_processing": database_api_tasks.get("processing_count"),
+            "oldest_pending_at": database_api_tasks.get("oldest_pending_at"),
+            "oldest_pending_age_seconds": database_api_tasks.get("oldest_pending_age_seconds"),
+            "oldest_processing_at": database_api_tasks.get("oldest_processing_at"),
+            "oldest_processing_age_seconds": database_api_tasks.get("oldest_processing_age_seconds"),
+        }
 
         cluster_manager = get_cluster_manager()
         if cluster_manager is None:
@@ -203,6 +219,7 @@ def create_cluster_status_router(
             "redis": redis_status,
             "database": database,
             "queue": queue_health,
+            "api_tasks": api_task_health,
             "release": release,
             "providers": providers,
             "cluster": cluster_block,

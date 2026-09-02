@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 from dao.admin.runtime_health import RuntimeHealthDAO
 from dao.admin.api_config import ApiConfigDAO
+from core.task_types import is_external_api_task
 
 
 def _json_value(value: Any) -> Any:
@@ -31,6 +32,37 @@ def _age_seconds(value: Any) -> Optional[int]:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return max(0, int((datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds()))
+
+
+def _task_channel_snapshot(rows: list[dict[str, Any]], *, external: bool) -> dict[str, Any]:
+    pending_count = 0
+    processing_count = 0
+    pending_times: list[Any] = []
+    processing_times: list[Any] = []
+    for row in rows:
+        task_type = str(row.get("task_type") or "")
+        if is_external_api_task(task_type) != external:
+            continue
+        status = str(row.get("status") or "").lower()
+        count = int(row.get("task_count") or 0)
+        if status in {"pending", "queued"}:
+            pending_count += count
+            if row.get("oldest_created_at") is not None:
+                pending_times.append(row["oldest_created_at"])
+        elif status == "processing":
+            processing_count += count
+            if row.get("oldest_started_at") is not None:
+                processing_times.append(row["oldest_started_at"])
+    oldest_pending_at = min(pending_times) if pending_times else None
+    oldest_processing_at = min(processing_times) if processing_times else None
+    return {
+        "pending_count": pending_count,
+        "processing_count": processing_count,
+        "oldest_pending_at": _json_value(oldest_pending_at),
+        "oldest_pending_age_seconds": _age_seconds(oldest_pending_at),
+        "oldest_processing_at": _json_value(oldest_processing_at),
+        "oldest_processing_age_seconds": _age_seconds(oldest_processing_at),
+    }
 
 
 def release_metadata_path() -> Path:
@@ -104,23 +136,14 @@ async def collect_database_health(db_manager: Optional[object]) -> dict[str, Any
                     "applied_count": applied_count,
                     "latest": {key: _json_value(value) for key, value in latest.items()},
                 }
-        task_queue = dict(snapshot.get("task_queue") or {})
-        oldest_pending_at = task_queue.get("oldest_pending_at")
-        oldest_processing_at = task_queue.get("oldest_processing_at")
-        task_queue.update(
-            {
-                "pending_count": int(task_queue.get("pending_count") or 0),
-                "processing_count": int(task_queue.get("processing_count") or 0),
-                "oldest_pending_at": _json_value(oldest_pending_at),
-                "oldest_pending_age_seconds": _age_seconds(oldest_pending_at),
-                "oldest_processing_at": _json_value(oldest_processing_at),
-                "oldest_processing_age_seconds": _age_seconds(oldest_processing_at),
-            }
-        )
+        task_rows = [dict(row) for row in (snapshot.get("task_queue_rows") or [])]
+        task_queue = _task_channel_snapshot(task_rows, external=False)
+        api_tasks = _task_channel_snapshot(task_rows, external=True)
         return {
             "status": "healthy",
             "migrations": migrations,
             "task_queue": task_queue,
+            "api_tasks": api_tasks,
         }
     except Exception as exc:
         return {

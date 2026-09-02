@@ -22,13 +22,11 @@ class FakeDatabase:
         return 1 if query == "SELECT 1" else False
 
     async def fetchrow(self, query: str):
+        raise AssertionError(query)
+
+    async def fetch(self, query: str):
         assert "FROM tasks" in query
-        return {
-            "pending_count": 0,
-            "processing_count": 0,
-            "oldest_pending_at": None,
-            "oldest_processing_at": None,
-        }
+        return []
 
 
 class FakeTaskQueue:
@@ -36,6 +34,12 @@ class FakeTaskQueue:
         return 0
 
     async def get_processing_count(self):
+        return 0
+
+    async def get_external_queue_length(self):
+        return 0
+
+    async def get_external_processing_count(self):
         return 0
 
 
@@ -144,14 +148,15 @@ async def test_health_degrades_when_database_is_unavailable(monkeypatch):
 
 async def test_health_degrades_when_oldest_queued_task_is_stalled(monkeypatch):
     class StalledDatabase(FakeDatabase):
-        async def fetchrow(self, query: str):
+        async def fetch(self, query: str):
             assert "FROM tasks" in query
-            return {
-                "pending_count": 1,
-                "processing_count": 0,
-                "oldest_pending_at": datetime.now(timezone.utc) - timedelta(minutes=5),
-                "oldest_processing_at": None,
-            }
+            return [{
+                "task_type": "i2v",
+                "status": "pending",
+                "task_count": 1,
+                "oldest_created_at": datetime.now(timezone.utc) - timedelta(minutes=5),
+                "oldest_started_at": None,
+            }]
 
     monkeypatch.setenv("HEALTH_QUEUE_MAX_AGE_SECONDS", "60")
     monkeypatch.setattr(

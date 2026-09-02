@@ -24,13 +24,34 @@ class HealthyDatabase:
                 "git_sha": "abc123",
                 "applied_count": 4,
             }
+        raise AssertionError(query)
+
+    async def fetch(self, query: str):
         assert "FROM tasks" in query
-        return {
-            "pending_count": 2,
-            "processing_count": 1,
-            "oldest_pending_at": datetime.now(timezone.utc),
-            "oldest_processing_at": None,
-        }
+        now = datetime.now(timezone.utc)
+        return [
+            {
+                "task_type": "i2v",
+                "status": "pending",
+                "task_count": 2,
+                "oldest_created_at": now,
+                "oldest_started_at": None,
+            },
+            {
+                "task_type": "i2v",
+                "status": "processing",
+                "task_count": 1,
+                "oldest_created_at": now,
+                "oldest_started_at": now,
+            },
+            {
+                "task_type": "seedance_t2v",
+                "status": "processing",
+                "task_count": 3,
+                "oldest_created_at": now,
+                "oldest_started_at": now,
+            },
+        ]
 
 
 async def test_collect_database_health_includes_latest_migration():
@@ -42,6 +63,8 @@ async def test_collect_database_health_includes_latest_migration():
     assert result["migrations"]["latest"]["applied_at"] == "2026-07-18T03:04:05+00:00"
     assert result["task_queue"]["pending_count"] == 2
     assert result["task_queue"]["oldest_pending_age_seconds"] <= 1
+    assert result["task_queue"]["processing_count"] == 1
+    assert result["api_tasks"]["processing_count"] == 3
 
 
 async def test_collect_database_health_reports_missing_ledger():
@@ -50,13 +73,11 @@ async def test_collect_database_health_reports_missing_ledger():
             return 1 if query == "SELECT 1" else False
 
         async def fetchrow(self, query: str):
+            raise AssertionError(query)
+
+        async def fetch(self, query: str):
             assert "FROM tasks" in query
-            return {
-                "pending_count": 0,
-                "processing_count": 0,
-                "oldest_pending_at": None,
-                "oldest_processing_at": None,
-            }
+            return []
 
     result = await collect_database_health(DatabaseWithoutLedger())
 
