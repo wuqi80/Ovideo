@@ -51,9 +51,9 @@ describe('MaterialPage workspace layout', () => {
     expect(source).toContain("'已同步到当前及后续同名镜头'");
     expect(source).toContain("isSynced ? 'cursor-not-allowed bg-n30 opacity-60'");
     expect(source).toContain('<span>AI 生图</span>');
-    expect(source).toContain('<span>角度</span>');
-    expect(source).toContain('<span>高清放大</span>');
-    expect(source).toContain('<span>去水印</span>');
+    expect(source).toContain("'角度处理中…' : '角度'");
+    expect(source).toContain("'高清放大处理中…' : '高清放大'");
+    expect(source).toContain("'去水印处理中…' : '去水印'");
     expect(source).toContain('<span>四视图</span>');
   });
 
@@ -81,10 +81,14 @@ describe('MaterialPage workspace layout', () => {
     expect(source).toContain('fileId: results[0].fileId');
   });
 
-  it('only deletes images created by the material stage', () => {
-    expect(source).toContain("targetMaterial.source === 'entity_file:material_image'");
-    expect(source).toContain("targetMaterial.source === 'ai'");
-    expect(source).toContain("targetMaterial.source === 'upload'");
+  it('shows persistent processing feedback and safely deletes character or scene materials', () => {
+    expect(source).toContain('role="status" aria-live="polite"');
+    expect(source).toContain("label: workflow === 'upscale_hd' ? '高清放大处理中…' : '去水印处理中…'");
+    expect(source).toContain("title: `删除${typeLabel}素材`");
+    expect(source).toContain('需要从剧本分镜重新导入');
+    expect(source).toContain("confirmText: '确认删除'");
     expect(source).toContain('await deleteEntityFile(targetMaterial.fileId)');
+    expect(source).toContain('await updateAsset(targetAssetId');
+    expect(source).toContain('aria-label={`删除${name}素材`}');
   });
 });

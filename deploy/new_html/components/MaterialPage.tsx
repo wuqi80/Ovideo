@@ -23,8 +23,9 @@ import {
 import { recommendDoubaoImageSize } from '../utils/doubaoImageSize';
 import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { deleteEntityFile, uploadEntityFile } from '../services/entityFileService';
+import { updateAsset } from '../services/assetMutationService';
 import { callAI } from '../services/aiService';
-import { crmMessage } from '../admin/crmUI';
+import { crmConfirm, crmMessage } from '../admin/crmUI';
 import {
   IMAGE_QUALITY_SUFFIX,
   applyImageStylePreset,
@@ -106,6 +107,12 @@ type ProcessModalConfig = {
   materials: Material[];
   selectedMaterialId: string;
   workflow: 'upscale_hd' | 'remove_watermark';
+};
+
+type MaterialOperationStatus = {
+  tagName: string;
+  workflow: 'angle_adjustment' | 'upscale_hd' | 'remove_watermark';
+  label: string;
 };
 
 const MATERIAL_IMAGE_STYLE_PRESETS = [
@@ -285,6 +292,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   const [visibleShotCount, setVisibleShotCount] = useState(MATERIAL_INITIAL_SHOT_COUNT);
   const [aiGeneratingTag, setAIGeneratingTag] = useState<string | null>(null);
   const [cameraGeneratingTag, setCameraGeneratingTag] = useState<string | null>(null);
+  const [materialOperationStatus, setMaterialOperationStatus] = useState<MaterialOperationStatus | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   // 🆕 追加分镜弹窗状态
@@ -707,6 +715,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
 
     try {
         setCameraGeneratingTag(tagName);
+        setMaterialOperationStatus({
+          tagName,
+          workflow,
+          label: workflow === 'upscale_hd' ? '高清放大处理中…' : '去水印处理中…',
+        });
 
         const targetAssetId = assetNameToId?.[tagName];
         const result = await runOnlineImageOperation({
@@ -761,6 +774,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         alert(error?.message || '处理失败，请稍后再试。');
     } finally {
         setCameraGeneratingTag(null);
+        setMaterialOperationStatus(null);
     }
   };
 
@@ -856,6 +870,11 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
 
     setCameraModalConfig(null);
     setCameraGeneratingTag(payload.tagName);
+    setMaterialOperationStatus({
+      tagName: payload.tagName,
+      workflow: 'angle_adjustment',
+      label: '角度调整处理中…',
+    });
     try {
         const prompt = payload.customPrompt?.trim().length
             ? payload.customPrompt.trim()
@@ -914,37 +933,45 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
         alert(error?.message || '角度调整失败，请重试。');
     } finally {
         setCameraGeneratingTag(null);
+        setMaterialOperationStatus(null);
     }
   };
 
-  const removeMaterialFromLibrary = async (tagName: string, materialId: string) => {
+  const removeMaterialFromLibrary = async (tagName: string, materialId: string, type: BindingAssetType) => {
       const existing = materialLibrary[tagName] || [];
       const targetMaterial = existing.find(material => material.id === materialId);
       if (!targetMaterial) return;
 
-      const isMaterialStageImage = (
-        targetMaterial.source === 'entity_file:material_image'
-        || targetMaterial.source === 'ai'
-        || targetMaterial.source === 'upload'
-      );
-      if (!isMaterialStageImage) {
-        alert('\u8bbe\u8ba1\u9636\u6bb5\u7684\u539f\u59cb\u56fe\u7247\u8bf7\u5728\u8bbe\u8ba1\u9875\u7ba1\u7406\uff0c\u7d20\u6750\u9875\u53ea\u5220\u9664\u672c\u9636\u6bb5\u65b0\u589e\u7684\u56fe\u7247\u3002');
-        return;
-      }
-      if (!targetMaterial.fileId) {
-        alert('\u8be5\u56fe\u7247\u5c1a\u672a\u5b8c\u6210\u6301\u4e45\u5316\uff0c\u8bf7\u5237\u65b0\u540e\u91cd\u8bd5\u3002');
-        return;
-      }
-
-      try {
-        await deleteEntityFile(targetMaterial.fileId);
-      } catch (error) {
-        console.error('Failed to delete material-stage image:', error);
-        alert('\u5220\u9664\u7d20\u6750\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002');
-        return;
-      }
+      const typeLabel = type === 'character' ? '角色' : type === 'scene' ? '场景' : '道具';
+      const confirmed = await crmConfirm({
+        title: `删除${typeLabel}素材`,
+        message: `确定删除“${tagName}”的这张素材图吗？删除后将解除相关镜头绑定，且无法撤销。如需再次使用，需要从剧本分镜重新导入，或重新上传/生成。`,
+        type: 'danger',
+        confirmText: '确认删除',
+      });
+      if (!confirmed) return;
 
       const updated = existing.filter(m => m.id !== materialId);
+
+      try {
+        if (targetMaterial.fileId) {
+          await deleteEntityFile(targetMaterial.fileId);
+        } else {
+          const targetAssetId = assetNameToId?.[tagName];
+          if (!targetAssetId) {
+            throw new Error('该素材缺少持久化文件标识');
+          }
+          await updateAsset(targetAssetId, {
+            reference_images: updated.map(material => material.url),
+            thumbnail_url: updated[0]?.url || '',
+          });
+        }
+      } catch (error) {
+        console.error('Failed to delete material-stage image:', error);
+        crmMessage.error(`删除素材失败：${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
+
       await onUpdateLibrary({
           ...materialLibrary,
           [tagName]: updated
@@ -952,6 +979,7 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
       if (selectedShot?.materialSelections?.[tagName] === materialId) {
           onUnbindMaterial(selectedShot.id, tagName);
       }
+      crmMessage.success(`${typeLabel}素材已删除`);
   };
 
   const handleSaveClick = () => {
@@ -1363,11 +1391,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                         selectedMaterialId={selectedShot.materialSelections?.[charName]}
                        aiGenerating={aiGeneratingTag === charName}
                        cameraGenerating={cameraGeneratingTag === charName}
+                       processingOperation={materialOperationStatus?.tagName === charName ? materialOperationStatus : null}
                         onUpload={(e) => handleFileUpload(e, charName, 'character')}
                        onOpenAI={() => openAIGenerator(charName, 'character')}
                        onOpenCamera={() => openCameraModal(charName, 'character')}
                        onProcessMaterial={(workflow) => openProcessModal(charName, 'character', workflow as 'upscale_hd' | 'remove_watermark')}
-                        onDeleteFromLibrary={(id) => removeMaterialFromLibrary(charName, id)}
+                        onDeleteFromLibrary={(id) => removeMaterialFromLibrary(charName, id, 'character')}
                         onBind={(id) => onBindMaterial(selectedShot.id, charName, id)}
                         isSyncedToFollowing={(id) => (
                           isMaterialFullySynced?.(selectedShot.id, charName, id) ?? false
@@ -1399,11 +1428,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                         selectedMaterialId={selectedShot.materialSelections?.[selectedShot.scene]}
                        aiGenerating={aiGeneratingTag === selectedShot.scene}
                        cameraGenerating={cameraGeneratingTag === selectedShot.scene}
+                       processingOperation={materialOperationStatus?.tagName === selectedShot.scene ? materialOperationStatus : null}
                         onUpload={(e) => handleFileUpload(e, selectedShot.scene, 'scene')}
                        onOpenAI={() => openAIGenerator(selectedShot.scene, 'scene')}
                        onOpenCamera={() => openCameraModal(selectedShot.scene, 'scene')}
                        onProcessMaterial={(workflow) => openProcessModal(selectedShot.scene, 'scene', workflow as 'upscale_hd' | 'remove_watermark')}
-                        onDeleteFromLibrary={(id) => removeMaterialFromLibrary(selectedShot.scene, id)}
+                        onDeleteFromLibrary={(id) => removeMaterialFromLibrary(selectedShot.scene, id, 'scene')}
                         onBind={(id) => onBindMaterial(selectedShot.id, selectedShot.scene, id)}
                         isSyncedToFollowing={(id) => (
                           isMaterialFullySynced?.(selectedShot.id, selectedShot.scene, id) ?? false
@@ -1436,11 +1466,12 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                           selectedMaterialId={selectedShot.materialSelections?.[propName]}
                           aiGenerating={aiGeneratingTag === propName}
                           cameraGenerating={cameraGeneratingTag === propName}
+                          processingOperation={materialOperationStatus?.tagName === propName ? materialOperationStatus : null}
                           onUpload={(e) => handleFileUpload(e, propName, 'prop')}
                           onOpenAI={() => openAIGenerator(propName, 'prop')}
                           onOpenCamera={() => openCameraModal(propName, 'prop')}
                           onProcessMaterial={(workflow) => openProcessModal(propName, 'prop', workflow as 'upscale_hd' | 'remove_watermark')}
-                          onDeleteFromLibrary={(id) => removeMaterialFromLibrary(propName, id)}
+                          onDeleteFromLibrary={(id) => removeMaterialFromLibrary(propName, id, 'prop')}
                           onBind={(id) => onBindMaterial(selectedShot.id, propName, id)}
                           isSyncedToFollowing={(id) => (
                             isMaterialFullySynced?.(selectedShot.id, propName, id) ?? false
@@ -1777,6 +1808,7 @@ const MaterialCard: React.FC<{
     selectedMaterialId?: string;
     aiGenerating: boolean;
     cameraGenerating: boolean;
+    processingOperation?: MaterialOperationStatus | null;
     onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onOpenAI: () => void;
     onOpenCamera: () => void;
@@ -1786,7 +1818,7 @@ const MaterialCard: React.FC<{
     isSyncedToFollowing: (id: string) => boolean;
     onUnbind: () => void;
     onViewImage: (url: string) => void;
-}> = ({ name, type, materials, selectedMaterialId, aiGenerating, cameraGenerating, onUpload, onOpenAI, onOpenCamera, onProcessMaterial, onDeleteFromLibrary, onBind, isSyncedToFollowing, onUnbind, onViewImage }) => {
+}> = ({ name, type, materials, selectedMaterialId, aiGenerating, cameraGenerating, processingOperation, onUpload, onOpenAI, onOpenCamera, onProcessMaterial, onDeleteFromLibrary, onBind, isSyncedToFollowing, onUnbind, onViewImage }) => {
     
     const boundMaterial = materials.find(m => m.id === selectedMaterialId);
     const hasMaterials = materials.length > 0;
@@ -1835,6 +1867,12 @@ const MaterialCard: React.FC<{
                      )}
                  </div>
                  <div className="min-w-0 flex-1 flex flex-col justify-center gap-2">
+                     {processingOperation && (
+                       <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-md border border-primary/25 bg-primary-light px-2.5 py-2 text-xs font-semibold text-primary">
+                         <Loader className="h-3.5 w-3.5 animate-spin" />
+                         <span>{processingOperation.label}</span>
+                       </div>
+                     )}
                      <div>
                         <span className="text-[10px] font-bold text-n100 uppercase tracking-wide block mb-1">当前状态</span>
                         <p className={`text-xs leading-relaxed ${boundMaterial ? 'text-success' : 'text-n300'}`}>
@@ -1922,17 +1960,21 @@ const MaterialCard: React.FC<{
                                             >
                                                 <ZoomIn className="w-3 h-3" />
                                             </button>
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); onDeleteFromLibrary(m.id); }} 
-                                            className="p-1.5 bg-danger rounded-full text-white hover:bg-danger transform hover:scale-110 transition-transform"
-                                            title="删除素材"
-                                        >
-                                            <Trash2 className="w-3 h-3" />
-                                        </button>
                                         </div>
                                     </div>
 
-                                    {m.source === 'ai' && <div className="absolute top-1 right-1 text-[8px] bg-primary text-white px-1 rounded shadow-sm">AI</div>}
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); onDeleteFromLibrary(m.id); }}
+                                        disabled={cameraGenerating}
+                                        className="absolute right-1 top-1 z-10 rounded-full border border-white/70 bg-danger p-1.5 text-white shadow-md transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-40"
+                                        title={`删除${type === 'character' ? '角色' : type === 'scene' ? '场景' : '道具'}素材`}
+                                        aria-label={`删除${name}素材`}
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
+
+                                    {m.source === 'ai' && <div className="absolute bottom-1 right-1 text-[8px] bg-primary text-white px-1 rounded shadow-sm">AI</div>}
                                 </div>
                             );
                         })}
@@ -1969,7 +2011,7 @@ const MaterialCard: React.FC<{
                     ) : (
                         <Camera className="w-3 h-3" />
                     )}
-                    <span>角度</span>
+                    <span>{processingOperation?.workflow === 'angle_adjustment' ? '角度处理中…' : '角度'}</span>
                 </button>
                 <button
                     onClick={() => onProcessMaterial('upscale_hd')}
@@ -1981,7 +2023,7 @@ const MaterialCard: React.FC<{
                     ) : (
                         <Maximize className="w-3 h-3" />
                     )}
-                    <span>高清放大</span>
+                    <span>{processingOperation?.workflow === 'upscale_hd' ? '高清放大处理中…' : '高清放大'}</span>
                 </button>
                 <button
                     onClick={() => onProcessMaterial('remove_watermark')}
@@ -1993,7 +2035,7 @@ const MaterialCard: React.FC<{
                     ) : (
                         <Scissors className="w-3 h-3" />
                     )}
-                    <span>去水印</span>
+                    <span>{processingOperation?.workflow === 'remove_watermark' ? '去水印处理中…' : '去水印'}</span>
                 </button>
                 {supportsStandardTurnaround(type) && (
                     <button

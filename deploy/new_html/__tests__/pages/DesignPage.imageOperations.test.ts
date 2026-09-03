@@ -96,6 +96,14 @@ describe('DesignPage image operation modals', () => {
     expect(source).toContain("setSequential('auto')");
   });
 
+  it('requires an explicit second confirmation before deleting an asset', () => {
+    expect(source).toContain('const confirmed = await crmConfirm({');
+    expect(source).toContain('删除后，该素材及其设计图将从当前分集移除，且无法撤销');
+    expect(source).toContain('需要从剧本分镜重新导入');
+    expect(source).toContain("confirmText: '确认删除'");
+    expect(source).toContain('if (!confirmed) return;');
+  });
+
   it('defaults refinement to the fast tier and exposes all four public writing tiers', () => {
     expect(source).toContain("LS.get('design_ai_refine_model', AiModel.DeepseekChat)");
     expect(source).toContain('const refineModelOptions = modelOptions');

@@ -25,7 +25,7 @@ import {
   runOnlineImageOperation,
 } from '../services/onlineImageOperationService';
 import { callAI } from '../services/aiService';
-import { crmMessage } from '../admin/crmUI';
+import { crmConfirm, crmMessage } from '../admin/crmUI';
 import { AiModel } from '../types';
 import {
   IMAGE_QUALITY_SUFFIX,
@@ -517,6 +517,17 @@ export const DesignPage: React.FC = () => {
   }, [name, description, projectId, episodeId, selectedScriptId, tab, forceReloadSlices]);
 
   const handleDelete = useCallback(async (assetId: string) => {
+    const asset = designAssets.find(item => item.assetId === assetId);
+    if (!asset) return;
+    const typeLabel = asset.assetType === 'character' ? '角色' : asset.assetType === 'scene' ? '场景' : '道具';
+    const confirmed = await crmConfirm({
+      title: `删除${typeLabel}素材`,
+      message: `确定删除${typeLabel}“${asset.name}”吗？删除后，该素材及其设计图将从当前分集移除，且无法撤销。如需再次使用，需要从剧本分镜重新导入。`,
+      type: 'danger',
+      confirmText: '确认删除',
+    });
+    if (!confirmed) return;
+
     setDeletingId(assetId);
     try {
       const res = await deleteAsset(assetId);
@@ -531,7 +542,7 @@ export const DesignPage: React.FC = () => {
       }
     }
     finally { setDeletingId(null); }
-  }, [forceReloadSlices]);
+  }, [designAssets, forceReloadSlices]);
 
   const handleUploadImage = useCallback(async (assetId: string, file: File) => {
     setUploadingId(assetId);
