@@ -1,5 +1,6 @@
 -- Standalone local-node image upscaling. Credits are reserved before enqueue,
--- consumed only after success, and capped at 50 points per image.
+-- consumed only after success, and capped at 50 points per image. DPI is a
+-- small print-delivery surcharge: 72/150/300 DPI add 0/1/3 points.
 
 INSERT INTO credit_rules (
   rule_id, feature_key, feature_name, enabled, base_cost, billing_unit,
@@ -21,21 +22,30 @@ VALUES (
         {"min": 4097, "max": 8192, "multiplier": 1.5},
         {"min": 8193, "max": 16000, "multiplier": 2.5},
         {"min": 16001, "max": 32000, "multiplier": 3.8},
-        {"min": 32001, "max": 50000, "multiplier": 5.0}
+        {"min": 32001, "max": 50000, "multiplier": 4.5}
       ],
       "default_multiplier": 1.0
     },
     {
       "key": "text_clarity",
-      "type": "enum",
-      "rules": [{"value": true, "multiplier": 1.1}],
-      "default_multiplier": 1.0
+      "type": "enum_add",
+      "rules": [{"value": true, "add": 2}],
+      "default_add": 0
+    },
+    {
+      "key": "dpi",
+      "type": "enum_add",
+      "rules": [
+        {"value": 150, "add": 1},
+        {"value": 300, "add": 3}
+      ],
+      "default_add": 0
     }
   ]'::jsonb,
   8,
   50,
-  '2026-09-02-image-upscale-v1',
-  '本地节点 AI 放大后按最长边输出并写入 DPI；4K/8K/16K/32K/50K 分档，文字清晰模式采用保守边缘增强；单张最高 50 积分，失败或取消不扣积分'
+  '2026-09-03-image-upscale-v2',
+  '本地节点 AI 放大后按最长边输出并写入 DPI；4K/8K/16K/32K/50K 分档，150/300 DPI 分别加 1/3 积分，文字清晰加 2 积分；单张最高 50 积分，失败或取消不扣积分'
 )
 ON CONFLICT (rule_id) DO UPDATE SET
   feature_name = EXCLUDED.feature_name,

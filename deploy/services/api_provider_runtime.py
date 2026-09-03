@@ -32,6 +32,9 @@ from services.api_provider_registry import (
     get_endpoint_env_key,
     get_model_env_key,
     get_minimax_operation_model_env_key,
+    get_provider_operation_api_key_env_key,
+    get_provider_operation_endpoint_env_key,
+    get_provider_operation_extra_env_key,
     get_provider_api_path,
     get_provider_extra_env_keys,
     get_provider_env_key,
@@ -547,18 +550,25 @@ def resolve_provider(
     catalog = PROVIDER_CATALOG.get(provider_id, {})
 
     primary_env = get_provider_env_key(provider_id)
-    seedance_operation = (
-        infer_model_binding_operation(provider_id, model_name)
-        if provider_id == "seedance" and model_name
+    requested_or_preset_model = model_name or preset.get("model_name") or ""
+    operation = (
+        infer_model_binding_operation(provider_id, requested_or_preset_model)
+        if requested_or_preset_model
         else ""
     )
+    operation_key_env = (
+        get_provider_operation_api_key_env_key(provider_id, operation)
+        if operation
+        else None
+    )
+    seedance_operation = operation if provider_id == "seedance" else ""
     seedance_operation_key_env = (
         get_seedance_operation_api_key_env_key(seedance_operation)
         if seedance_operation
         else None
     )
     fallback_envs = list(catalog.get("fallback_env") or [])
-    key_envs = _unique([seedance_operation_key_env, primary_env, *fallback_envs])
+    key_envs = _unique([operation_key_env, seedance_operation_key_env, primary_env, *fallback_envs])
     api_key, api_key_env = _first_env(key_envs)
 
     # Fallback env keys are credentials only. Endpoint/proxy settings are
@@ -566,6 +576,9 @@ def resolve_provider(
     # to the wrong API surface (for example Seedance using ARK image endpoint).
     endpoint_envs = _unique(
         [
+            get_provider_operation_endpoint_env_key(provider_id, operation)
+            if operation
+            else None,
             get_seedance_operation_endpoint_env_key(seedance_operation)
             if seedance_operation
             else None,
@@ -582,6 +595,9 @@ def resolve_provider(
 
     proxy_mode_envs = _unique(
         [
+            get_proxy_mode_env_key(operation_key_env)
+            if operation_key_env
+            else None,
             get_proxy_mode_env_key(seedance_operation_key_env)
             if seedance_operation_key_env
             else None,
@@ -598,6 +614,9 @@ def resolve_provider(
 
     custom_proxy_envs = _unique(
         [
+            get_custom_proxy_env_key(operation_key_env)
+            if operation_key_env
+            else None,
             get_custom_proxy_env_key(seedance_operation_key_env)
             if seedance_operation_key_env
             else None,
@@ -606,11 +625,18 @@ def resolve_provider(
     )
     custom_proxy, custom_proxy_env = _first_env(custom_proxy_envs)
 
-    model_envs = _unique(
-        scoped_model_env_candidates(get_model_env_key(primary_env), model_scope)
-        if primary_env
-        else []
-    )
+    model_envs = _unique([
+        *(
+            scoped_model_env_candidates(get_model_env_key(operation_key_env), model_scope)
+            if operation_key_env
+            else []
+        ),
+        *(
+            scoped_model_env_candidates(get_model_env_key(primary_env), model_scope)
+            if primary_env
+            else []
+        ),
+    ])
     runtime_model_name, model_env = _first_env(model_envs)
     resolved_model_name = model_name or runtime_model_name or preset.get("model_name") or ""
     deepseek_operation_request = False
@@ -656,10 +682,15 @@ def resolve_provider(
     extra: Dict[str, str] = {}
     extra_sources: Dict[str, str] = {}
     for field, env_key in get_provider_extra_env_keys(provider_id).items():
-        value = (os.getenv(env_key) or "").strip()
+        operation_extra_env = (
+            get_provider_operation_extra_env_key(provider_id, operation, field)
+            if operation
+            else None
+        )
+        value, value_env = _first_env(_unique([operation_extra_env, env_key]))
         if value:
             extra[field] = value
-            extra_sources[field] = env_key
+            extra_sources[field] = value_env or env_key
 
     return ResolvedProviderConfig(
         provider=provider_id,

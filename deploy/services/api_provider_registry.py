@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+import re
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit, urlunsplit
 
@@ -553,6 +554,70 @@ def scoped_model_env_candidates(env_key: Optional[str], scope: Optional[str]) ->
     if scoped and scoped != env_key:
         return [scoped, env_key]
     return [env_key]
+
+
+def provider_billing_channel(
+    provider: str,
+    endpoint: Optional[str],
+    request_template: Any = None,
+) -> str:
+    """Classify one credential card without coupling billing to its provider.
+
+    Plan and metered credentials are independent runtime channels.  Explicit
+    request metadata takes precedence, while Ark Plan endpoints remain
+    recognizable for existing cards that predate the billing-mode field.
+    """
+    template = request_template
+    if isinstance(template, str):
+        try:
+            template = json.loads(template) if template.strip() else {}
+        except json.JSONDecodeError:
+            template = {}
+    if not isinstance(template, dict):
+        template = {}
+
+    values = [
+        template.get("billing_mode"),
+        template.get("billingMode"),
+        template.get("provider_access_mode"),
+        template.get("providerAccessMode"),
+        template.get("access_mode"),
+        template.get("accessMode"),
+    ]
+    for value in values:
+        normalized = re.sub(r"[^a-z0-9]+", "", str(value or "").strip().lower())
+        if "plan" in normalized or "subscription" in normalized:
+            return "plan"
+        if normalized in {"payg", "payasyougo", "ondemand", "metered", "standard"}:
+            return "payg"
+
+    value = _with_default_https_for_host(str(endpoint or "").strip(), ARK_OFFICIAL_HOST)
+    try:
+        path = urlsplit(value).path.rstrip("/").lower()
+    except ValueError:
+        path = value.rstrip("/").lower()
+    if path == "/api/plan" or path.startswith("/api/plan/"):
+        return "plan"
+    return "payg"
+
+
+def _provider_operation_env_prefix(provider: str, operation: str) -> str:
+    provider_token = re.sub(r"[^A-Z0-9]+", "_", normalize_provider(provider).upper()).strip("_")
+    operation_token = re.sub(r"[^A-Z0-9]+", "_", str(operation or "default").upper()).strip("_")
+    return f"{provider_token}_{operation_token}"
+
+
+def get_provider_operation_api_key_env_key(provider: str, operation: str) -> str:
+    return f"{_provider_operation_env_prefix(provider, operation)}_API_KEY"
+
+
+def get_provider_operation_endpoint_env_key(provider: str, operation: str) -> str:
+    return f"{_provider_operation_env_prefix(provider, operation)}_ENDPOINT"
+
+
+def get_provider_operation_extra_env_key(provider: str, operation: str, field: str) -> str:
+    field_token = re.sub(r"[^A-Z0-9]+", "_", str(field or "").upper()).strip("_")
+    return f"{_provider_operation_env_prefix(provider, operation)}_{field_token}"
 
 
 def _with_model_usage_scope(option: Dict[str, Any], scope: str) -> Dict[str, Any]:

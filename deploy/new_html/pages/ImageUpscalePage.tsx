@@ -20,7 +20,7 @@ import { apiBlob, apiJson } from '../services/httpClient';
 const LONG_EDGE_PRESETS = [4096, 8192, 16000, 32000, 50000] as const;
 const DPI_PRESETS = [72, 150, 300] as const;
 
-function fallbackCost(targetLongEdge: number, textClarity: boolean): number {
+function fallbackCost(targetLongEdge: number, dpi: number, textClarity: boolean): number {
   const base = targetLongEdge <= 4096
     ? 8
     : targetLongEdge <= 8192
@@ -29,8 +29,23 @@ function fallbackCost(targetLongEdge: number, textClarity: boolean): number {
         ? 25
         : targetLongEdge <= 32000
           ? 38
-          : 50;
-  return Math.min(50, Math.round(base * (textClarity ? 1.1 : 1)));
+          : 45;
+  const dpiSurcharge = dpi >= 300 ? 3 : dpi >= 150 ? 1 : 0;
+  return Math.min(50, base + dpiSurcharge + (textClarity ? 2 : 0));
+}
+
+function estimatedDurationLabel(targetLongEdge: number, textClarity: boolean): string {
+  const range = targetLongEdge <= 4096
+    ? [1, 3]
+    : targetLongEdge <= 8192
+      ? [2, 4]
+      : targetLongEdge <= 16000
+        ? [3, 5]
+        : targetLongEdge <= 32000
+          ? [3, 6]
+          : [4, 8];
+  const upper = range[1] + (textClarity && targetLongEdge < 50000 ? 1 : 0);
+  return `约 ${range[0]}–${upper} 分钟`;
 }
 
 function formatPixels(value: number): string {
@@ -64,11 +79,15 @@ export const ImageUpscalePage: React.FC = () => {
   const [taskId, setTaskId] = useState('');
   const [resultUrl, setResultUrl] = useState('');
   const [error, setError] = useState('');
-  const [estimatedCost, setEstimatedCost] = useState(() => fallbackCost(8192, false));
+  const [estimatedCost, setEstimatedCost] = useState(() => fallbackCost(8192, 300, false));
 
   const estimatedOutput = useMemo(
     () => outputSize(sourceSize, targetLongEdge),
     [sourceSize, targetLongEdge],
+  );
+  const estimatedDuration = useMemo(
+    () => estimatedDurationLabel(targetLongEdge, textClarity),
+    [targetLongEdge, textClarity],
   );
   const busy = ['uploading', 'queued', 'running'].includes(status);
 
@@ -81,10 +100,10 @@ export const ImageUpscalePage: React.FC = () => {
         text_clarity: textClarity,
       })
         .then(quote => {
-          if (active) setEstimatedCost(quote.enabled ? quote.estimated_cost : fallbackCost(targetLongEdge, textClarity));
+          if (active) setEstimatedCost(quote.enabled ? quote.estimated_cost : fallbackCost(targetLongEdge, dpi, textClarity));
         })
         .catch(() => {
-          if (active) setEstimatedCost(fallbackCost(targetLongEdge, textClarity));
+          if (active) setEstimatedCost(fallbackCost(targetLongEdge, dpi, textClarity));
         });
     }, 120);
     return () => {
@@ -303,7 +322,7 @@ export const ImageUpscalePage: React.FC = () => {
                     </button>
                   ))}
                 </div>
-                <p className="mt-2 text-[11px] leading-5 text-n200">DPI 是打印密度信息；实际像素由上方最长边决定。</p>
+                <p className="mt-2 text-[11px] leading-5 text-n200">DPI 是打印密度信息；实际像素由上方最长边决定。150 DPI 加 1 点，300 DPI 加 3 点。</p>
               </div>
             </section>
 
@@ -341,6 +360,11 @@ export const ImageUpscalePage: React.FC = () => {
                 <span className="font-semibold text-n500">预计创作点数</span>
                 <span className="font-display text-xl font-bold text-warning">{estimatedCost} 点</span>
               </div>
+              <div className="mt-2 flex items-center justify-between border-t border-n50 pt-2 text-sm">
+                <span className="font-semibold text-n500">预计处理耗时</span>
+                <span className="font-semibold text-n700">{estimatedDuration}</span>
+              </div>
+              <p className="mt-1 text-[11px] leading-5 text-n200">基于当前本地节点实测估算；排队等待与下载时间另计。</p>
               <p className="mt-1 text-[11px] leading-5 text-n200">加入本地节点队列；成功后扣除，失败或取消自动退回。结果保留 30 天。</p>
 
               {busy && (

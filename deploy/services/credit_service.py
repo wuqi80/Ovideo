@@ -155,6 +155,26 @@ def _eval_additive_factor(factor: Dict[str, Any], params: Dict[str, Any]) -> flo
     return 0.0
 
 
+def _eval_post_additive_factor(factor: Dict[str, Any], params: Dict[str, Any]) -> float:
+    """Evaluate fixed surcharges after legacy multiplicative pricing."""
+    if not isinstance(factor, dict) or factor.get('type') != 'enum_add':
+        return 0.0
+    key = factor.get('key')
+    if not key:
+        return 0.0
+    value = params.get(key)
+    for rule in factor.get('rules', []) or []:
+        if str(rule.get('value')) == str(value):
+            try:
+                return float(rule.get('add', 0) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+    try:
+        return float(factor.get('default_add', 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def compute_cost(rule: Dict[str, Any], params: Dict[str, Any]) -> int:
     if str(rule.get('feature_key') or '') == 'video_generation':
         return int(quote_video_credits(params).get('credits') or 0)
@@ -163,12 +183,19 @@ def compute_cost(rule: Dict[str, Any], params: Dict[str, Any]) -> int:
     factors = rule.get('factors') or []
     total = float(base)
     additive_types = {'linear_add', 'per_unit_add', 'lookup_unit_add'}
+    post_additive_types = {'enum_add'}
     for factor in factors:
         if isinstance(factor, dict) and factor.get('type') in additive_types:
             total += _eval_additive_factor(factor, params)
     for factor in factors:
-        if not isinstance(factor, dict) or factor.get('type') not in additive_types:
+        if (
+            not isinstance(factor, dict)
+            or factor.get('type') not in additive_types | post_additive_types
+        ):
             total *= _eval_factor(factor, params)
+    for factor in factors:
+        if isinstance(factor, dict) and factor.get('type') in post_additive_types:
+            total += _eval_post_additive_factor(factor, params)
     cost = int(round(total))
     min_c = int(rule.get('min_cost', 0) or 0)
     max_c = rule.get('max_cost')

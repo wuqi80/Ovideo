@@ -211,6 +211,25 @@ def test_seedance_provider_catalog_exposes_both_billing_channels():
     assert [item["mode"] for item in seedance["access_modes"]] == ["standard", "agent_plan"]
 
 
+def test_provider_billing_channel_recognizes_plan_metadata_and_ark_endpoint():
+    from services.api_provider_registry import provider_billing_channel
+
+    assert provider_billing_channel(
+        "minimax",
+        "https://api.minimaxi.com/v1",
+        {"provider_access_mode": "domestic_token_plan"},
+    ) == "plan"
+    assert provider_billing_channel(
+        "doubao",
+        "https://ark.cn-beijing.volces.com/api/plan/",
+    ) == "plan"
+    assert provider_billing_channel(
+        "minimax",
+        "https://api.minimaxi.com/v1",
+        {"billing_mode": "pay_as_you_go"},
+    ) == "payg"
+
+
 def test_minimax_provider_catalog_exposes_domestic_and_international_channels():
     from services.api_provider_registry import (
         get_api_provider_catalog,
@@ -542,6 +561,103 @@ async def test_seedance_agent_plan_and_payg_cards_coexist_in_runtime(monkeypatch
     assert "/api/plan/" in plan.endpoint
     assert payg.api_key == "payg-key"
     assert "/api/plan/" not in payg.endpoint
+
+
+@pytest.mark.asyncio
+async def test_same_model_prefers_plan_card_over_payg_card_in_runtime(monkeypatch):
+    from services import api_config_runtime_loader as loader
+    from services.api_provider_runtime import resolve_provider
+
+    for env_key in loader.managed_api_env_keys():
+        if env_key.startswith("MINIMAX_"):
+            monkeypatch.delenv(env_key, raising=False)
+            monkeypatch.setitem(loader._BASE_API_ENV_VALUES, env_key, None)
+
+    bindings = [
+        {
+            "operation": "video-standard",
+            "model_name": "MiniMax-Hailuo-2.3",
+        }
+    ]
+    rows = [
+        {
+            "config_id": "plan-card",
+            "name": "A Plan card",
+            "provider": "minimax",
+            "endpoint": "https://api.minimaxi.com/v1",
+            "api_key_encrypted": "enc:plan-key",
+            "model_bindings": bindings,
+            "request_template": {"provider_access_mode": "domestic_token_plan"},
+            "enabled": True,
+        },
+        {
+            "config_id": "payg-card",
+            "name": "Z Payg card",
+            "provider": "minimax",
+            "endpoint": "https://api.minimaxi.com/v1",
+            "api_key_encrypted": "enc:payg-key",
+            "model_bindings": bindings,
+            "request_template": {"billing_mode": "pay_as_you_go"},
+            "enabled": True,
+        },
+    ]
+    monkeypatch.setattr(loader.ApiConfigDAO, "list_enabled", AsyncMock(return_value=rows))
+    monkeypatch.setattr(
+        loader.ApiConfigDAO,
+        "decrypt_key",
+        staticmethod(lambda value: value.split(":", 1)[1]),
+    )
+
+    try:
+        result = await loader.load_api_configs_to_env()
+        resolved = resolve_provider("minimax", "MiniMax-Hailuo-2.3")
+
+        assert result["success"] is True
+        assert resolved.api_key == "plan-key"
+        assert resolved.extra["provider_access_mode"] == "domestic_token_plan"
+    finally:
+        loader.reset_managed_api_env_to_baseline()
+
+
+@pytest.mark.asyncio
+async def test_plan_and_payg_cards_do_not_disable_each_other(monkeypatch):
+    from services import api_config_service as service
+
+    rows = [
+        {
+            "config_id": "plan-card",
+            "provider": "doubao",
+            "endpoint": "https://ark.cn-beijing.volces.com/api/plan/",
+            "api_key_encrypted": "enc:plan-key",
+            "enabled": True,
+        },
+        {
+            "config_id": "payg-card",
+            "provider": "doubao",
+            "endpoint": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+            "api_key_encrypted": "enc:payg-key",
+            "enabled": True,
+        },
+    ]
+    updates = []
+
+    class FakeDAO:
+        @staticmethod
+        async def list_all():
+            return deepcopy(rows)
+
+        @staticmethod
+        async def update(config_id, **fields):
+            updates.append((config_id, fields))
+            return next(item for item in rows if item["config_id"] == config_id)
+
+    monkeypatch.setattr(service, "ApiConfigDAO", FakeDAO)
+
+    disabled, disabled_rows = await service._disable_conflicting_provider_configs(rows[0])
+
+    assert disabled == []
+    assert disabled_rows == []
+    assert updates == []
 
 
 @pytest.mark.asyncio

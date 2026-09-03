@@ -34,6 +34,10 @@ from services.api_provider_registry import (
     get_gpt_image_tiers,
     get_model_env_key,
     get_minimax_operation_model_env_key,
+    get_provider_model_binding_options,
+    get_provider_operation_api_key_env_key,
+    get_provider_operation_endpoint_env_key,
+    get_provider_operation_extra_env_key,
     get_provider_default_endpoint,
     get_provider_extra_env_keys,
     get_provider_env_key,
@@ -54,6 +58,7 @@ from services.api_provider_registry import (
     normalize_seedance_endpoint,
     normalize_seedance_model_for_endpoint,
     seedance_access_mode,
+    provider_billing_channel,
     primary_model_name_for_bindings,
 )
 from utils.config_helpers import _config_get
@@ -78,6 +83,27 @@ GEMINI_IMAGE_LEGACY_MODELS = {
 GEMINI_IMAGE_NEW_MODEL = "gemini-3.1-flash-image-preview"
 SORA2_NEW_MODEL = SORA2_DEFAULT_VIDEO_MODEL
 VEO_NEW_MODEL = VEO_DEFAULT_VIDEO_MODEL
+_DYNAMIC_OPERATION_ENV_KEYS: set[str] = set()
+
+
+def _operation_env_keys(provider: str, operation: str) -> set[str]:
+    api_key_env = get_provider_operation_api_key_env_key(provider, operation)
+    keys = {
+        api_key_env,
+        get_provider_operation_endpoint_env_key(provider, operation),
+        get_proxy_mode_env_key(api_key_env),
+        get_custom_proxy_env_key(api_key_env),
+        get_model_env_key(api_key_env),
+    }
+    for scope in MODEL_USAGE_SCOPES:
+        scoped_model_env = get_scoped_model_env_key(get_model_env_key(api_key_env), scope)
+        if scoped_model_env:
+            keys.add(scoped_model_env)
+    for field in get_provider_extra_env_keys(provider):
+        keys.add(get_provider_operation_extra_env_key(provider, operation, field))
+    return keys
+
+
 def managed_api_env_keys() -> set[str]:
     keys: set[str] = (
         set(SEEDANCE_SUB_MODEL_ENV_MAP.values())
@@ -110,6 +136,11 @@ def managed_api_env_keys() -> set[str]:
             scoped_model_env = get_scoped_model_env_key(get_model_env_key(env_key), scope)
             if scoped_model_env:
                 keys.add(scoped_model_env)
+    for provider in PROVIDER_ENV_MAP:
+        for option in get_provider_model_binding_options(provider):
+            operation = str(option.get("operation") or "").strip().lower()
+            if operation:
+                keys.update(_operation_env_keys(provider, operation))
     for operation_model_env in (
         set(SEEDANCE_SUB_MODEL_ENV_MAP.values())
         | set(DASHSCOPE_SUB_MODEL_ENV_MAP.values())
@@ -127,6 +158,9 @@ _BASE_API_ENV_VALUES = {key: os.environ.get(key) for key in managed_api_env_keys
 
 
 def reset_managed_api_env_to_baseline() -> None:
+    for key in _DYNAMIC_OPERATION_ENV_KEYS:
+        if key not in _BASE_API_ENV_VALUES:
+            os.environ.pop(key, None)
     for key, value in _BASE_API_ENV_VALUES.items():
         if value is None:
             os.environ.pop(key, None)
@@ -236,7 +270,19 @@ def _explicit_runtime_binding_keys(
 async def load_api_configs_to_env() -> Dict[str, Any]:
     """Load enabled DB configs into managed env vars for resolve_provider()."""
     try:
-        configs = await ApiConfigDAO.list_enabled()
+        configs = sorted(
+            await ApiConfigDAO.list_enabled(),
+            key=lambda config: (
+                1
+                if provider_billing_channel(
+                    str(_config_get(config, "provider", "") or ""),
+                    str(_config_get(config, "endpoint", "") or ""),
+                    _config_get(config, "request_template", {}),
+                ) == "plan"
+                else 0,
+                str(_config_get(config, "name", "") or "").lower(),
+            ),
+        )
         new_env: Dict[str, Optional[str]] = dict(_BASE_API_ENV_VALUES)
         loaded = 0
         loaded_providers: List[str] = []
@@ -366,6 +412,22 @@ async def load_api_configs_to_env() -> Dict[str, Any]:
                     continue
                 if (scope, operation) not in explicit_runtime_binding_keys:
                     continue
+                operation_api_key_env = get_provider_operation_api_key_env_key(provider_id, operation)
+                operation_endpoint_env = get_provider_operation_endpoint_env_key(provider_id, operation)
+                operation_env_keys = _operation_env_keys(provider_id, operation)
+                _DYNAMIC_OPERATION_ENV_KEYS.update(operation_env_keys)
+                new_env[operation_api_key_env] = api_key
+                new_env[operation_endpoint_env] = endpoint or None
+                new_env[get_proxy_mode_env_key(operation_api_key_env)] = proxy_mode
+                new_env[get_custom_proxy_env_key(operation_api_key_env)] = custom_proxy or None
+                new_env[
+                    get_scoped_model_env_key(get_model_env_key(operation_api_key_env), scope)
+                ] = bound_model
+                for field in get_provider_extra_env_keys(provider_id):
+                    extra_value = _config_extra_value(config, field)
+                    new_env[
+                        get_provider_operation_extra_env_key(provider_id, operation, field)
+                    ] = extra_value or None
                 if provider_id == "seedance" and operation in SEEDANCE_SUB_MODEL_ENV_MAP:
                     sub_model = operation
                     new_env[get_scoped_model_env_key(get_seedance_sub_model_env_key(sub_model), scope)] = bound_model

@@ -36,6 +36,7 @@ from services.api_provider_registry import (
     normalize_seedance_endpoint,
     normalize_seedance_model_for_endpoint,
     primary_model_name_for_bindings,
+    provider_billing_channel,
     seedance_access_mode,
     summarize_api_provider_configs,
 )
@@ -127,10 +128,9 @@ def _row_provider(row: Any) -> str:
 
 def _provider_runtime_channel(row: Any) -> tuple[str, str]:
     provider = normalize_provider(_row_provider(row))
-    if provider == "seedance":
-        endpoint = str(_config_get(row, "endpoint", "") or "")
-        return provider, seedance_access_mode(endpoint)
-    return provider, "default"
+    endpoint = str(_config_get(row, "endpoint", "") or "")
+    request_template = _config_get(row, "request_template", {})
+    return provider, provider_billing_channel(provider, endpoint, request_template)
 
 
 def _row_model_name(row: Any) -> str:
@@ -177,6 +177,7 @@ async def _find_duplicate_api_card(
     api_key: str,
     *,
     endpoint: str = "",
+    request_template: Optional[Dict[str, Any]] = None,
     exclude_config_id: str = "",
 ) -> Optional[Any]:
     provider_id = normalize_provider(provider)
@@ -188,10 +189,15 @@ async def _find_duplicate_api_card(
             continue
         if normalize_provider(_row_provider(row)) != provider_id:
             continue
-        if provider_id == "seedance":
-            row_endpoint = str(_config_get(row, "endpoint", "") or "")
-            if seedance_access_mode(row_endpoint) != seedance_access_mode(endpoint):
-                continue
+        row_endpoint = str(_config_get(row, "endpoint", "") or "")
+        row_channel = provider_billing_channel(
+            provider_id,
+            row_endpoint,
+            _config_get(row, "request_template", {}),
+        )
+        candidate_channel = provider_billing_channel(provider_id, endpoint, request_template)
+        if row_channel != candidate_channel:
+            continue
         existing_key = _row_plaintext_key(row)
         if existing_key and hmac.compare_digest(existing_key, candidate_key):
             return row
@@ -374,9 +380,8 @@ async def _test_api_config_row_health(
 async def _disable_conflicting_provider_configs(row: Any) -> tuple[List[str], List[Any]]:
     """Keep at most one enabled keyed config per provider channel.
 
-    Seedance has separate operation-scoped runtime slots for Agent Plan and
-    pay-as-you-go.  Those two channels may coexist; rows within the same
-    channel still conflict.  Other providers retain one active keyed row.
+    Plan and pay-as-you-go cards are independent runtime channels for every
+    provider. Rows within the same billing channel still conflict.
     """
     provider = _row_provider(row)
     keep_id = _row_config_id(row)
@@ -393,11 +398,8 @@ async def _disable_conflicting_provider_configs(row: Any) -> tuple[List[str], Li
             continue
         if not _row_enabled(other) or not _row_has_key(other):
             continue
-        if normalize_provider(provider) == "seedance":
-            row_endpoint = str(_config_get(row, "endpoint", "") or "")
-            other_endpoint = str(_config_get(other, "endpoint", "") or "")
-            if seedance_access_mode(row_endpoint) != seedance_access_mode(other_endpoint):
-                continue
+        if _provider_runtime_channel(row) != _provider_runtime_channel(other):
+            continue
         await ApiConfigDAO.update(other_id, enabled=False)
         disabled.append(other_id)
         disabled_rows.append(other)
@@ -714,7 +716,12 @@ async def create_api_config(
 ) -> Dict[str, Any]:
     provider_id = provider.strip()
     normalized_endpoint = _normalized_endpoint(provider_id, endpoint)
-    duplicate = await _find_duplicate_api_card(provider_id, api_key, endpoint=normalized_endpoint)
+    duplicate = await _find_duplicate_api_card(
+        provider_id,
+        api_key,
+        endpoint=normalized_endpoint,
+        request_template=request_template,
+    )
     if duplicate:
         raise ApiConfigCreateFailed(
             f"This API key already has a card for provider {normalize_provider(provider_id)}: "
@@ -779,7 +786,12 @@ async def create_api_config_key_batch(
     duplicate_rows: List[Any] = []
     new_keys: List[str] = []
     for api_key in deduped_keys:
-        duplicate = await _find_duplicate_api_card(provider_id, api_key, endpoint=normalized_endpoint)
+        duplicate = await _find_duplicate_api_card(
+            provider_id,
+            api_key,
+            endpoint=normalized_endpoint,
+            request_template=request_template,
+        )
         if duplicate:
             duplicate_rows.append(duplicate)
         else:
@@ -854,6 +866,7 @@ async def activate_api_config(
     touched_rows.append(activated)
 
     disabled_ids: List[str] = []
+    target_channel = _provider_runtime_channel(activated)
     for row in await ApiConfigDAO.list_all():
         other_id = _row_config_id(row)
         if not other_id or other_id == config_id:
@@ -861,6 +874,8 @@ async def activate_api_config(
         if _row_provider(row).lower() != provider.lower():
             continue
         if not _row_has_key(row) or not _row_enabled(row):
+            continue
+        if _provider_runtime_channel(row) != target_channel:
             continue
         disabled = await ApiConfigDAO.update(other_id, enabled=False)
         disabled_ids.append(other_id)
@@ -906,6 +921,10 @@ async def update_api_config(
             provider,
             replacement_key,
             endpoint=effective_endpoint,
+            request_template=fields.get(
+                "request_template",
+                _config_get(before, "request_template", {}),
+            ),
             exclude_config_id=config_id,
         )
         if duplicate:

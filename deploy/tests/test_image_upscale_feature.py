@@ -17,7 +17,7 @@ def test_image_upscale_migration_is_manifested_and_capped_at_fifty():
     assert "sql/db_migration_image_upscale_credit_rule.sql" in manifest
 
 
-def test_image_upscale_credit_tiers_and_text_mode_never_exceed_fifty():
+def test_image_upscale_credit_tiers_dpi_and_text_mode_never_exceed_fifty():
     rule = {
         "feature_key": "image_upscale",
         "base_cost": 10,
@@ -30,21 +30,34 @@ def test_image_upscale_credit_tiers_and_text_mode_never_exceed_fifty():
                     {"min": 4097, "max": 8192, "multiplier": 1.5},
                     {"min": 8193, "max": 16000, "multiplier": 2.5},
                     {"min": 16001, "max": 32000, "multiplier": 3.8},
-                    {"min": 32001, "max": 50000, "multiplier": 5.0},
+                    {"min": 32001, "max": 50000, "multiplier": 4.5},
                 ],
             },
             {
                 "key": "text_clarity",
-                "type": "enum",
-                "rules": [{"value": True, "multiplier": 1.1}],
+                "type": "enum_add",
+                "rules": [{"value": True, "add": 2}],
+            },
+            {
+                "key": "dpi",
+                "type": "enum_add",
+                "rules": [
+                    {"value": 150, "add": 1},
+                    {"value": 300, "add": 3},
+                ],
             },
         ],
         "min_cost": 8,
         "max_cost": 50,
     }
 
-    assert [compute_cost(rule, {"target_long_edge": edge}) for edge in (4096, 8192, 16000, 32000, 50000)] == [8, 15, 25, 38, 50]
-    assert compute_cost(rule, {"target_long_edge": 50000, "text_clarity": True}) == 50
+    assert [
+        compute_cost(rule, {"target_long_edge": edge, "dpi": 72})
+        for edge in (4096, 8192, 16000, 32000, 50000)
+    ] == [8, 15, 25, 38, 45]
+    assert compute_cost(rule, {"target_long_edge": 50000, "dpi": 150}) == 46
+    assert compute_cost(rule, {"target_long_edge": 50000, "dpi": 300}) == 48
+    assert compute_cost(rule, {"target_long_edge": 50000, "dpi": 300, "text_clarity": True}) == 50
 
 
 def test_frontend_exposes_standalone_image_upscale_route_and_controls():
@@ -62,6 +75,9 @@ def test_frontend_exposes_standalone_image_upscale_route_and_controls():
     assert "纯图片背景效果通常更稳定" in page
     assert "'image_upscale'" in page
     assert "结果保留 30 天" in page
+    assert "预计处理耗时" in page
+    assert "排队等待与下载时间另计" in page
+    assert "[4, 8]" in page
     assert "不占用主站硬盘" not in page
     assert "/ticket" in page
 
