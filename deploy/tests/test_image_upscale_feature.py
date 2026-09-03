@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 from agent_routes import _extract_node_local_entries
@@ -8,13 +9,24 @@ DEPLOY_DIR = Path(__file__).resolve().parents[1]
 
 
 def test_image_upscale_migration_is_manifested_and_capped_at_fifty():
-    sql = (DEPLOY_DIR / "sql/db_migration_image_upscale_credit_rule.sql").read_text(encoding="utf-8")
+    legacy_path = DEPLOY_DIR / "sql/db_migration_image_upscale_credit_rule.sql"
+    legacy_sql = legacy_path.read_text(encoding="utf-8")
+    sql = (DEPLOY_DIR / "sql/db_migration_image_upscale_credit_pricing_v2.sql").read_text(
+        encoding="utf-8"
+    )
     manifest = (DEPLOY_DIR / "db_build/manifest.txt").read_text(encoding="utf-8")
 
+    # Applied migrations are immutable. This is the checksum recorded by the
+    # production ledger before the pricing-v2 migration was introduced.
+    assert hashlib.sha256(legacy_path.read_bytes()).hexdigest() == (
+        "5f0a44e15d6562ad4b7471a4d891337fb3d25d2206ad00d5f11b296b9abf092b"
+    )
+    assert "2026-09-02-image-upscale-v1" in legacy_sql
     assert "'image_upscale'" in sql
     assert "min_cost, max_cost" in sql
     assert "  50," in sql
     assert "sql/db_migration_image_upscale_credit_rule.sql" in manifest
+    assert "sql/db_migration_image_upscale_credit_pricing_v2.sql" in manifest
 
 
 def test_image_upscale_credit_tiers_dpi_and_text_mode_never_exceed_fifty():
