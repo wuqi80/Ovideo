@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { History, Download, Trash2, RefreshCw, CheckSquare, Square, Film, Image as ImageIcon, Play, Clock, AlertTriangle, X, ShieldAlert } from 'lucide-react';
+import { History, Download, Trash2, RefreshCw, CheckSquare, Square, Film, Image as ImageIcon, Play, Clock, AlertTriangle, X, ShieldAlert, FileText } from 'lucide-react';
 import { fetchDeletedUserFiles, fetchUserFiles, deleteEntityFile, hardDeleteEntityFile, hardDeleteEntityFiles, type EntityFile } from '../services/entityFileService';
-import { LazyVideo } from './LazyVideo';
 import { apiJson, secureApiUrl } from '../services/httpClient';
 import {
+  enrichHistoryTaskMetadata,
   enrichImageUpscaleHistory,
   getHistoryPromptText,
   getHistoryThumbnailFallbackSource,
@@ -114,6 +114,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'video' | 'image'>('video');
+  const [promptModalFile, setPromptModalFile] = useState<EntityFile | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ mode: 'single' | 'batch'; files: EntityFile[]; permanent: boolean } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number } | null>(null);
@@ -128,6 +129,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
       let allFiles = data.items;
 
       const tasks = await fetchRecentHistoryTasks();
+      allFiles = enrichHistoryTaskMetadata(allFiles, tasks);
       allFiles = enrichImageUpscaleHistory(allFiles, tasks);
 
       setFiles(allFiles);
@@ -290,6 +292,13 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
   };
 
   const getThumbnailUrl = (file: EntityFile): string | null => {
+    if (file.fileType === 'video' && !file.isDeleted && activeTab === 'history') {
+      if (file.thumbnailUrl) {
+        return secureApiUrl(file.thumbnailUrl, { absolute: true });
+      }
+      const thumbnailEndpoint = `/api/thumbnail?url=${encodeURIComponent(file.fileUrl)}&width=640&height=360`;
+      return secureApiUrl(thumbnailEndpoint, { absolute: true });
+    }
     const sourceUrl = getHistoryThumbnailSource(file);
     if (sourceUrl) return secureApiUrl(sourceUrl, { absolute: true });
     if (activeTab === 'recycle' && file.fileType === 'image' && file.fileId.startsWith('file_')) {
@@ -478,6 +487,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
                         大尺寸图
                       </span>
                     )}
+                    {isVideoFile && (
+                      <span className="absolute right-3 top-3 z-10 rounded-md border border-white/30 bg-primary/90 px-2 py-1 text-[10px] font-bold text-white shadow-sm backdrop-blur">
+                        视频
+                      </span>
+                    )}
                     {activeTab === 'recycle' ? (
                       thumbnailUrl && !isVideoFile ? (
                         <HistoryThumbnailImage src={thumbnailUrl} alt="回收站图片缩略图" />
@@ -490,13 +504,9 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
                     ) : mediaUrl ? (
                       <>
                         {isVideoFile ? (
-                          <LazyVideo
-                            src={mediaUrl}
-                            preload="none"
-                            className="w-full h-full object-cover"
-                            muted
-                            loop
-                            playsInline
+                          <HistoryThumbnailImage
+                            src={thumbnailUrl || ''}
+                            alt="视频缩略图"
                           />
                         ) : (
                           <HistoryThumbnailImage
@@ -555,6 +565,15 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
                         >
                           <Download className="w-3 h-3" />
                           下载
+                        </button>
+                      )}
+                      {activeTab === 'history' && (
+                        <button
+                          type="button"
+                          onClick={() => setPromptModalFile(file)}
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 border border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary rounded text-xs font-medium transition-colors"
+                        >
+                          <FileText className="w-3 h-3" />提示词
                         </button>
                       )}
                       {activeTab === 'history' && file.fileId.startsWith('file_') && (
@@ -678,6 +697,53 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
                     {deleteModal.permanent ? '确认永久删除' : '移入回收站'}
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 提示词弹窗 */}
+      {promptModalFile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-n900/50 backdrop-blur-sm"
+          onClick={() => setPromptModalFile(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="history-prompt-title"
+            className="relative w-full max-w-2xl mx-4 overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-bottom"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between border-b border-n40 px-6 py-5">
+              <div>
+                <h3 id="history-prompt-title" className="text-base font-bold text-n800">生成提示词</h3>
+                <p className="mt-1 text-xs text-n100">
+                  {meta(promptModalFile)?.model || '未知模型'} · {formatTime(promptModalFile.createdAt)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPromptModalFile(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-n100 transition-colors hover:bg-n20 hover:text-n700"
+                aria-label="关闭提示词"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto px-6 py-5">
+              <div className="whitespace-pre-wrap break-words rounded-md border border-n40 bg-n20 p-4 text-sm leading-6 text-n700">
+                {getHistoryPromptText(promptModalFile) || '该历史记录没有保存提示词'}
+              </div>
+            </div>
+            <div className="flex justify-end border-t border-n40 bg-n20 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setPromptModalFile(null)}
+                className="rounded-lg bg-primary px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover"
+              >
+                关闭
               </button>
             </div>
           </div>

@@ -7,6 +7,7 @@ import { ProjectFile, StoryboardItem, MaterialLibrary, GenerationReference, Refe
 import { LayoutDashboard, Image as ImageIcon, Sparkles, Upload, X, ChevronLeft, ChevronRight, Wand2, Users, MapPin, Box, Zap, User, Play, CheckCircle2, CircleDashed, CheckSquare, Square, Trash2, ArrowRight, Save, History, Clock, RefreshCw, ZoomIn, Eye, FolderInput, GripVertical, Camera, Pencil, Type, MoveRight, Eraser, RotateCcw, Download, Layers, Scissors, Grid3X3, Clapperboard, AlertTriangle, Library, Search, Check } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { generateFinalIllustrationResult } from '../services/geminiImageGenerationService';
+import { generateDoubaoImages } from '../services/doubaoService';
 import { generateWithComfyUIWorkflowQueued, generateHumanMultiAngleQueued, generateAroundAngleQueued, adjustImageAngleQueued, generateMattingQueued, generateImageFusionQueued, generatePanorama360Queued, generatePanoramaFusionQueued, generateAutoStoryboardQueued, generateMultiGridStoryboard } from '../services/comfyuiGenerationService';
 import { getComfyUIQueueStatus, waitForComfyUITaskAllImages } from '../services/comfyuiTaskWaitService';
 // 2026-05-21：分镜页 GPT Image 2 系列 + 化神参数面板
@@ -24,6 +25,7 @@ import {
 import type { GeneratedImageResult, ComfyUITaskRegistryMeta } from '../services/comfyuiTaskWaitService';
 import type { TaskKind } from '../types';
 import { generateThumbnail } from '../utils/imageOptimization';
+import { recommendDoubaoImageSize } from '../utils/doubaoImageSize';
 import { buildStoryboardSegmentLookup } from '../utils/storyboardSegments';
 import { loadShotImages, clearImageCache, getCachedBlobUrl, setCachedBlobUrl, removeImageFromCache, getImageThumbnailUrl } from '../services/imageLoaderService';
 import { saveRunningTask, removeRunningTask, getRecoverableTasks } from '../services/taskRecovery';
@@ -1532,6 +1534,47 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                   generationModel: modelToUse,
                   generationAttempt: attempt,
               }];
+          } else if (modelToUse === 'doubao') {
+              updateShotProgressStage(shot.id, '豆包正在生成画面', 10);
+              const results = await generateDoubaoImages({
+                  prompt: promptToUse,
+                  model: 'doubao-seedream-5-0-lite-260128',
+                  references: refImages,
+                  referenceMetadata: submittedReferences.map(reference => ({
+                      referenceId: reference.id,
+                      assetId: reference.assetId,
+                      fileId: reference.fileId,
+                      type: reference.type,
+                      name: reference.name,
+                      description: reference.description,
+                      source: reference.source,
+                  })),
+                  size: recommendDoubaoImageSize(
+                      resolvedImageSettings.ratio,
+                      resolvedImageSettings.k,
+                  ),
+                  sequential: 'disabled',
+                  count: 1,
+                  entityType: 'storyboard_item',
+                  entityId: shot.id,
+                  fileRole: 'generated_image',
+                  projectId,
+                  episodeId,
+                  sourcePage: 'generation',
+                  sourceItemId: shot.id,
+              });
+              generated = results.map(result => {
+                  const url = result.fileUrl || result.url;
+                  return {
+                      id: result.fileId || uuidv4(),
+                      url,
+                      thumbnail: url,
+                      timestamp: Date.now(),
+                      fileId: result.fileId,
+                      generationModel: modelToUse,
+                      generationAttempt: attempt,
+                  };
+              }).filter(image => image.url);
           } else if (modelToUse === 'gpt_image_vip' || modelToUse === 'gpt_image_official') {
               updateShotProgressStage(shot.id, 'AI 正在生成画面', 10);
               const tier = modelToUse === 'gpt_image_vip' ? 'vip' : 'official';
@@ -1691,7 +1734,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       setGeneratingShotIds(prev => new Set(prev).add(shotId));
       try {
           console.log('🔄 重新生成 - 当前参考图片:', references.map(r => ({ id: r.id, url: r.url.substring(0, 50) + '...' })));
-          await generateForShot(selectedShot, true, globalModel, references);
+          await generateForShot(selectedShot, true, selectedGenerationModel, references);
       } catch (e: any) {
           // 不再吞错：暴露真实原因（缺 key / 内容审查 / 参考图取不到 等），便于定位。
           alert(`生成失败：${e?.message || e || '请检查网络或图片大小'}`);
@@ -2941,7 +2984,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                           title={globalModelOption.hint}
                         >
                           {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
+                            <option key={option.value} value={option.value}>
+                              【{option.requiresCluster ? '处理集群' : '在线 API'}】{option.label}
+                            </option>
                           ))}
                         </select>
                       </label>
@@ -2989,7 +3034,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                     >
                         <option value="">跟随默认 · {globalModelOption.shortLabel}</option>
                         {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
+                          <option key={option.value} value={option.value}>
+                            【{option.requiresCluster ? '处理集群' : '在线 API'}】{option.label}
+                          </option>
                         ))}
                     </select>
                     <div className="mt-2 rounded bg-n0 px-3 py-2 text-[10px] leading-4 text-n300">
@@ -3049,7 +3096,9 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             </div>
                         </div>
                     )}
-                    <p className="mt-2 text-[9px] text-n100">顶部设置全局默认模型；当前镜头可以跟随默认，也可在此单独覆盖。</p>
+                    <p className="mt-2 text-[9px] text-n100">
+                      顶部设置全局默认模型；当前镜头可以跟随默认，也可在此单独覆盖。在线 API 模型使用后台配置，处理集群模型依赖可用节点。
+                    </p>
 
                     <div className="mt-3 pt-3 border-t border-n40">
                         <div className="text-[9px] text-n100 mb-2 flex items-center gap-1">
@@ -3530,14 +3579,14 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                    <div className="absolute bottom-0 left-0 right-0 flex flex-wrap items-center justify-center gap-3 py-3 bg-n20 border-t border-n40 backdrop-blur-sm">
                         <InlineCreditEstimate
                             featureKey={STORYBOARD_IMAGE_CREDIT_FEATURE}
-                            params={{ image_count: 1, model: globalModel }}
+                            params={{ image_count: 1, model: selectedGenerationModel }}
                             fallbackCost={STORYBOARD_IMAGE_CREDIT_FALLBACK}
                         />
                         <button 
                             onClick={handleGenerateCurrent}
                             disabled={isCurrentShotGenerating || !prompt}
                             className="px-8 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-lg font-bold text-sm shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 transition-transform"
-                            title={COMFYUI_MODELS.has(globalModel) && references.length === 0 && currentGeneratedImages.length === 0 ? '当前模型需要参考图' : ''}
+                            title={COMFYUI_MODELS.has(selectedGenerationModel) && references.length === 0 && currentGeneratedImages.length === 0 ? '当前模型需要参考图' : ''}
                         >
                             <Sparkles className={`w-4 h-4 ${isCurrentShotGenerating ? 'animate-spin' : ''}`} />
                             {isCurrentShotGenerating

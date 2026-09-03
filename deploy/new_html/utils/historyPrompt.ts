@@ -133,6 +133,47 @@ export function getHistoryThumbnailFallbackSource(
     : '';
 }
 
+export function enrichHistoryTaskMetadata(
+  files: EntityFile[],
+  tasks: HistoryTaskSummary[],
+): EntityFile[] {
+  const taskById = new Map(
+    tasks
+      .map(task => [nonEmptyString(task.task_id), task] as const)
+      .filter(([taskId]) => !!taskId),
+  );
+
+  return files.map(file => {
+    const metadata = asRecord(file.metadata) || {};
+    const task = taskById.get(nonEmptyString(metadata.task_id));
+    const data = asRecord(task?.data);
+    if (!task || !data) return file;
+
+    const prompt = nonEmptyString(metadata.prompt)
+      || nonEmptyString(data.prompt)
+      || nonEmptyString(data.text_prompt)
+      || nonEmptyString(data.positive_prompt);
+    const model = nonEmptyString(metadata.model)
+      || nonEmptyString(data.model)
+      || nonEmptyString(data.model_name)
+      || nonEmptyString(data.sub_model)
+      || nonEmptyString(task.task_type);
+    const thumbnailUrl = nonEmptyString(file.thumbnailUrl)
+      || nonEmptyString(metadata.thumbnail_url)
+      || nonEmptyString(data.thumbnail_url);
+
+    return {
+      ...file,
+      ...(thumbnailUrl ? { thumbnailUrl } : {}),
+      metadata: {
+        ...metadata,
+        ...(prompt ? { prompt } : {}),
+        ...(model ? { model } : {}),
+      },
+    };
+  });
+}
+
 export function enrichImageUpscaleHistory(
   files: EntityFile[],
   tasks: HistoryTaskSummary[],

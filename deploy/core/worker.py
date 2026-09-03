@@ -1679,6 +1679,8 @@ class Worker:
                             'task_id': task_id,
                             'source': source,
                             'task_type': task.task_type if task else source,
+                            'prompt': task_data.get('prompt') or task_data.get('text_prompt') or '',
+                            'model': task_data.get('model') or task_data.get('model_name') or task_data.get('sub_model') or (task.task_type if task else source),
                             'project_id': project_id,
                             'episode_id': task_data.get('episode_id'),
                         },
@@ -1743,6 +1745,12 @@ class Worker:
                 if result_thumb and result_thumb.get('success'):
                     thumb_url = f"/storage/thumbnails/{thumb_filename}"
                     logger.info(f"🖼️ 视频缩略图已生成: {thumb_url}")
+
+                    if DB_AVAILABLE and file_record:
+                        try:
+                            await FileDAO.merge_metadata(file_record['file_id'], {'thumbnail_url': thumb_url})
+                        except Exception as te:
+                            logger.debug(f"缩略图文件元数据同步失败(不影响结果): {te}")
 
                     # 缩略图也走 entity-aware 同步（更新 video_segments.thumbnail_url）
                     if DB_AVAILABLE and entity_type and entity_id:
@@ -1888,6 +1896,8 @@ class Worker:
                     result_metadata = {
                         'task_id': task_id,
                         'prompt_id': prompt_id,
+                        'prompt': (self.current_task.data or {}).get('prompt', '') if self.current_task else '',
+                        'model': ((self.current_task.data or {}).get('model') or (self.current_task.data or {}).get('model_name') or self.current_task.task_type) if self.current_task else '',
                         'original_filename': filename,
                         'comfyui_subfolder': subfolder,
                         'comfyui_type': downloaded_from,
@@ -1940,6 +1950,11 @@ class Worker:
                     if result_thumb and result_thumb.get('success'):
                         thumb_url = f"/storage/thumbnails/{thumb_filename}"
                         logger.info(f"🖼️ 视频缩略图已生成: {thumb_url}")
+                        if DB_AVAILABLE and file_record:
+                            try:
+                                await FileDAO.merge_metadata(file_record['file_id'], {'thumbnail_url': thumb_url})
+                            except Exception as te:
+                                logger.debug(f"缩略图文件元数据同步失败(不影响结果): {te}")
                 except Exception as te:
                     logger.debug(f"视频缩略图生成失败(不影响结果): {te}")
 

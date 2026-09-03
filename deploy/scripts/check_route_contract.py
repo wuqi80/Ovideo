@@ -5900,7 +5900,8 @@ def check_frontend_lazy_video_contract(root: Path) -> int:
         (lazy_video, "export const withVideoFirstFrame"),
         (video_page, "import { LazyVideo } from './LazyVideo';"),
         (final_page, "import { LazyVideo } from '../components/LazyVideo';"),
-        (history_page, "import { LazyVideo } from './LazyVideo';"),
+        (history_page, 'alt="视频缩略图"'),
+        (history_page, "/api/thumbnail?url="),
         (media_page, "import { LazyVideo } from '../components/LazyVideo';"),
         (reverse_page, "import { LazyVideo } from '../components/LazyVideo';"),
     ]
@@ -5910,6 +5911,7 @@ def check_frontend_lazy_video_contract(root: Path) -> int:
         (final_page, '<video src={v.file_url}'),
         (final_page, '<video src={withFirstFrame(t.video_url)}'),
         (history_page, '<video\n                            src={mediaUrl}'),
+        (history_page, "<LazyVideo"),
         (media_page, '<video src={item.file_url}'),
         (reverse_page, '<video src={task.video_file_url}'),
     ]
@@ -5986,11 +5988,6 @@ def check_frontend_video_preload_contract(root: Path) -> int:
             root / "new_html" / "components" / "VideoPage.tsx",
             2,
             "Video workflow result lists should keep LazyVideo preload='none'",
-        ),
-        (
-            root / "new_html" / "components" / "HistoryPage.tsx",
-            1,
-            "History video grid should keep LazyVideo preload='none'",
         ),
         (
             root / "new_html" / "pages" / "FinalProductPage.tsx",

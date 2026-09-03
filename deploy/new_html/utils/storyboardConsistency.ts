@@ -10,6 +10,7 @@ import { COMPUTER_OPERATION_ORIENTATION_RULE } from './scriptPromptStandards';
 
 export type StoryboardGenerationModel =
   | 'nanobanana'
+  | 'doubao'
   | 'qwen'
   | 'qwen_lora'
   | 'kontext'

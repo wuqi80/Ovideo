@@ -18,6 +18,13 @@ export const STORYBOARD_GENERATION_MODEL_OPTIONS: readonly StoryboardGenerationM
     requiresCluster: false,
   },
   {
+    value: 'doubao',
+    label: 'Doubao-Seedream-5.0-lite · 参考图生图模型',
+    shortLabel: 'Doubao-Seedream-5.0-lite · 参考优先',
+    hint: '参考图一致性优先，走后台配置的豆包生图接口',
+    requiresCluster: false,
+  },
+  {
     value: 'qwen',
     label: 'Qwen Image Edit 2509 · 多参考图模型',
     shortLabel: 'Qwen Image Edit 2509 · 多参考',

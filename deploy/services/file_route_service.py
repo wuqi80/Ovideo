@@ -269,18 +269,29 @@ async def build_thumbnail_file(
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_cache_path = cache_path.with_name(f"{cache_path.name}.{uuid_hex_provider()}.tmp")
 
-    with Image.open(file_path) as img:
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
+    try:
+        if Path(file_path).suffix.lower() in FILE_TYPE_EXTENSIONS["video"]:
+            from file_optimization import FileOptimizationService
 
-        img.thumbnail((thumb_width, thumb_height), Image.Resampling.LANCZOS)
-
-        try:
-            img.save(tmp_cache_path, format="JPEG", quality=75, optimize=True)
+            result = await FileOptimizationService.create_video_thumbnail(
+                file_path,
+                str(tmp_cache_path),
+                max_size=(thumb_width, thumb_height),
+            )
+            if not result.get("success"):
+                raise ThumbnailFileNotFound("video_thumbnail_failed")
             os.replace(tmp_cache_path, cache_path)
-        finally:
-            if tmp_cache_path.exists():
-                tmp_cache_path.unlink(missing_ok=True)
+        else:
+            with Image.open(file_path) as img:
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+
+                img.thumbnail((thumb_width, thumb_height), Image.Resampling.LANCZOS)
+                img.save(tmp_cache_path, format="JPEG", quality=75, optimize=True)
+            os.replace(tmp_cache_path, cache_path)
+    finally:
+        if tmp_cache_path.exists():
+            tmp_cache_path.unlink(missing_ok=True)
 
     return ThumbnailFile(path=cache_path, media_type="image/jpeg", headers=thumbnail_headers())
 

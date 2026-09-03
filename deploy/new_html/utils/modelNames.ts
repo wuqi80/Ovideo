@@ -22,6 +22,7 @@ export const generationModelNames = {
   'qwenN_lora': 'Qwen Image Edit 2509 + Lightning LoRA',
   'kontext': 'Kontext v2',
   'nanobanana': 'Gemini 3.1 Flash Image Preview',
+  'doubao': 'Doubao-Seedream-5.0-lite',
   'gpt_image_vip': 'GPT Image 2 VIP',
   'gpt_image_official': 'GPT Image 2'
 };

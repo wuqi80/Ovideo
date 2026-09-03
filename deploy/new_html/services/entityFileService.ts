@@ -9,6 +9,7 @@ export interface EntityFile {
   createdAt: string;
   deletedAt?: string;
   isDeleted?: boolean;
+  thumbnailUrl?: string;
   metadata?: Record<string, unknown>;
   entityType?: string;
   entityId?: string;
@@ -24,6 +25,7 @@ function normalize(row: any): EntityFile {
     createdAt: row.created_at ?? row.createdAt ?? '',
     deletedAt: row.deleted_at ?? row.deletedAt,
     isDeleted: !!(row.is_deleted ?? row.isDeleted),
+    thumbnailUrl: row.thumbnail_url ?? row.thumbnailUrl ?? row.metadata?.thumbnail_url,
     metadata: row.metadata,
     entityType: row.entity_type ?? row.entityType,
     entityId: row.entity_id ?? row.entityId,

@@ -204,6 +204,38 @@ async def test_build_thumbnail_file_uses_file_record_and_missing_raises(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_build_thumbnail_file_extracts_video_frame_through_optimizer(tmp_path, monkeypatch):
+    from PIL import Image
+    from file_optimization import FileOptimizationService
+
+    source = tmp_path / "stored.mp4"
+    source.write_bytes(b"video")
+    _FileDAO.records["file_video"] = {"file_id": "file_video", "file_path": str(source)}
+    calls = []
+
+    async def fake_thumbnail(video_path, output_path, time_position=None, max_size=None):
+        calls.append((video_path, output_path, time_position, max_size))
+        Image.new("RGB", (32, 18), color=(40, 50, 60)).save(output_path, format="JPEG")
+        return {"success": True, "thumbnail_path": output_path, "time_position": 0.5, "non_black": True}
+
+    monkeypatch.setattr(FileOptimizationService, "create_video_thumbnail", fake_thumbnail)
+
+    result = await svc.build_thumbnail_file(
+        url="/api/files/file_video/download",
+        width=640,
+        height=360,
+        file_dao=_FileDAO,
+        logger=_Logger(),
+        cache_dir=tmp_path / "cache",
+        uuid_hex_provider=lambda: "video",
+    )
+
+    assert result.path.exists()
+    assert result.media_type == "image/jpeg"
+    assert calls == [(str(source), calls[0][1], None, (640, 360))]
+
+
+@pytest.mark.asyncio
 async def test_upload_generic_file_creates_default_project_version_and_record(tmp_path):
     result = await svc.upload_generic_file(
         filename="shot.png",

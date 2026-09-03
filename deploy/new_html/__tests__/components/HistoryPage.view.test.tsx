@@ -137,4 +137,59 @@ describe('HistoryPage fixed views', () => {
       '/api/entity-files/file_source/recycle-thumbnail',
     );
   });
+
+  it('labels videos, renders an authenticated thumbnail, and opens the full prompt between download and delete', async () => {
+    (fetchUserFiles as any).mockResolvedValue({
+      items: [{
+        fileId: 'file_video',
+        fileUrl: '/storage/video/yuan/moon-teahouse.mp4',
+        fileType: 'video',
+        fileRole: 'generated_video',
+        isSelected: false,
+        createdAt: '2026-09-03T10:15:00Z',
+        metadata: { task_id: 'task_video' },
+      }],
+      total: 1,
+    });
+    (apiJson as any).mockImplementation((url: string) => Promise.resolve(
+      url === '/api/tasks?limit=100'
+        ? {
+            tasks: [{
+              task_id: 'task_video',
+              task_type: 'seedance_video',
+              status: 'completed',
+              data: {
+                prompt: '月球茶馆内，机器人阿壳推开木门。\n镜头缓慢向前推进。',
+                model: 'doubao-seedance-2-0-260128',
+              },
+            }],
+          }
+        : { tasks: [] },
+    ));
+
+    const { container } = render(<HistoryPage />);
+
+    expect(await screen.findByText('视频')).toBeInTheDocument();
+    const thumbnail = screen.getByRole('img', { name: '视频缩略图' });
+    expect(thumbnail).toHaveAttribute(
+      'src',
+      '/api/thumbnail?url=%2Fstorage%2Fvideo%2Fyuan%2Fmoon-teahouse.mp4&width=640&height=360',
+    );
+
+    const card = thumbnail.closest('.group');
+    const actions = Array.from(card?.querySelectorAll('a, button') || []).map(action => action.textContent?.trim());
+    expect(actions.slice(-3)).toEqual(['下载', '提示词', '删除']);
+
+    fireEvent.click(screen.getByRole('button', { name: '提示词' }));
+    const dialog = screen.getByRole('dialog', { name: '生成提示词' });
+    expect(dialog).toHaveTextContent('月球茶馆内，机器人阿壳推开木门。');
+    expect(dialog).toHaveTextContent('镜头缓慢向前推进。');
+    expect(dialog).toHaveTextContent('doubao-seedance-2-0-260128');
+
+    fireEvent.mouseLeave(dialog);
+    expect(screen.getByRole('dialog', { name: '生成提示词' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '关闭提示词' }));
+    expect(screen.queryByRole('dialog', { name: '生成提示词' })).not.toBeInTheDocument();
+    expect(container.querySelector('video')).not.toBeInTheDocument();
+  });
 });

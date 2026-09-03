@@ -103,7 +103,7 @@ export function buildOtherStoryboardImagePickerItems(
 }
 
 export function expectedStoryboardGenerationSeconds(model: string): number {
-  if (model === 'nanobanana') return 90;
+  if (model === 'nanobanana' || model === 'doubao') return 90;
   if (model === 'gpt_image_vip' || model === 'gpt_image_official') return 120;
   return 150;
 }

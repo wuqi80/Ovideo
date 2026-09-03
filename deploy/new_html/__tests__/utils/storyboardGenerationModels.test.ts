@@ -9,6 +9,7 @@ describe('storyboard generation model catalog', () => {
   it('keeps all stable operation identifiers while exposing model versions and capabilities', () => {
     expect(STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => option.value)).toEqual([
       'nanobanana',
+      'doubao',
       'qwen',
       'qwen_lora',
       'kontext',
@@ -19,6 +20,7 @@ describe('storyboard generation model catalog', () => {
     ]);
     expect(STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => option.label)).toEqual([
       'Gemini 3.1 Flash Image Preview · 快速生图模型',
+      'Doubao-Seedream-5.0-lite · 参考图生图模型',
       'Qwen Image Edit 2509 · 多参考图模型',
       'Qwen Image Edit 2509 + Lightning LoRA · 风格强化模型',
       'Kontext v2 · 高质量生图模型',
@@ -35,6 +37,8 @@ describe('storyboard generation model catalog', () => {
         .filter(option => option.requiresCluster)
         .map(option => option.value),
     ).toEqual(['qwen', 'qwen_lora', 'kontext', 'qwenN', 'qwenN_lora']);
+    expect(getStoryboardGenerationModelOption('doubao').requiresCluster).toBe(false);
+    expect(getStoryboardGenerationModelOption('doubao').hint).toContain('后台配置');
     expect(getStoryboardGenerationModelOption('qwenN').hint).toContain('上下文连贯');
     expect(getStoryboardGenerationModelOption('gpt_image_official').hint).toContain('质量设置');
   });

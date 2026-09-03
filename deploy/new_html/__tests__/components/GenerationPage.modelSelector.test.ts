@@ -22,7 +22,17 @@ describe('generation page model selectors', () => {
     expect(source).toContain('.filter(option => option.requiresCluster)');
     expect(source).toContain('selectedGenerationModelOption.hint');
     expect(source).toContain('COMFYUI_MODELS.has(selectedGenerationModel)');
-    expect(source).toContain('顶部设置全局默认模型；当前镜头可以跟随默认，也可在此单独覆盖。');
+    expect(source).toContain("option.requiresCluster ? '处理集群' : '在线 API'");
+    expect(source).toContain('在线 API 模型使用后台配置，处理集群模型依赖可用节点。');
+  });
+
+  it('offers the Doubao API model and routes current-shot generation through the selected override', () => {
+    expect(source).toContain("import { generateDoubaoImages } from '../services/doubaoService';");
+    expect(source).toContain("modelToUse === 'doubao'");
+    expect(source).toContain("model: 'doubao-seedream-5-0-lite-260128'");
+    expect(source).toContain('recommendDoubaoImageSize(');
+    expect(source).toContain('generateForShot(selectedShot, true, selectedGenerationModel, references)');
+    expect(source).toContain('params={{ image_count: 1, model: selectedGenerationModel }}');
   });
 
   it('applies config locking immediately and disables current-shot configuration controls', () => {

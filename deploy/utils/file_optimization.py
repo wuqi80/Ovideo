@@ -12,6 +12,7 @@ from typing import Optional, Tuple, AsyncGenerator
 from PIL import Image
 import ffmpeg
 import logging
+from PIL import ImageStat
 
 logger = logging.getLogger(__name__)
 
@@ -117,30 +118,90 @@ class FileOptimizationService:
             return {'success': False, 'error': str(e)}
     
     @staticmethod
+    def _video_thumbnail_positions(duration: Optional[float]) -> list[float]:
+        """Return early-frame samples in chronological order, bounded by duration."""
+        candidates = (0.05, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0)
+        if not duration or duration <= 0:
+            return list(candidates)
+        latest = max(0.0, duration - 0.02)
+        positions = [position for position in candidates if position <= latest]
+        return positions or [0.0]
+
+    @staticmethod
+    def _probe_video_duration(video_path: str) -> Optional[float]:
+        try:
+            probe = ffmpeg.probe(video_path)
+            return float(probe.get('format', {}).get('duration') or 0) or None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _extract_video_frame(video_path: str, output_path: str, position: float) -> None:
+        (
+            ffmpeg
+            .input(video_path, ss=position)
+            .output(output_path, vframes=1, format='image2', vcodec='mjpeg')
+            .overwrite_output()
+            .run(capture_stdout=True, capture_stderr=True)
+        )
+
+    @staticmethod
+    def _frame_has_visible_content(frame_path: str) -> bool:
+        """Reject fully or nearly black intro frames without rejecting dark scenes."""
+        with Image.open(frame_path) as frame:
+            grayscale = frame.convert('L')
+            grayscale.thumbnail((96, 96), Image.Resampling.BILINEAR)
+            histogram = grayscale.histogram()
+            pixel_count = max(1, sum(histogram))
+            dark_ratio = sum(histogram[:12]) / pixel_count
+            mean_luma = float(ImageStat.Stat(grayscale).mean[0])
+            return mean_luma >= 8.0 or dark_ratio <= 0.98
+
+    @staticmethod
     async def create_video_thumbnail(
         video_path: str,
         output_path: str,
-        time_position: float = 1.0
+        time_position: Optional[float] = None,
+        max_size: Optional[Tuple[int, int]] = None,
     ) -> dict:
-        """从视频提取缩略图"""
+        """Extract the earliest visible frame from the beginning of a video."""
         try:
-            # 使用ffmpeg提取帧
-            (
-                ffmpeg
-                .input(video_path, ss=time_position)
-                .output(output_path, vframes=1, format='image2', vcodec='mjpeg')
-                .overwrite_output()
-                .run(capture_stdout=True, capture_stderr=True)
-            )
+            duration = await asyncio.to_thread(FileOptimizationService._probe_video_duration, video_path)
+            positions = [time_position] if time_position is not None else FileOptimizationService._video_thumbnail_positions(duration)
+            extracted_position = None
+            visible_frame_found = False
+
+            for position in positions:
+                try:
+                    await asyncio.to_thread(
+                        FileOptimizationService._extract_video_frame,
+                        video_path,
+                        output_path,
+                        float(position),
+                    )
+                except Exception as exc:
+                    logger.debug("视频缩略图候选帧 %.2fs 提取失败: %s", position, exc)
+                    continue
+                extracted_position = float(position)
+                if await asyncio.to_thread(FileOptimizationService._frame_has_visible_content, output_path):
+                    visible_frame_found = True
+                    break
+
+            if extracted_position is None or not os.path.exists(output_path):
+                raise RuntimeError("无法从视频中提取有效帧")
             
             # 压缩缩略图
-            await FileOptimizationService.compress_image(
-                output_path, output_path, 'thumbnail'
+            compression = await FileOptimizationService.compress_image(
+                output_path, output_path, 'thumbnail', max_size=max_size
             )
+            if not compression.get('success'):
+                raise RuntimeError(compression.get('error') or '视频缩略图压缩失败')
             
             return {
                 'success': True,
-                'thumbnail_path': output_path
+                'thumbnail_path': output_path,
+                'time_position': extracted_position,
+                'non_black': visible_frame_found,
             }
         
         except Exception as e:
