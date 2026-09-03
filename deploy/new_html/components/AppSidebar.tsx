@@ -17,6 +17,7 @@ import {
   Plus,
   ScanLine,
   Share2,
+  Trash2,
   UserRound,
 } from 'lucide-react';
 import { apiFetch, apiJson } from '../services/httpClient';
@@ -138,7 +139,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
   }, []);
 
   const openRecentProjectTool = useCallback(async (
-    target: 'canvas' | 'media-library' | 'history' | 'image-upscale',
+    target: 'canvas' | 'media-library' | 'history' | 'recycle-bin' | 'image-upscale',
   ) => {
     const projectId = recent[0]?.project_id;
     if (!projectId) {
@@ -175,7 +176,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
     { key: 'canvas', label: '专业画布', icon: Brush, onClick: () => { void openRecentProjectTool('canvas'); } },
     { key: 'media-library', label: '我的素材', icon: Library, onClick: () => { void openRecentProjectTool('media-library'); } },
     { key: 'image-upscale', label: '图片高清放大', icon: ScanLine, onClick: () => { void openRecentProjectTool('image-upscale'); } },
-    { key: 'history', label: '版本记录', icon: Clock3, onClick: () => { void openRecentProjectTool('history'); } },
+    { key: 'history', label: '生成历史', icon: Clock3, onClick: () => { void openRecentProjectTool('history'); } },
+    { key: 'recycle-bin', label: '回收站', icon: Trash2, onClick: () => { void openRecentProjectTool('recycle-bin'); } },
   ];
   const visibleTools = tools ?? defaultTools;
 

@@ -6,12 +6,12 @@ import { apiJson, secureApiUrl } from '../services/httpClient';
 import { getHistoryPromptText } from '../utils/historyPrompt';
 
 interface HistoryPageProps {
-  // 预留扩展
+  view?: 'history' | 'recycle';
 }
 
-export const HistoryPage: React.FC<HistoryPageProps> = () => {
+export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) => {
   const [files, setFiles] = useState<EntityFile[]>([]);
-  const [activeTab, setActiveTab] = useState<'history' | 'recycle'>('history');
+  const activeTab = view;
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
@@ -265,19 +265,13 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
       {/* 头部 - 固定52px高度 */}
       <div className="workflow-stage-toolbar px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <History className="w-4 h-4 text-primary" />
-          <h2 className="text-sm font-bold text-n700 uppercase tracking-wider">生成文件</h2>
+          {activeTab === 'recycle'
+            ? <Trash2 className="w-4 h-4 text-primary" />
+            : <History className="w-4 h-4 text-primary" />}
+          <h2 className="text-sm font-bold text-n700 uppercase tracking-wider">
+            {activeTab === 'recycle' ? '回收站' : '生成历史'}
+          </h2>
           <span className="text-xs text-n100">共 {files.length} 个文件</span>
-          <div className="flex rounded-lg bg-n20 p-0.5">
-            <button
-              onClick={() => { setActiveTab('history'); setSelectedTasks(new Set()); }}
-              className={`px-3 py-1 rounded-md text-xs ${activeTab === 'history' ? 'bg-n0 text-primary shadow-sm' : 'text-n300'}`}
-            >生成历史</button>
-            <button
-              onClick={() => { setActiveTab('recycle'); setSelectedTasks(new Set()); }}
-              className={`px-3 py-1 rounded-md text-xs ${activeTab === 'recycle' ? 'bg-n0 text-primary shadow-sm' : 'text-n300'}`}
-            >回收站</button>
-          </div>
         </div>
 
         <div className="flex items-center gap-2">

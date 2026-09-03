@@ -11,7 +11,8 @@
  *   /projects/:projectId/ep/:episodeId/workflow/design   → 流程化: 资产设计
  *   /projects/:projectId/ep/:episodeId/workflow/generation → 流程化: 视频生成
  *   /projects/:projectId/ep/:episodeId/workflow/enhance   → 流程化: 视频增强
- *   /projects/:projectId/ep/:episodeId/workflow/history   → 流程化: 历史记录
+ *   /projects/:projectId/ep/:episodeId/workflow/history   → 流程化: 生成历史
+ *   /projects/:projectId/ep/:episodeId/workflow/recycle-bin → 流程化: 回收站
  *   /projects/:projectId/ep/:episodeId/canvas            → 创剧自由画布
  *
  * 兼容旧路由 (向后兼容):
@@ -54,6 +55,7 @@ const FinalProductSharePage = React.lazy(() => import('./pages/FinalProductShare
 const StoryboardGenPage = React.lazy(() => import('./pages/StoryboardGenPage').then(m => ({ default: m.StoryboardGenPage })));
 const VideoGenPage = React.lazy(() => import('./pages/VideoGenPage').then(m => ({ default: m.VideoGenPage })));
 const HistoryPage = React.lazy(() => import('./pages/HistoryPage').then(m => ({ default: m.HistoryPage })));
+const RecycleBinPage = React.lazy(() => import('./pages/RecycleBinPage').then(m => ({ default: m.RecycleBinPage })));
 const StudioRedirectPage = React.lazy(() => import('./pages/StudioRedirectPage').then(m => ({ default: m.StudioRedirectPage })));
 const MediaLibraryPage = React.lazy(() => import('./pages/MediaLibraryPage'));
 const ImageUpscalePage = React.lazy(() => import('./pages/ImageUpscalePage'));
@@ -162,6 +164,7 @@ const App: React.FC = () => {
                                 {/* 2026-05-26 Slice 1：素材库（项目级页面，挂在 workflow 下复用顶部导航） */}
                                 <Route path="media-library" element={<MediaLibraryPage />} />
                                 <Route path="history" element={<HistoryPage />} />
+                                <Route path="recycle-bin" element={<RecycleBinPage />} />
                                 <Route path="image-upscale" element={<ImageUpscalePage />} />
                             </Route>
 

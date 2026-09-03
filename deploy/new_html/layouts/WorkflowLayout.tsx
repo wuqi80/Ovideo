@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Outlet, useParams, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Clock, Brush, Library, Coins, Download, ScanLine } from 'lucide-react';
+import { Clock, Brush, Library, Coins, Download, ScanLine, Trash2 } from 'lucide-react';
 import { EpisodeProvider } from '../contexts/EpisodeContext';
 import type { SourcePage } from '../types';
 import { TaskBadge } from '../components/TaskBadge';
@@ -103,7 +103,8 @@ export const WorkflowLayout: React.FC = () => {
     { key: 'canvas', label: '专业画布', icon: Brush, to: `/projects/${projectId}/ep/${episodeId}/canvas` },
     { key: 'media-library', label: '我的素材', icon: Library, to: 'media-library', badge: <TaskBadge page="media-library" /> },
     { key: 'image-upscale', label: '图片高清放大', icon: ScanLine, to: 'image-upscale', badge: <TaskBadge page="image-upscale" /> },
-    { key: 'history', label: '版本记录', icon: Clock, to: 'history', badge: <TaskBadge page="history" /> },
+    { key: 'history', label: '生成历史', icon: Clock, to: 'history', badge: <TaskBadge page="history" /> },
+    { key: 'recycle-bin', label: '回收站', icon: Trash2, to: 'recycle-bin' },
   ];
 
   return (

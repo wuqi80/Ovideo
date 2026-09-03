@@ -44,10 +44,15 @@ describe('AppSidebar public tools', () => {
     expect(screen.getByText('更多功能')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '专业画布' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '我的素材' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '版本记录' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '生成历史' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '回收站' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '图片高清放大' })).toBeInTheDocument();
     expect(
-      screen.getByText('图片高清放大').compareDocumentPosition(screen.getByText('版本记录'))
+      screen.getByText('图片高清放大').compareDocumentPosition(screen.getByText('生成历史'))
+      & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.getByText('生成历史').compareDocumentPosition(screen.getByText('回收站'))
       & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     await waitFor(() => expect(apiJson).toHaveBeenCalledWith('/api/projects', {}, '最近项目'));
@@ -72,5 +77,25 @@ describe('AppSidebar public tools', () => {
       expect(screen.getByTestId('location')).toHaveTextContent('/projects/proj_1/ep/ep_1/workflow/image-upscale');
     });
     expect(apiJson).toHaveBeenCalledWith('/api/projects/proj_1/episodes', {}, '最近分集');
+  });
+
+  it('opens the standalone recycle bin from the most recent project and episode', async () => {
+    (apiJson as any)
+      .mockResolvedValueOnce({ success: true, projects: [{ project_id: 'proj_1', project_name: '测试项目' }] })
+      .mockResolvedValueOnce({ success: true, episodes: [{ episode_id: 'ep_1' }] });
+
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <AppSidebar />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('测试项目');
+    fireEvent.click(screen.getByRole('button', { name: '回收站' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/projects/proj_1/ep/ep_1/workflow/recycle-bin');
+    });
   });
 });
