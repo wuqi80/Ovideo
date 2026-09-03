@@ -3,6 +3,7 @@ import { History, Download, Trash2, RefreshCw, CheckSquare, Square, Film, Image 
 import { fetchDeletedUserFiles, fetchUserFiles, deleteEntityFile, restoreEntityFile, type EntityFile } from '../services/entityFileService';
 import { LazyVideo } from './LazyVideo';
 import { apiJson, secureApiUrl } from '../services/httpClient';
+import { getHistoryPromptText } from '../utils/historyPrompt';
 
 interface HistoryPageProps {
   // 预留扩展
@@ -61,6 +62,8 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
     for (const task of (data.tasks || [])) {
       if (task.status !== 'completed') continue;
       const images = task.result?.images || [];
+      const isUpscaleTask = task.task_type === 'image_upscale'
+        || task.data?.requested_workflow_type === 'image_upscale';
       for (const img of images) {
         const url = img.url || img;
         if (!url || typeof url !== 'string') continue;
@@ -68,7 +71,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
           fileId: `task_${task.task_id}_${taskFiles.length}`,
           fileUrl: url,
           fileType: 'image',
-          fileRole: 'generated_image',
+          fileRole: isUpscaleTask ? 'upscaled_image' : 'generated_image',
           isSelected: false,
           createdAt: task.completed_at || task.created_at || '',
           metadata: { prompt: task.data?.prompt, model: task.data?.model || task.task_type, source: 'task' },
@@ -374,6 +377,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
               const isSelected = selectedTasks.has(file.fileId);
               const canSelect = activeTab === 'recycle' || !!mediaUrl;
               const m = meta(file);
+              const promptText = getHistoryPromptText(file);
 
               return (
                 <div
@@ -440,7 +444,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                     </div>
 
                     <div className="text-xs text-n300 mb-3 line-clamp-2 min-h-[2.5rem]">
-                      {m?.prompt || <span className="italic opacity-50">无提示词</span>}
+                      {promptText || <span className="italic opacity-50">无提示词</span>}
                     </div>
 
                     <div className="flex gap-2">
@@ -528,7 +532,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = () => {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-n300 truncate">{meta(deleteModal.files[0])?.model || '未知模型'}</p>
                     <p className="text-xs text-n100 mt-1">{formatTime(deleteModal.files[0]?.createdAt || '')}</p>
-                    <p className="text-xs text-n100 mt-2 line-clamp-2">{meta(deleteModal.files[0])?.prompt || '无提示词'}</p>
+                    <p className="text-xs text-n100 mt-2 line-clamp-2">{getHistoryPromptText(deleteModal.files[0]) || '无提示词'}</p>
                   </div>
                 </div>
               ) : (
