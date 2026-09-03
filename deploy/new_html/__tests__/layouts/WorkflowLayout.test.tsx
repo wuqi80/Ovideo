@@ -61,7 +61,7 @@ describe('WorkflowLayout template pipeline shell', () => {
     expect(source).toContain('activeStage.subs.length > 1');
   });
 
-  it('keeps the dark sidebar with plain-language navigation and optional advanced tools', () => {
+  it('keeps the dark sidebar with plain-language navigation and all-user advanced tools', () => {
     expect(sidebarSource).toContain('bg-n900');
     expect(sidebarSource).toContain('<BrandLogo');
     expect(sidebarSource).toContain('开始新作品');
@@ -75,6 +75,10 @@ describe('WorkflowLayout template pipeline shell', () => {
     expect(source).toContain("label: '我的素材'");
     expect(source).toContain("label: '版本记录'");
     expect(source).toContain("label: '专业画布'");
+    expect(sidebarSource).toContain('const visibleTools = tools ?? defaultTools');
+    expect(sidebarSource).toContain("label: '图片高清放大'");
+    expect(sidebarSource).toContain("label: '专业画布'");
+    expect(sidebarSource).toContain('/episodes`');
   });
 
   it('keeps the sidebar first, the stepper centered, and credits/notification/export rightmost', () => {

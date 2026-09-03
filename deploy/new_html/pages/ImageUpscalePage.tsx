@@ -316,8 +316,16 @@ export const ImageUpscalePage: React.FC = () => {
                       <h3 className="text-sm font-bold text-n800">文字清晰</h3>
                       <p className="mt-0.5 text-[11px] text-n200">海报、标识、字幕边缘增强</p>
                     </div>
-                    <button type="button" role="switch" aria-checked={textClarity} onClick={() => setTextClarity(value => !value)} disabled={busy} className={`relative h-6 w-11 rounded-full transition-colors ${textClarity ? 'bg-primary' : 'bg-n70'} disabled:opacity-50`}>
-                      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-n0 shadow transition-transform ${textClarity ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-label="文字清晰"
+                      aria-checked={textClarity}
+                      onClick={() => setTextClarity(value => !value)}
+                      disabled={busy}
+                      className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${textClarity ? 'border-primary bg-primary' : 'border-n100 bg-n70'} disabled:cursor-not-allowed disabled:opacity-50`}
+                    >
+                      <span className={`pointer-events-none absolute left-0.5 top-0.5 h-[18px] w-[18px] rounded-full bg-n0 shadow transition-transform ${textClarity ? 'translate-x-5' : 'translate-x-0'}`} />
                     </button>
                   </div>
                   <div className="mt-3 flex gap-2 rounded-xl border border-warning/25 bg-warning/10 p-3 text-[11px] leading-5 text-n400">
@@ -333,7 +341,7 @@ export const ImageUpscalePage: React.FC = () => {
                 <span className="font-semibold text-n500">预计创作点数</span>
                 <span className="font-display text-xl font-bold text-warning">{estimatedCost} 点</span>
               </div>
-              <p className="mt-1 text-[11px] leading-5 text-n200">加入本地节点队列；成功后扣除，失败或取消自动退回。结果保存在本地节点 7 天，下载由主站鉴权后流式传输，不占用主站硬盘。</p>
+              <p className="mt-1 text-[11px] leading-5 text-n200">加入本地节点队列；成功后扣除，失败或取消自动退回。结果保留 30 天。</p>
 
               {busy && (
                 <div className="mt-4 rounded-xl bg-b50 p-3">

@@ -35,9 +35,14 @@ describe('AdminSettingsPage category-specific model checks', () => {
     expect(cardSource).toContain('<ProviderOperationPaths meta={meta} runtime={runtime} />');
   });
 
-  it('refreshes legacy stored binding labels from the current public model metadata', () => {
+  it('supports backend-owned publish state and editable public wording with visible defaults', () => {
     expect(source).toContain('label: String(option?.label || item.label || operation)');
-    expect(source).toContain("if (modelName.includes('seedance-1.5')) return 'Seedance 1.5 Pro · 首尾帧视频模型'");
+    expect(source).toContain('front_model_key: String(option?.front_model_key || item.front_model_key');
+    expect(source).toContain('aria-label="前台上架"');
+    expect(source).toContain('前台展示名称');
+    expect(source).toContain('模型说明');
+    expect(source).toContain('默认：{binding.default_display_name');
+    expect(source).toContain('恢复默认');
     expect(source).toContain('uniqueModelBindingsForDisplay');
   });
 });

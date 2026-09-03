@@ -57,6 +57,12 @@ interface ApiModelBinding {
     model_name: string;
     scope?: string;
     scope_label?: string;
+    front_model_key?: string;
+    default_display_name?: string;
+    default_description?: string;
+    display_name?: string;
+    description?: string;
+    published?: boolean;
 }
 
 interface ApiConfig {
@@ -500,28 +506,10 @@ function modelBindingOptionMatches(option: ApiModelBinding, binding: ApiModelBin
         && normalizeModelUsageScope(option.scope) === normalizeModelUsageScope(binding.scope);
 }
 
-function publicApiModelBindingLabel(providerRaw: string, binding: ApiModelBinding): string {
-    const provider = normalizeProvider(providerRaw);
-    const operation = String(binding.operation || '').trim().toLowerCase();
-    const modelName = String(binding.model_name || '').trim().toLowerCase();
-    if (provider === 'seedance') {
-        if (modelName.includes('seedance-1.5')) return 'Seedance 1.5 Pro · 首尾帧视频模型';
-        if (operation === 'fast') return 'Seedance 2.0 Fast · 多模态快速视频模型';
-        if (operation === 'mini') return 'Seedance 2.0 Mini · 多模态简化视频模型';
-        return 'Seedance 2.0 · 多模态标准视频模型';
-    }
-    if (provider === 'dashscope') {
-        if (operation === 'wan26') return 'Wan 2.6 · 镜头叙事视频模型';
-        if (operation.startsWith('kling-')) return 'Kling V3 · 全能音画视频模型';
-        if (operation.startsWith('vidu-')) return 'Vidu Q3 · 多参考视频模型';
-        if (operation === 'happyhorse') return 'HappyHorse 1.0 · 角色一致性视频模型';
-    }
-    if (provider === 'minimax' && operation === 'video-standard') {
-        return 'MiniMax Hailuo 2.3 · 首尾帧标准视频模型';
-    }
-    if (provider === 'doubao' && operation === 'generate') {
-        return 'Doubao-Seedream-5.0-lite · 参考图生图模型';
-    }
+function publicApiModelBindingLabel(_providerRaw: string, binding: ApiModelBinding): string {
+    const displayName = String(binding.display_name || binding.default_display_name || '').trim();
+    const description = String(binding.description || binding.default_description || '').trim();
+    if (displayName) return description ? `${displayName} · ${description}` : displayName;
     return String(binding.label || binding.operation || binding.model_name || '').trim();
 }
 
@@ -1044,16 +1032,21 @@ function normalizeApiModelBindings(
         const operation = option && (rawOperation === 'default' || !optionByOperation) ? option.operation : rawOperation;
         if (!operation) return;
         const normalizedScope = normalizeModelUsageScope(option?.scope || scope);
-        normalized.set(`${normalizedScope}::${operation}`, {
+        const normalizedBinding: ApiModelBinding = {
             operation,
-            // Known providers own the public model wording. Prefer their
-            // current metadata so legacy labels already stored in DB cannot
-            // drift away from the creator-facing model catalogue.
             label: String(option?.label || item.label || operation),
             model_name: modelName,
             scope: normalizedScope,
             scope_label: item.scope_label || option?.scope_label || modelUsageScopeLabel(normalizedScope),
-        });
+            front_model_key: String(option?.front_model_key || item.front_model_key || '').trim(),
+            default_display_name: String(option?.default_display_name || item.default_display_name || '').trim(),
+            default_description: String(option?.default_description || item.default_description || '').trim(),
+            display_name: String(item.display_name || '').trim(),
+            description: String(item.description || '').trim(),
+            published: item.published !== false,
+        };
+        normalizedBinding.label = publicApiModelBindingLabel('', normalizedBinding);
+        normalized.set(`${normalizedScope}::${operation}`, normalizedBinding);
     });
     return Array.from(normalized.values());
 }
@@ -1928,7 +1921,8 @@ const ApiConfigEditorModal: React.FC<{
                                 const selectedOption = selectableOptions.find(item => String(item.operation || '').trim().toLowerCase() === String(binding.operation || '').trim().toLowerCase())
                                     || bindingOptions.find(item => modelBindingOptionMatches(item, binding));
                                 return (
-                                    <div key={`${modelBindingKey(binding)}-${index}`} className="grid grid-cols-1 gap-2 border border-n40 bg-n20 p-3 md:grid-cols-[minmax(140px,0.6fr)_minmax(180px,0.8fr)_minmax(0,1.4fr)_32px]">
+                                    <div key={`${modelBindingKey(binding)}-${index}`} className="rounded border border-n40 bg-n20 p-3">
+                                      <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(140px,0.6fr)_minmax(180px,0.8fr)_minmax(0,1.4fr)_32px]">
                                         <label className="block min-w-0">
                                             <span className="block text-[11px] font-medium text-n300 mb-1">使用场景</span>
                                             <select
@@ -1945,6 +1939,9 @@ const ApiConfigEditorModal: React.FC<{
                                                         scope_label: modelUsageScopeLabel(scope, usageScopes),
                                                         label: option?.label || binding.label,
                                                         model_name: option?.model_name || binding.model_name,
+                                                        front_model_key: option?.front_model_key || binding.front_model_key,
+                                                        default_display_name: option?.default_display_name || binding.default_display_name,
+                                                        default_description: option?.default_description || binding.default_description,
                                                     });
                                                 }}
                                                 className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 focus:border-primary focus:outline-none"
@@ -1972,6 +1969,12 @@ const ApiConfigEditorModal: React.FC<{
                                                             model_name: option?.model_name || binding.model_name,
                                                             scope: bindingScope,
                                                             scope_label: modelUsageScopeLabel(bindingScope, usageScopes),
+                                                            front_model_key: option?.front_model_key,
+                                                            default_display_name: option?.default_display_name,
+                                                            default_description: option?.default_description,
+                                                            display_name: '',
+                                                            description: '',
+                                                            published: option?.published !== false,
                                                         });
                                                     }}
                                                     className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 focus:border-primary focus:outline-none"
@@ -1998,7 +2001,7 @@ const ApiConfigEditorModal: React.FC<{
                                             <span className="mt-1 block font-mono text-[10px] text-n100">{binding.operation}</span>
                                         </label>
                                         <label className="block min-w-0">
-                                            <span className="block text-[11px] font-medium text-n300 mb-1">模型名</span>
+                                            <span className="block text-[11px] font-medium text-n300 mb-1">厂商模型 ID</span>
                                             <input
                                                 required
                                                 value={binding.model_name}
@@ -2016,6 +2019,62 @@ const ApiConfigEditorModal: React.FC<{
                                         >
                                             <X className="w-3.5 h-3.5" />
                                         </button>
+                                      </div>
+                                      {binding.front_model_key && (
+                                        <div className="mt-3 grid gap-3 border-t border-n40 pt-3 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.25fr)_auto]">
+                                            <label className="flex min-w-[92px] items-center gap-2 self-start pt-6 text-xs font-medium text-n500">
+                                                <button
+                                                    type="button"
+                                                    role="switch"
+                                                    aria-label="前台上架"
+                                                    aria-checked={binding.published !== false}
+                                                    onClick={() => updateBinding(index, { ...binding, published: binding.published === false })}
+                                                    className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${binding.published !== false ? 'bg-success' : 'bg-n70'}`}
+                                                >
+                                                    <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-n0 shadow transition-transform ${binding.published !== false ? 'translate-x-4' : 'translate-x-0'}`} />
+                                                </button>
+                                                {binding.published !== false ? '已上架' : '未上架'}
+                                            </label>
+                                            <label className="block min-w-0">
+                                                <span className="mb-1 flex items-center gap-1 text-[11px] font-medium text-n300">
+                                                    前台展示名称
+                                                    <span className={`rounded px-1 py-0.5 text-[9px] ${binding.display_name ? 'bg-b50 text-primary' : 'bg-n40 text-n200'}`}>
+                                                        {binding.display_name ? '已自定义' : '默认'}
+                                                    </span>
+                                                </span>
+                                                <input
+                                                    value={binding.display_name || ''}
+                                                    onChange={event => updateBinding(index, { ...binding, display_name: event.target.value })}
+                                                    className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 focus:border-primary focus:outline-none"
+                                                    placeholder={binding.default_display_name || '前台模型名称'}
+                                                />
+                                                <span className="mt-1 block truncate text-[10px] text-n100">默认：{binding.default_display_name || '-'}</span>
+                                            </label>
+                                            <label className="block min-w-0">
+                                                <span className="mb-1 flex items-center gap-1 text-[11px] font-medium text-n300">
+                                                    模型说明
+                                                    <span className={`rounded px-1 py-0.5 text-[9px] ${binding.description ? 'bg-b50 text-primary' : 'bg-n40 text-n200'}`}>
+                                                        {binding.description ? '已自定义' : '默认'}
+                                                    </span>
+                                                </span>
+                                                <input
+                                                    value={binding.description || ''}
+                                                    onChange={event => updateBinding(index, { ...binding, description: event.target.value })}
+                                                    className="w-full rounded border border-n40 bg-n0 px-3 py-2 text-sm text-n800 focus:border-primary focus:outline-none"
+                                                    placeholder={binding.default_description || '例如：首尾帧标准视频模型'}
+                                                />
+                                                <span className="mt-1 block truncate text-[10px] text-n100">默认：{binding.default_description || '-'}</span>
+                                            </label>
+                                            <button
+                                                type="button"
+                                                onClick={() => updateBinding(index, { ...binding, display_name: '', description: '' })}
+                                                disabled={!binding.display_name && !binding.description}
+                                                className="self-start mt-5 rounded border border-n40 bg-n0 px-2.5 py-2 text-[11px] text-n300 hover:bg-n20 disabled:cursor-not-allowed disabled:opacity-40"
+                                            >
+                                                恢复默认
+                                            </button>
+                                        </div>
+                                      )}
                                     </div>
                                 );
                             })}

@@ -119,6 +119,39 @@ def test_seedance_binding_options_are_explicit():
         "Seedance 2.0 Fast · 多模态快速视频模型",
         "Seedance 2.0 Mini · 多模态简化视频模型",
     ]
+    assert options[0]["front_model_key"] == "Seedance15"
+    assert options[0]["default_display_name"] == "Seedance 1.5 Pro"
+    assert options[0]["default_description"] == "首尾帧视频模型"
+    assert options[0]["published"] is True
+
+
+def test_video_binding_preserves_custom_public_wording_and_publish_state():
+    from services.api_provider_registry import normalize_model_bindings
+
+    bindings = normalize_model_bindings(
+        "minimax",
+        [{
+            "scope": "workflow",
+            "operation": "video-standard",
+            "model_name": "MiniMax-Hailuo-2.3",
+            "display_name": "海螺标准",
+            "description": "首尾帧精细视频模型",
+            "published": False,
+        }],
+    )
+    standard = next(
+        item
+        for item in bindings
+        if item["scope"] == "workflow" and item["operation"] == "video-standard"
+    )
+
+    assert standard["front_model_key"] == "MINI"
+    assert standard["default_display_name"] == "MiniMax Hailuo 2.3"
+    assert standard["default_description"] == "首尾帧标准视频模型"
+    assert standard["display_name"] == "海螺标准"
+    assert standard["description"] == "首尾帧精细视频模型"
+    assert standard["label"] == "海螺标准 · 首尾帧精细视频模型"
+    assert standard["published"] is False
 
 
 def test_dashscope_binding_labels_match_frontend_model_wording():

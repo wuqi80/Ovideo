@@ -2,12 +2,23 @@
  * AppSidebar.tsx — 全局深色侧边栏（完全对齐 docs/design-standard 模板的侧栏结构）
  *
  * 结构自上而下：品牌块 → 面向普通用户的主导航 → 最近项目
- * → 更多功能（可选）→ 创作点数 → 用户行。
+ * → 更多功能 → 创作点数 → 用户行。
  * credits 传 undefined 时组件自行拉取；仅视觉与导航，不承载业务状态。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Plus, LayoutGrid, Share2, ChevronDown, LogOut, UserRound } from 'lucide-react';
+import {
+  Brush,
+  ChevronDown,
+  Clock3,
+  LayoutGrid,
+  Library,
+  LogOut,
+  Plus,
+  ScanLine,
+  Share2,
+  UserRound,
+} from 'lucide-react';
 import { apiFetch, apiJson } from '../services/httpClient';
 import { getCreditBalance } from '../services/creditService';
 import { clearAccountIdentity, getStoredUsername } from '../services/accountStorage';
@@ -30,10 +41,16 @@ interface RecentProject {
   name?: string;
 }
 
+interface RecentEpisode {
+  episode_id?: string;
+  episodeId?: string;
+  id?: string;
+}
+
 interface AppSidebarProps {
   /** 成片与分享的目标路由；缺省时不渲染该项（无分集上下文的页面） */
   exportTo?: string;
-  /** 按需使用的功能区（如工作流内的 我的素材 / 版本记录 / 专业画布） */
+  /** 工作流可传入当前项目的精确链接；缺省时使用最近作品导航。 */
   tools?: AppSidebarItem[];
   credits?: number | null;
   className?: string;
@@ -48,7 +65,7 @@ const itemClass = (active: boolean) =>
 
 const sectionLabelClass = 'px-2.5 pb-2 pt-0 font-mono text-[10px] font-bold tracking-[0.14em] text-n400';
 
-export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools = [], credits, className = '' }) => {
+export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits, className = '' }) => {
   const navigate = useNavigate();
   const managed = credits === undefined;
   const [selfCredits, setSelfCredits] = useState<number | null>(null);
@@ -120,6 +137,48 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools = [], cr
     window.location.href = '/login';
   }, []);
 
+  const openRecentProjectTool = useCallback(async (
+    target: 'canvas' | 'media-library' | 'history' | 'image-upscale',
+  ) => {
+    const projectId = recent[0]?.project_id;
+    if (!projectId) {
+      navigate('/projects');
+      return;
+    }
+    if (target === 'media-library') {
+      navigate(`/projects/${projectId}/media-library`);
+      return;
+    }
+    try {
+      const data = await apiJson<{ episodes?: RecentEpisode[] }>(
+        `/api/projects/${encodeURIComponent(projectId)}/episodes`,
+        {},
+        '最近分集',
+      );
+      const episode = Array.isArray(data?.episodes) ? data.episodes[0] : undefined;
+      const episodeId = episode?.episode_id || episode?.episodeId || episode?.id;
+      if (!episodeId) {
+        navigate(`/projects/${projectId}/episodes`);
+        return;
+      }
+      navigate(
+        target === 'canvas'
+          ? `/projects/${projectId}/ep/${episodeId}/canvas`
+          : `/projects/${projectId}/ep/${episodeId}/workflow/${target}`,
+      );
+    } catch {
+      navigate(`/projects/${projectId}/episodes`);
+    }
+  }, [navigate, recent]);
+
+  const defaultTools: AppSidebarItem[] = [
+    { key: 'canvas', label: '专业画布', icon: Brush, onClick: () => { void openRecentProjectTool('canvas'); } },
+    { key: 'media-library', label: '我的素材', icon: Library, onClick: () => { void openRecentProjectTool('media-library'); } },
+    { key: 'history', label: '版本记录', icon: Clock3, onClick: () => { void openRecentProjectTool('history'); } },
+    { key: 'image-upscale', label: '图片高清放大', icon: ScanLine, onClick: () => { void openRecentProjectTool('image-upscale'); } },
+  ];
+  const visibleTools = tools ?? defaultTools;
+
   const shownCredits = managed ? selfCredits : credits;
   const initial = (username.trim().charAt(0) || 'U').toUpperCase();
 
@@ -181,11 +240,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools = [], cr
           </>
         )}
 
-        {/* 上下文工具区 */}
-        {tools.length > 0 && (
+        {/* 全员可见的工具区；工作流内使用当前项目的精确链接 */}
+        {visibleTools.length > 0 && (
           <>
             <div className={`${sectionLabelClass} pt-3`}>更多功能</div>
-            {tools.map(item => {
+            {visibleTools.map(item => {
               const Icon = item.icon;
               const inner = (
                 <>

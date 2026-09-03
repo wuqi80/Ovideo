@@ -459,9 +459,21 @@ const ALL_MODEL_VALUES = new Set<string>(ALL_MODELS);
 export interface VideoCapabilityModelLike {
   key?: string;
   label?: string;
+  display_name?: string;
+  description?: string;
+  default_display_name?: string;
+  default_description?: string;
+  published?: boolean;
   provider?: string;
   model_name?: string | null;
   model_options?: string[];
+  model_option_labels?: Array<{
+    operation?: string;
+    model_name: string;
+    label?: string;
+    display_name?: string;
+    description?: string;
+  }>;
   available?: boolean;
   preferred_agent_id?: string | null;
   preferred_node_id?: string | null;
@@ -510,12 +522,26 @@ export function formatVideoModelRuntimeLabel(capability?: VideoCapabilityModelLi
 
 export function formatVideoModelOptionLabel(
   model: VideoModel,
-  _capability?: VideoCapabilityModelLike | null,
+  capability?: VideoCapabilityModelLike | null,
 ): string {
-  // Provider identifiers often contain namespaces, task modes and build dates.
-  // Keep those raw values in runtimeLabel/capability, while the selector uses
-  // a stable public model name plus its existing capability description.
+  const backendLabel = String(capability?.label || '').trim();
+  if (backendLabel) return backendLabel;
   return getModelDisplayName(model);
+}
+
+export function getVideoModelRuntimeOptions(
+  capability?: VideoCapabilityModelLike | null,
+): Array<{ value: string; label: string }> {
+  const metadata = Array.isArray(capability?.model_option_labels)
+    ? capability.model_option_labels
+    : [];
+  return getVideoModelRuntimeNames(capability).map(value => {
+    const match = metadata.find(item => String(item.model_name || '').trim() === value);
+    return {
+      value,
+      label: String(match?.display_name || match?.label || value).trim() || value,
+    };
+  });
 }
 
 export function buildVideoModelOptions(

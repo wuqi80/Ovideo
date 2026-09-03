@@ -5,6 +5,7 @@ import {
   getModelDisplayName,
   getVideoCreditFallbackCost,
   getVideoCreditEstimateParams,
+  getVideoModelRuntimeOptions,
   getMiniMaxVideoParamsError,
   inferSeedanceTaskType,
   isSeedanceAgentPlanModel,
@@ -245,49 +246,49 @@ describe('buildVideoModelOptions', () => {
       },
       {
         key: 'HappyHorse',
-        label: '炼虚',
+        label: 'HappyHorse 1.0 · 角色一致性视频模型',
         provider: 'dashscope',
         model_name: 'happyhorse-1.0-r2v',
         available: true,
       },
       {
         key: 'MINI',
-        label: '金丹',
+        label: 'MiniMax Hailuo 2.3 · 首尾帧标准视频模型',
         provider: 'minimax',
         model_options: ['MiniMax-Hailuo-2.3', 'MiniMax-Hailuo-2.3-Fast'],
         available: true,
       },
       {
         key: 'Seedance2',
-        label: '飞升',
+        label: 'Seedance 2.0 · 多模态标准视频模型',
         provider: 'seedance',
         model_name: 'doubao-seedance-2-0-260128',
         available: false,
       },
       {
         key: 'Seedance2Mini',
-        label: '元婴',
+        label: 'Seedance 2.0 Mini · 多模态简化视频模型',
         provider: 'seedance',
         model_name: 'doubao-seedance-2-0-mini-260615',
         available: true,
       },
       {
         key: 'MiniMaxH3',
-        label: '本地 MiniMax H3',
+        label: 'MiniMax H3 · 本地节点模型',
         provider: 'processing_cluster',
         model_name: 'MiniMax H3',
         available: true,
       },
       {
         key: 'MiniMaxH3Fast',
-        label: 'MiniMax H3 Fast',
+        label: 'MiniMax H3 Fast · 本地节点模型',
         provider: 'processing_cluster',
         model_name: 'MiniMax H3 Fast',
         available: true,
       },
       {
         key: 'MiniMaxH3Mini',
-        label: '本地 MiniMax H3 Mini',
+        label: 'MiniMax H3 Mini · 本地节点模型',
         provider: 'processing_cluster',
         model_name: 'MiniMax H3 Mini',
         available: true,
@@ -352,7 +353,7 @@ describe('buildVideoModelOptions', () => {
     const options = buildVideoModelOptions([
       {
         key: 'Seedance15',
-        label: 'Seedance 1.5',
+        label: 'Seedance 1.5 Pro · 首尾帧视频模型',
         provider: 'seedance',
         model_name: 'doubao-seedance-1.5-pro',
         available: true,
@@ -362,6 +363,27 @@ describe('buildVideoModelOptions', () => {
     expect(options.map(option => option.value)).toEqual(['Seedance15']);
     expect(options[0].label).toBe('Seedance 1.5 Pro · 首尾帧视频模型');
     expect(options[0].runtimeLabel).toBe('doubao-seedance-1.5-pro');
+  });
+
+  it('uses backend customized wording and concise runtime option names', () => {
+    const capability = {
+      key: 'MINI',
+      label: '海螺标准 · 首尾帧精细视频模型',
+      provider: 'minimax',
+      model_name: 'MiniMax-Hailuo-2.3',
+      model_options: ['MiniMax-Hailuo-2.3', 'MiniMax-Hailuo-2.3-Fast'],
+      model_option_labels: [
+        { model_name: 'MiniMax-Hailuo-2.3', display_name: '海螺标准' },
+        { model_name: 'MiniMax-Hailuo-2.3-Fast', display_name: '海螺快速' },
+      ],
+      available: true,
+    };
+
+    expect(buildVideoModelOptions([capability], ['MINI'])[0].label).toBe('海螺标准 · 首尾帧精细视频模型');
+    expect(getVideoModelRuntimeOptions(capability)).toEqual([
+      { value: 'MiniMax-Hailuo-2.3', label: '海螺标准' },
+      { value: 'MiniMax-Hailuo-2.3-Fast', label: '海螺快速' },
+    ]);
   });
 
   it('does not resurrect the current legacy or unavailable model', () => {

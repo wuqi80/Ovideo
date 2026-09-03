@@ -62,7 +62,7 @@ GPU2_IMAGE_UPSCALE_OUTPUT_ROOT = ROOT / "outputs" / "image_upscale"
 GPU2_NODE_OUTPUT_REGISTRY = ROOT / "config" / "node-output-registry.json"
 GPU2_NODE_OUTPUT_RETENTION_DAYS = max(
     1,
-    int(os.environ.get("OSTORY_NODE_OUTPUT_RETENTION_DAYS", "7")),
+    int(os.environ.get("OSTORY_NODE_OUTPUT_RETENTION_DAYS", "30")),
 )
 GPU2_NODE_OUTPUT_MIN_FREE_GIB = max(
     1,

@@ -12,10 +12,10 @@ import {
     SELECTABLE_MODELS,
     buildVideoModelOptions,
     formatVideoModelOptionLabel,
+    getVideoModelRuntimeOptions,
     getModelDisplayName,
     getVideoCreditFallbackCost,
     getVideoCreditEstimateParams,
-    getVideoModelRuntimeNames,
     inferDashScopeTaskType,
     inferSeedanceTaskType,
     isDashScopeVideoModel,
@@ -415,8 +415,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     ), [seedanceSupportsMultimodal]);
     const miniMaxCapability = getVideoCapability(videoCapabilities, 'MINI');
     const miniMaxModelOptions = useMemo(() => (
-        getVideoModelRuntimeNames(miniMaxCapability)
-            .map(model => ({ value: model, label: model }))
+        getVideoModelRuntimeOptions(miniMaxCapability)
     ), [miniMaxCapability]);
     const defaultMiniMaxVideoModel = miniMaxModelOptions[0]?.value;
     const [globalModel, setGlobalModel] = usePersistedPageState<VideoModel>({

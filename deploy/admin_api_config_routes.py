@@ -231,7 +231,7 @@ class ApiConfigCreateBody(BaseModel):
     endpoint: str = Field(..., min_length=1)
     api_key: str = Field(..., min_length=1)
     model_name: str = ""
-    model_bindings: List[Dict[str, str]] = Field(default_factory=list)
+    model_bindings: List[Dict[str, Any]] = Field(default_factory=list)
     proxy_mode: str = "direct"
     custom_proxy: str = ""
     request_template: Dict[str, Any] = Field(default_factory=dict)
@@ -248,7 +248,7 @@ class ApiConfigBulkKeysBody(BaseModel):
     api_keys: List[str] = Field(..., min_length=1)
     name_prefix: str = ""
     model_name: str = ""
-    model_bindings: List[Dict[str, str]] = Field(default_factory=list)
+    model_bindings: List[Dict[str, Any]] = Field(default_factory=list)
     proxy_mode: str = "direct"
     custom_proxy: str = ""
     request_template: Dict[str, Any] = Field(default_factory=dict)
@@ -265,7 +265,7 @@ class ApiConfigUpdateBody(BaseModel):
     endpoint: Optional[str] = None
     api_key: Optional[str] = None
     model_name: Optional[str] = None
-    model_bindings: Optional[List[Dict[str, str]]] = None
+    model_bindings: Optional[List[Dict[str, Any]]] = None
     proxy_mode: Optional[str] = None
     custom_proxy: Optional[str] = None
     request_template: Optional[Dict[str, Any]] = None

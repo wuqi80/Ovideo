@@ -413,6 +413,111 @@ MINIMAX_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
 ]
 
 
+# Public model presentation is owned by the backend binding catalogue. The
+# frontend key is stable application identity; provider model ids stay separate
+# so wording changes cannot accidentally alter runtime routing.
+VIDEO_PUBLIC_MODEL_BINDINGS: Dict[tuple[str, str], Dict[str, str]] = {
+    ("seedance", "agent_plan"): {
+        "front_model_key": "Seedance15",
+        "default_display_name": "Seedance 1.5 Pro",
+        "default_description": "首尾帧视频模型",
+    },
+    ("seedance", "standard"): {
+        "front_model_key": "Seedance2",
+        "default_display_name": "Seedance 2.0",
+        "default_description": "多模态标准视频模型",
+    },
+    ("seedance", "fast"): {
+        "front_model_key": "Seedance2Fast",
+        "default_display_name": "Seedance 2.0 Fast",
+        "default_description": "多模态快速视频模型",
+    },
+    ("seedance", "mini"): {
+        "front_model_key": "Seedance2Mini",
+        "default_display_name": "Seedance 2.0 Mini",
+        "default_description": "多模态简化视频模型",
+    },
+    ("minimax", "video-standard"): {
+        "front_model_key": "MINI",
+        "default_display_name": "MiniMax Hailuo 2.3",
+        "default_description": "首尾帧标准视频模型",
+    },
+    ("minimax", "video-fast"): {
+        "front_model_key": "MINI",
+        "default_display_name": "MiniMax Hailuo 2.3 Fast",
+        "default_description": "快速视频模型",
+    },
+    ("dashscope", "wan26"): {
+        "front_model_key": "大能",
+        "default_display_name": "Wan 2.6",
+        "default_description": "镜头叙事视频模型",
+    },
+    ("dashscope", "kling-standard"): {
+        "front_model_key": "Kling",
+        "default_display_name": "Kling V3",
+        "default_description": "全能音画视频模型",
+    },
+    ("dashscope", "kling-omni"): {
+        "front_model_key": "Kling",
+        "default_display_name": "Kling V3 Omni",
+        "default_description": "多参考音画视频模型",
+    },
+    **{
+        ("dashscope", operation): {
+            "front_model_key": "Vidu",
+            "default_display_name": "Vidu Q3",
+            "default_description": "多参考视频模型",
+        }
+        for operation in DASHSCOPE_DEFAULT_MODEL_MAP
+        if operation.startswith("vidu-")
+    },
+    ("dashscope", "happyhorse"): {
+        "front_model_key": "HappyHorse",
+        "default_display_name": "HappyHorse 1.0",
+        "default_description": "角色一致性视频模型",
+    },
+    ("sora2", SORA2_DEFAULT_VIDEO_MODEL.lower()): {
+        "front_model_key": "Sora2",
+        "default_display_name": "Sora 2",
+        "default_description": "长镜头视频模型",
+    },
+    ("veo", VEO_DEFAULT_VIDEO_MODEL.lower()): {
+        "front_model_key": "Veo",
+        "default_display_name": "Veo 3.1 Fast",
+        "default_description": "高质量快速视频模型",
+    },
+}
+
+
+def _split_public_binding_label(label: str, model_name: str) -> tuple[str, str]:
+    value = str(label or "").strip()
+    if " · " in value:
+        name, description = value.split(" · ", 1)
+        return name.strip(), description.strip()
+    return value or str(model_name or "").strip(), ""
+
+
+def model_binding_public_defaults(
+    provider: str,
+    operation: str,
+    *,
+    label: str = "",
+    model_name: str = "",
+) -> Dict[str, str]:
+    """Return immutable default wording and stable frontend identity."""
+    provider_id = normalize_provider(provider)
+    operation_id = str(operation or "").strip().lower()
+    configured = VIDEO_PUBLIC_MODEL_BINDINGS.get((provider_id, operation_id))
+    if configured:
+        return dict(configured)
+    default_name, default_description = _split_public_binding_label(label, model_name)
+    return {
+        "front_model_key": "",
+        "default_display_name": default_name,
+        "default_description": default_description,
+    }
+
+
 def normalize_model_usage_scope(scope: Optional[str]) -> str:
     normalized = (scope or MODEL_USAGE_SCOPE_WORKFLOW).strip().lower()
     aliases = {
@@ -450,7 +555,7 @@ def scoped_model_env_candidates(env_key: Optional[str], scope: Optional[str]) ->
     return [env_key]
 
 
-def _with_model_usage_scope(option: Dict[str, str], scope: str) -> Dict[str, str]:
+def _with_model_usage_scope(option: Dict[str, Any], scope: str) -> Dict[str, Any]:
     normalized_scope = normalize_model_usage_scope(scope)
     return {
         **option,
@@ -459,7 +564,7 @@ def _with_model_usage_scope(option: Dict[str, str], scope: str) -> Dict[str, str
     }
 
 
-def expand_model_binding_scope_options(options: List[Dict[str, str]]) -> List[Dict[str, str]]:
+def expand_model_binding_scope_options(options: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [
         _with_model_usage_scope(option, scope)
         for scope in MODEL_USAGE_SCOPES
@@ -1298,44 +1403,58 @@ def get_provider_model_binding_options(
     provider: str,
     *,
     include_scopes: bool = False,
-) -> List[Dict[str, str]]:
+) -> List[Dict[str, Any]]:
     """Return the front-end operation/model choices supported by one API card."""
     provider_id = normalize_provider(provider)
     if provider_id == "deepseek":
         options = deepcopy(DEEPSEEK_MODEL_BINDING_OPTIONS)
-        return expand_model_binding_scope_options(options) if include_scopes else options
-    if provider_id == "doubao":
+    elif provider_id == "doubao":
         options = deepcopy(DOUBAO_IMAGE_MODEL_BINDING_OPTIONS)
-        return expand_model_binding_scope_options(options) if include_scopes else options
-    if provider_id == "seedance":
+    elif provider_id == "seedance":
         options = deepcopy(SEEDANCE_MODEL_BINDING_OPTIONS)
-        return expand_model_binding_scope_options(options) if include_scopes else options
-    if provider_id == "dashscope":
+    elif provider_id == "dashscope":
         options = deepcopy(DASHSCOPE_MODEL_BINDING_OPTIONS)
-        return expand_model_binding_scope_options(options) if include_scopes else options
-    if provider_id == "minimax":
+    elif provider_id == "minimax":
         options = deepcopy(MINIMAX_MODEL_BINDING_OPTIONS)
-        return expand_model_binding_scope_options(options) if include_scopes else options
+    else:
+        options = []
+        seen: set[str] = set()
+        for preset in API_MODEL_PRESETS:
+            if normalize_provider(str(preset.get("provider") or "")) != provider_id:
+                continue
+            model_name = str(preset.get("model_name") or "").strip()
+            if not model_name:
+                continue
+            operation = str(preset.get("operation") or model_name).strip().lower()
+            if not operation or operation in seen:
+                continue
+            seen.add(operation)
+            options.append(
+                {
+                    "operation": operation,
+                    "label": str(preset.get("operation_label") or preset.get("name") or operation).strip(),
+                    "model_name": model_name,
+                }
+            )
 
-    options: List[Dict[str, str]] = []
-    seen: set[str] = set()
-    for preset in API_MODEL_PRESETS:
-        if normalize_provider(str(preset.get("provider") or "")) != provider_id:
-            continue
-        model_name = str(preset.get("model_name") or "").strip()
-        if not model_name:
-            continue
-        operation = str(preset.get("operation") or model_name).strip().lower()
-        if not operation or operation in seen:
-            continue
-        seen.add(operation)
-        options.append(
-            {
-                "operation": operation,
-                "label": str(preset.get("operation_label") or preset.get("name") or operation).strip(),
-                "model_name": model_name,
-            }
+    public_options: List[Dict[str, Any]] = []
+    for option in options:
+        defaults = model_binding_public_defaults(
+            provider_id,
+            str(option.get("operation") or ""),
+            label=str(option.get("label") or ""),
+            model_name=str(option.get("model_name") or ""),
         )
+        if defaults.get("front_model_key"):
+            option = {
+                **option,
+                **defaults,
+                "display_name": "",
+                "description": "",
+                "published": True,
+            }
+        public_options.append(option)
+    options = public_options
     return expand_model_binding_scope_options(options) if include_scopes else options
 
 
@@ -1364,7 +1483,7 @@ def normalize_model_bindings(
     provider: str,
     bindings: Any,
     legacy_model_name: Optional[str] = None,
-) -> List[Dict[str, str]]:
+) -> List[Dict[str, Any]]:
     """Normalize one-card/many-model bindings and enforce one model per operation."""
     provider_id = normalize_provider(provider)
     raw_bindings = bindings
@@ -1376,11 +1495,13 @@ def normalize_model_bindings(
     if not isinstance(raw_bindings, list):
         raw_bindings = []
 
-    option_labels = {
-        (normalize_model_usage_scope(item.get("scope")), item["operation"]): item["label"]
-        for item in get_provider_model_binding_options(provider, include_scopes=True)
+    binding_options = get_provider_model_binding_options(provider, include_scopes=True)
+    options_by_key = {
+        (normalize_model_usage_scope(item.get("scope")), item["operation"]): item
+        for item in binding_options
     }
-    normalized: Dict[tuple[str, str], Dict[str, str]] = {}
+    option_labels = {key: item["label"] for key, item in options_by_key.items()}
+    normalized: Dict[tuple[str, str], Dict[str, Any]] = {}
     for item in raw_bindings:
         if not isinstance(item, dict):
             continue
@@ -1400,18 +1521,39 @@ def normalize_model_bindings(
             operation = "agent_plan"
         elif not operation or (operation == "default" and inferred_operation != "default"):
             operation = inferred_operation
-        label = str(
-            option_labels.get((scope, operation))
-            if provider_id == "doubao"
-            else item.get("label") or option_labels.get((scope, operation)) or operation
-        ).strip()
-        normalized[(scope, operation)] = {
+        default_option = options_by_key.get((scope, operation)) or {}
+        defaults = model_binding_public_defaults(
+            provider_id,
+            operation,
+            label=str(default_option.get("label") or item.get("label") or operation),
+            model_name=model_name,
+        )
+        display_name = str(item.get("display_name") or "").strip()
+        description = str(item.get("description") or "").strip()
+        default_display_name = str(defaults.get("default_display_name") or model_name).strip()
+        default_description = str(defaults.get("default_description") or "").strip()
+        effective_name = display_name or default_display_name
+        effective_description = description or default_description
+        published_raw = item.get("published", True)
+        published = published_raw is not False and str(published_raw).strip().lower() not in {"0", "false", "no", "off"}
+        normalized_binding: Dict[str, Any] = {
             "operation": operation,
-            "label": label,
+            "label": str(item.get("label") or default_option.get("label") or operation).strip(),
             "model_name": model_name,
             "scope": scope,
             "scope_label": MODEL_USAGE_SCOPE_LABELS[scope],
         }
+        if defaults.get("front_model_key"):
+            normalized_binding.update({
+                "label": f"{effective_name} · {effective_description}" if effective_description else effective_name,
+                "front_model_key": str(defaults.get("front_model_key") or "").strip(),
+                "default_display_name": default_display_name,
+                "default_description": default_description,
+                "display_name": display_name,
+                "description": description,
+                "published": published,
+            })
+        normalized[(scope, operation)] = normalized_binding
 
     fallback_model = str(legacy_model_name or "").strip()
     if provider_id == "deepseek":
@@ -1419,13 +1561,14 @@ def normalize_model_bindings(
     if not normalized and fallback_model:
         operation = infer_model_binding_operation(provider, fallback_model)
         scope = MODEL_USAGE_SCOPE_WORKFLOW
-        normalized[(scope, operation)] = {
+        option = options_by_key.get((scope, operation)) or {
             "operation": operation,
             "label": option_labels.get((scope, operation)) or operation,
             "model_name": fallback_model,
             "scope": scope,
             "scope_label": MODEL_USAGE_SCOPE_LABELS[scope],
         }
+        normalized[(scope, operation)] = deepcopy(option)
     if provider_id in {"gemini-text", "gemini-image", "deepseek", "doubao", "seedance", "dashscope", "minimax"} and normalized:
         for option in get_provider_model_binding_options(provider_id, include_scopes=True):
             operation = option["operation"]

@@ -59,3 +59,33 @@ async def test_restricted_policy_matches_runtime_model_or_task_alias():
             task_type="minimax_video",
             task_data={"model": "MiniMax-H3"},
         )
+
+
+@pytest.mark.asyncio
+async def test_image_upscale_is_a_credit_feature_available_to_restricted_accounts():
+    FakeUserDAO.permissions = {
+        "accessMode": "restricted",
+        "allowedModels": ["gemini-2.5-flash"],
+    }
+
+    permissions = await require_user_model_access(
+        "user_1",
+        user_dao=FakeUserDAO,
+        task_type="image_upscale",
+        task_data={"requested_workflow_type": "image_upscale"},
+    )
+
+    assert permissions["accessMode"] == "restricted"
+
+
+@pytest.mark.asyncio
+async def test_image_upscale_stays_blocked_for_suspended_accounts():
+    FakeUserDAO.permissions = {"accessMode": "blocked"}
+
+    with pytest.raises(HTTPException, match="禁止使用生成模型"):
+        await require_user_model_access(
+            "user_1",
+            user_dao=FakeUserDAO,
+            task_type="image_upscale",
+            task_data={"requested_workflow_type": "image_upscale"},
+        )

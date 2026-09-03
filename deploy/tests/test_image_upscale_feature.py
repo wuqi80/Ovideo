@@ -57,9 +57,12 @@ def test_frontend_exposes_standalone_image_upscale_route_and_controls():
     assert "50000" in page
     assert "300 DPI" in page
     assert "文字清晰" in page
+    assert 'aria-label="文字清晰"' in page
+    assert "absolute left-0.5 top-0.5" in page
     assert "纯图片背景效果通常更稳定" in page
     assert "'image_upscale'" in page
-    assert "结果保存在本地节点 7 天" in page
+    assert "结果保留 30 天" in page
+    assert "不占用主站硬盘" not in page
     assert "/ticket" in page
 
 

@@ -11,6 +11,11 @@ ACCESS_RESTRICTED = "restricted"
 ACCESS_BLOCKED = "blocked"
 VALID_ACCESS_MODES = {ACCESS_INHERIT, ACCESS_RESTRICTED, ACCESS_BLOCKED}
 
+# These are platform features rather than selectable generation models.  They
+# are available to every active account and are billed by the normal credit
+# rules, so a legacy per-model allow-list must not accidentally block them.
+PLATFORM_FEATURE_TASK_TYPES = {"image-upscale"}
+
 
 def _model_key(value: Any) -> str:
     return str(value or "").strip().lower().replace("_", "-")
@@ -101,6 +106,8 @@ async def require_user_model_access(
         raise HTTPException(status_code=403, detail="该账号已被禁止使用生成模型")
     if mode == ACCESS_RESTRICTED:
         candidates = _candidate_model_keys(model=model, task_type=task_type, task_data=task_data)
+        if candidates & PLATFORM_FEATURE_TASK_TYPES:
+            return permissions
         if not _is_allowed(permissions["allowedModels"], candidates):
             raise HTTPException(status_code=403, detail="该账号无权使用当前模型")
     return permissions

@@ -3,9 +3,21 @@ import { apiJson } from './httpClient';
 export interface VideoModelCapability {
   key: string;
   label: string;
+  display_name?: string;
+  description?: string;
+  default_display_name?: string;
+  default_description?: string;
+  published?: boolean;
   provider: string;
   model_name?: string | null;
   model_options?: string[];
+  model_option_labels?: Array<{
+    operation?: string;
+    model_name: string;
+    label?: string;
+    display_name?: string;
+    description?: string;
+  }>;
   available?: boolean;
   task_types: string[];
   media_inputs: string[];

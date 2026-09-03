@@ -79,7 +79,7 @@ class ApiConfigDAO:
         endpoint: str,
         api_key: str,
         model_name: str = "",
-        model_bindings: Optional[List[Dict[str, str]]] = None,
+        model_bindings: Optional[List[Dict[str, Any]]] = None,
         proxy_mode: str = "direct",
         request_template: Optional[dict] = None,
         headers: Optional[dict] = None,

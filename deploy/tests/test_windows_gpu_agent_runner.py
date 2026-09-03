@@ -176,6 +176,9 @@ def test_gpu2_node_local_output_retention_moves_and_resolves_file(tmp_path, monk
     assert resolved["filename"] == "poster.png"
     assert resolved["size"] == len(b"upscaled-image")
     assert Path(resolved["path"]).read_bytes() == b"upscaled-image"
+    expires_at = datetime.fromisoformat(metadata["expires_at"])
+    created_at = datetime.fromisoformat(metadata["created_at"])
+    assert expires_at - created_at == timedelta(days=30)
 
 
 def test_gpu2_node_local_output_cleanup_removes_expired_files(tmp_path, monkeypatch):

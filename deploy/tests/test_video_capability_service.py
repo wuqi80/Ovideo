@@ -1,6 +1,16 @@
 from types import SimpleNamespace
 
+import pytest
+
 from services import video_capability_service
+
+
+@pytest.fixture(autouse=True)
+def disable_admin_catalog_database(monkeypatch):
+    async def no_catalog(_usage_scope: str):
+        return None
+
+    monkeypatch.setattr(video_capability_service, "load_public_video_catalog", no_catalog)
 
 
 async def test_video_capabilities_report_seedance_omni_and_comfyui(monkeypatch):
@@ -393,3 +403,77 @@ def test_video_manifest_exposes_agent_plan_and_payg_seedance_models_together():
     assert seedance15["available"] is True
     assert seedance15["supports_original_audio"] is False
     assert "reference_audio" not in seedance15["media_inputs"]
+
+
+def test_backend_catalog_controls_visibility_and_public_wording():
+    configs = [{
+        "provider": "minimax",
+        "endpoint": "https://api.minimaxi.com/v1",
+        "enabled": True,
+        "model_name": "MiniMax-Hailuo-2.3",
+        "model_bindings": [
+            {
+                "scope": "workflow",
+                "operation": "video-standard",
+                "model_name": "MiniMax-Hailuo-2.3",
+                "display_name": "海螺标准",
+                "description": "首尾帧精细视频模型",
+                "published": True,
+            },
+            {
+                "scope": "workflow",
+                "operation": "video-fast",
+                "model_name": "MiniMax-Hailuo-2.3-Fast",
+                "published": False,
+            },
+        ],
+    }]
+    catalog = video_capability_service.build_public_video_catalog(configs)
+    manifest = video_capability_service.build_video_model_manifest(
+        standard_seedance_model="doubao-seedance-2-0-260128",
+        fast_seedance_model="doubao-seedance-2-0-fast-260128",
+        mini_seedance_model="doubao-seedance-2-0-mini-260615",
+        seedance_omni=True,
+        comfyui_available=False,
+        api_availability={"MINI": True},
+        runtime_model_names={
+            "MINI": ["MiniMax-Hailuo-2.3", "MiniMax-Hailuo-2.3-Fast"],
+        },
+        public_model_catalog=catalog,
+    )
+
+    minimax = next(model for model in manifest["models"] if model["key"] == "MINI")
+    assert minimax["available"] is True
+    assert minimax["published"] is True
+    assert minimax["label"] == "海螺标准 · 首尾帧精细视频模型"
+    assert minimax["default_display_name"] == "MiniMax Hailuo 2.3"
+    assert minimax["display_name_customized"] is True
+    assert minimax["model_options"] == ["MiniMax-Hailuo-2.3"]
+
+
+def test_disabling_every_backend_card_hides_that_provider_models():
+    catalog = video_capability_service.build_public_video_catalog([{
+        "provider": "seedance",
+        "endpoint": "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+        "enabled": False,
+        "model_bindings": [],
+    }])
+    manifest = video_capability_service.build_video_model_manifest(
+        standard_seedance_model="doubao-seedance-2-0-260128",
+        fast_seedance_model="doubao-seedance-2-0-fast-260128",
+        mini_seedance_model="doubao-seedance-2-0-mini-260615",
+        seedance_omni=True,
+        comfyui_available=False,
+        api_availability={
+            "Seedance15": True,
+            "Seedance2": True,
+            "Seedance2Fast": True,
+            "Seedance2Mini": True,
+        },
+        public_model_catalog=catalog,
+    )
+
+    seedance = [model for model in manifest["models"] if model["provider"] == "seedance"]
+    assert seedance
+    assert all(model["available"] is False for model in seedance)
+    assert all(model["published"] is False for model in seedance)
