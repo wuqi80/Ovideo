@@ -21,4 +21,9 @@ describe('generation and media interaction feedback', () => {
     expect(mediaSource).toContain('创建文件夹');
     expect(mediaSource).not.toContain('window.prompt');
   });
+
+  it('renders video library cards from cached thumbnails using the filmstrip treatment', () => {
+    expect(mediaSource).toContain('/api/thumbnail?url=${encodeURIComponent(item.file_url)}&width=640&height=360');
+    expect(mediaSource).toContain('<FilmstripThumbnail src={thumb} alt="视频缩略图" />');
+  });
 });

@@ -41,6 +41,8 @@ import { useCurrentOrgId, useWorkspace } from '../contexts/WorkspaceContext';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { LazyVideo } from '../components/LazyVideo';
 import { getStoredUserId } from '../services/accountStorage';
+import { secureApiUrl } from '../services/httpClient';
+import { FilmstripThumbnail } from '../components/FilmstripThumbnail';
 
 type CategoryKey = 'all' | 'mine' | 'shared' | 'image' | 'video' | 'audio' | 'frame' | 'favorite';
 
@@ -829,7 +831,15 @@ const MediaCard: React.FC<MediaCardProps> = ({
   item, selected, checked, onSelect, onToggleCheck, onToggleFavorite, myUserId,
 }) => {
   const isMine = item.user_id === myUserId;
-  const thumb = item.thumbnail_url || (item.item_type === 'image' ? item.file_url : null);
+  const sourceThumb = item.thumbnail_url || (item.item_type === 'image' ? item.file_url : null);
+  const thumb = sourceThumb
+    ? secureApiUrl(sourceThumb, { absolute: true })
+    : item.item_type === 'video' && item.file_url
+      ? secureApiUrl(
+          `/api/thumbnail?url=${encodeURIComponent(item.file_url)}&width=640&height=360`,
+          { absolute: true },
+        )
+      : null;
 
   return (
     <div
@@ -844,10 +854,10 @@ const MediaCard: React.FC<MediaCardProps> = ({
       }`}
     >
       <div className="aspect-square bg-n20 flex items-center justify-center overflow-hidden">
-        {thumb ? (
+        {item.item_type === 'video' ? (
+          <FilmstripThumbnail src={thumb} alt="视频缩略图" />
+        ) : thumb ? (
           <img src={thumb} alt={item.title || item.file_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-        ) : item.item_type === 'video' ? (
-          <Film size={32} className="text-n100" />
         ) : item.item_type === 'audio' ? (
           <Music size={32} className="text-n100" />
         ) : (

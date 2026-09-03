@@ -6028,6 +6028,8 @@ def check_frontend_thumbnail_contract(root: Path) -> int:
     image_loader = root / "new_html" / "services" / "imageLoaderService.ts"
     generation_page = root / "new_html" / "components" / "GenerationPage.tsx"
     storyboard_page = root / "new_html" / "pages" / "StoryboardGenPage.tsx"
+    media_library_page = root / "new_html" / "pages" / "MediaLibraryPage.tsx"
+    filmstrip_thumbnail = root / "new_html" / "components" / "FilmstripThumbnail.tsx"
 
     required_snippets = [
         (image_loader, "export function getImageThumbnailUrl"),
@@ -6037,6 +6039,10 @@ def check_frontend_thumbnail_contract(root: Path) -> int:
         (generation_page, "getImageThumbnailUrl(img.thumbnail || img.url, 360, 220)"),
         (storyboard_page, "import { getImageThumbnailUrl } from '../services/imageLoaderService';"),
         (storyboard_page, "imageUrl: getImageThumbnailUrl(imgUrl, 320, 180),"),
+        (media_library_page, "/api/thumbnail?url=${encodeURIComponent(item.file_url)}&width=640&height=360"),
+        (media_library_page, '<FilmstripThumbnail src={thumb} alt="视频缩略图" />'),
+        (filmstrip_thumbnail, 'data-testid="filmstrip-sprockets-top"'),
+        (filmstrip_thumbnail, 'data-testid="filmstrip-sprockets-bottom"'),
     ]
 
     checks = 0
