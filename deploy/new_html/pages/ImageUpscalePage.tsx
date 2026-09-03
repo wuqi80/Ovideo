@@ -5,8 +5,10 @@ import {
   CheckCircle2,
   Download,
   FileImage,
+  History,
   ImagePlus,
   Loader2,
+  RefreshCw,
   ScanLine,
   Sparkles,
   Type,
@@ -19,6 +21,54 @@ import { apiBlob, apiJson } from '../services/httpClient';
 
 const LONG_EDGE_PRESETS = [4096, 8192, 16000, 32000, 50000] as const;
 const DPI_PRESETS = [72, 150, 300] as const;
+
+interface UpscaleHistoryTask {
+  task_id: string;
+  task_type?: string;
+  status?: string;
+  progress?: number | null;
+  result?: any;
+  error?: string | null;
+  created_at?: string | null;
+  completed_at?: string | null;
+  data?: Record<string, any>;
+}
+
+function isImageUpscaleTask(task: UpscaleHistoryTask): boolean {
+  return task.task_type === 'image_upscale'
+    || task.data?.requested_workflow_type === 'image_upscale'
+    || task.data?.source_page === 'image-upscale';
+}
+
+function upscaleResultUrl(task: UpscaleHistoryTask): string {
+  const first = task.result?.images?.[0];
+  if (typeof first === 'string') return first;
+  return typeof first?.url === 'string' ? first.url : '';
+}
+
+function formatHistoryTime(value?: string | null): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    hour12: false,
+  });
+}
+
+function historyStatusLabel(status?: string): string {
+  const labels: Record<string, string> = {
+    pending: '排队中',
+    queued: '排队中',
+    processing: '处理中',
+    running: '处理中',
+    completed: '已完成',
+    failed: '失败',
+    cancelled: '已取消',
+    timeout: '已超时',
+  };
+  return labels[String(status || '').toLowerCase()] || '未知状态';
+}
 
 function fallbackCost(targetLongEdge: number, dpi: number, textClarity: boolean): number {
   const base = targetLongEdge <= 4096
@@ -80,6 +130,10 @@ export const ImageUpscalePage: React.FC = () => {
   const [resultUrl, setResultUrl] = useState('');
   const [error, setError] = useState('');
   const [estimatedCost, setEstimatedCost] = useState(() => fallbackCost(8192, 300, false));
+  const [historyTasks, setHistoryTasks] = useState<UpscaleHistoryTask[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState('');
+  const [historyDownloadId, setHistoryDownloadId] = useState('');
 
   const estimatedOutput = useMemo(
     () => outputSize(sourceSize, targetLongEdge),
@@ -90,6 +144,23 @@ export const ImageUpscalePage: React.FC = () => {
     [targetLongEdge, textClarity],
   );
   const busy = ['uploading', 'queued', 'running'].includes(status);
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const data = await apiJson<{ tasks?: UpscaleHistoryTask[] }>(
+        '/api/tasks?limit=100',
+        {},
+        '加载图片放大历史',
+      );
+      setHistoryTasks((data.tasks || []).filter(isImageUpscaleTask).slice(0, 20));
+    } catch (caught: any) {
+      setHistoryError(caught?.message || '图片放大历史加载失败');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -115,6 +186,10 @@ export const ImageUpscalePage: React.FC = () => {
   useEffect(() => () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
   }, [previewUrl]);
+
+  useEffect(() => {
+    void loadHistory();
+  }, [loadHistory]);
 
   const selectFile = useCallback((selected: File | null) => {
     if (!selected) return;
@@ -175,6 +250,7 @@ export const ImageUpscalePage: React.FC = () => {
       });
       setTaskId(submitted.task_id);
       setStatus('running');
+      void loadHistory();
       const url = await waitForComfyUITask(
         submitted.task_id,
         value => setProgress(value > 1 ? value / 100 : value),
@@ -192,45 +268,72 @@ export const ImageUpscalePage: React.FC = () => {
       setResultUrl(url);
       setProgress(1);
       setStatus('completed');
+      void loadHistory();
       window.dispatchEvent(new CustomEvent('credits:updated'));
     } catch (caught: any) {
       setStatus('failed');
       setError(caught?.message || '图片放大失败，请稍后重试。');
     }
-  }, [busy, dpi, episodeId, file, previewUrl, projectId, targetLongEdge, textClarity]);
+  }, [busy, dpi, episodeId, file, loadHistory, previewUrl, projectId, targetLongEdge, textClarity]);
+
+  const downloadUpscaleOutput = useCallback(async (url: string, filename: string) => {
+    const nodeOutputMatch = url.match(/^\/api\/node-outputs\/[^/]+\/[^/]+\/download(?:\?.*)?$/);
+    if (nodeOutputMatch) {
+      const ticketEndpoint = url.replace(/\/download(?:\?.*)?$/, '/ticket');
+      const ticket = await apiJson<{ download_url: string }>(
+        ticketEndpoint,
+        { method: 'POST' },
+        '申请高清图片下载',
+      );
+      const anchor = document.createElement('a');
+      anchor.href = ticket.download_url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      return;
+    }
+    const blob = await apiBlob(url, { method: 'GET' }, '下载高清放大图片');
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }, []);
 
   const downloadResult = useCallback(async () => {
     if (!resultUrl) return;
     try {
-      const nodeOutputMatch = resultUrl.match(/^\/api\/node-outputs\/[^/]+\/[^/]+\/download(?:\?.*)?$/);
-      if (nodeOutputMatch) {
-        const ticketEndpoint = resultUrl.replace(/\/download(?:\?.*)?$/, '/ticket');
-        const ticket = await apiJson<{ download_url: string }>(
-          ticketEndpoint,
-          { method: 'POST' },
-          '申请高清图片下载',
-        );
-        const anchor = document.createElement('a');
-        anchor.href = ticket.download_url;
-        anchor.download = `${(file?.name || 'image').replace(/\.[^.]+$/, '')}_${targetLongEdge}px_${dpi}dpi.png`;
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        return;
-      }
-      const blob = await apiBlob(resultUrl, { method: 'GET' }, '下载高清放大图片');
-      const objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = objectUrl;
-      anchor.download = `${(file?.name || 'image').replace(/\.[^.]+$/, '')}_${targetLongEdge}px_${dpi}dpi.png`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      await downloadUpscaleOutput(
+        resultUrl,
+        `${(file?.name || 'image').replace(/\.[^.]+$/, '')}_${targetLongEdge}px_${dpi}dpi.png`,
+      );
     } catch (caught: any) {
       setError(caught?.message || '下载失败，请从任务通知重新打开结果。');
     }
-  }, [dpi, file?.name, resultUrl, targetLongEdge]);
+  }, [downloadUpscaleOutput, dpi, file?.name, resultUrl, targetLongEdge]);
+
+  const downloadHistoryResult = useCallback(async (task: UpscaleHistoryTask) => {
+    const url = upscaleResultUrl(task);
+    if (!url) return;
+    const edge = Number(task.data?.target_long_edge || 0);
+    const outputDpi = Number(task.data?.dpi || 0);
+    setHistoryDownloadId(task.task_id);
+    setHistoryError('');
+    try {
+      await downloadUpscaleOutput(
+        url,
+        `图片放大_${edge || 'result'}px_${outputDpi || 300}dpi.png`,
+      );
+    } catch (caught: any) {
+      setHistoryError(caught?.message || '历史结果下载失败，文件可能已超过 30 天保留期。');
+    } finally {
+      setHistoryDownloadId('');
+    }
+  }, [downloadUpscaleOutput]);
 
   return (
     <div className="h-full overflow-y-auto bg-n20 px-6 py-6 scrollbar-atlas">
@@ -244,7 +347,7 @@ export const ImageUpscalePage: React.FC = () => {
             <p className="mt-1 text-sm text-n300">AI 修复细节后按原比例输出，最长边最高 50,000px，最高写入 300 DPI。</p>
           </div>
           <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-2.5 text-xs leading-5 text-n500">
-            <span className="font-semibold text-warning">本地队列任务</span> · 成功后扣除 {estimatedCost} 点 · 单张不超过 50 点
+            <span className="font-semibold text-warning">图片放大独立队列</span> · 每位用户最多 2 个 · 成功后扣除 {estimatedCost} 点
           </div>
         </div>
 
@@ -365,7 +468,7 @@ export const ImageUpscalePage: React.FC = () => {
                 <span className="font-semibold text-n700">{estimatedDuration}</span>
               </div>
               <p className="mt-1 text-[11px] leading-5 text-n200">基于当前本地节点实测估算；排队等待与下载时间另计。</p>
-              <p className="mt-1 text-[11px] leading-5 text-n200">加入本地节点队列；成功后扣除，失败或取消自动退回。结果保留 30 天。</p>
+              <p className="mt-1 text-[11px] leading-5 text-n200">加入图片放大独立队列；每位用户最多同时排队或处理 2 个。成功后扣除，失败或取消自动退回。结果保留 30 天。</p>
 
               {busy && (
                 <div className="mt-4 rounded-xl bg-b50 p-3">
@@ -399,6 +502,77 @@ export const ImageUpscalePage: React.FC = () => {
             </section>
           </aside>
         </div>
+
+        <section className="mt-5 overflow-hidden rounded-2xl border border-n50 bg-n0 shadow-soft">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-n40 px-5 py-4">
+            <div>
+              <h2 className="flex items-center gap-2 font-display text-base font-bold text-n800"><History size={17} className="text-primary" /> 图片放大历史</h2>
+              <p className="mt-1 text-xs text-n200">保留最近 20 条任务记录；完成结果在 30 天内可重新下载。</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { void loadHistory(); }}
+              disabled={historyLoading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-n50 px-3 py-2 text-xs font-semibold text-n400 hover:border-b300 hover:text-primary disabled:opacity-50"
+            >
+              <RefreshCw size={14} className={historyLoading ? 'animate-spin' : ''} /> 刷新
+            </button>
+          </div>
+
+          {historyError && (
+            <div className="mx-5 mt-4 rounded-xl border border-danger/25 bg-r50 p-3 text-xs leading-5 text-danger">{historyError}</div>
+          )}
+
+          {historyLoading && historyTasks.length === 0 ? (
+            <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-n200"><Loader2 size={16} className="animate-spin" /> 正在加载历史记录</div>
+          ) : historyTasks.length === 0 ? (
+            <div className="flex min-h-32 flex-col items-center justify-center gap-2 text-sm text-n200"><History size={22} /> 暂无图片放大记录</div>
+          ) : (
+            <div className="divide-y divide-n40">
+              {historyTasks.map(task => {
+                const normalizedStatus = String(task.status || '').toLowerCase();
+                const result = upscaleResultUrl(task);
+                const edge = Number(task.data?.target_long_edge || 0);
+                const outputDpi = Number(task.data?.dpi || 0);
+                const textMode = Boolean(task.data?.text_clarity);
+                const active = ['pending', 'queued', 'processing', 'running'].includes(normalizedStatus);
+                const statusClass = normalizedStatus === 'completed'
+                  ? 'bg-success/10 text-success'
+                  : active
+                    ? 'bg-b50 text-primary'
+                    : normalizedStatus === 'failed' || normalizedStatus === 'timeout'
+                      ? 'bg-r50 text-danger'
+                      : 'bg-n30 text-n300';
+                return (
+                  <div key={task.task_id} className="grid gap-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusClass}`}>{historyStatusLabel(normalizedStatus)}</span>
+                        <span className="font-mono text-xs text-n400">{edge ? `${formatPixels(edge)}px` : '规格未知'} · {outputDpi || 300} DPI</span>
+                        {textMode && <span className="rounded-full bg-primary-light px-2 py-1 text-[10px] font-semibold text-primary">文字清晰</span>}
+                      </div>
+                      <div className="mt-1 truncate text-[11px] text-n200">{formatHistoryTime(task.completed_at || task.created_at)} · {task.task_id}</div>
+                      {active && typeof task.progress === 'number' && (
+                        <div className="mt-2 h-1.5 max-w-sm overflow-hidden rounded-full bg-n40"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(3, Math.min(100, task.progress > 1 ? task.progress : task.progress * 100))}%` }} /></div>
+                      )}
+                      {task.error && <div className="mt-1 truncate text-[11px] text-danger">{task.error}</div>}
+                    </div>
+                    <div className="text-xs text-n300">{normalizedStatus === 'completed' ? '结果保留 30 天' : active ? '等待本地节点处理' : ''}</div>
+                    <button
+                      type="button"
+                      onClick={() => { void downloadHistoryResult(task); }}
+                      disabled={!result || historyDownloadId === task.task_id}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-primary px-3 text-xs font-semibold text-primary hover:bg-primary-light disabled:cursor-not-allowed disabled:border-n60 disabled:text-n200"
+                    >
+                      {historyDownloadId === task.task_id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                      {result ? '重新下载' : '暂无结果'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

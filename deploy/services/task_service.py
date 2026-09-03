@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 from fastapi import HTTPException
 
 from task_queue import TaskQueue, Task
-from core.task_types import is_local_node_task
+from core.task_types import is_local_node_task, local_node_queue_lane
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +188,7 @@ class TaskService:
 
         reserved = False
         local_slot_reserved = False
+        local_slot_lane = "default"
         daily_quota_key: Optional[str] = None
         enqueued = False
         try:
@@ -204,24 +205,41 @@ class TaskService:
                 )
 
             if self.redis is not None and is_local_node_task(task_type):
+                local_slot_lane = local_node_queue_lane(task_type, task_data)
+                task_data["queue_lane"] = local_slot_lane
                 active_rows = await TaskDAO.get_active_tasks_for_user(user_id, limit=200)
                 active_local_ids = [
                     str(row.get("task_id"))
                     for row in active_rows
-                    if row.get("task_id") and is_local_node_task(str(row.get("task_type") or ""))
+                    if row.get("task_id")
+                    and is_local_node_task(str(row.get("task_type") or ""))
+                    and local_node_queue_lane(
+                        str(row.get("task_type") or ""),
+                        row.get("task_data") if isinstance(row.get("task_data"), dict) else {},
+                    ) == local_slot_lane
                 ]
                 local_slot_reserved = await self.queue.reserve_local_user_slot(
                     user_id,
                     task_id,
                     active_task_ids=active_local_ids,
                     limit=2,
+                    lane=local_slot_lane,
                 )
                 if not local_slot_reserved:
+                    is_upscale_lane = local_slot_lane == "image_upscale"
                     raise HTTPException(
                         status_code=429,
                         detail={
-                            "code": "local_node_user_queue_limit",
-                            "message": "本地节点任务每位用户最多同时排队 2 个，请等待已有任务完成后再试",
+                            "code": (
+                                "image_upscale_user_queue_limit"
+                                if is_upscale_lane
+                                else "local_node_user_queue_limit"
+                            ),
+                            "message": (
+                                "图片放大任务每位用户最多同时排队或处理 2 个，请等待已有任务完成后再试"
+                                if is_upscale_lane
+                                else "本地节点视频任务每位用户最多同时排队或处理 2 个，请等待已有任务完成后再试"
+                            ),
                         },
                     )
 
@@ -290,7 +308,11 @@ class TaskService:
                     logger.error("释放未入队任务创作点数失败 %s: %s", task_id, release_error)
             if local_slot_reserved and not enqueued:
                 try:
-                    await self.queue.release_local_user_slot(user_id, task_id)
+                    await self.queue.release_local_user_slot(
+                        user_id,
+                        task_id,
+                        lane=local_slot_lane,
+                    )
                 except Exception as release_error:
                     logger.error("释放未入队任务本地节点名额失败 %s: %s", task_id, release_error)
             if daily_quota_key and not enqueued:

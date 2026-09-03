@@ -7,6 +7,26 @@ from cluster_config import RedisConfig
 from task_service import TaskService
 
 
+def test_local_user_slot_keys_separate_image_upscale_from_video_lane():
+    assert TaskQueue._local_user_slot_key("user-1") == "comfyui:user_local_active:user-1"
+    assert TaskQueue._local_user_slot_key("user-1", "image_upscale") == (
+        "comfyui:user_local_active:image_upscale:user-1"
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_upscale_terminal_release_cleans_new_and_legacy_slot_keys():
+    redis = AsyncMock()
+    queue = TaskQueue(redis)
+
+    await queue.release_local_user_slot("user-1", "image-1", lane="image_upscale")
+
+    assert redis.zrem.await_args_list == [
+        call("comfyui:user_local_active:image_upscale:user-1", "image-1"),
+        call("comfyui:user_local_active:user-1", "image-1"),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_task_service_uses_preallocated_task_id():
     service = TaskService(AsyncMock(), model_access_checker=AsyncMock(return_value={"accessMode": "inherit"}))

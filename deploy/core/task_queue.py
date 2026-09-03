@@ -147,8 +147,11 @@ class TaskQueue:
         await self.redis.zrem(RedisConfig.EXTERNAL_PROCESSING_QUEUE_KEY, task_id)
 
     @staticmethod
-    def _local_user_slot_key(user_id: str) -> str:
-        return f"comfyui:user_local_active:{user_id}"
+    def _local_user_slot_key(user_id: str, lane: str = "default") -> str:
+        normalized_lane = str(lane or "default").strip().lower()
+        if normalized_lane == "default":
+            return f"comfyui:user_local_active:{user_id}"
+        return f"comfyui:user_local_active:{normalized_lane}:{user_id}"
 
     async def reserve_local_user_slot(
         self,
@@ -156,8 +159,9 @@ class TaskQueue:
         task_id: str,
         active_task_ids: Optional[List[str]] = None,
         limit: int = 2,
+        lane: str = "default",
     ) -> bool:
-        """Atomically reserve one of a user's shared-local-node queue slots."""
+        """Atomically reserve one of a user's local-node queue-lane slots."""
         script = """
         local key = KEYS[1]
         local task_prefix = ARGV[1]
@@ -194,7 +198,7 @@ class TaskQueue:
         result = await self.redis.eval(
             script,
             1,
-            self._local_user_slot_key(user_id),
+            self._local_user_slot_key(user_id, lane),
             RedisConfig.TASK_STATUS_PREFIX,
             task_id,
             int(time.time()),
@@ -203,9 +207,18 @@ class TaskQueue:
         )
         return bool(int(result or 0))
 
-    async def release_local_user_slot(self, user_id: Optional[str], task_id: str) -> None:
+    async def release_local_user_slot(
+        self,
+        user_id: Optional[str],
+        task_id: str,
+        lane: str = "default",
+    ) -> None:
         if user_id:
-            await self.redis.zrem(self._local_user_slot_key(user_id), task_id)
+            await self.redis.zrem(self._local_user_slot_key(user_id, lane), task_id)
+            # Image-upscale slots used the default key before queue lanes were
+            # introduced. Remove that legacy membership when such a task ends.
+            if lane == "image_upscale":
+                await self.redis.zrem(self._local_user_slot_key(user_id), task_id)
 
     async def reserve_daily_quota(
         self,
@@ -254,7 +267,13 @@ class TaskQueue:
         if not task:
             return
         try:
-            await self.release_local_user_slot(task.user_id, task.task_id)
+            from core.task_types import local_node_queue_lane
+
+            await self.release_local_user_slot(
+                task.user_id,
+                task.task_id,
+                lane=local_node_queue_lane(task.task_type, task.data),
+            )
         except Exception as exc:
             logger.warning("释放用户本地节点队列名额失败 %s: %s", task.task_id, exc)
 

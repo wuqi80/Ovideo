@@ -102,8 +102,8 @@ export const WorkflowLayout: React.FC = () => {
   const sidebarTools: AppSidebarItem[] = [
     { key: 'canvas', label: '专业画布', icon: Brush, to: `/projects/${projectId}/ep/${episodeId}/canvas` },
     { key: 'media-library', label: '我的素材', icon: Library, to: 'media-library', badge: <TaskBadge page="media-library" /> },
-    { key: 'history', label: '版本记录', icon: Clock, to: 'history', badge: <TaskBadge page="history" /> },
     { key: 'image-upscale', label: '图片高清放大', icon: ScanLine, to: 'image-upscale', badge: <TaskBadge page="image-upscale" /> },
+    { key: 'history', label: '版本记录', icon: Clock, to: 'history', badge: <TaskBadge page="history" /> },
   ];
 
   return (

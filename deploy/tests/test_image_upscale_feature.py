@@ -63,6 +63,7 @@ def test_image_upscale_credit_tiers_dpi_and_text_mode_never_exceed_fifty():
 def test_frontend_exposes_standalone_image_upscale_route_and_controls():
     app = (DEPLOY_DIR / "new_html/App.tsx").read_text(encoding="utf-8")
     layout = (DEPLOY_DIR / "new_html/layouts/WorkflowLayout.tsx").read_text(encoding="utf-8")
+    sidebar = (DEPLOY_DIR / "new_html/components/AppSidebar.tsx").read_text(encoding="utf-8")
     page = (DEPLOY_DIR / "new_html/pages/ImageUpscalePage.tsx").read_text(encoding="utf-8")
 
     assert 'path="image-upscale"' in app
@@ -80,6 +81,11 @@ def test_frontend_exposes_standalone_image_upscale_route_and_controls():
     assert "[4, 8]" in page
     assert "不占用主站硬盘" not in page
     assert "/ticket" in page
+    assert "图片放大历史" in page
+    assert "'/api/tasks?limit=100'" in page
+    assert "每位用户最多同时排队或处理 2 个" in page
+    assert layout.index("label: '图片高清放大'") < layout.index("label: '版本记录'")
+    assert sidebar.index("label: '图片高清放大'") < sidebar.index("label: '版本记录'")
 
 
 def test_agent_completion_exposes_only_an_authenticated_node_output_url():

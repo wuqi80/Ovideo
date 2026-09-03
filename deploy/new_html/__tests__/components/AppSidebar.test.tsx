@@ -46,6 +46,10 @@ describe('AppSidebar public tools', () => {
     expect(screen.getByRole('button', { name: '我的素材' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '版本记录' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '图片高清放大' })).toBeInTheDocument();
+    expect(
+      screen.getByText('图片高清放大').compareDocumentPosition(screen.getByText('版本记录'))
+      & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     await waitFor(() => expect(apiJson).toHaveBeenCalledWith('/api/projects', {}, '最近项目'));
   });
 

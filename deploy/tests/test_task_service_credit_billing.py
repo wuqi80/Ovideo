@@ -154,6 +154,85 @@ async def test_submit_rejects_third_active_local_node_task_before_billing(monkey
 
 
 @pytest.mark.asyncio
+async def test_image_upscale_uses_an_independent_two_task_lane(monkeypatch):
+    from dao_task import TaskDAO
+
+    monkeypatch.setattr(
+        TaskDAO,
+        "get_active_tasks_for_user",
+        AsyncMock(return_value=[
+            {"task_id": "video-1", "task_type": "i2v", "task_data": {}},
+            {"task_id": "video-2", "task_type": "upscale_hd", "task_data": {}},
+        ]),
+    )
+    monkeypatch.setattr(
+        task_credit_billing_service,
+        "reserve_task_credits",
+        AsyncMock(return_value=False),
+    )
+
+    service = TaskService(object(), model_access_checker=AsyncMock(return_value={}))
+    service.queue = _Queue()
+    service.queue.reserve_local_user_slot = AsyncMock(return_value=True)
+
+    task_id = await service.submit(
+        "image_upscale",
+        {"requested_workflow_type": "image_upscale"},
+        "user-1",
+        prepare=False,
+        task_id="image-1",
+    )
+
+    assert task_id == "image-1"
+    assert service.queue.tasks[0].data["queue_lane"] == "image_upscale"
+    reservation = service.queue.reserve_local_user_slot.await_args
+    assert reservation.kwargs["lane"] == "image_upscale"
+    assert reservation.kwargs["active_task_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_submit_rejects_third_image_upscale_without_counting_video_tasks(monkeypatch):
+    from dao_task import TaskDAO
+
+    async def reserve_credits(**_kwargs):
+        raise AssertionError("billing must not run after image-upscale limit rejection")
+
+    monkeypatch.setattr(
+        TaskDAO,
+        "get_active_tasks_for_user",
+        AsyncMock(return_value=[
+            {"task_id": "image-1", "task_type": "image_upscale", "task_data": {}},
+            {"task_id": "image-2", "task_type": "image_upscale", "task_data": {}},
+            {"task_id": "video-1", "task_type": "i2v", "task_data": {}},
+            {"task_id": "video-2", "task_type": "upscale_hd", "task_data": {}},
+        ]),
+    )
+    monkeypatch.setattr(task_credit_billing_service, "reserve_task_credits", reserve_credits)
+
+    service = TaskService(object(), model_access_checker=AsyncMock(return_value={}))
+    service.queue = _Queue()
+    service.queue.reserve_local_user_slot = AsyncMock(return_value=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.submit(
+            "image_upscale",
+            {"requested_workflow_type": "image_upscale"},
+            "user-1",
+            prepare=False,
+            task_id="image-3",
+        )
+
+    reservation = service.queue.reserve_local_user_slot.await_args
+    assert reservation.kwargs["lane"] == "image_upscale"
+    assert reservation.kwargs["active_task_ids"] == ["image-1", "image-2"]
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.detail == {
+        "code": "image_upscale_user_queue_limit",
+        "message": "图片放大任务每位用户最多同时排队或处理 2 个，请等待已有任务完成后再试",
+    }
+
+
+@pytest.mark.asyncio
 async def test_submit_rejects_fourth_platform_hailuo_task_with_exact_message(monkeypatch):
     from unittest.mock import AsyncMock
     from dao_task import TaskDAO

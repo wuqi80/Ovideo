@@ -29,3 +29,14 @@ def is_external_api_task(task_type: str) -> bool:
 def is_local_node_task(task_type: str) -> bool:
     """Return True for work that must occupy the shared local GPU node."""
     return bool(task_type) and not is_external_api_task(task_type)
+
+
+def local_node_queue_lane(task_type: str, task_data: dict | None = None) -> str:
+    """Return the per-user concurrency lane for a local-node task.
+
+    Image upscaling has its own two-task allowance so it does not consume the
+    user's local video-generation allowance. All other local-node work keeps
+    the established shared lane.
+    """
+    requested_type = str((task_data or {}).get("requested_workflow_type") or "")
+    return "image_upscale" if task_type == "image_upscale" or requested_type == "image_upscale" else "default"

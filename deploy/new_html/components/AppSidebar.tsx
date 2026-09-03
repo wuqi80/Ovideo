@@ -174,8 +174,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
   const defaultTools: AppSidebarItem[] = [
     { key: 'canvas', label: '专业画布', icon: Brush, onClick: () => { void openRecentProjectTool('canvas'); } },
     { key: 'media-library', label: '我的素材', icon: Library, onClick: () => { void openRecentProjectTool('media-library'); } },
-    { key: 'history', label: '版本记录', icon: Clock3, onClick: () => { void openRecentProjectTool('history'); } },
     { key: 'image-upscale', label: '图片高清放大', icon: ScanLine, onClick: () => { void openRecentProjectTool('image-upscale'); } },
+    { key: 'history', label: '版本记录', icon: Clock3, onClick: () => { void openRecentProjectTool('history'); } },
   ];
   const visibleTools = tools ?? defaultTools;
 
