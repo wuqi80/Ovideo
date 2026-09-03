@@ -464,6 +464,7 @@ export interface VideoCapabilityModelLike {
   default_display_name?: string;
   default_description?: string;
   published?: boolean;
+  unavailable_reason?: string;
   provider?: string;
   model_name?: string | null;
   model_options?: string[];
@@ -487,6 +488,7 @@ export interface VideoModelOption {
   baseLabel: string;
   runtimeLabel: string;
   available: boolean;
+  unavailableReason?: string;
   provider?: string;
   capability?: VideoCapabilityModelLike;
 }
@@ -558,8 +560,8 @@ export function buildVideoModelOptions(
 
   return fallbackModels.flatMap((model) => {
     const capability = capabilityByKey.get(model);
+    if (!capability || capability.published === false) return [];
     const available = capability?.available === true;
-    if (!available) return [];
     const runtimeLabel = formatVideoModelRuntimeLabel(capability);
     const label = formatVideoModelOptionLabel(model, capability);
     return [{
@@ -568,6 +570,9 @@ export function buildVideoModelOptions(
       baseLabel: getModelDisplayName(model),
       runtimeLabel,
       available,
+      unavailableReason: available
+        ? undefined
+        : String(capability.unavailable_reason || '后台未配置可用通道，或模型服务暂不可用'),
       provider: capability?.provider,
       capability,
     }];
@@ -576,11 +581,21 @@ export function buildVideoModelOptions(
 
 export function withCurrentVideoModelOption(
   options: readonly VideoModelOption[],
-  _currentModel: VideoModel,
-  _capabilities: readonly VideoCapabilityModelLike[] | null | undefined,
+  currentModel: VideoModel,
+  capabilities: readonly VideoCapabilityModelLike[] | null | undefined,
 ): VideoModelOption[] {
-  // Do not resurrect retired or unavailable models just because an older card
-  // still stores their internal key. VideoPage normalizes the active selection
-  // to the first usable option while preserving historical result metadata.
-  return [...options];
+  if (options.some(option => option.value === currentModel)) return [...options];
+  const capability = (capabilities || []).find(item => item.key === currentModel);
+  if (!capability || capability.published === false) return [...options];
+  const label = formatVideoModelOptionLabel(currentModel, capability);
+  return [{
+    value: currentModel,
+    label,
+    baseLabel: getModelDisplayName(currentModel),
+    runtimeLabel: formatVideoModelRuntimeLabel(capability),
+    available: false,
+    unavailableReason: String(capability.unavailable_reason || '当前模型暂不可用'),
+    provider: capability.provider,
+    capability,
+  }, ...options];
 }

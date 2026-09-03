@@ -26,6 +26,35 @@ describe('normalizeVideoMediaRef', () => {
 });
 
 describe('MiniMax submission validation', () => {
+    it('persists the Hailuo model identity and selected 6-second duration', async () => {
+        localStorage.setItem('auth_token', 'test-token');
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(
+            JSON.stringify({ task_id: 'task_minimax_6s' }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+        ));
+
+        await submitTask(
+            '/storage/frame.png',
+            null,
+            'move gently',
+            'MINI',
+            undefined,
+            undefined,
+            'single',
+            undefined,
+            { duration: 6, minimax_resolution: '768P' },
+        );
+
+        const [, options] = fetchSpy.mock.calls[0];
+        expect(JSON.parse(String(options?.body || '{}'))).toMatchObject({
+            task_type: 'minimax_i2v',
+            model: 'MINI',
+            duration: 6,
+            minimax_resolution: '768P',
+        });
+        fetchSpy.mockRestore();
+    });
+
     it('rejects an unsupported resolution and duration pair before calling the API', async () => {
         const fetchSpy = vi.spyOn(globalThis, 'fetch');
 

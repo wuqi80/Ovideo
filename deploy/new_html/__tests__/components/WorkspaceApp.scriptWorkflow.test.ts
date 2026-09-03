@@ -38,6 +38,7 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('const exportFileId = selectedFileId || activeScriptId');
     expect(source).toContain('filesRef.current.find(file => file.id === exportFileId)');
     expect(source).toContain('await activateWorkflowScript(exportFileId)');
+    expect(source).toContain('await syncStoryboardItems(\n            eid,\n            buildStoryboardDbPayload(exportableItems)');
     expect(source).toContain('preserve_existing_storyboards: true');
     expect(source).toContain('storyboard_items: []');
     expect(source).toContain("buildScriptAssetDescriptionRows(\n            'character'");

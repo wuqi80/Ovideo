@@ -89,6 +89,7 @@ async def start_episode_compose(
     user_id: str,
     selections: Optional[Any],
     audio_mode: str = "reference_dubbing",
+    timeline: Optional[Any] = None,
     *,
     episode_dao: Any,
     compose_service: Any = episode_compose_service,
@@ -96,13 +97,23 @@ async def start_episode_compose(
     project_id = await episode_dao.get_project_id(episode_id)
     if not project_id:
         raise EpisodeNotFound("Episode not found")
-    job = compose_service.start_compose(
-        episode_id,
-        user_id,
-        project_id,
-        selections,
-        audio_mode,
-    )
+    if timeline is None:
+        job = compose_service.start_compose(
+            episode_id,
+            user_id,
+            project_id,
+            selections,
+            audio_mode,
+        )
+    else:
+        job = compose_service.start_compose(
+            episode_id,
+            user_id,
+            project_id,
+            selections,
+            audio_mode,
+            timeline,
+        )
     return {
         "success": True,
         "status": job["status"],

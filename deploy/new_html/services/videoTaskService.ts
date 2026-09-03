@@ -181,6 +181,9 @@ export async function submitTask(
         const imageUrl = normalizeVideoMediaRef(imageFilename);
         requestData = {
             task_type: taskType,
+            // GenerateRequest 的通用默认值是 Wan2；显式记录前端模型，避免
+            // MiniMax 任务完成后在视频历史/卡片上被错误标记为 Wan 2.2。
+            model: 'MINI',
             first_frame_image: imageUrl,
             prompt: prompt,
             duration: minimaxParams.duration,

@@ -88,6 +88,26 @@ describe('video task reconciliation', () => {
     expect(result.resumable).toEqual([]);
   });
 
+  it('uses the MiniMax task route as the authoritative model and repairs a legacy Wan label', () => {
+    const result = reconcileActiveVideoTasks(groups, {
+      'group-2': {
+        state: 'done',
+        videos: ['/uploads/hailuo.mp4'],
+        videoGenerateTimes: [0],
+        videoModels: ['Wan2'],
+      },
+    }, [task({
+      task_id: 'legacy-minimax',
+      task_type: 'minimax_i2v',
+      status: 'completed',
+      data: { workspace_group_id: 'group-2', model: 'Wan2' },
+      result: { videos: [{ url: '/uploads/hailuo.mp4', generateTime: 36 }] },
+    })]);
+
+    expect(result.statuses['group-2'].videoModels).toEqual(['MINI']);
+    expect(result.statuses['group-2'].videoGenerateTimes).toEqual([36]);
+  });
+
   it('does not attach a task from another episode', () => {
     const result = reconcileActiveVideoTasks(groups, {}, [task({
       task_id: 'wrong-episode',

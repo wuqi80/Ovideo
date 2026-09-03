@@ -474,9 +474,66 @@ async def get_takes(episode_id: str) -> List[Dict[str, Any]]:
     return await _list_shot_takes(episode_id)
 
 
-async def _get_shots(episode_id: str, selections: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+def _normalize_editor_timeline(timeline: Optional[Any]) -> List[Dict[str, Any]]:
+    if not isinstance(timeline, list):
+        return []
+    normalized: List[Dict[str, Any]] = []
+    for index, raw in enumerate(timeline[:500]):
+        if not isinstance(raw, dict):
+            continue
+        segment_id = str(raw.get("segment_id") or "").strip()
+        if not segment_id:
+            continue
+        duration_ms = max(100, min(86_400_000, int(_finite_number(raw.get("duration_ms"), 100))))
+        normalized.append(
+            {
+                "clip_id": str(raw.get("clip_id") or f"{segment_id}-cut-{index + 1}"),
+                "segment_id": segment_id,
+                "start_ms": max(0, int(_finite_number(raw.get("start_ms")))),
+                "duration_ms": duration_ms,
+                "source_offset_ms": max(0, int(_finite_number(raw.get("source_offset_ms")))),
+                "_index": index,
+            }
+        )
+    return sorted(normalized, key=lambda item: (item["start_ms"], item["_index"]))
+
+
+async def _get_shots(
+    episode_id: str,
+    selections: Optional[Dict[str, str]] = None,
+    timeline: Optional[Any] = None,
+) -> List[Dict[str, Any]]:
     selected_segments = selections or {}
     shots = await _list_shot_takes(episode_id)
+    edited_timeline = _normalize_editor_timeline(timeline)
+    if edited_timeline:
+        take_rows: Dict[str, Dict[str, Any]] = {}
+        for shot in shots:
+            for take in shot.get("takes") or []:
+                take_rows[take["segment_id"]] = {
+                    "video_url": take["video_url"],
+                    "audio_url": shot.get("audio_url"),
+                    "audio_urls": shot.get("audio_urls") or ([shot["audio_url"]] if shot.get("audio_url") else []),
+                    "audio_segments": shot.get("audio_segments") or [],
+                    "sfx_audio_url": shot.get("sfx_audio_url"),
+                    "audio_ms": shot.get("audio_ms") or 0,
+                }
+        result: List[Dict[str, Any]] = []
+        for item in edited_timeline:
+            source = take_rows.get(item["segment_id"])
+            if not source:
+                continue
+            result.append(
+                {
+                    **source,
+                    "clip_id": item["clip_id"],
+                    "segment_id": item["segment_id"],
+                    "duration_ms": item["duration_ms"],
+                    "source_offset_ms": item["source_offset_ms"],
+                }
+            )
+        return result
+
     result: List[Dict[str, Any]] = []
     for shot in shots:
         if not shot["takes"]:
@@ -499,6 +556,14 @@ async def _get_shots(episode_id: str, selections: Optional[Dict[str, str]] = Non
     return result
 
 
+def _audio_trim_filter(source_offset: float, target_duration: float) -> str:
+    return (
+        f"atrim=start={source_offset:.3f}:"
+        f"end={source_offset + target_duration:.3f},"
+        "asetpts=PTS-STARTPTS,apad[a]"
+    )
+
+
 async def _compose(
     episode_id: str,
     user_id: str,
@@ -506,9 +571,14 @@ async def _compose(
     job: Dict[str, Any],
     selections: Optional[Dict[str, str]] = None,
     audio_mode: str = "reference_dubbing",
+    timeline: Optional[Any] = None,
 ) -> None:
     _ensure_media_tools()
-    shots = await _get_shots(episode_id, selections)
+    shots = (
+        await _get_shots(episode_id, selections, timeline)
+        if timeline is not None
+        else await _get_shots(episode_id, selections)
+    )
     job["total"] = len(shots)
     if not shots:
         raise RuntimeError("No video segments available for episode composition")
@@ -540,6 +610,16 @@ async def _compose(
             idx += 1
             clip_path = os.path.join(tmp, f"clip_{idx:03d}.mp4")
             video_duration = await _probe_dur(video_path)
+            source_offset = min(
+                max(0.0, _finite_number(row.get("source_offset_ms")) / 1000.0),
+                max(0.0, video_duration - 0.1),
+            )
+            edited_duration_ms = int(_finite_number(row.get("duration_ms")))
+            edited_duration = (
+                min(edited_duration_ms / 1000.0, max(0.1, video_duration - source_offset))
+                if edited_duration_ms > 0
+                else None
+            )
             audio_segments = row.get("audio_segments") or []
             ordered_parts: List[Dict[str, Any]] = []
             for segment in audio_segments:
@@ -609,7 +689,7 @@ async def _compose(
                 clip_path,
             ]
             if use_reference_audio:
-                target_duration = max(video_duration, audio_ms / 1000.0)
+                target_duration = edited_duration or max(video_duration, audio_ms / 1000.0)
                 if ordered_parts:
                     audio_inputs: List[str] = []
                     sequence_filters: List[str] = []
@@ -651,23 +731,30 @@ async def _compose(
                         )
                         sequence_filters.append(
                             "[voice][sfx]amix=inputs=2:duration=longest:"
-                            "dropout_transition=0,apad[a]"
+                            "dropout_transition=0[mixed]"
                         )
                     else:
-                        sequence_filters.append("[voice]apad[a]")
+                        sequence_filters.append("[voice]anull[mixed]")
+                    sequence_filters.append(
+                        f"[mixed]{_audio_trim_filter(source_offset, target_duration)}"
+                    )
                     audio_filter = ";".join(sequence_filters)
                 else:
                     audio_inputs = []
                     for audio_path in audio_paths:
                         audio_inputs.extend(["-i", audio_path])
                     if len(audio_paths) == 1:
-                        audio_filter = "[1:a]apad[a]"
+                        audio_filter = (
+                            f"[1:a]anull[mixed];"
+                            f"[mixed]{_audio_trim_filter(source_offset, target_duration)}"
+                        )
                     else:
                         padded = "".join(f"[{i}:a]apad[a{i}];" for i in range(1, len(audio_paths) + 1))
                         mix_inputs = "".join(f"[a{i}]" for i in range(1, len(audio_paths) + 1))
                         audio_filter = (
                             f"{padded}{mix_inputs}"
-                            f"amix=inputs={len(audio_paths)}:duration=longest:dropout_transition=0[a]"
+                            f"amix=inputs={len(audio_paths)}:duration=longest:dropout_transition=0[mixed];"
+                            f"[mixed]{_audio_trim_filter(source_offset, target_duration)}"
                         )
                 cmd = [
                     "ffmpeg",
@@ -675,6 +762,7 @@ async def _compose(
                     "-y",
                     "-loglevel",
                     "error",
+                    *( ["-ss", f"{source_offset:.3f}"] if source_offset > 0 else [] ),
                     "-i",
                     video_path,
                     *audio_inputs,
@@ -689,7 +777,7 @@ async def _compose(
                     *common,
                 ]
             else:
-                target_duration = video_duration or 5
+                target_duration = edited_duration or video_duration or 5
                 if video_has_audio:
                     cmd = [
                         "ffmpeg",
@@ -697,6 +785,7 @@ async def _compose(
                         "-y",
                         "-loglevel",
                         "error",
+                        *( ["-ss", f"{source_offset:.3f}"] if source_offset > 0 else [] ),
                         "-i",
                         video_path,
                         "-filter_complex",
@@ -716,6 +805,7 @@ async def _compose(
                         "-y",
                         "-loglevel",
                         "error",
+                        *( ["-ss", f"{source_offset:.3f}"] if source_offset > 0 else [] ),
                         "-i",
                         video_path,
                         "-f",
@@ -825,6 +915,7 @@ def start_compose(
     project_id: str,
     selections: Optional[Dict[str, str]] = None,
     audio_mode: str = "reference_dubbing",
+    timeline: Optional[Any] = None,
 ) -> Dict[str, Any]:
     current = _jobs.get(episode_id)
     if current and current.get("status") == "running":
@@ -852,6 +943,7 @@ def start_compose(
                 job,
                 selections,
                 normalized_audio_mode,
+                timeline,
             )
         except Exception as exc:
             job["status"] = "failed"

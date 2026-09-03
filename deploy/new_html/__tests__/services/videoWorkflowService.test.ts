@@ -185,6 +185,26 @@ describe('video workflow service', () => {
     expect(JSON.parse(opts.body)).toEqual({ audio_mode: 'video_original' });
   });
 
+  it('sends the edited cut list to episode composition', async () => {
+    const { startCompose } = await loadService();
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ status: 'running', total: 2, done: 0 }));
+    const timeline = [{
+      clip_id: 'seg_1-cut-2',
+      segment_id: 'seg_1',
+      start_ms: 0,
+      duration_ms: 1800,
+      source_offset_ms: 1200,
+    }];
+
+    await startCompose('ep_1', undefined, 'reference_dubbing', timeline);
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(JSON.parse(opts.body)).toEqual({
+      audio_mode: 'reference_dubbing',
+      timeline,
+    });
+  });
+
   it('loads episode compose status', async () => {
     const { getComposeStatus } = await loadService();
     mockFetch.mockResolvedValueOnce(mockJsonResponse({ status: 'done', total: 2, done: 2 }));

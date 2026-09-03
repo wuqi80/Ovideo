@@ -14,7 +14,10 @@ function createdAtValue(task: VideoTask): number {
   return Number.isFinite(value) ? value : 0;
 }
 
-function taskModel(task: VideoTask): VideoModel | undefined {
+export function getVideoTaskModel(task: VideoTask): VideoModel | undefined {
+  // task_type records the route that actually ran and is authoritative for
+  // legacy MiniMax tasks whose generic request schema filled model=Wan2.
+  if (['minimax_i2v', 'minimax_morph'].includes(String(task.task_type || '').toLowerCase())) return 'MINI';
   const raw = String(task.data?.model || '').trim() as VideoModel;
   return ALL_MODELS.includes(raw) ? raw : undefined;
 }
@@ -66,7 +69,7 @@ export function reconcileActiveVideoTasks(
   latestByGroup.forEach((task, uuid) => {
     const previous: TaskStatus = statuses[uuid] || {};
     const progress = Number(task.progress);
-    const model = taskModel(task) || previous.pendingVideoModel;
+    const model = getVideoTaskModel(task) || previous.pendingVideoModel;
     if (task.status === 'completed') {
       const previousVideos = previous.videos || [];
       const previousTimes = previous.videoGenerateTimes || [];
@@ -82,7 +85,14 @@ export function reconcileActiveVideoTasks(
       const models = [...previousModels];
       generated.forEach(video => {
         const normalized = video.url.split('?')[0];
-        if (videos.some(existing => String(existing).split('?')[0] === normalized)) return;
+        const existingIndex = videos.findIndex(existing => String(existing).split('?')[0] === normalized);
+        if (existingIndex >= 0) {
+          // Reconciliation also repairs legacy labels for results that were
+          // already restored from video_segments/session storage.
+          if (model) models[existingIndex] = model;
+          if (video.generateTime > 0) times[existingIndex] = video.generateTime;
+          return;
+        }
         videos.push(video.url);
         times.push(video.generateTime);
         models.push(model);

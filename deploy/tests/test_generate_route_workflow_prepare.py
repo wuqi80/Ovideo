@@ -301,6 +301,45 @@ async def test_generate_route_rejects_unauthorized_studio_scope_before_enqueue()
 
 
 @pytest.mark.asyncio
+async def test_generate_route_replaces_generic_five_second_default_with_hailuo_six_seconds():
+    async def require_auth():
+        return "u-test"
+
+    service = Mock()
+    service.submit = AsyncMock(return_value="minimax-6s")
+    task_service_module = Mock()
+    task_service_module.get.return_value = service
+    task_service_module.get_queue.return_value.get_queue_length = AsyncMock(return_value=0)
+
+    router = create_task_router(
+        require_auth_dependency=require_auth,
+        jwt_auth_module=Mock(),
+        task_service_module=task_service_module,
+        task_dao=Mock(),
+        file_dao=Mock(),
+        get_pubsub_redis_client=Mock(),
+        logger=Mock(),
+    )
+    create_generate_task = next(
+        route.endpoint
+        for route in router.routes
+        if getattr(route, "path", None) == "/api/generate"
+    )
+
+    await create_generate_task(
+        GenerateRequest(
+            task_type="minimax_i2v",
+            first_frame_image="/storage/frame.png",
+        ),
+        username="u-test",
+    )
+
+    submitted_data = service.submit.await_args.args[1]
+    assert submitted_data["duration"] == 6
+    assert submitted_data["minimax_resolution"] == "768P"
+
+
+@pytest.mark.asyncio
 async def test_generate_route_rejects_invalid_minimax_options_before_enqueue():
     async def require_auth():
         return "u-test"

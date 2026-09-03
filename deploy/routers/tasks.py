@@ -232,10 +232,20 @@ def create_task_router(
                 prepare_workflow = False
             if request.task_type in {"minimax_i2v", "minimax_morph"}:
                 try:
-                    normalize_minimax_generation_options(
-                        task_data.get("duration"),
+                    # GenerateRequest.duration 的跨模型默认值是 5 秒，但 Hailuo
+                    # 只接受 6/10 秒。未显式传时按 Hailuo 默认 6 秒，并把规范化
+                    # 结果真正写回任务数据，避免队列/worker 再读到通用的 5 秒。
+                    raw_duration = (
+                        task_data.get("duration")
+                        if "duration" in request.model_fields_set
+                        else None
+                    )
+                    duration, resolution = normalize_minimax_generation_options(
+                        raw_duration,
                         task_data.get("minimax_resolution"),
                     )
+                    task_data["duration"] = duration
+                    task_data["minimax_resolution"] = resolution
                 except ValueError as exc:
                     raise HTTPException(status_code=400, detail=str(exc)) from exc
             try:

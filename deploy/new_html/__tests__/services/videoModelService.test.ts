@@ -228,7 +228,7 @@ describe('buildVideoModelOptions', () => {
     expect(SELECTABLE_MODELS).not.toContain('一阶');
   });
 
-  it('keeps only available models and exposes one concise preferred runtime label', () => {
+  it('keeps published unavailable models disabled with a reason and exposes one concise preferred runtime label', () => {
     const options = buildVideoModelOptions([
       {
         key: 'LTXNode1',
@@ -299,11 +299,15 @@ describe('buildVideoModelOptions', () => {
       'MiniMaxH3',
       'MiniMaxH3Fast',
       'MiniMaxH3Mini',
+      'Seedance2',
       'Seedance2Mini',
       'MINI',
       'HappyHorse',
     ]);
-    expect(options.every(option => option.available)).toBe(true);
+    expect(options.find(option => option.value === 'Seedance2')).toMatchObject({
+      available: false,
+      unavailableReason: '后台未配置可用通道，或模型服务暂不可用',
+    });
     expect(options.some(option => option.label.includes('当前不可用'))).toBe(false);
     expect(options.some(option => option.label.includes('MiniMax H3'))).toBe(true);
     expect(options.some(option => option.label.includes('Seedance 2.0'))).toBe(true);
@@ -386,7 +390,7 @@ describe('buildVideoModelOptions', () => {
     ]);
   });
 
-  it('does not resurrect the current legacy or unavailable model', () => {
+  it('keeps the current published unavailable model visible and disabled', () => {
     const options = buildVideoModelOptions([
       {
         key: 'HappyHorse',
@@ -407,6 +411,10 @@ describe('buildVideoModelOptions', () => {
       },
     ]);
 
-    expect(withCurrent.map(option => option.value)).toEqual(['HappyHorse']);
+    expect(withCurrent.map(option => option.value)).toEqual(['Seedance2', 'HappyHorse']);
+    expect(withCurrent[0]).toMatchObject({
+      available: false,
+      unavailableReason: '当前模型暂不可用',
+    });
   });
 });

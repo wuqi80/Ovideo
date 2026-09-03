@@ -21,7 +21,7 @@ import { deriveScriptStagesFromPersisted } from './utils/scriptStageDerivation';
 import { listEpisodeScripts, createEpisodeScript, updateEpisodeScriptById, deleteEpisodeScript, listEpisodeScriptSegments, batchSaveScriptSegments, getScriptConversation, createScriptMessage, updateScriptMessage, createScriptVersion, selectScriptVersion, confirmScriptVersion, rejectScriptVersion, updateScriptVersionMetadata } from './services/scriptTimelineService';
 import { assertEnoughCredits, consumeCredits, estimateTextTokens } from './services/creditService';
 import { exportScript, deleteStoryboardItem } from './services/storyboardMutationService';
-import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
+import { batchCreateStoryboardItems, getEpisodeScript, updateEpisodeScript, getStoryboardItems, syncStoryboardItems, updateStoryboardItem } from './services/episodeDataService';
 import { getAuthToken } from './services/httpClient';
 import { useScriptModelOptions } from './hooks/useScriptModelOptions';
 import {
@@ -3251,6 +3251,14 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             await activateWorkflowScript(exportFileId);
           }
           await saveEpisodeToBackend();
+          // 导出是进入素材页的明确提交点。这里必须同步全部现有镜头，而不能只依赖
+          // 编辑时未等待的单条 PUT 或 saveEpisodeToBackend 的“仅新增”逻辑，否则
+          // bound_assets 会保留上一个版本，导致镜头继续绑定旧场景/角色/道具。
+          await syncStoryboardItems(
+            eid,
+            buildStoryboardDbPayload(exportableItems),
+            workflowFile.id,
+          );
           const charSet = new Set<string>(workflowFile.extractedCharacters || []);
           const sceneSet = new Set<string>(workflowFile.extractedScenes || []);
           const propSet = new Set<string>(workflowFile.extractedProps || []);

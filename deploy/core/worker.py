@@ -1661,6 +1661,45 @@ class Worker:
             file_role = task_data.get('file_role') or 'video'
             project_id = task_data.get('project_id')
 
+            # Probe the downloaded media once so downstream composition uses the
+            # real clip length.  If ffprobe is unavailable, preserve the duration
+            # requested from the provider instead of leaving video_segments NULL
+            # (the frontend historically interpreted NULL as a hard-coded 5s).
+            requested_duration_seconds = None
+            for duration_key in ('duration', 'duration_seconds'):
+                try:
+                    duration_value = float(task_data.get(duration_key) or 0)
+                except (TypeError, ValueError):
+                    duration_value = 0
+                if duration_value > 0:
+                    requested_duration_seconds = duration_value
+                    break
+            actual_duration_seconds = None
+            try:
+                from file_optimization import FileOptimizationService
+                actual_duration_seconds = await asyncio.to_thread(
+                    FileOptimizationService._probe_video_duration,
+                    str(local_path),
+                )
+            except Exception as duration_error:
+                logger.debug(f"视频时长探测失败，将使用请求时长: {duration_error}")
+            resolved_duration_seconds = actual_duration_seconds or requested_duration_seconds
+            resolved_duration_ms = (
+                max(1, int(round(resolved_duration_seconds * 1000)))
+                if resolved_duration_seconds
+                else None
+            )
+
+            task_type = str(task.task_type if task else source or '').strip().lower()
+            persisted_model = (
+                'MINI'
+                if task_type in {'minimax_i2v', 'minimax_morph'}
+                else task_data.get('model')
+                or task_data.get('model_name')
+                or task_data.get('sub_model')
+                or task_type
+            )
+
             # 保存到数据库
             file_record = None
             if DB_AVAILABLE:
@@ -1680,7 +1719,8 @@ class Worker:
                             'source': source,
                             'task_type': task.task_type if task else source,
                             'prompt': task_data.get('prompt') or task_data.get('text_prompt') or '',
-                            'model': task_data.get('model') or task_data.get('model_name') or task_data.get('sub_model') or (task.task_type if task else source),
+                            'model': persisted_model,
+                            'duration_seconds': resolved_duration_seconds,
                             'project_id': project_id,
                             'episode_id': task_data.get('episode_id'),
                         },
@@ -1701,6 +1741,22 @@ class Worker:
                             logger.info(f"🔁 legacy 字段已同步: {entity_type}/{entity_id}/{file_role}")
                         except Exception as e:
                             logger.warning(f"⚠️ legacy 字段同步失败（不致命）: {e}")
+
+                    # URL 同步不会写入时长/模型。完成时一并回写，避免
+                    # MiniMax 视频被旧的 Wan2 标签覆盖，或 6s 视频被当成 5s。
+                    if entity_type == 'video_segment' and entity_id:
+                        try:
+                            from dao.creative.video_segment import VideoSegmentDAO
+                            await VideoSegmentDAO.update(
+                                entity_id,
+                                video_url=file_url,
+                                model=persisted_model,
+                                duration_ms=resolved_duration_ms,
+                                task_id=task_id,
+                                status='completed',
+                            )
+                        except Exception as segment_error:
+                            logger.warning(f"⚠️ video_segment 生成元数据同步失败（不致命）: {segment_error}")
 
                     # 2026-05-26 Slice 1 收尾：同步进通用素材库（best-effort）
                     try:
@@ -1769,7 +1825,10 @@ class Worker:
                 'url': file_url,
                 'thumbnail_url': thumb_url,
                 'size': len(video_content),
-                'file_path': str(local_path)
+                'file_path': str(local_path),
+                'duration_seconds': resolved_duration_seconds,
+                'duration_ms': resolved_duration_ms,
+                'model': persisted_model,
             }
 
         except Exception as e:

@@ -226,6 +226,50 @@ async def test_minimax_task_uses_model_name_duration_and_success_status(mock_wor
     mock_worker.task_queue.complete_task.assert_awaited_once()
 
 
+async def test_external_minimax_video_persists_model_and_requested_duration(mock_worker, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    task = Task(
+        task_id='m-save-6',
+        task_type='minimax_i2v',
+        data={
+            'entity_type': 'video_segment',
+            'entity_id': 'seg-6',
+            'file_role': 'video',
+            'episode_id': 'ep-1',
+            'model': 'Wan2',  # legacy generic-schema contamination
+            'duration': 6,
+        },
+        priority=2,
+        user_id='u1',
+    )
+    fake_file_record = {'file_id': 'file-6', 'user_id': 'u1', 'file_type': 'video'}
+
+    with patch('core.worker.DB_AVAILABLE', True), \
+         patch('core.worker.FileDAO') as fake_file_dao, \
+         patch('file_optimization.FileOptimizationService._probe_video_duration', return_value=None), \
+         patch('file_optimization.FileOptimizationService.create_video_thumbnail', new=AsyncMock(return_value={'success': False})), \
+         patch('file_service._sync_legacy_on_file_create', new=AsyncMock()), \
+         patch('dao.creative.video_segment.VideoSegmentDAO.update', new=AsyncMock()) as update_segment, \
+         patch('media_library_service.create_from_file', new=AsyncMock()):
+        fake_file_dao.create_file = AsyncMock(return_value=fake_file_record)
+        saved = await mock_worker._save_external_video(b'video-bytes', task, 'minimax')
+
+    create_kwargs = fake_file_dao.create_file.await_args.kwargs
+    assert create_kwargs['metadata']['model'] == 'MINI'
+    assert create_kwargs['metadata']['duration_seconds'] == 6
+    update_segment.assert_awaited_once_with(
+        'seg-6',
+        video_url=saved['url'],
+        model='MINI',
+        duration_ms=6000,
+        task_id='m-save-6',
+        status='completed',
+    )
+    assert saved['duration_seconds'] == 6
+    assert saved['duration_ms'] == 6000
+    assert saved['model'] == 'MINI'
+
+
 def test_minimax_video_token_plan_2056_message_is_actionable():
     from services.api_provider_runtime import vendor_user_facing_error
 

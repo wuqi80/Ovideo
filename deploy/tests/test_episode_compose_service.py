@@ -75,6 +75,81 @@ def test_global_audio_timeline_disables_fades_for_sound_effects():
     assert timeline["volume"] == 1
 
 
+def test_editor_timeline_normalizes_order_bounds_and_source_offsets():
+    normalized = episode_compose_service._normalize_editor_timeline(
+        [
+            {"segment_id": "seg_2", "start_ms": 5000, "duration_ms": 0},
+            {
+                "clip_id": "seg_1-cut",
+                "segment_id": "seg_1",
+                "start_ms": 0,
+                "duration_ms": 1800,
+                "source_offset_ms": 1200,
+            },
+            {"segment_id": "", "duration_ms": 1000},
+        ]
+    )
+
+    assert normalized == [
+        {
+            "clip_id": "seg_1-cut",
+            "segment_id": "seg_1",
+            "start_ms": 0,
+            "duration_ms": 1800,
+            "source_offset_ms": 1200,
+            "_index": 1,
+        },
+        {
+            "clip_id": "seg_2-cut-1",
+            "segment_id": "seg_2",
+            "start_ms": 5000,
+            "duration_ms": 100,
+            "source_offset_ms": 0,
+            "_index": 0,
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_shots_uses_edited_cut_order_and_allows_repeated_source(monkeypatch):
+    async def fake_list_shot_takes(_episode_id):
+        return [
+            {
+                "item_id": "shot_1",
+                "audio_url": "/storage/audio/one.mp3",
+                "audio_urls": ["/storage/audio/one.mp3"],
+                "audio_segments": [],
+                "sfx_audio_url": None,
+                "audio_ms": 4000,
+                "takes": [{"segment_id": "seg_1", "video_url": "/storage/video/one.mp4"}],
+            },
+            {
+                "item_id": "shot_2",
+                "audio_url": None,
+                "audio_urls": [],
+                "audio_segments": [],
+                "sfx_audio_url": None,
+                "audio_ms": 0,
+                "takes": [{"segment_id": "seg_2", "video_url": "/storage/video/two.mp4"}],
+            },
+        ]
+
+    monkeypatch.setattr(episode_compose_service, "_list_shot_takes", fake_list_shot_takes)
+    timeline = [
+        {"clip_id": "two", "segment_id": "seg_2", "start_ms": 0, "duration_ms": 900},
+        {"clip_id": "one-b", "segment_id": "seg_1", "start_ms": 900, "duration_ms": 1200, "source_offset_ms": 2000},
+        {"clip_id": "one-a", "segment_id": "seg_1", "start_ms": 2100, "duration_ms": 1000},
+        {"clip_id": "foreign", "segment_id": "not-in-episode", "start_ms": 0, "duration_ms": 5000},
+    ]
+
+    shots = await episode_compose_service._get_shots("ep_1", timeline=timeline)
+
+    assert [shot["clip_id"] for shot in shots] == ["two", "one-b", "one-a"]
+    assert shots[1]["source_offset_ms"] == 2000
+    assert shots[1]["duration_ms"] == 1200
+    assert shots[1]["audio_url"] == "/storage/audio/one.mp3"
+
+
 @pytest.mark.asyncio
 async def test_mix_global_audio_tracks_uses_timeline_trim_delay_and_bgm_fades(
     monkeypatch,
@@ -589,15 +664,16 @@ async def test_compose_respects_explicit_video_original_mode(monkeypatch, tmp_pa
     async def fake_video_size(_path):
         return None
 
-    async def fake_get_shots(_episode_id, _selections=None):
-        return [
-            {
-                "video_url": "/storage/video/one.mp4",
-                "audio_url": "/storage/audio/reference.mp3",
-                "audio_urls": ["/storage/audio/reference.mp3"],
-                "audio_ms": 4000,
-            }
-        ]
+    async def fake_get_shots(_episode_id, _selections=None, timeline=None):
+        row = {
+            "video_url": "/storage/video/one.mp4",
+            "audio_url": "/storage/audio/reference.mp3",
+            "audio_urls": ["/storage/audio/reference.mp3"],
+            "audio_ms": 4000,
+        }
+        if timeline:
+            row.update({"source_offset_ms": 1250, "duration_ms": 1750})
+        return [row]
 
     async def fake_create_final_cut_records(**_kwargs):
         return None
@@ -638,8 +714,24 @@ async def test_compose_respects_explicit_video_original_mode(monkeypatch, tmp_pa
     )
     reference_cmd = commands[0]
     reference_filter = reference_cmd[reference_cmd.index("-filter_complex") + 1]
-    assert "[1:a]apad[a]" in reference_filter
+    assert "[1:a]anull[mixed]" in reference_filter
+    assert "atrim=start=0.000:end=4.000" in reference_filter
     assert os.path.normpath(str(reference_audio)) in [os.path.normpath(str(part)) for part in reference_cmd]
+
+    commands.clear()
+    await episode_compose_service._compose(
+        "ep_1",
+        "user_1",
+        "proj_1",
+        {},
+        audio_mode="reference_dubbing",
+        timeline=[{"segment_id": "seg_1", "duration_ms": 1750, "source_offset_ms": 1250}],
+    )
+    trimmed_cmd = commands[0]
+    trimmed_filter = trimmed_cmd[trimmed_cmd.index("-filter_complex") + 1]
+    assert trimmed_cmd[trimmed_cmd.index("-ss") + 1] == "1.250"
+    assert trimmed_cmd[trimmed_cmd.index("-t") + 1] == "1.75"
+    assert "atrim=start=1.250:end=3.000" in trimmed_filter
 
 
 @pytest.mark.asyncio

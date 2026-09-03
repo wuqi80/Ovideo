@@ -47,4 +47,22 @@ describe('EnhancePage compose audio mode', () => {
     expect(source).toContain('aria-live="polite"');
     expect(source).toContain('setEnhanceError(`提交');
   });
+
+  it('provides practical timeline editing controls and server-backed saving', () => {
+    expect(source).toContain('撤销（Ctrl+Z）');
+    expect(source).toContain('重做（Ctrl+Y / Ctrl+Shift+Z）');
+    expect(source).toContain('在播放头处切分');
+    expect(source).toContain('复制选中片段');
+    expect(source).toContain('磁吸到播放头和片段边缘');
+    expect(source).toContain("ripple: clip.type === 'video'");
+    expect(source).toContain('拖动裁剪入点');
+    expect(source).toContain('拖动裁剪出点');
+    expect(source).toContain('createTimelineTrack');
+    expect(source).toContain('updateTimelineTrack');
+  });
+
+  it('composes from the current edited cut list', () => {
+    expect(source).toContain('const timeline = composeTimelineItems(clipsRef.current)');
+    expect(source).toContain('startCompose(episodeId, undefined, composeAudioMode, timeline)');
+  });
 });

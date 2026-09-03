@@ -63,6 +63,7 @@ class FakeComposeService:
         project_id: str,
         selections,
         audio_mode="reference_dubbing",
+        timeline=None,
     ):
         cls.started = {
             "episode_id": episode_id,
@@ -71,6 +72,8 @@ class FakeComposeService:
             "selections": selections,
             "audio_mode": audio_mode,
         }
+        if timeline is not None:
+            cls.started["timeline"] = timeline
         return {
             "status": "running",
             "total": 3,
@@ -211,6 +214,30 @@ async def test_start_episode_compose_preserves_explicit_video_original_mode():
 
     assert result["audio_mode"] == "video_original"
     assert FakeComposeService.started["audio_mode"] == "video_original"
+
+
+async def test_start_episode_compose_forwards_edited_timeline():
+    timeline = [
+        {
+            "clip_id": "seg_1-cut-2",
+            "segment_id": "seg_1",
+            "start_ms": 0,
+            "duration_ms": 1800,
+            "source_offset_ms": 1200,
+        }
+    ]
+
+    await episode_video_service.start_episode_compose(
+        "ep_1",
+        "user_1",
+        None,
+        "reference_dubbing",
+        timeline,
+        episode_dao=FakeEpisodeDAO,
+        compose_service=FakeComposeService,
+    )
+
+    assert FakeComposeService.started["timeline"] == timeline
 
 
 async def test_start_episode_compose_raises_when_episode_missing():

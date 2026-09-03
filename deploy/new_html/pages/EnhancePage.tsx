@@ -3,6 +3,7 @@ import {
   Wand2, MonitorPlay, Zap, Mic2, Volume2, Film, Play, Pause,
   Scissors, Trash2, Music, ZoomIn, ZoomOut, GripHorizontal,
   Maximize, Loader, CheckCircle, Download, RefreshCw, Sparkles, AlignStartVertical,
+  Undo2, Redo2, Copy, Magnet, Save, SkipBack, SkipForward, Lock, Unlock,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
 import type { VideoSegment, StoryboardItemDB, AudioTrack } from '../types';
@@ -28,7 +29,21 @@ import { updateAudioTrack } from '../services/audioGenerationService';
 import LazyVideo from '../components/LazyVideo';
 import { MusicModal } from '../components/audio/MusicModal';
 import { SfxModal } from '../components/audio/SfxModal';
-import { withEntityFileVideoFallbacks } from '../utils/enhanceSourceClips';
+import { withEntityFileVideoFallbacks, type EnhanceMediaClip } from '../utils/enhanceSourceClips';
+import {
+  cloneEnhanceClips,
+  composeTimelineItems,
+  deleteTimelineClip,
+  duplicateTimelineClip,
+  formatTimelineTime,
+  moveTimelineClip,
+  restoreEnhanceTimeline,
+  serializeEnhanceTimeline,
+  splitTimelineClip,
+  trimTimelineClip,
+  type PersistedEnhanceTimelineItem,
+} from '../utils/enhanceTimelineEditor';
+import { createTimelineTrack, getTimelineTracks, updateTimelineTrack } from '../services/scriptTimelineService';
 import {
   clusterNodePreferenceId,
   DEFAULT_GPU_NODE_NAME,
@@ -41,26 +56,9 @@ import {
 import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 import { InlineCreditEstimate } from '../components/InlineCreditEstimate';
 
-interface MediaClip {
-  id: string;
-  url: string;
-  thumbnailUrl?: string;
-  referenceImageUrl?: string;
-  model?: string;
-  comfyFilename?: string;
-  sourceLabel?: string;
-  audioKind?: 'voice' | 'bgm' | 'sfx';
-  audioTrackId?: string;
-  sourceDuration?: number;
-  volume?: number;
-  fadeIn?: number;
-  fadeOut?: number;
-  startTime: number;
-  duration: number;
-  sourceOffset: number;
-  type: 'video' | 'audio';
-  settings?: { upscale: boolean; interpolate: boolean; lipSync: boolean };
-}
+type MediaClip = EnhanceMediaClip;
+
+const ENHANCE_TIMELINE_TRACK_NAME = '优化合成时间线';
 
 type EnhancementKind = 'dub' | 'upscale' | 'interpolate' | 'lipSync';
 
@@ -147,6 +145,7 @@ export function buildEnhanceSourceClips(
       }
       allClips.push({
         id: seg.segmentId || `vid_${i}`,
+        sourceId: seg.segmentId || `vid_${i}`,
         url: videoUrl,
         thumbnailUrl: seg.thumbnailUrl ? secureMediaUrl(seg.thumbnailUrl) : undefined,
         referenceImageUrl: storyboard?.generatedImageUrl
@@ -155,6 +154,7 @@ export function buildEnhanceSourceClips(
         model: seg.model,
         startTime: videoTime,
         duration: dur,
+        sourceDuration: dur,
         sourceOffset: 0,
         type: 'video',
         settings: { upscale: false, interpolate: false, lipSync: false },
@@ -336,6 +336,19 @@ export const EnhancePage: React.FC = () => {
   const [clips, setClips] = useState<MediaClip[]>([]);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [snapGuide, setSnapGuide] = useState<number | null>(null);
+  const [timelineReady, setTimelineReady] = useState(false);
+  const [timelineRevision, setTimelineRevision] = useState(0);
+  const [timelineSaveState, setTimelineSaveState] = useState<'saved' | 'saving' | 'unsaved' | 'error'>('saved');
+  const [undoCount, setUndoCount] = useState(0);
+  const [redoCount, setRedoCount] = useState(0);
+  const [trackState, setTrackState] = useState<Record<'video' | 'voice' | 'bgm' | 'sfx', { locked: boolean }>>({
+    video: { locked: false },
+    voice: { locked: false },
+    bgm: { locked: false },
+    sfx: { locked: false },
+  });
   const [showMusicModal, setShowMusicModal] = useState(false);
   const [showSfxModal, setShowSfxModal] = useState(false);
 
@@ -409,17 +422,6 @@ export const EnhancePage: React.FC = () => {
       if (s.status === 'running') composeTimerRef.current = window.setTimeout(pollCompose, 4000);
     }).catch(() => {});
   }, [episodeId]);
-  const handleCompose = useCallback(async () => {
-    if (!episodeId) { alert('未找到当前集'); return; }
-    try {
-      const s = await startCompose(episodeId, undefined, composeAudioMode);
-      setCompose({ ...s, status: (s.status as any) || 'running' });
-      if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
-      composeTimerRef.current = window.setTimeout(pollCompose, 3000);
-    } catch (e: any) {
-      setCompose({ status: 'failed', total: 0, done: 0, error: e?.message || '启动失败' });
-    }
-  }, [episodeId, pollCompose, composeAudioMode]);
   useEffect(() => () => { if (composeTimerRef.current) clearTimeout(composeTimerRef.current); }, []);
   // 进入页面时恢复正在进行/已完成的合成状态
   useEffect(() => {
@@ -441,6 +443,55 @@ export const EnhancePage: React.FC = () => {
   const audioElementRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const playTimerRef = useRef<number | null>(null);
   const clipScopeRef = useRef('');
+  const persistedTimelineItemsRef = useRef<PersistedEnhanceTimelineItem[] | null>(null);
+  const timelineTrackIdRef = useRef<string | null>(null);
+  const timelineSaveInFlightRef = useRef<Promise<void> | null>(null);
+  const clipsRef = useRef<MediaClip[]>([]);
+  const undoStackRef = useRef<MediaClip[][]>([]);
+  const redoStackRef = useRef<MediaClip[][]>([]);
+
+  useEffect(() => {
+    clipsRef.current = clips;
+  }, [clips]);
+
+  useEffect(() => {
+    let active = true;
+    setTimelineReady(false);
+    timelineTrackIdRef.current = null;
+    setTimelineSaveState('saved');
+    persistedTimelineItemsRef.current = null;
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setUndoCount(0);
+    setRedoCount(0);
+    if (!episodeId) {
+      setTimelineReady(true);
+      return () => { active = false; };
+    }
+    getTimelineTracks(episodeId)
+      .then(response => {
+        if (!active) return;
+        const tracks = Array.isArray(response?.tracks) ? response.tracks : [];
+        const track = tracks.find((item: any) => (
+          (item.track_name ?? item.trackName) === ENHANCE_TIMELINE_TRACK_NAME
+        ));
+        if (track) {
+          const trackId = String(track.track_id ?? track.trackId ?? '');
+          timelineTrackIdRef.current = trackId;
+          persistedTimelineItemsRef.current = Array.isArray(track.items)
+            ? track.items as PersistedEnhanceTimelineItem[]
+            : [];
+        }
+      })
+      .catch(error => {
+        console.warn('[EnhancePage] timeline load failed:', error);
+        setTimelineSaveState('error');
+      })
+      .finally(() => {
+        if (active) setTimelineReady(true);
+      });
+    return () => { active = false; };
+  }, [episodeId]);
 
   useEffect(() => {
     let active = true;
@@ -487,18 +538,33 @@ export const EnhancePage: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!storyboardAudioLoaded) return;
+    if (!storyboardAudioLoaded || !timelineReady) return;
     const sourceClips = [
       ...buildEnhanceSourceClips(enhanceVideoSegments, storyboardAudioItems, audioTracks),
       ...actorDubbingClips,
     ];
-    if (sourceClips.length === 0) return;
-    setClips(prev => mergeSourceClips(prev, sourceClips));
-    setSelectedClipId(prev => {
-      if (prev && sourceClips.some(c => c.id === prev)) return prev;
-      return sourceClips.find(c => c.type === 'video')?.id ?? sourceClips[0]?.id ?? null;
+    if (sourceClips.length === 0) {
+      setClips([]);
+      return;
+    }
+    setClips(prev => {
+      const merged = mergeSourceClips(prev, sourceClips);
+      const draft = persistedTimelineItemsRef.current;
+      if (!draft) return merged;
+      const restored = restoreEnhanceTimeline(sourceClips, draft);
+      const restoredVideos = restored.filter(clip => clip.type === 'video');
+      return [...restoredVideos, ...merged.filter(clip => clip.type === 'audio')];
     });
-  }, [enhanceVideoSegments, storyboardAudioItems, audioTracks, actorDubbingClips, storyboardAudioLoaded]);
+    setSelectedClipId(prev => {
+      const availableIds = new Set([
+        ...sourceClips.map(clip => clip.id),
+        ...(persistedTimelineItemsRef.current || []).map(item => item.clipId).filter(Boolean),
+      ]);
+      if (prev && availableIds.has(prev)) return prev;
+      const draftFirstId = persistedTimelineItemsRef.current?.find(item => item.kind === 'video')?.clipId;
+      return draftFirstId ?? sourceClips.find(c => c.type === 'video')?.id ?? sourceClips[0]?.id ?? null;
+    });
+  }, [enhanceVideoSegments, storyboardAudioItems, audioTracks, actorDubbingClips, storyboardAudioLoaded, timelineReady, episodeId]);
 
   useEffect(() => {
     const scope = episodeId || '';
@@ -507,6 +573,7 @@ export const EnhancePage: React.FC = () => {
       setSelectedClipId(null);
       setCurrentTime(0);
       setPlaying(false);
+      persistedTimelineItemsRef.current = null;
     }
     clipScopeRef.current = scope;
   }, [episodeId]);
@@ -567,6 +634,123 @@ export const EnhancePage: React.FC = () => {
     () => Math.max(10, videoDuration, ...clips.map(c => c.startTime + c.duration), currentTime + 1),
     [clips, currentTime, videoDuration]
   );
+  const knownVideoSourceIds = useMemo(
+    () => enhanceVideoSegments
+      .filter(segment => Boolean(segment.segmentId && segment.videoUrl))
+      .map(segment => segment.segmentId),
+    [enhanceVideoSegments],
+  );
+
+  const markTimelineChanged = useCallback((next: MediaClip[]) => {
+    clipsRef.current = next;
+    persistedTimelineItemsRef.current = serializeEnhanceTimeline(next, knownVideoSourceIds);
+    setClips(next);
+    setTimelineSaveState('unsaved');
+    setTimelineRevision(revision => revision + 1);
+  }, [knownVideoSourceIds]);
+
+  const commitTimeline = useCallback((update: (current: MediaClip[]) => MediaClip[]) => {
+    const current = clipsRef.current;
+    const next = update(cloneEnhanceClips(current));
+    if (next === current || JSON.stringify(next) === JSON.stringify(current)) return false;
+    undoStackRef.current = [...undoStackRef.current.slice(-79), cloneEnhanceClips(current)];
+    redoStackRef.current = [];
+    setUndoCount(undoStackRef.current.length);
+    setRedoCount(0);
+    markTimelineChanged(next);
+    return true;
+  }, [markTimelineChanged]);
+
+  const commitPreviewTimeline = useCallback((before: MediaClip[]) => {
+    const current = clipsRef.current;
+    if (JSON.stringify(before) === JSON.stringify(current)) return;
+    undoStackRef.current = [...undoStackRef.current.slice(-79), cloneEnhanceClips(before)];
+    redoStackRef.current = [];
+    setUndoCount(undoStackRef.current.length);
+    setRedoCount(0);
+    markTimelineChanged(current);
+  }, [markTimelineChanged]);
+
+  const undoTimeline = useCallback(() => {
+    const previous = undoStackRef.current.pop();
+    if (!previous) return;
+    redoStackRef.current.push(cloneEnhanceClips(clipsRef.current));
+    setUndoCount(undoStackRef.current.length);
+    setRedoCount(redoStackRef.current.length);
+    markTimelineChanged(cloneEnhanceClips(previous));
+  }, [markTimelineChanged]);
+
+  const redoTimeline = useCallback(() => {
+    const next = redoStackRef.current.pop();
+    if (!next) return;
+    undoStackRef.current.push(cloneEnhanceClips(clipsRef.current));
+    setUndoCount(undoStackRef.current.length);
+    setRedoCount(redoStackRef.current.length);
+    markTimelineChanged(cloneEnhanceClips(next));
+  }, [markTimelineChanged]);
+
+  const saveTimelineNow = useCallback(async () => {
+    if (!episodeId || !timelineReady) return;
+    if (timelineSaveInFlightRef.current) {
+      await timelineSaveInFlightRef.current;
+    }
+    const items = serializeEnhanceTimeline(clipsRef.current, knownVideoSourceIds);
+    persistedTimelineItemsRef.current = items;
+    setTimelineSaveState('saving');
+    const saveTask = (async () => {
+      if (timelineTrackIdRef.current) {
+        await updateTimelineTrack(timelineTrackIdRef.current, { items });
+        return;
+      }
+      const response = await createTimelineTrack(episodeId, {
+        track_type: 'video',
+        track_name: ENHANCE_TIMELINE_TRACK_NAME,
+        sort_order: 0,
+        items,
+      });
+      const createdId = String(response?.track?.track_id ?? response?.track?.trackId ?? '');
+      if (createdId) {
+        timelineTrackIdRef.current = createdId;
+      }
+    })();
+    timelineSaveInFlightRef.current = saveTask;
+    try {
+      await saveTask;
+      setTimelineSaveState('saved');
+    } catch (saveError) {
+      console.warn('[EnhancePage] timeline save failed:', saveError);
+      setTimelineSaveState('error');
+      throw saveError;
+    } finally {
+      if (timelineSaveInFlightRef.current === saveTask) {
+        timelineSaveInFlightRef.current = null;
+      }
+    }
+  }, [episodeId, knownVideoSourceIds, timelineReady]);
+
+  useEffect(() => {
+    if (timelineRevision <= 0 || !episodeId || !timelineReady) return;
+    const timer = window.setTimeout(() => {
+      void saveTimelineNow().catch(() => {});
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [episodeId, saveTimelineNow, timelineReady, timelineRevision]);
+
+  const handleCompose = useCallback(async () => {
+    if (!episodeId) { alert('未找到当前集'); return; }
+    const timeline = composeTimelineItems(clipsRef.current);
+    if (timeline.length === 0) { alert('时间线上没有可合成的视频片段'); return; }
+    try {
+      await saveTimelineNow();
+      const s = await startCompose(episodeId, undefined, composeAudioMode, timeline);
+      setCompose({ ...s, status: (s.status as any) || 'running' });
+      if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
+      composeTimerRef.current = window.setTimeout(pollCompose, 3000);
+    } catch (e: any) {
+      setCompose({ status: 'failed', total: 0, done: 0, error: e?.message || '启动失败' });
+    }
+  }, [episodeId, pollCompose, composeAudioMode, saveTimelineNow]);
+
   const modalScript = useMemo(() => ({
     adaptedScript: storyboardAudioItems
       .slice()
@@ -668,31 +852,37 @@ export const EnhancePage: React.FC = () => {
 
   const handleSplit = useCallback(() => {
     if (!selectedClipId) return;
-    const clipIdx = clips.findIndex(c => c.id === selectedClipId);
-    if (clipIdx === -1) return;
-    const clip = clips[clipIdx];
-    if (currentTime > clip.startTime && currentTime < clip.startTime + clip.duration) {
-      const splitPoint = currentTime - clip.startTime;
-      const c1 = { ...clip, duration: splitPoint };
-      const c2 = {
-        ...clip,
-        id: `${clip.id}_s_${Date.now()}`,
-        startTime: currentTime,
-        sourceOffset: clip.sourceOffset + splitPoint,
-        duration: clip.duration - splitPoint,
-      };
-      const next = [...clips];
-      next.splice(clipIdx, 1, c1, c2);
-      setClips(next);
-      setSelectedClipId(c2.id);
+    const clip = clipsRef.current.find(item => item.id === selectedClipId);
+    if (!clip) return;
+    const trackKey = clip.type === 'video' ? 'video' : (clip.audioKind || 'voice');
+    if (trackState[trackKey].locked) return;
+    const nextId = `${clip.sourceId || clip.id}_cut_${Date.now()}`;
+    if (commitTimeline(current => splitTimelineClip(current, selectedClipId, currentTime, nextId))) {
+      setSelectedClipId(nextId);
     }
-  }, [selectedClipId, clips, currentTime]);
+  }, [commitTimeline, currentTime, selectedClipId, trackState]);
 
   const handleDelete = useCallback(() => {
     if (!selectedClipId) return;
-    setClips(prev => prev.filter(c => c.id !== selectedClipId));
+    const clip = clipsRef.current.find(item => item.id === selectedClipId);
+    if (!clip) return;
+    const trackKey = clip.type === 'video' ? 'video' : (clip.audioKind || 'voice');
+    if (trackState[trackKey].locked) return;
+    commitTimeline(current => deleteTimelineClip(current, selectedClipId, clip.type === 'video'));
     setSelectedClipId(null);
-  }, [selectedClipId]);
+  }, [commitTimeline, selectedClipId, trackState]);
+
+  const handleDuplicate = useCallback(() => {
+    if (!selectedClipId) return;
+    const clip = clipsRef.current.find(item => item.id === selectedClipId);
+    if (!clip) return;
+    const trackKey = clip.type === 'video' ? 'video' : (clip.audioKind || 'voice');
+    if (trackState[trackKey].locked) return;
+    const nextId = `${clip.sourceId || clip.id}_copy_${Date.now()}`;
+    if (commitTimeline(current => duplicateTimelineClip(current, selectedClipId, nextId))) {
+      setSelectedClipId(nextId);
+    }
+  }, [commitTimeline, selectedClipId, trackState]);
 
   const persistAudioClip = useCallback(async (clip: MediaClip) => {
     if (!clip.audioTrackId) return;
@@ -734,21 +924,32 @@ export const EnhancePage: React.FC = () => {
 
   const handleDragStart = useCallback((e: React.MouseEvent, clip: MediaClip) => {
     e.stopPropagation();
+    const trackKey = clip.type === 'video' ? 'video' : (clip.audioKind || 'voice');
+    if (trackState[trackKey].locked) return;
     setSelectedClipId(clip.id);
     const startX = e.clientX;
     const initialStart = clip.startTime;
+    const before = cloneEnhanceClips(clipsRef.current);
     let finalStart = initialStart;
     const onMove = (me: MouseEvent) => {
       const delta = (me.clientX - startX) / scale;
       const rawStart = Math.max(0, initialStart + delta);
-      const boundaries = videoClips.flatMap(item => [item.startTime, item.startTime + item.duration]);
-      const nearby = boundaries.find(boundary => Math.abs(boundary - rawStart) <= 0.2);
-      finalStart = nearby ?? Math.round(rawStart * 10) / 10;
-      setClips(prev => prev.map(c => c.id === clip.id ? { ...c, startTime: finalStart } : c));
+      const result = moveTimelineClip(before, clip.id, rawStart, {
+        ripple: clip.type === 'video',
+        snap: snapEnabled && !me.shiftKey,
+        playhead: currentTime,
+        snapThreshold: Math.max(0.05, 8 / scale),
+      });
+      finalStart = result.clips.find(item => item.id === clip.id)?.startTime ?? initialStart;
+      setSnapGuide(result.guide);
+      clipsRef.current = result.clips;
+      setClips(result.clips);
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      setSnapGuide(null);
+      commitPreviewTimeline(before);
       if (clip.type === 'audio' && clip.audioTrackId) {
         void persistAudioClip({ ...clip, startTime: finalStart }).catch(error => {
           console.warn('[EnhancePage] audio drag persist failed:', error);
@@ -757,23 +958,132 @@ export const EnhancePage: React.FC = () => {
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
-  }, [persistAudioClip, scale, videoClips]);
+  }, [commitPreviewTimeline, currentTime, persistAudioClip, scale, snapEnabled, trackState]);
+
+  const handleTrimStart = useCallback((e: React.MouseEvent, clip: MediaClip, side: 'left' | 'right') => {
+    e.stopPropagation();
+    e.preventDefault();
+    const trackKey = clip.type === 'video' ? 'video' : (clip.audioKind || 'voice');
+    if (trackState[trackKey].locked) return;
+    setSelectedClipId(clip.id);
+    const startX = e.clientX;
+    const before = cloneEnhanceClips(clipsRef.current);
+    const onMove = (event: MouseEvent) => {
+      const delta = (event.clientX - startX) / scale;
+      const next = trimTimelineClip(before, clip.id, side, delta, clip.type === 'video');
+      clipsRef.current = next;
+      setClips(next);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      commitPreviewTimeline(before);
+      const updated = clipsRef.current.find(item => item.id === clip.id);
+      if (updated?.type === 'audio' && updated.audioTrackId) {
+        void persistAudioClip(updated).catch(error => console.warn('[EnhancePage] audio trim persist failed:', error));
+      }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [commitPreviewTimeline, persistAudioClip, scale, trackState]);
 
   const handleRulerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!timelineContainerRef.current) return;
-    const rect = timelineContainerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left + timelineContainerRef.current.scrollLeft;
-    setCurrentTime(Math.max(0, x / scale));
-  }, [scale]);
+    const seek = (clientX: number) => {
+      const rect = timelineContainerRef.current!.getBoundingClientRect();
+      const x = clientX - rect.left + timelineContainerRef.current!.scrollLeft;
+      setCurrentTime(Math.min(totalDuration, Math.max(0, x / scale)));
+    };
+    seek(e.clientX);
+    const onMove = (event: MouseEvent) => seek(event.clientX);
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [scale, totalDuration]);
 
   const updateClipSettings = useCallback((updates: Partial<NonNullable<MediaClip['settings']>>) => {
     if (!selectedClipId) return;
-    setClips(prev => prev.map(c =>
+    commitTimeline(prev => prev.map(c =>
       c.id === selectedClipId && c.type === 'video'
         ? { ...c, settings: { ...c.settings!, ...updates } }
         : c
     ));
-  }, [selectedClipId]);
+  }, [commitTimeline, selectedClipId]);
+
+  const seekToEdit = useCallback((direction: 'previous' | 'next') => {
+    const points = [...new Set(videoClips.flatMap(clip => [clip.startTime, clip.startTime + clip.duration]))]
+      .sort((a, b) => a - b);
+    if (direction === 'previous') {
+      const target = points.filter(point => point < currentTime - 0.01).pop() ?? 0;
+      setCurrentTime(target);
+    } else {
+      const target = points.find(point => point > currentTime + 0.01) ?? videoDuration;
+      setCurrentTime(target);
+    }
+  }, [currentTime, videoClips, videoDuration]);
+
+  const fitTimeline = useCallback(() => {
+    const width = timelineContainerRef.current?.clientWidth || 800;
+    setScale(Math.max(5, Math.min(100, Math.floor((width - 32) / Math.max(1, totalDuration)))));
+    if (timelineContainerRef.current) timelineContainerRef.current.scrollLeft = 0;
+  }, [totalDuration]);
+
+  const toggleTrackState = useCallback((key: 'video' | 'voice' | 'bgm' | 'sfx') => {
+    setTrackState(current => ({
+      ...current,
+      [key]: { locked: !current[key].locked },
+    }));
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const modifier = event.ctrlKey || event.metaKey;
+      if (modifier && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redoTimeline(); else undoTimeline();
+        return;
+      }
+      if (modifier && event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        redoTimeline();
+        return;
+      }
+      if (modifier && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        void saveTimelineNow().catch(() => {});
+        return;
+      }
+      if (event.key === ' ') {
+        event.preventDefault();
+        togglePlay();
+      } else if (event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        handleSplit();
+      } else if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        handleDelete();
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        setCurrentTime(value => Math.max(0, value - (event.shiftKey ? 1 : 1 / 30)));
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        setCurrentTime(value => Math.min(totalDuration, value + (event.shiftKey ? 1 : 1 / 30)));
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        setCurrentTime(0);
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        setCurrentTime(videoDuration);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleDelete, handleSplit, redoTimeline, saveTimelineNow, togglePlay, totalDuration, undoTimeline, videoDuration]);
 
   // 自动恢复本页发起且尚未完成的 GPU 美化任务，避免切页后丢失状态。
   useEffect(() => {
@@ -828,6 +1138,7 @@ export const EnhancePage: React.FC = () => {
       setEnhanceError('请先在时间线上选择一个视频片段。');
       return;
     }
+    const targetEntityId = targetClip.sourceId || targetClip.id;
 
     if (enhancementKind === 'lipSync' || enhancementKind === 'dub') {
       const audioClip = audioClips.find(clip => clip.id === lipSyncAudioClipId);
@@ -860,7 +1171,7 @@ export const EnhancePage: React.FC = () => {
           'Wan2',
           {
             entity_type: 'video_segment',
-            entity_id: targetClip.id,
+            entity_id: targetEntityId,
             file_role: 'video',
             project_id: projectId || undefined,
             episode_id: episodeId || undefined,
@@ -869,7 +1180,7 @@ export const EnhancePage: React.FC = () => {
           },
           { duration: targetClip.duration },
         );
-        const pollerUuid = `enhance-${isDub ? 'dub' : 'lipsync'}:${targetClip.id}`;
+        const pollerUuid = `enhance-${isDub ? 'dub' : 'lipsync'}:${targetEntityId}`;
         setProcessStage('排队中');
         setEnhanceNotice(`${isDub ? '视频配音' : '配音对嘴'}任务已进入处理队列。`);
         startVideoPoll(pollerUuid, {
@@ -878,7 +1189,7 @@ export const EnhancePage: React.FC = () => {
           kind: 'video-voice',
           targetPage: 'enhance',
           targetEntityType: 'video_segment',
-          targetEntityId: targetClip.id,
+          targetEntityId,
           episodeId: episodeId || undefined,
           projectId: projectId || undefined,
           callbacks: {
@@ -890,7 +1201,7 @@ export const EnhancePage: React.FC = () => {
             onComplete: ({ status }) => {
               const outputUrl = status.result?.videos?.[0]?.url;
               if (outputUrl) {
-                void updateVideoSegment(targetClip.id, {
+                void updateVideoSegment(targetEntityId, {
                   video_url: outputUrl,
                   task_id: status.task_id,
                   status: 'completed',
@@ -925,14 +1236,14 @@ export const EnhancePage: React.FC = () => {
       try {
         const result = await submitInterpolateTaskQueued(targetClip.url, targetFps, {
           entity_type: 'video_segment',
-          entity_id: targetClip.id,
+          entity_id: targetEntityId,
           file_role: 'video',
           project_id: projectId || undefined,
           episode_id: episodeId || undefined,
           preferred_agent_id: selectedClusterNode?.agentId,
           preferred_node_id: selectedClusterNode?.nodeId || selectedClusterNode?.id,
         });
-        const pollerUuid = `enhance-interpolate:${targetClip.id}`;
+        const pollerUuid = `enhance-interpolate:${targetEntityId}`;
         setProcessStage('排队中');
         setEnhanceNotice('智能补帧任务已进入处理队列。');
         startVideoPoll(pollerUuid, {
@@ -941,7 +1252,7 @@ export const EnhancePage: React.FC = () => {
           kind: 'video-enhance',
           targetPage: 'enhance',
           targetEntityType: 'video_segment',
-          targetEntityId: targetClip.id,
+          targetEntityId,
           episodeId: episodeId || undefined,
           projectId: projectId || undefined,
           callbacks: {
@@ -953,7 +1264,7 @@ export const EnhancePage: React.FC = () => {
             onComplete: ({ status }) => {
               const outputUrl = status.result?.videos?.[0]?.url;
               if (outputUrl) {
-                void updateVideoSegment(targetClip.id, {
+                void updateVideoSegment(targetEntityId, {
                   video_url: outputUrl,
                   task_id: status.task_id,
                   status: 'completed',
@@ -994,7 +1305,7 @@ export const EnhancePage: React.FC = () => {
     try {
       const result = await submitUpscaleTaskQueued(filename, {
         entity_type: 'video_segment',
-        entity_id: targetClip.id,
+        entity_id: targetEntityId,
         file_role: 'video',
         project_id: projectId || undefined,
         episode_id: episodeId || undefined,
@@ -1003,7 +1314,7 @@ export const EnhancePage: React.FC = () => {
         preferred_node_id: selectedClusterNode?.nodeId || selectedClusterNode?.id,
       });
       const backendTaskId = result.task_id;
-      const pollerUuid = `enhance-upscale:${targetClip.id}`;
+      const pollerUuid = `enhance-upscale:${targetEntityId}`;
       setProcessStage('排队中');
       setEnhanceNotice('视频放大任务已进入处理队列。');
       startVideoPoll(pollerUuid, {
@@ -1012,7 +1323,7 @@ export const EnhancePage: React.FC = () => {
         kind: 'video-upscale',
         targetPage: 'enhance',
         targetEntityType: 'video_segment',
-        targetEntityId: targetClip.id,
+        targetEntityId,
         episodeId: episodeId || undefined,
         projectId: projectId || undefined,
         callbacks: {
@@ -1070,11 +1381,24 @@ export const EnhancePage: React.FC = () => {
           <div className="responsive-toolbar workflow-stage-toolbar px-4 flex items-center justify-between">
             <div className="toolbar-group">
               <Wand2 size={16} className="text-primary" />
-              <h2 className="text-sm font-semibold">视频美化</h2>
+              <div>
+                <h2 className="text-sm font-semibold">剪辑与优化合成</h2>
+                <p className="text-[10px] text-n100">按当前时间线剪辑、配音并输出成片</p>
+              </div>
             </div>
             <div className="toolbar-actions">
-              <span className="text-xs font-mono text-n100">{formatTime(currentTime)}</span>
+              <span className="text-xs font-mono tabular-nums text-n300" title="时:分:秒:帧（30 FPS）">{formatTimelineTime(currentTime)}</span>
               <span className="text-[10px] text-n100">{videoClips.length}V · {audioClips.length}A</span>
+              <button
+                type="button"
+                onClick={() => void saveTimelineNow().catch(() => {})}
+                disabled={!episodeId || timelineSaveState === 'saving'}
+                className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] ${timelineSaveState === 'error' ? 'text-danger' : 'text-n300 hover:bg-n20'}`}
+                title={timelineSaveState === 'error' ? '保存失败，点击重试' : '保存时间线（Ctrl+S）'}
+              >
+                {timelineSaveState === 'saving' ? <Loader size={12} className="animate-spin" /> : <Save size={12} />}
+                {timelineSaveState === 'saving' ? '保存中' : timelineSaveState === 'unsaved' ? '未保存' : timelineSaveState === 'error' ? '重试保存' : '已保存'}
+              </button>
               <div className="inline-flex h-7 rounded border border-n40 overflow-hidden" aria-label="成片音频来源">
                 <button
                   type="button"
@@ -1159,6 +1483,7 @@ export const EnhancePage: React.FC = () => {
                   preload="none"
                   controls={false}
                   muted={composeAudioMode === 'reference_dubbing'}
+                  aria-label="当前时间线视频预览"
                   className="w-full h-full object-contain"
                 />
               ) : (
@@ -1183,6 +1508,53 @@ export const EnhancePage: React.FC = () => {
               <>
                 <div className="text-[11px] text-n100 truncate">
                   选中: {selectedClip.id.slice(0, 20)}{selectedClip.id.length > 20 ? '...' : ''}
+                </div>
+                <div className="rounded-lg border border-primary/20 bg-primary-light/40 p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-n700">视频剪辑</span>
+                    <span className="font-mono text-[10px] tabular-nums text-n300">{formatTimelineTime(selectedClip.startTime)} → {formatTimelineTime(selectedClip.startTime + selectedClip.duration)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1">
+                      <span className="text-[11px] text-n300">源片入点（秒）</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={Math.max(0, (selectedClip.sourceDuration || selectedClip.duration) - 0.1)}
+                        step={0.1}
+                        value={selectedClip.sourceOffset.toFixed(1)}
+                        onChange={event => {
+                          const target = Math.max(0, Number(event.target.value) || 0);
+                          const delta = target - selectedClip.sourceOffset;
+                          commitTimeline(current => trimTimelineClip(current, selectedClip.id, 'left', delta, true));
+                        }}
+                        className="w-full rounded border border-n40 bg-n0 px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[11px] text-n300">片段时长（秒）</span>
+                      <input
+                        type="number"
+                        min={0.1}
+                        max={Math.max(0.1, (selectedClip.sourceDuration || selectedClip.duration) - selectedClip.sourceOffset)}
+                        step={0.1}
+                        value={selectedClip.duration.toFixed(1)}
+                        onChange={event => {
+                          const target = Math.max(0.1, Number(event.target.value) || 0.1);
+                          commitTimeline(current => trimTimelineClip(current, selectedClip.id, 'right', target - selectedClip.duration, true));
+                        }}
+                        className="w-full rounded border border-n40 bg-n0 px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={handleDuplicate} className="flex-1 h-8 rounded border border-n40 bg-n0 text-[11px] text-n500 hover:border-primary hover:text-primary">
+                      复制片段
+                    </button>
+                    <button type="button" onClick={handleSplit} className="flex-1 h-8 rounded border border-n40 bg-n0 text-[11px] text-n500 hover:border-primary hover:text-primary">
+                      在播放头切分
+                    </button>
+                  </div>
                 </div>
                 <div className="rounded border border-n40 bg-n10 p-2.5 space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -1416,6 +1788,27 @@ export const EnhancePage: React.FC = () => {
                       />
                     </label>
                   </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1">
+                      <span className="text-[11px] text-n300">源音频入点（秒）</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={Math.max(0, (selectedClip.sourceDuration || selectedClip.duration) - 0.1)}
+                        step={0.1}
+                        value={selectedClip.sourceOffset.toFixed(1)}
+                        onChange={event => updateSelectedAudioClip({ sourceOffset: Math.max(0, Number(event.target.value) || 0) })}
+                        onBlur={() => {
+                          const current = clipsRef.current.find(clip => clip.id === selectedClip.id);
+                          if (current) void persistAudioClip(current);
+                        }}
+                        className="w-full rounded border border-n40 px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                      />
+                    </label>
+                    <div className="flex items-end pb-1 text-[10px] leading-4 text-n100">
+                      拖动片段两侧也可裁剪；按住 Shift 临时关闭吸附。
+                    </div>
+                  </div>
                   <label className="block space-y-1">
                     <span className="flex justify-between text-[11px] text-n300">
                       <span>音量</span><span>{Math.round((selectedClip.volume ?? 1) * 100)}%</span>
@@ -1431,6 +1824,42 @@ export const EnhancePage: React.FC = () => {
                       className="w-full accent-primary"
                     />
                   </label>
+                  {selectedClip.audioKind === 'bgm' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-n300">淡入（秒）</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={selectedClip.duration}
+                          step={0.1}
+                          value={(selectedClip.fadeIn || 0).toFixed(1)}
+                          onChange={event => updateSelectedAudioClip({ fadeIn: Math.max(0, Number(event.target.value) || 0) })}
+                          onBlur={() => {
+                            const current = clipsRef.current.find(clip => clip.id === selectedClip.id);
+                            if (current) void persistAudioClip(current);
+                          }}
+                          className="w-full rounded border border-n40 px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <span className="text-[11px] text-n300">淡出（秒）</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={selectedClip.duration}
+                          step={0.1}
+                          value={(selectedClip.fadeOut || 0).toFixed(1)}
+                          onChange={event => updateSelectedAudioClip({ fadeOut: Math.max(0, Number(event.target.value) || 0) })}
+                          onBlur={() => {
+                            const current = clipsRef.current.find(clip => clip.id === selectedClip.id);
+                            if (current) void persistAudioClip(current);
+                          }}
+                          className="w-full rounded border border-n40 px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-2">
@@ -1464,7 +1893,7 @@ export const EnhancePage: React.FC = () => {
       </div>
 
       {/* Bottom Timeline */}
-      <div className="h-72 bg-n0 border-t border-n40 flex flex-col shrink-0 z-20">
+      <div className="h-80 bg-n0 border-t border-n40 flex flex-col shrink-0 z-20" aria-label="优化合成时间线编辑器">
         <div className="hidden" aria-hidden="true">
           {audioClips.map(clip => (
             <audio
@@ -1482,11 +1911,36 @@ export const EnhancePage: React.FC = () => {
         <div className="responsive-toolbar px-4 py-1.5 border-b border-n40 flex justify-between items-center shrink-0 bg-n0">
           <div className="toolbar-group">
             <button
+              type="button"
+              onClick={undoTimeline}
+              disabled={undoCount === 0}
+              className="p-1.5 hover:bg-n20 rounded text-n300 hover:text-n800 transition-colors disabled:opacity-30"
+              title="撤销（Ctrl+Z）"
+            >
+              <Undo2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={redoTimeline}
+              disabled={redoCount === 0}
+              className="p-1.5 hover:bg-n20 rounded text-n300 hover:text-n800 transition-colors disabled:opacity-30"
+              title="重做（Ctrl+Y / Ctrl+Shift+Z）"
+            >
+              <Redo2 size={14} />
+            </button>
+            <div className="w-px h-4 bg-n40 mx-1" />
+            <button type="button" onClick={() => seekToEdit('previous')} className="p-1.5 hover:bg-n20 rounded text-n300" title="上一个剪辑点">
+              <SkipBack size={14} />
+            </button>
+            <button
               onClick={togglePlay}
               className="p-1.5 hover:bg-n20 rounded text-n300 hover:text-n800 transition-colors"
               title={playing ? '暂停' : '播放'}
             >
               {playing ? <Pause size={14} className="fill-current" /> : <Play size={14} className="fill-current" />}
+            </button>
+            <button type="button" onClick={() => seekToEdit('next')} className="p-1.5 hover:bg-n20 rounded text-n300" title="下一个剪辑点">
+              <SkipForward size={14} />
             </button>
             <div className="w-px h-4 bg-n40 mx-1" />
             <button
@@ -1504,6 +1958,14 @@ export const EnhancePage: React.FC = () => {
               title="删除选中片段"
             >
               <Trash2 size={14} />
+            </button>
+            <button
+              onClick={handleDuplicate}
+              disabled={!selectedClipId}
+              className="p-1.5 rounded text-n300 hover:bg-n20 hover:text-n800 disabled:opacity-30"
+              title="复制选中片段"
+            >
+              <Copy size={14} />
             </button>
             <div className="w-px h-4 bg-n40 mx-1" />
             <button
@@ -1535,12 +1997,23 @@ export const EnhancePage: React.FC = () => {
 
           <div className="toolbar-actions">
             <button
+              type="button"
+              onClick={() => setSnapEnabled(value => !value)}
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] ${snapEnabled ? 'bg-primary-light text-primary' : 'text-n300 hover:bg-n20'}`}
+              title="磁吸到播放头和片段边缘；拖动时按 Shift 可临时关闭"
+            >
+              <Magnet size={13} /> 磁吸
+            </button>
+            <button type="button" onClick={fitTimeline} className="px-2 py-1 rounded text-[11px] text-n300 hover:bg-n20" title="缩放到适合窗口">
+              适合窗口
+            </button>
+            <button
               onClick={() => setScale(Math.max(5, scale - 5))}
               className="p-1.5 hover:bg-n20 rounded text-n300 hover:text-n800 transition-colors"
             >
               <ZoomOut size={14} />
             </button>
-            <span className="text-[11px] text-n100 font-mono w-12 text-center">{scale}px/s</span>
+            <span className="text-[11px] text-n100 font-mono w-14 text-center">{scale}px/s</span>
             <button
               onClick={() => setScale(Math.min(100, scale + 5))}
               className="p-1.5 hover:bg-n20 rounded text-n300 hover:text-n800 transition-colors"
@@ -1553,20 +2026,28 @@ export const EnhancePage: React.FC = () => {
         {/* Tracks */}
         <div className="flex-1 flex overflow-hidden relative">
           {/* Track headers */}
-          <div className="w-16 shrink-0 border-r border-n40 bg-n0 flex flex-col z-10">
-            <div className="h-5 border-b border-n40" />
-            <div className="h-16 border-b border-n40 flex items-center justify-center text-[11px] text-n100 gap-1">
-              <MonitorPlay size={12} /> 视频
-            </div>
-            <div className="h-10 border-b border-n40 flex items-center justify-center text-[11px] text-n100 gap-1">
-              <Mic2 size={12} /> 配音
-            </div>
-            <div className="h-10 border-b border-n40 flex items-center justify-center text-[11px] text-n100 gap-1">
-              <Music size={12} /> 音乐
-            </div>
-            <div className="h-10 border-b border-n40 flex items-center justify-center text-[11px] text-n100 gap-1">
-              <Sparkles size={12} /> 音效
-            </div>
+          <div className="w-28 shrink-0 border-r border-n40 bg-n0 flex flex-col z-10">
+            <div className="h-5 border-b border-n40 px-2 flex items-center text-[9px] text-n100">轨道</div>
+            {([
+              { key: 'video' as const, label: '视频', Icon: MonitorPlay, height: 'h-16' },
+              { key: 'voice' as const, label: '配音', Icon: Mic2, height: 'h-10' },
+              { key: 'bgm' as const, label: '音乐', Icon: Music, height: 'h-10' },
+              { key: 'sfx' as const, label: '音效', Icon: Sparkles, height: 'h-10' },
+            ]).map(({ key, label, Icon, height }) => (
+              <div key={key} className={`${height} border-b border-n40 flex items-center justify-between px-2 text-[11px] text-n300 gap-1`}>
+                <span className="flex items-center gap-1 min-w-0"><Icon size={12} /><span className="truncate">{label}</span></span>
+                <span className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => toggleTrackState(key)}
+                    className={`p-1 rounded hover:bg-n20 ${trackState[key].locked ? 'text-primary' : 'text-n100'}`}
+                    title={trackState[key].locked ? `解锁${label}轨` : `锁定${label}轨`}
+                  >
+                    {trackState[key].locked ? <Lock size={11} /> : <Unlock size={11} />}
+                  </button>
+                </span>
+              </div>
+            ))}
           </div>
 
           {/* Track content */}
@@ -1588,8 +2069,15 @@ export const EnhancePage: React.FC = () => {
                 className="absolute top-0 bottom-0 w-px bg-red-500 z-50 pointer-events-none"
                 style={{ left: `${currentTime * scale}px` }}
               >
-                <div className="absolute top-0 -translate-x-1/2 w-2.5 h-2.5 bg-red-500 rounded-full" />
+                <div className="absolute top-0 -translate-x-1/2 w-3 h-3 bg-red-500 rounded-b-md" />
               </div>
+              {snapGuide != null && (
+                <div
+                  className="absolute top-5 bottom-0 w-px bg-primary z-40 pointer-events-none"
+                  style={{ left: `${snapGuide * scale}px` }}
+                  aria-hidden="true"
+                />
+              )}
 
               {/* Video track */}
               <div className="h-16 border-b border-n40 relative bg-n0">
@@ -1597,13 +2085,23 @@ export const EnhancePage: React.FC = () => {
                   <div
                     key={clip.id}
                     onMouseDown={e => handleDragStart(e, clip)}
-                    className={`absolute top-1.5 bottom-1.5 rounded border-2 overflow-hidden cursor-grab active:cursor-grabbing transition-colors ${
+                    className={`absolute top-1.5 bottom-1.5 rounded border-2 overflow-hidden transition-colors ${trackState.video.locked ? 'cursor-not-allowed opacity-60' : 'cursor-grab active:cursor-grabbing'} ${
                       selectedClipId === clip.id
                         ? 'border-primary z-20 bg-n0'
                         : 'border-n40 z-10 hover:border-primary bg-n0'
                     }`}
-                    style={{ left: `${clip.startTime * scale}px`, width: `${clip.duration * scale}px` }}
+                    style={{ left: `${clip.startTime * scale}px`, width: `${Math.max(18, clip.duration * scale)}px` }}
                   >
+                    <div
+                      className="absolute inset-y-0 left-0 z-30 w-2 cursor-ew-resize bg-white/0 hover:bg-primary/60"
+                      onMouseDown={event => handleTrimStart(event, clip, 'left')}
+                      title="拖动裁剪入点"
+                    />
+                    <div
+                      className="absolute inset-y-0 right-0 z-30 w-2 cursor-ew-resize bg-white/0 hover:bg-primary/60"
+                      onMouseDown={event => handleTrimStart(event, clip, 'right')}
+                      title="拖动裁剪出点"
+                    />
                     <div className="absolute inset-0 bg-black">
                       {clip.thumbnailUrl ? (
                         <img
@@ -1656,7 +2154,7 @@ export const EnhancePage: React.FC = () => {
                   <div
                     key={clip.id}
                     onMouseDown={e => handleDragStart(e, clip)}
-                    className={`absolute top-1 bottom-1 rounded border overflow-hidden cursor-grab active:cursor-grabbing ${
+                    className={`absolute top-1 bottom-1 rounded border overflow-hidden ${trackState[group.key as 'voice' | 'bgm' | 'sfx'].locked ? 'cursor-not-allowed opacity-60' : 'cursor-grab active:cursor-grabbing'} ${
                       selectedClipId === clip.id
                         ? 'border-primary z-20 bg-primary-light shadow-sm'
                         : group.key === 'bgm'
@@ -1665,8 +2163,18 @@ export const EnhancePage: React.FC = () => {
                             ? 'border-warning/40 z-10 hover:border-warning bg-warning/10'
                             : 'border-primary/40 z-10 hover:border-primary bg-primary-light'
                     }`}
-                    style={{ left: `${clip.startTime * scale}px`, width: `${clip.duration * scale}px` }}
+                    style={{ left: `${clip.startTime * scale}px`, width: `${Math.max(16, clip.duration * scale)}px` }}
                   >
+                    <div
+                      className="absolute inset-y-0 left-0 z-30 w-2 cursor-ew-resize bg-white/20 hover:bg-primary/60"
+                      onMouseDown={event => handleTrimStart(event, clip, 'left')}
+                      title="拖动裁剪入点"
+                    />
+                    <div
+                      className="absolute inset-y-0 right-0 z-30 w-2 cursor-ew-resize bg-white/20 hover:bg-primary/60"
+                      onMouseDown={event => handleTrimStart(event, clip, 'right')}
+                      title="拖动裁剪出点"
+                    />
                     <GripHorizontal size={10} className="text-primary absolute left-1 top-1/2 -translate-y-1/2 opacity-50" />
                     <div className="w-full h-full flex items-center justify-center overflow-hidden opacity-60">
                       <svg className="w-full h-6 text-primary" preserveAspectRatio="none" viewBox="0 0 100 100">

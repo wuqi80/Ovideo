@@ -3,6 +3,7 @@ import { resolveAudioTrackTimeline } from './audioTrackTimeline';
 
 export interface EnhanceMediaClip {
   id: string;
+  sourceId?: string;
   url: string;
   thumbnailUrl?: string;
   referenceImageUrl?: string;
@@ -78,6 +79,7 @@ export function buildEnhanceSourceClips(
       }
       allClips.push({
         id: seg.segmentId || `vid_${i}`,
+        sourceId: seg.segmentId || `vid_${i}`,
         url: videoUrl,
         thumbnailUrl: seg.thumbnailUrl ? secureMediaUrl(seg.thumbnailUrl) : undefined,
         referenceImageUrl: storyboard?.generatedImageUrl
@@ -86,6 +88,7 @@ export function buildEnhanceSourceClips(
         model: seg.model,
         startTime: videoTime,
         duration: dur,
+        sourceDuration: dur,
         sourceOffset: 0,
         type: 'video',
         settings: { upscale: false, interpolate: false, lipSync: false },

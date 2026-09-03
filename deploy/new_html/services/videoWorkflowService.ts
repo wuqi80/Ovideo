@@ -8,6 +8,7 @@ export interface VideoModelCapability {
   default_display_name?: string;
   default_description?: string;
   published?: boolean;
+  unavailable_reason?: string;
   provider: string;
   model_name?: string | null;
   model_options?: string[];
@@ -18,7 +19,6 @@ export interface VideoModelCapability {
     display_name?: string;
     description?: string;
   }>;
-  available?: boolean;
   task_types: string[];
   media_inputs: string[];
   supports_original_audio?: boolean;
@@ -152,6 +152,14 @@ export interface ComposeStatus {
 export type ComposeAudioMode = 'video_original' | 'reference_dubbing';
 export const DEFAULT_COMPOSE_AUDIO_MODE: ComposeAudioMode = 'reference_dubbing';
 
+export interface ComposeTimelineItem {
+  clip_id: string;
+  segment_id: string;
+  start_ms: number;
+  duration_ms: number;
+  source_offset_ms: number;
+}
+
 export interface VideoTake {
   segment_id: string;
   take_id?: string | null;
@@ -192,12 +200,14 @@ export async function startCompose(
   episodeId: string,
   selections?: Record<string, string>,
   audioMode: ComposeAudioMode = DEFAULT_COMPOSE_AUDIO_MODE,
+  timeline?: ComposeTimelineItem[],
 ): Promise<ComposeStatus> {
   return apiJson<any>(`/api/episodes/${episodeId}/compose`, {
     method: 'POST',
     body: JSON.stringify({
       ...(selections ? { selections } : {}),
       audio_mode: audioMode,
+      ...(timeline?.length ? { timeline } : {}),
     }),
   }, 'startCompose');
 }
