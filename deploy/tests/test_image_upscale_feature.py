@@ -96,8 +96,8 @@ def test_frontend_exposes_standalone_image_upscale_route_and_controls():
     assert "图片放大历史" in page
     assert "'/api/tasks?limit=100'" in page
     assert "每位用户最多同时排队或处理 2 个" in page
-    assert layout.index("label: '图片高清放大'") < layout.index("label: '版本记录'")
-    assert sidebar.index("label: '图片高清放大'") < sidebar.index("label: '版本记录'")
+    assert layout.index("label: '图片高清放大'") < layout.index("label: '生成历史'")
+    assert sidebar.index("label: '图片高清放大'") < sidebar.index("label: '生成历史'")
 
 
 def test_agent_completion_exposes_only_an_authenticated_node_output_url():

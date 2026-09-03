@@ -15,7 +15,11 @@ import aiohttp
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
-from services.api_provider_registry import MINIMAX_DEFAULT_PROVIDER_MODEL
+from services.api_provider_registry import (
+    MINIMAX_DEFAULT_PROVIDER_MODEL,
+    MINIMAX_MUSIC_MODEL,
+    MINIMAX_MUSIC_OPERATION,
+)
 from services.api_provider_runtime import resolve_provider
 
 logger = logging.getLogger(__name__)
@@ -653,33 +657,52 @@ class MinimaxAudioClient:
     async def music_generate(
         self,
         lyrics: str = "",
+        prompt: str = "",
         refer_voice: str = "",
         refer_instrumental: str = "",
-        model: str = "music-01",
+        model: Optional[str] = None,
         audio_format: str = "mp3",
         sample_rate: int = 44100,
         bitrate: int = 256000,
+        is_instrumental: bool = False,
+        lyrics_optimizer: bool = False,
     ) -> Dict[str, Any]:
         """
         生成音乐，返回含 audio (hex) 的结果。
         lyrics: 歌词文本
-        refer_voice: 参考演唱音频 (file_id)
-        refer_instrumental: 参考伴奏 (file_id)
+        prompt: 音乐风格、情绪和场景描述
+        refer_voice/refer_instrumental: music-01 历史调用兼容字段
         """
+        resolved_model = str(model or "").strip()
+        if not resolved_model:
+            music_config = resolve_provider("minimax", MINIMAX_MUSIC_OPERATION)
+            resolved_model = music_config.model_name or MINIMAX_MUSIC_MODEL
+        legacy_music = resolved_model.lower() == "music-01"
         payload = {
-            "model": model,
+            "model": resolved_model,
             "audio_setting": {
                 "format": audio_format,
                 "sample_rate": sample_rate,
                 "bitrate": bitrate,
             },
         }
-        if lyrics:
-            payload["lyrics"] = lyrics
-        if refer_voice:
-            payload["refer_voice"] = refer_voice
-        if refer_instrumental:
-            payload["refer_instrumental"] = refer_instrumental
+        if legacy_music:
+            legacy_lyrics = lyrics or prompt
+            if legacy_lyrics:
+                payload["lyrics"] = legacy_lyrics
+            if refer_voice:
+                payload["refer_voice"] = refer_voice
+            if refer_instrumental:
+                payload["refer_instrumental"] = refer_instrumental
+        else:
+            if prompt:
+                payload["prompt"] = prompt
+            if lyrics:
+                payload["lyrics"] = lyrics
+            if is_instrumental:
+                payload["is_instrumental"] = True
+            if lyrics_optimizer:
+                payload["lyrics_optimizer"] = True
 
         data = await self._request_json(
             "post",
@@ -696,9 +719,10 @@ class MinimaxAudioClient:
             with open(filepath, "wb") as f:
                 f.write(bytes.fromhex(audio_hex))
             data["audio_url"] = f"/storage/audio/{filename}"
-            data["duration_ms"] = self._estimate_mp3_duration(
+            reported_duration = data.get("extra_info", {}).get("music_duration")
+            data["duration_ms"] = int(reported_duration or self._estimate_mp3_duration(
                 len(audio_hex) // 2, bitrate
-            )
+            ))
 
         return data
 
@@ -709,15 +733,24 @@ class MinimaxAudioClient:
         self,
         text: str,
         language: str = "zh",
+        mode: str = "write_full_song",
+        lyrics: str = "",
+        title: str = "",
     ) -> Dict[str, Any]:
-        # Current MiniMax lyrics API uses mode + prompt.  Keep ``language`` in
-        # the public client signature for callers that still pass it, but do
-        # not send the removed legacy field to the provider.
+        # Keep ``language`` in the public signature for legacy callers, but the
+        # current MiniMax endpoint no longer accepts it.
         del language
+        resolved_mode = str(mode or "write_full_song").strip().lower()
+        if resolved_mode not in {"write_full_song", "edit"}:
+            raise ValueError(f"Unsupported MiniMax lyrics mode: {mode}")
         payload = {
-            "mode": "write_full_song",
+            "mode": resolved_mode,
             "prompt": text,
         }
+        if resolved_mode == "edit" and lyrics:
+            payload["lyrics"] = lyrics
+        if title:
+            payload["title"] = title
         return await self._request_json(
             "post",
             "lyrics_generation",

@@ -16,6 +16,8 @@ from services.api_provider_registry import (
     DEEPSEEK_DEFAULT_MODEL_MAP,
     MINIMAX_M3_MODEL,
     MINIMAX_M3_OPERATION,
+    MINIMAX_MUSIC_MODEL,
+    MINIMAX_MUSIC_OPERATION,
     MINIMAX_OPERATION_MODEL_ENV_MAP,
     MINIMAX_TTS_HD_MODEL,
     MINIMAX_TTS_TURBO_MODEL,
@@ -522,7 +524,7 @@ def resolve_minimax_model_name(
     *,
     usage_scope: Optional[str] = MODEL_USAGE_SCOPE_WORKFLOW,
 ) -> tuple[str, Optional[str]]:
-    """Resolve the stable MiniMax text operation without disturbing video/audio defaults."""
+    """Resolve a stable MiniMax operation without disturbing the primary video model."""
     requested = str(model_name or "").strip()
     operation = requested.lower()
     if operation in MINIMAX_OPERATION_MODEL_ENV_MAP:
@@ -530,6 +532,7 @@ def resolve_minimax_model_name(
         configured, configured_env = _first_env(scoped_model_env_candidates(operation_env, usage_scope))
         fallback_model = {
             MINIMAX_M3_OPERATION: MINIMAX_M3_MODEL,
+            MINIMAX_MUSIC_OPERATION: MINIMAX_MUSIC_MODEL,
             "speech-hd": MINIMAX_TTS_HD_MODEL,
             "speech-turbo": MINIMAX_TTS_TURBO_MODEL,
         }.get(operation, MINIMAX_M3_MODEL)

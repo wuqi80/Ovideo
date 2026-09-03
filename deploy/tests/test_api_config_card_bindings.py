@@ -245,6 +245,11 @@ def test_minimax_provider_catalog_exposes_domestic_and_international_channels():
         "https://api.minimax.io/v1",
     ]
     assert "text" in minimax["capabilities"]
+    assert {
+        "operation": "music",
+        "label": "音乐生成 (Music 2.6)",
+        "model_name": "music-2.6",
+    } in get_provider_model_binding_options("minimax")
     assert get_provider_model_binding_options("minimax")[-1] == {
         "operation": "minimax-m3",
         "label": "MiniMax M3 文本",
@@ -269,6 +274,7 @@ async def test_one_enabled_minimax_card_projects_m3_without_changing_video_prima
         "MINIMAX_API_KEY",
         "MINIMAX_MODEL",
         "MINIMAX_MODEL_M3",
+        "MINIMAX_MODEL_MUSIC",
     ):
         monkeypatch.delenv(env_key, raising=False)
         monkeypatch.setitem(loader._BASE_API_ENV_VALUES, env_key, None)
@@ -291,6 +297,11 @@ async def test_one_enabled_minimax_card_projects_m3_without_changing_video_prima
                 "label": "练气 (MiniMax M3 文本)",
                 "model_name": "MiniMax-M3",
             },
+            {
+                "operation": "music",
+                "label": "音乐生成 (Music 2.6)",
+                "model_name": "music-2.6",
+            },
         ],
         "proxy_mode": "direct",
         "enabled": True,
@@ -308,6 +319,7 @@ async def test_one_enabled_minimax_card_projects_m3_without_changing_video_prima
     assert loader.os.environ["MINIMAX_API_KEY"] == "key-plan"
     assert loader.os.environ["MINIMAX_MODEL"] == "MiniMax-Hailuo-2.3"
     assert loader.os.environ["MINIMAX_MODEL_M3"] == "MiniMax-M3"
+    assert loader.os.environ["MINIMAX_MODEL_MUSIC"] == "music-2.6"
 
 
 def test_legacy_default_binding_is_recovered_to_known_model_operation():

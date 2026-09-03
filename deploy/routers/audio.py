@@ -347,7 +347,12 @@ def create_audio_router(
         bind_to_character_voice_id: Optional[str] = None
 
     class MinimaxMusicRequest(BaseModel):
+        prompt: str = ""
         lyrics: str = ""
+        model: Optional[str] = None
+        is_instrumental: bool = False
+        lyrics_optimizer: bool = False
+        # Retained for old clients; current models do not receive these fields.
         refer_voice: str = ""
         refer_instrumental: str = ""
         entity_type: Optional[str] = None
@@ -359,6 +364,9 @@ def create_audio_router(
     class MinimaxLyricsRequest(BaseModel):
         text: str
         language: str = "zh"
+        mode: str = "write_full_song"
+        lyrics: str = ""
+        title: str = ""
 
 
     @router.post("/api/minimax/voice-design")
@@ -669,6 +677,9 @@ def create_audio_router(
                 client=_require_minimax_client(),
                 text=data.text,
                 language=data.language,
+                mode=data.mode,
+                lyrics=data.lyrics,
+                title=data.title,
             )
         except Exception as e:
             logger.error(f"MiniMax lyrics 失败: {e}")

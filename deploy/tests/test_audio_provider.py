@@ -48,7 +48,15 @@ async def test_minimax_generate_music_via_music_generate():
         result = await provider.generate_music("紧张悬疑的背景音乐", duration_ms=30000)
         assert result["audio_url"].endswith(".mp3")
         assert result["duration_ms"] == 30000
-        client.music_generate.assert_awaited_once()
+        client.music_generate.assert_awaited_once_with(
+            lyrics="",
+            prompt="紧张悬疑的背景音乐",
+            model=None,
+            is_instrumental=True,
+            lyrics_optimizer=False,
+            refer_voice="",
+            refer_instrumental="",
+        )
 
 
 async def test_minimax_generate_sfx_via_music_generate():
@@ -61,7 +69,13 @@ async def test_minimax_generate_sfx_via_music_generate():
         provider = MinimaxAudioProvider()
         result = await provider.generate_sfx("explosion")
         assert result["audio_url"].endswith(".mp3")
-        client.music_generate.assert_awaited_once()
+        client.music_generate.assert_awaited_once_with(
+            prompt="explosion",
+            is_instrumental=True,
+            model=None,
+            refer_voice="",
+            refer_instrumental="",
+        )
 
 
 async def test_get_audio_provider_factory():

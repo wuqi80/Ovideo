@@ -68,12 +68,12 @@ class MinimaxAudioProvider(AudioProvider):
         )
 
     async def generate_sfx(self, description: str, **kwargs) -> Dict[str, Any]:
-        # 2026-06-10：MiniMax 没有专门的音效（SFX）API。库内唯一的"文本→音频生成"
-        # 后端是 music_generate（music-01）。这里把音效描述当作生成提示丢给它，
-        # 是当前可用的最接近方案——产出的是一段音频而非严格意义的音效片段，
-        # 质量/贴合度有限。若后续接入专门 SFX 模型，应在此替换。
+        # MiniMax 没有专门的音效（SFX）API。这里仍以无歌词音乐近似生成，
+        # 产出不是严格意义的音效片段；后续接入专门 SFX 模型时应替换。
         result = await self._client().music_generate(
-            lyrics=description,
+            prompt=description,
+            is_instrumental=True,
+            model=kwargs.get('model'),
             refer_voice=kwargs.get('refer_voice', ''),
             refer_instrumental=kwargs.get('refer_instrumental', ''),
         )
@@ -85,11 +85,15 @@ class MinimaxAudioProvider(AudioProvider):
     async def generate_music(
         self, description: str, duration_ms: Optional[int] = None, **kwargs
     ) -> Dict[str, Any]:
-        lyrics = kwargs.get('lyrics', description)
+        lyrics = kwargs.get('lyrics', '')
         refer_voice = kwargs.get('refer_voice', '')
         refer_instrumental = kwargs.get('refer_instrumental', '')
         result = await self._client().music_generate(
             lyrics=lyrics,
+            prompt=kwargs.get('prompt', description),
+            model=kwargs.get('model'),
+            is_instrumental=kwargs.get('is_instrumental', not bool(lyrics)),
+            lyrics_optimizer=kwargs.get('lyrics_optimizer', False),
             refer_voice=refer_voice,
             refer_instrumental=refer_instrumental,
         )

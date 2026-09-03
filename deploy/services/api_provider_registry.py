@@ -233,10 +233,13 @@ MINIMAX_FAST_VIDEO_MODEL = "MiniMax-Hailuo-2.3-Fast"
 MINIMAX_LEGACY_VIDEO_MODELS = frozenset({"MiniMax-Hailuo-02"})
 MINIMAX_TTS_HD_MODEL = "speech-2.8-hd"
 MINIMAX_TTS_TURBO_MODEL = "speech-2.8-turbo"
+MINIMAX_MUSIC_OPERATION = "music"
+MINIMAX_MUSIC_MODEL = "music-2.6"
 MINIMAX_M3_OPERATION = "minimax-m3"
 MINIMAX_M3_MODEL = "MiniMax-M3"
 MINIMAX_OPERATION_MODEL_ENV_MAP: Dict[str, str] = {
     MINIMAX_M3_OPERATION: "MINIMAX_MODEL_M3",
+    MINIMAX_MUSIC_OPERATION: "MINIMAX_MODEL_MUSIC",
     "speech-hd": "MINIMAX_MODEL_SPEECH_HD",
     "speech-turbo": "MINIMAX_MODEL_SPEECH_TURBO",
 }
@@ -405,6 +408,11 @@ MINIMAX_MODEL_BINDING_OPTIONS: List[Dict[str, str]] = [
         "operation": "speech-turbo",
         "label": "语音生成 (Speech 2.8 Turbo)",
         "model_name": MINIMAX_TTS_TURBO_MODEL,
+    },
+    {
+        "operation": MINIMAX_MUSIC_OPERATION,
+        "label": "音乐生成 (Music 2.6)",
+        "model_name": MINIMAX_MUSIC_MODEL,
     },
     {
         "operation": MINIMAX_M3_OPERATION,
@@ -1155,6 +1163,14 @@ API_MODEL_PRESETS: List[dict] = [
         "model_name": MINIMAX_TTS_TURBO_MODEL,
         "operation": "speech-turbo",
         "operation_label": "语音生成 (Speech 2.8 Turbo)",
+        "category": "audio",
+    },
+    {
+        "name": "MiniMax Music 2.6",
+        "provider": "minimax",
+        "model_name": MINIMAX_MUSIC_MODEL,
+        "operation": MINIMAX_MUSIC_OPERATION,
+        "operation_label": "音乐生成 (Music 2.6)",
         "category": "audio",
     },
     {

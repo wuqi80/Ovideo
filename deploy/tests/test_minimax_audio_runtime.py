@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import minimax_audio
-from services.api_provider_registry import MINIMAX_DEFAULT_PROVIDER_MODEL
+from services.api_provider_registry import (
+    MINIMAX_DEFAULT_PROVIDER_MODEL,
+    MINIMAX_MUSIC_MODEL,
+    MINIMAX_MUSIC_OPERATION,
+)
 
 
 @dataclass
@@ -146,6 +150,61 @@ async def test_minimax_audio_voice_clone_sends_runtime_group_proxy(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_minimax_audio_music_uses_music_2_6_contract(monkeypatch):
+    def fake_resolve_provider(provider: str, model_name: str | None = None) -> FakeConfig:
+        if model_name == MINIMAX_MUSIC_OPERATION:
+            return FakeConfig(model_name=MINIMAX_MUSIC_MODEL)
+        return FakeConfig()
+
+    monkeypatch.setattr(minimax_audio, "resolve_provider", fake_resolve_provider)
+    fake_resp = _fake_response({"base_resp": {"status_code": 0}, "data": {"audio": ""}})
+    fake_session_ctx = _fake_post_session(fake_resp)
+    client = minimax_audio.MinimaxAudioClient()
+
+    with patch("aiohttp.ClientSession", return_value=fake_session_ctx):
+        await client.music_generate(
+            lyrics="[Verse]\nhello",
+            prompt="cinematic orchestral",
+            refer_voice="legacy-voice",
+            refer_instrumental="legacy-instrumental",
+        )
+
+    args, kwargs = fake_session_ctx.post.call_args
+    assert args[0] == "https://minimax-runtime.example.test/v1/music_generation"
+    assert kwargs["json"]["model"] == "music-2.6"
+    assert kwargs["json"]["prompt"] == "cinematic orchestral"
+    assert kwargs["json"]["lyrics"] == "[Verse]\nhello"
+    assert "refer_voice" not in kwargs["json"]
+    assert "refer_instrumental" not in kwargs["json"]
+
+
+@pytest.mark.asyncio
+async def test_minimax_audio_music_preserves_explicit_music_01_contract(monkeypatch):
+    monkeypatch.setattr(minimax_audio, "resolve_provider", lambda *_args, **_kwargs: FakeConfig())
+    fake_resp = _fake_response({"base_resp": {"status_code": 0}, "data": {"audio": ""}})
+    fake_session_ctx = _fake_post_session(fake_resp)
+    client = minimax_audio.MinimaxAudioClient()
+
+    with patch("aiohttp.ClientSession", return_value=fake_session_ctx):
+        await client.music_generate(
+            prompt="legacy description",
+            refer_voice="legacy-voice",
+            refer_instrumental="legacy-instrumental",
+            model="music-01",
+            is_instrumental=True,
+        )
+
+    _, kwargs = fake_session_ctx.post.call_args
+    assert kwargs["json"] == {
+        "model": "music-01",
+        "audio_setting": {"format": "mp3", "sample_rate": 44100, "bitrate": 256000},
+        "lyrics": "legacy description",
+        "refer_voice": "legacy-voice",
+        "refer_instrumental": "legacy-instrumental",
+    }
+
+
+@pytest.mark.asyncio
 async def test_minimax_audio_file_upload_sends_runtime_group_proxy(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(minimax_audio, "resolve_provider", lambda *_args, **_kwargs: FakeConfig())
     fake_resp = _fake_response({"base_resp": {"status_code": 0}, "file": {"file_id": "file-1"}})
@@ -200,6 +259,7 @@ async def test_runtime_loader_projects_minimax_group_id_from_request_template(mo
     from services.api_provider_runtime import resolve_provider
 
     managed_keys = loader.managed_api_env_keys()
+    saved_dynamic_keys = set(loader._DYNAMIC_OPERATION_ENV_KEYS)
     saved_base = dict(loader._BASE_API_ENV_VALUES)
     saved_env = {key: os.environ.get(key) for key in managed_keys}
     env_key = get_provider_env_key("minimax")
@@ -240,9 +300,17 @@ async def test_runtime_loader_projects_minimax_group_id_from_request_template(mo
         assert config.extra["group_id"] == "db-group"
         assert config.extra["provider_access_mode"] == "token_plan"
     finally:
+        cleanup_keys = (
+            loader.managed_api_env_keys()
+            | set(loader._DYNAMIC_OPERATION_ENV_KEYS)
+            | managed_keys
+        )
         loader._BASE_API_ENV_VALUES.clear()
         loader._BASE_API_ENV_VALUES.update(saved_base)
-        for key, value in saved_env.items():
+        loader._DYNAMIC_OPERATION_ENV_KEYS.clear()
+        loader._DYNAMIC_OPERATION_ENV_KEYS.update(saved_dynamic_keys)
+        for key in cleanup_keys:
+            value = saved_env.get(key)
             if value is None:
                 os.environ.pop(key, None)
             else:

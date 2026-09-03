@@ -27,6 +27,7 @@ from services.api_provider_registry import (
     DOUBAO_IMAGE_LEGACY_MODEL,
     MINIMAX_DEFAULT_VIDEO_MODEL,
     MINIMAX_M3_MODEL,
+    MINIMAX_MUSIC_MODEL,
     MINIMAX_TTS_HD_MODEL,
     SORA2_DEFAULT_VIDEO_MODEL,
     VEO_DEFAULT_VIDEO_MODEL,
@@ -246,6 +247,21 @@ def test_minimax_speech_operation_resolves_scoped_runtime_model_env(monkeypatch)
     studio = resolve_provider("minimax", "speech-hd", usage_scope="studio")
     assert studio.model_name == "speech-studio-hd"
     assert studio.model_env == speech_studio_env
+
+
+def test_minimax_music_operation_defaults_to_music_2_6_and_supports_override(monkeypatch):
+    env_key = get_provider_env_key("minimax")
+    assert env_key
+    music_env = get_minimax_operation_model_env_key("music")
+
+    monkeypatch.setenv(env_key, "shared-minimax-key")
+    monkeypatch.delenv(music_env, raising=False)
+    assert resolve_provider("minimax", "music").model_name == MINIMAX_MUSIC_MODEL
+
+    monkeypatch.setenv(music_env, "music-01")
+    configured = resolve_provider("minimax", "music")
+    assert configured.model_name == "music-01"
+    assert configured.model_env == music_env
 
 
 def test_seedance_sub_models_resolve_scoped_runtime_model_env(monkeypatch):

@@ -24,7 +24,11 @@ def _reset_logger():
 
 class _MusicRequest:
     def __init__(self, **kwargs):
+        self.prompt = kwargs.pop("prompt", "cinematic orchestral")
         self.lyrics = kwargs.pop("lyrics", "line one")
+        self.model = kwargs.pop("model", None)
+        self.is_instrumental = kwargs.pop("is_instrumental", False)
+        self.lyrics_optimizer = kwargs.pop("lyrics_optimizer", False)
         self.refer_voice = kwargs.pop("refer_voice", "voice_ref")
         self.refer_instrumental = kwargs.pop("refer_instrumental", "inst_ref")
         self.entity_type = kwargs.pop("entity_type", "storyboard")
@@ -88,7 +92,15 @@ async def test_generate_minimax_music_response_persists_local_audio(tmp_path: Pa
     assert client.calls == [
         (
             "music_generate",
-            {"lyrics": "a" * 90, "refer_voice": "voice_ref", "refer_instrumental": "inst_ref"},
+            {
+                "lyrics": "a" * 90,
+                "prompt": "cinematic orchestral",
+                "refer_voice": "voice_ref",
+                "refer_instrumental": "inst_ref",
+                "model": None,
+                "is_instrumental": False,
+                "lyrics_optimizer": False,
+            },
         )
     ]
     assert result == {
@@ -118,14 +130,29 @@ async def test_generate_minimax_lyrics_response_extracts_nested_lyrics():
         "song_title": "",
         "style_tags": "",
     }
-    assert client.calls == [("lyrics_generate", {"text": "write a chorus", "language": "zh"})]
+    assert client.calls == [(
+        "lyrics_generate",
+        {
+            "text": "write a chorus",
+            "language": "zh",
+            "mode": "write_full_song",
+            "lyrics": "",
+            "title": "",
+        },
+    )]
 
 
 @pytest.mark.asyncio
 async def test_generate_minimax_lyrics_response_prefers_current_top_level_contract():
     class CurrentLyricsClient:
         async def lyrics_generate(self, **kwargs):
-            assert kwargs == {"text": "写一首校园歌曲", "language": "zh"}
+            assert kwargs == {
+                "text": "写一首校园歌曲",
+                "language": "zh",
+                "mode": "write_full_song",
+                "lyrics": "",
+                "title": "",
+            }
             return {
                 "lyrics": "[Verse]\n下课铃响起",
                 "song_title": "下课以后",
