@@ -128,12 +128,17 @@ describe('StoryboardScriptColumn', () => {
     expect(designColumnSource).not.toContain("target.tagName === 'INPUT'");
   });
 
-  it('gives long video prompts a taller, user-resizable editor', () => {
+  it('gives long image and video prompts taller, user-resizable editors', () => {
+    expect(designColumnSource).toContain('data-testid={`storyboard-image-prompt-${item.id}`}');
+    expect(designColumnSource).toContain('min-h-[144px] max-h-[320px]');
+    expect(designColumnSource).toMatch(
+      /data-testid=\{`storyboard-image-prompt-\$\{item\.id\}`\}[\s\S]{0,320}rows=\{6\}/,
+    );
     expect(designColumnSource).toContain('data-testid={`storyboard-video-prompt-${item.id}`}');
-    expect(designColumnSource).toContain('min-h-[112px] max-h-[240px]');
+    expect(designColumnSource).toContain('min-h-[192px] max-h-[400px]');
     expect(designColumnSource).toContain('border border-n40 resize-y');
     expect(designColumnSource).toMatch(
-      /data-testid=\{`storyboard-video-prompt-\$\{item\.id\}`\}[\s\S]{0,300}rows=\{5\}/,
+      /data-testid=\{`storyboard-video-prompt-\$\{item\.id\}`\}[\s\S]{0,320}rows=\{9\}/,
     );
   });
 

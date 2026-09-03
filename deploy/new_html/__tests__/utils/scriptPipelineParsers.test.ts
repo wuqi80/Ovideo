@@ -4,6 +4,7 @@ import {
     parseVideoScriptBlocks,
     parseVideoScriptGroups,
     combineVideoScriptOutputs,
+    ensureExplicitVideoScriptShotSizes,
     ensureVideoScriptPromptLengths,
     findVideoScriptShotBlock,
     normalizeGeneratedVideoScript,
@@ -201,6 +202,63 @@ describe('parseVideoScriptGroups', () => {
         expect(blocks[0].shotNo).toBe('分镜12-3');
     });
 
+    it('adds an explicit shot size inferred from the visual description', () => {
+        const normalized = ensureExplicitVideoScriptShotSizes([
+            '分段1',
+            '分镜1-1',
+            '时长（秒）：5',
+            '画面描述：特写，女主角抬眼看向镜头。',
+            '镜头运动：缓慢推近，平视角度。',
+        ].join('\n'));
+
+        expect(normalized).toContain('时长（秒）：5\n景别：特写\n画面描述');
+    });
+
+    it('preserves an existing shot size and defaults to a medium shot when none can be inferred', () => {
+        const existing = ensureExplicitVideoScriptShotSizes([
+            '分段1',
+            '分镜1-1',
+            '时间：3秒',
+            '景别：远景',
+            '画面描述：人物穿过荒原。',
+        ].join('\n'));
+        const fallback = ensureExplicitVideoScriptShotSizes([
+            '分段1',
+            '分镜1-1',
+            '时间：3秒',
+            '画面描述：人物推门进入办公室。',
+        ].join('\n'));
+
+        expect(existing.match(/景别：远景/g)).toHaveLength(1);
+        expect(fallback).toContain('时间：3秒\n景别：中景\n画面描述');
+    });
+
+    it('keeps later shots out of a misplaced segment constraint section', () => {
+        const normalized = ensureVideoScriptPromptLengths([
+            '分段1',
+            '镜头1-1',
+            '时间：5秒',
+            '景别：中景',
+            '画面描述：角色站在门口。',
+            '【视觉风格】复古中式与科幻元素融合。',
+            '【正向稳定约束】角色造型与空间关系保持稳定。',
+            '保持无字幕、无水印、无Logo。',
+            '镜头1-2',
+            '时间：5秒',
+            '景别：近景',
+            '画面描述：角色抬手指向菜单板。',
+            '镜头运动：固定镜头，平视角度。',
+        ].join('\n'));
+        const [group] = parseVideoScriptGroups(normalized);
+
+        expect(group.blocks).toHaveLength(2);
+        expect(normalized).toContain('镜头1-2\n时间：5秒\n景别：近景');
+        expect(normalized.indexOf('镜头1-2')).toBeLessThan(normalized.indexOf('【视觉风格】'));
+        expect(group.stabilityConstraint).toContain('无背景音乐');
+        expect(group.stabilityConstraint).not.toContain('镜头1-2');
+        expect(group.stabilityConstraint).not.toContain('画面描述：角色抬手');
+    });
+
     it('silently pads short segment prompts while preserving shot content', () => {
         const normalized = ensureVideoScriptPromptLengths([
             '分段1',
@@ -213,6 +271,7 @@ describe('parseVideoScriptGroups', () => {
         const [group] = parseVideoScriptGroups(normalized);
 
         expect(group.blocks[0].rawBlock).toContain('主角推门进入办公室');
+        expect(group.blocks[0].rawBlock).toContain('景别：中景');
         expect(countPromptCharacters(group.visualStyle)).toBeGreaterThanOrEqual(MIN_VISUAL_STYLE_CHARACTERS);
         expect(countPromptCharacters(group.stabilityConstraint))
             .toBeGreaterThanOrEqual(MIN_STABILITY_CONSTRAINT_CHARACTERS);

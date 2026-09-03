@@ -133,7 +133,7 @@ export const StoryboardScriptColumn: React.FC<StoryboardScriptColumnProps> = ({
                       <span className={`mb-3 block text-xs font-semibold ${isHighlighted ? 'text-primary' : 'text-n700'}`}>
                         {toStoryboardLabel(entry.localShotLabel)}
                       </span>
-                      <span className="block whitespace-pre-wrap font-mono text-sm leading-7 text-n700">
+                      <span className="font-document block whitespace-pre-wrap text-sm leading-7 text-n700">
                         {getScriptBlock(item)}
                       </span>
                     </button>

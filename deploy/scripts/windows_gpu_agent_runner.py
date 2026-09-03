@@ -196,6 +196,70 @@ def lookup_gpu2_node_output(output_id: str) -> Dict[str, Any] | None:
     return {**item, "path": str(path)}
 
 
+def delete_gpu2_node_output(output_id: str) -> Dict[str, Any]:
+    """Permanently remove one registered upscale output from the GPU node."""
+    normalized_id = str(output_id or "").strip()
+    with _GPU2_NODE_OUTPUT_LOCK:
+        entries = _gpu2_load_node_output_registry()
+        item = entries.get(normalized_id)
+        if not isinstance(item, dict):
+            return {"success": True, "deleted": False, "freed_bytes": 0}
+
+        path = _gpu2_safe_node_output_path(item.get("path"))
+        if path is None:
+            raise RuntimeError("Node output path is outside the managed output directory")
+
+        freed_bytes = path.stat().st_size if path.is_file() else 0
+        if path.exists():
+            if not path.is_file():
+                raise RuntimeError("Node output path is not a file")
+            path.unlink()
+
+        entries.pop(normalized_id, None)
+        _gpu2_save_node_output_registry(entries)
+        return {
+            "success": True,
+            "deleted": True,
+            "freed_bytes": freed_bytes,
+        }
+
+
+def serve_gpu2_node_output_delete_once(agent: Any) -> bool:
+    """Execute at most one authenticated node-local permanent deletion."""
+    if not getattr(agent, "agent_id", None):
+        return False
+    response = requests.get(
+        f"{agent.server_url}/api/agent/node-output-deletions/poll",
+        headers=agent._headers(),
+        timeout=(3, 8),
+    )
+    response.raise_for_status()
+    request_data = (response.json() or {}).get("request")
+    if not isinstance(request_data, dict):
+        return False
+
+    request_id = str(request_data.get("request_id") or "")
+    output_id = str(request_data.get("output_id") or "")
+    try:
+        result = delete_gpu2_node_output(output_id)
+        payload = {
+            "success": True,
+            "freed_bytes": int(result.get("freed_bytes") or 0),
+            "error": "",
+        }
+    except Exception as exc:
+        payload = {"success": False, "freed_bytes": 0, "error": str(exc)}
+
+    completed = requests.post(
+        f"{agent.server_url}/api/agent/node-output-deletions/{request_id}/complete",
+        json=payload,
+        headers=agent._headers(),
+        timeout=(3, 15),
+    )
+    completed.raise_for_status()
+    return True
+
+
 def serve_gpu2_node_output_download_once(agent: Any) -> bool:
     """Serve at most one authenticated relay request through an outbound stream."""
     if not getattr(agent, "agent_id", None):
@@ -1240,7 +1304,7 @@ def build_gpu2_upscale_workflow(task: Dict[str, Any]) -> Dict[str, Any]:
         },
         "5": {
             "class_type": "SaveImage",
-            "inputs": {"images": ["4", 0], "filename_prefix": "OSTORY_GPU2_upscale"},
+            "inputs": {"images": ["4", 0], "filename_prefix": "OSTORY_ScencGo_upscale"},
         },
     }
 
@@ -3043,6 +3107,15 @@ def main() -> None:
             return super().heartbeat()
 
         def poll(self):
+            try:
+                if serve_gpu2_node_output_delete_once(self):
+                    return None
+            except Exception as exc:
+                print(
+                    f"[OSTORY] Node-local output deletion failed: {exc}",
+                    file=sys.stderr,
+                    flush=True,
+                )
             try:
                 if serve_gpu2_node_output_download_once(self):
                     return None

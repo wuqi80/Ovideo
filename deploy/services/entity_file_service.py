@@ -19,6 +19,14 @@ class EntityFileBatchTooLarge(EntityFileServiceError):
     pass
 
 
+class EntityFileDeleteRiskNotAcknowledged(EntityFileServiceError):
+    pass
+
+
+class EntityFilePhysicalDeleteFailed(EntityFileServiceError):
+    pass
+
+
 class EntityFileMigrationFailed(EntityFileServiceError):
     pass
 
@@ -78,6 +86,18 @@ async def list_deleted_user_files(
     )
     total = await entity_file_dao.count_deleted_user_files(user_id, file_type)
     return {"success": True, "items": _normalize_file_rows(rows), "total": total}
+
+
+async def get_deleted_user_file(
+    *,
+    file_id: str,
+    user_id: str,
+    entity_file_dao: Any,
+) -> Dict[str, Any]:
+    row = await entity_file_dao.get_deleted_user_file(file_id, user_id)
+    if not row:
+        raise EntityFileNotFound("Deleted file not found or access denied")
+    return _normalize_file_rows([row])[0]
 
 
 async def list_entity_files(
@@ -263,23 +283,87 @@ async def restore_entity_file(
 async def hard_delete_entity_file(
     *,
     file_id: str,
+    user_id: str,
+    risk_ack: bool,
     entity_file_dao: Any,
+    node_output_deleter: Optional[Callable[..., Any]] = None,
 ) -> Dict[str, Any]:
-    result = await entity_file_dao.hard_delete(file_id)
-    if not result:
-        raise EntityFileNotFound("File not found")
-    return {"success": True, "freed_bytes": result["freed_bytes"]}
+    if not risk_ack:
+        raise EntityFileDeleteRiskNotAcknowledged("Permanent deletion must be acknowledged")
+
+    row = await entity_file_dao.get_deleted_user_file(file_id, user_id)
+    if not row:
+        raise EntityFileNotFound("Deleted file not found or access denied")
+    normalized = _normalize_file_rows([row])[0]
+    metadata = normalized.get("metadata") if isinstance(normalized.get("metadata"), dict) else {}
+    node_output_id = str(metadata.get("node_output_id") or "").strip()
+    node_agent_id = str(metadata.get("node_agent_id") or "").strip()
+    is_node_local = str(normalized.get("file_path") or "").startswith("agent://") or (
+        str(metadata.get("source") or "") == "node_local_output"
+    )
+
+    try:
+        if is_node_local:
+            if not node_output_id or not node_agent_id or node_output_deleter is None:
+                raise EntityFilePhysicalDeleteFailed("Local node deletion information is unavailable")
+            remote = await node_output_deleter(
+                agent_id=node_agent_id,
+                output_id=node_output_id,
+            )
+            deleted = await entity_file_dao.delete_deleted_user_file_record(file_id, user_id)
+            if not deleted:
+                raise EntityFilePhysicalDeleteFailed("File record changed during permanent deletion")
+            freed_bytes = max(0, int((remote or {}).get("freed_bytes") or 0))
+        else:
+            result = await entity_file_dao.hard_delete(file_id, user_id)
+            if not result:
+                raise EntityFileNotFound("Deleted file not found or access denied")
+            freed_bytes = max(0, int(result.get("freed_bytes") or 0))
+    except EntityFileServiceError:
+        raise
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise EntityFilePhysicalDeleteFailed(str(exc)) from exc
+
+    return {"success": True, "file_id": file_id, "freed_bytes": freed_bytes}
 
 
 async def hard_delete_entity_files_batch(
     *,
     file_ids: list[str],
+    user_id: str,
+    risk_ack: bool,
     entity_file_dao: Any,
+    node_output_deleter: Optional[Callable[..., Any]] = None,
 ) -> Dict[str, Any]:
-    if len(file_ids) > 200:
+    if not risk_ack:
+        raise EntityFileDeleteRiskNotAcknowledged("Permanent deletion must be acknowledged")
+    unique_ids = [file_id for file_id in dict.fromkeys(file_ids or []) if file_id]
+    if len(unique_ids) > 200:
         raise EntityFileBatchTooLarge("Batch hard delete accepts at most 200 files")
-    result = await entity_file_dao.hard_delete_batch(file_ids)
-    return {"success": True, **result}
+
+    deleted = 0
+    freed_bytes = 0
+    errors = []
+    for file_id in unique_ids:
+        try:
+            result = await hard_delete_entity_file(
+                file_id=file_id,
+                user_id=user_id,
+                risk_ack=True,
+                entity_file_dao=entity_file_dao,
+                node_output_deleter=node_output_deleter,
+            )
+            deleted += 1
+            freed_bytes += int(result.get("freed_bytes") or 0)
+        except EntityFileServiceError as exc:
+            errors.append({"file_id": file_id, "error": str(exc)})
+    return {
+        "success": not errors,
+        "requested": len(unique_ids),
+        "deleted": deleted,
+        "freed_bytes": freed_bytes,
+        "errors": errors,
+    }
 
 
 async def run_entity_file_migration(

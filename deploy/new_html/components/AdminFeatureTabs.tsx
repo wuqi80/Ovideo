@@ -28,6 +28,10 @@ import { getAdminRole, setAdminSession } from '../admin/adminAuth';
 import { PLATFORM_ROLE_OPTIONS, getPlatformRoleDescription } from '../utils/adminRoles';
 import { formatChinaDateTime } from '../utils/dateTime';
 import { getCreditTransactionReason } from '../utils/creditTransactionPresentation';
+import {
+  normalizeAdminCreditAdjustmentAmountInput,
+  parseAdminCreditAdjustmentAmount,
+} from '../utils/adminCreditAdjustment';
 import AdminOrganizationsTab from '../admin/AdminOrganizationsTab';
 import {
   crmMessage, crmConfirm, crmPrompt,
@@ -699,7 +703,7 @@ const CreditAccountsTab: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [adjustOpen, setAdjustOpen] = useState<{ owner_id: string; owner: string } | null>(null);
-  const [amount, setAmount] = useState(0);
+  const [amountText, setAmountText] = useState('');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -717,13 +721,27 @@ const CreditAccountsTab: React.FC = () => {
 
   useEffect(() => { reload(); }, [reload]);
 
+  const openAdjustment = (account: { owner_id: string; owner_type: string }) => {
+    setAmountText('');
+    setReason('');
+    setAdjustOpen({ owner_id: account.owner_id, owner: `${account.owner_type}/${account.owner_id}` });
+  };
+
+  const closeAdjustment = () => {
+    if (submitting) return;
+    setAdjustOpen(null);
+    setAmountText('');
+    setReason('');
+  };
+
   const submitAdjust = async () => {
-    if (!adjustOpen || amount === 0 || !reason.trim()) { crmMessage.error('需要金额（非 0）和理由'); return; }
+    const amount = parseAdminCreditAdjustmentAmount(amountText);
+    if (!adjustOpen || amount === null || !reason.trim()) { crmMessage.error('需要金额（非 0 整数）和理由'); return; }
     setSubmitting(true);
     try {
       await apiPost(`/api/admin/credit-accounts/${adjustOpen.owner_id}/adjust`, { delta: amount, reason });
       crmMessage.success('调整成功');
-      setAdjustOpen(null); setAmount(0); setReason('');
+      setAdjustOpen(null); setAmountText(''); setReason('');
       reload();
     } catch (e: any) {
       crmMessage.error(`调整失败：${await readApiError(e)}`);
@@ -759,7 +777,7 @@ const CreditAccountsTab: React.FC = () => {
             <td className="p-2.5 text-right">
               <CrmActionLink type="primary" disabled={a.owner_type !== 'user'}
                 title={a.owner_type !== 'user' ? '当前只支持调整 user 账户' : ''}
-                onClick={() => setAdjustOpen({ owner_id: a.owner_id, owner: `${a.owner_type}/${a.owner_id}` })}>
+                onClick={() => openAdjustment(a)}>
                 手动调整
               </CrmActionLink>
             </td>
@@ -771,18 +789,28 @@ const CreditAccountsTab: React.FC = () => {
       <CrmPagination total={accounts.length} page={page} pageSize={PAGE_SIZE} onChange={setPage} />
 
       {adjustOpen && (
-        <div className="fixed inset-0 z-50 bg-n900/40 backdrop-blur-sm flex items-center justify-center"
-             onClick={e => { if (e.target === e.currentTarget) setAdjustOpen(null); }}>
-          <div className="bg-n0 border border-n40 rounded-lg w-96 shadow-bottom animate-scaleIn">
+        <div className="fixed inset-0 z-50 bg-n900/40 backdrop-blur-sm flex items-center justify-center">
+          <div role="dialog" aria-modal="true" aria-labelledby="credit-adjustment-title" className="bg-n0 border border-n40 rounded-lg w-96 shadow-bottom animate-scaleIn">
             <div className="flex justify-between items-center px-5 pt-4 pb-1">
-              <div className="text-[15px] font-semibold text-n800">手动调整 — {adjustOpen.owner}</div>
-              <button onClick={() => setAdjustOpen(null)} className="text-n100 hover:text-n700"><X className="w-4 h-4" /></button>
+              <div id="credit-adjustment-title" className="text-[15px] font-semibold text-n800">手动调整 — {adjustOpen.owner}</div>
+              <button type="button" onClick={closeAdjustment} disabled={submitting} aria-label="关闭手动调整窗口" className="text-n100 hover:text-n700 disabled:opacity-50"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-5 py-3 space-y-3">
               <div className="text-xs text-n300">正数 = 充值/赠送，负数 = 扣减。需要管理员审计理由。</div>
               <div>
                 <label className="block text-xs text-n300 mb-1">金额 *</label>
-                <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} placeholder="正/负整数"
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={amountText}
+                  onChange={event => {
+                    if (/^-?\d*$/.test(event.target.value)) {
+                      setAmountText(normalizeAdminCreditAdjustmentAmountInput(event.target.value));
+                    }
+                  }}
+                  onFocus={event => event.currentTarget.select()}
+                  placeholder="正/负整数"
+                  aria-label="调整金额"
                        className="w-full bg-n0 border border-n40 rounded px-2.5 py-1.5 text-sm focus:border-primary focus:outline-none" />
               </div>
               <div>
@@ -792,9 +820,9 @@ const CreditAccountsTab: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-5 pb-4">
-              <button onClick={() => setAdjustOpen(null)}
-                      className="px-3.5 py-1.5 rounded border border-n40 text-n700 hover:bg-n20 text-sm">取消</button>
-              <button onClick={submitAdjust} disabled={submitting}
+              <button type="button" onClick={closeAdjustment} disabled={submitting}
+                      className="px-3.5 py-1.5 rounded border border-n40 text-n700 hover:bg-n20 text-sm disabled:opacity-50">取消</button>
+              <button type="button" onClick={submitAdjust} disabled={submitting}
                       className="px-3.5 py-1.5 rounded bg-primary hover:bg-primary-hover text-white text-sm disabled:opacity-60">
                 {submitting ? '提交中…' : '提交调整'}
               </button>

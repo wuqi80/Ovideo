@@ -94,6 +94,7 @@ def create_node_output_router(*, require_auth_dependency: Callable[..., Any]) ->
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
+            "Accept-Ranges": "none",
         }
         if size:
             headers["Content-Length"] = str(size)
@@ -127,7 +128,7 @@ def create_node_output_router(*, require_auth_dependency: Callable[..., Any]) ->
 
     @router.get("/download/{ticket_token}")
     async def download_node_output(ticket_token: str):
-        ticket = await tickets.consume(ticket_token)
+        ticket = await tickets.resolve(ticket_token)
         if ticket is None:
             raise HTTPException(status_code=401, detail="下载链接已失效，请重新点击下载")
         return await create_stream(ticket.task_id, ticket.output_id, ticket.user_id)

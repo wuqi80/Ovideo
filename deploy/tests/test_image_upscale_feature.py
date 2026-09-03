@@ -88,6 +88,10 @@ def test_frontend_exposes_standalone_image_upscale_route_and_controls():
     assert "纯图片背景效果通常更稳定" in page
     assert "'image_upscale'" in page
     assert "结果保留 30 天" in page
+    assert "formatImageUpscaleDeletionTime" in page
+    assert "预计于" in (
+        DEPLOY_DIR / "new_html/utils/imageUpscaleRetention.ts"
+    ).read_text(encoding="utf-8")
     assert "预计处理耗时" in page
     assert "排队等待与下载时间另计" in page
     assert "[4, 8]" in page

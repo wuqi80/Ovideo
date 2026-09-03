@@ -41,6 +41,7 @@ import {
 import { formatProcessingNodeName } from '../utils/processingTerminology';
 import { fitAngleOutputDimensions } from '../utils/angleOutputSize';
 import {
+  applyComputerOperationOrientationConstraint,
   buildIdentityAnchoredPrompt,
   mergeDefaultShotReferences,
   resolveSelectedShotReferences,
@@ -1464,7 +1465,21 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
               '正在分析提示词与参考图',
               6,
           );
-          const promptToUse = buildIdentityAnchoredPrompt(shot, basePrompt, materialLibrary, submittedReferences);
+          const identityAnchoredPrompt = buildIdentityAnchoredPrompt(
+              shot,
+              basePrompt,
+              materialLibrary,
+              submittedReferences,
+          );
+          const promptToUse = applyComputerOperationOrientationConstraint(identityAnchoredPrompt, [
+              shot.originalText,
+              shot.scriptSegment,
+              shot.imagePrompt,
+              shot.videoPrompt,
+              shot.dialogue,
+              shot.scene,
+              ...(shot.props || []),
+          ]);
           const sourceDimensions = imageRatio === 'auto' || imageK === 'auto'
               ? await loadImageDimensions(refImages)
               : [];
@@ -2510,9 +2525,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
       console.log('   - 待导出的镜头数:', itemsToCheck.length);
       
       const itemsToExport = itemsToCheck.map(item => {
-          const selectedImg = item.selectedImageId 
-              ? item.generatedImages?.find(img => img.id === item.selectedImageId)
-              : item.generatedImages?.[0];
+          const selectedImg = (
+              item.selectedImageId
+                  ? item.generatedImages?.find(img => img.id === item.selectedImageId)
+                  : undefined
+          ) || item.generatedImages?.[0];
           
           console.log(`   📸 镜头 ${item.id}:`, {
               hasImages: !!item.generatedImages,

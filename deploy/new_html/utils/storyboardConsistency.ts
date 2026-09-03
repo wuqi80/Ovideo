@@ -6,6 +6,7 @@ import type {
   ProjectFile,
   StoryboardItem,
 } from '../types';
+import { COMPUTER_OPERATION_ORIENTATION_RULE } from './scriptPromptStandards';
 
 export type StoryboardGenerationModel =
   | 'nanobanana'
@@ -33,6 +34,31 @@ export interface StoryboardReferencePlan {
 export interface DefaultReferenceMerge {
   references: GenerationReference[];
   exceedsLimit: boolean;
+}
+
+const COMPUTER_DEVICE_PATTERN = /(?:电脑|计算机|笔记本(?:电脑)?|台式机|工作站|显示器|键盘|鼠标|\bcomputer\b|\blaptop\b|\bdesktop\b|\bworkstation\b|\bmonitor\b|\bkeyboard\b|\bmouse\b)/i;
+const COMPUTER_OPERATION_PATTERN = /(?:操作|使用|输入|打字|敲(?:击)?键盘|点击鼠标|浏览|查看|注视|看着|盯着|面向|(?:正在|埋头|低头|专注)(?:使用电脑)?(?:办公|工作)|坐在.{0,12}(?:电脑|笔记本|显示器).{0,4}(?:前|旁)|(?:电脑|笔记本|显示器).{0,4}(?:前|旁)|(?:屏幕|显示器)上?(?:显示|呈现)|\b(?:use|using|operate|operating|work|working|type|typing|click|clicking|browse|browsing|look|looking)\b)/i;
+const EXPLICIT_SCREEN_FRONT_PATTERN = /(?:屏幕(?:正面)?(?:朝向|面向|正对)(?:镜头|观众)|把.{0,12}屏幕.{0,8}(?:转向|面向|展示给)(?:镜头|观众)|屏幕内容特写|屏幕正面展示给观众|(?:越过.{0,8}(?:肩膀|肩头)|过肩(?:镜头|视角)?).{0,16}(?:看到|看见|展示|读取).{0,8}(?:屏幕|显示器)(?:正面|内容)?|screen\s+(?:front\s+)?facing\s+(?:the\s+)?(?:camera|audience)|show\s+(?:the\s+)?screen\s+to\s+(?:the\s+)?(?:camera|audience)|close-up\s+of\s+(?:the\s+)?screen\s+content|over-the-shoulder.{0,24}screen)/i;
+
+export function applyComputerOperationOrientationConstraint(
+  prompt: string,
+  contextValues: Array<string | null | undefined> = [],
+): string {
+  const basePrompt = String(prompt || '').trim();
+  if (basePrompt.includes(COMPUTER_OPERATION_ORIENTATION_RULE)) return basePrompt;
+
+  const context = [basePrompt, ...contextValues]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .join('\n');
+  if (
+    !COMPUTER_DEVICE_PATTERN.test(context)
+    || !COMPUTER_OPERATION_PATTERN.test(context)
+    || EXPLICIT_SCREEN_FRONT_PATTERN.test(context)
+  ) {
+    return basePrompt;
+  }
+
+  return [basePrompt, COMPUTER_OPERATION_ORIENTATION_RULE].filter(Boolean).join('\n\n');
 }
 
 function normalizedAnchor(raw: unknown): CharacterIdentityAnchor {

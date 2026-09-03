@@ -233,6 +233,7 @@ export async function updateScriptMessage(
 
 export interface CreateScriptVersionPayload {
   messageId?: string;
+  baseVersionId?: string;
   content: string;
   storyboardItems: StoryboardItem[];
   source?: 'ai' | 'manual' | 'legacy';
@@ -254,6 +255,8 @@ const SCRIPT_VERSION_SELECT_RETRY_DELAYS_MS = [
   10000,
 ];
 
+const SCRIPT_VERSION_CONFIRM_RETRY_DELAYS_MS = [300, 1000];
+
 function isTransientScriptVersionSelectError(error: unknown): boolean {
   const status = Number((error as { status?: unknown } | null)?.status);
   if ([502, 503, 504].includes(status)) return true;
@@ -264,6 +267,14 @@ function isTransientScriptVersionSelectError(error: unknown): boolean {
 
 function waitForScriptVersionSelectRetry(delayMs: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, delayMs));
+}
+
+function isTransientScriptVersionConfirmError(error: unknown): boolean {
+  const status = Number((error as { status?: unknown } | null)?.status);
+  if ([500, 502, 503, 504].includes(status)) return true;
+  if ((error as { name?: string } | null)?.name === 'AbortError') return false;
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /(?:^|\D)(?:500|502|503|504)(?:\D|$)|internal server error|failed to fetch|fetch failed|networkerror|network error|load failed|connection refused/i.test(message);
 }
 
 export async function createScriptVersion(
@@ -277,6 +288,7 @@ export async function createScriptVersion(
       method: 'POST',
       body: JSON.stringify({
         message_id: payload.messageId,
+        base_version_id: payload.baseVersionId,
         content: payload.content,
         storyboard_items: payload.storyboardItems,
         source: payload.source || 'ai',
@@ -324,25 +336,46 @@ export async function confirmScriptVersion(
   scriptId: string,
   versionId: string,
 ): Promise<ScriptStoryboardVersion> {
-  const response = await apiJson<any>(
-    `/api/episodes/${episodeId}/scripts/${scriptId}/versions/${versionId}/confirm`,
-    { method: 'PUT' },
-    'confirmScriptVersion',
-  );
-  return mapVersion(response?.version);
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const response = await apiJson<any>(
+        `/api/episodes/${episodeId}/scripts/${scriptId}/versions/${versionId}/confirm`,
+        { method: 'PUT' },
+        'confirmScriptVersion',
+      );
+      return mapVersion(response?.version);
+    } catch (error) {
+      const delayMs = SCRIPT_VERSION_CONFIRM_RETRY_DELAYS_MS[attempt];
+      if (delayMs === undefined || !isTransientScriptVersionConfirmError(error)) {
+        throw error;
+      }
+      console.warn(
+        `confirmScriptVersion 暂时不可用，${delayMs}ms 后重试 (${attempt + 1}/${SCRIPT_VERSION_CONFIRM_RETRY_DELAYS_MS.length})`,
+      );
+      await waitForScriptVersionSelectRetry(delayMs);
+    }
+  }
 }
 
 export async function rejectScriptVersion(
   episodeId: string,
   scriptId: string,
   versionId: string,
-): Promise<ScriptStoryboardVersion> {
+): Promise<{
+  version: ScriptStoryboardVersion;
+  outcome: 'rejected' | 'already_rejected' | 'already_confirmed' | 'not_rejectable';
+  currentVersionId?: string;
+}> {
   const response = await apiJson<any>(
     `/api/episodes/${episodeId}/scripts/${scriptId}/versions/${versionId}/reject`,
     { method: 'PUT' },
     'rejectScriptVersion',
   );
-  return mapVersion(response?.version);
+  return {
+    version: mapVersion(response?.version),
+    outcome: response?.outcome || 'rejected',
+    currentVersionId: response?.current_version_id || undefined,
+  };
 }
 
 export async function updateScriptVersionMetadata(

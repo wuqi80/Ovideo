@@ -27,6 +27,8 @@ export interface GpuTaskRouting {
 
 export interface GpuTaskRoutingOptions {
   strict?: boolean;
+  /** Ignore the browser's saved node preference and choose from live capacity. */
+  automatic?: boolean;
 }
 
 const PREFERRED_GPU_NODE_KEY = 'ostory:preferred-gpu-node-id';
@@ -126,8 +128,10 @@ export function selectGpuTaskNode(
     if (requestedNode) return requestedNode;
   }
 
-  const gpu1 = usableNodes.find((node) => matchesClusterNode(node, DEFAULT_GPU_NODE_NAME));
-  if (gpu1) return gpu1;
+  if (!options?.automatic) {
+    const gpu1 = usableNodes.find((node) => matchesClusterNode(node, DEFAULT_GPU_NODE_NAME));
+    if (gpu1) return gpu1;
+  }
 
   return [...usableNodes].sort((left, right) => (
     clusterNodeLoad(left) - clusterNodeLoad(right)
@@ -172,7 +176,7 @@ export async function resolveGpuTaskRouting(
   options?: GpuTaskRoutingOptions,
 ): Promise<GpuTaskRouting> {
   const result = await fetchClusterNodes();
-  const requested = explicitNodeId || getPreferredGpuNodeId();
+  const requested = explicitNodeId || (options?.automatic ? '' : getPreferredGpuNodeId());
   const requestedNode = result.nodes.find((item) => matchesClusterNode(item, requested));
   const node = selectGpuTaskNode(result.nodes, requested, options);
 
@@ -188,7 +192,7 @@ export async function resolveGpuTaskRouting(
     setPreferredGpuNodeId(clusterNodePreferenceId(requestedNode));
   }
 
-  if (!options?.strict && (!requestedNode || !hasClusterNodeCapacity(requestedNode))) {
+  if (!options?.strict && requested && (!requestedNode || !hasClusterNodeCapacity(requestedNode))) {
     crmMessage.info(`处理节点「${formatProcessingNodeName(requested)}」当前不可用，任务已自动切换到「${node.name}」。`);
   }
 

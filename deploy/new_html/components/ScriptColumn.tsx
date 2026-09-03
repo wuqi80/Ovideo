@@ -654,7 +654,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
           <>
             {isEditMode ? (
                 <textarea
-                    className="w-full h-full p-6 bg-n0 text-sm font-mono text-n700 leading-relaxed resize-none focus:outline-none focus:bg-n0 border border-primary focus:border-primary focus:ring-2 focus:ring-primary/20"
+                    className="font-document w-full h-full p-6 bg-n0 text-sm text-n700 leading-relaxed resize-none focus:outline-none focus:bg-n0 border border-primary focus:border-primary focus:ring-2 focus:ring-primary/20"
                     value={selectedFile.scriptContent || ''}
                     onChange={(e) => onUpdateScript(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
@@ -669,7 +669,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                 // 🆕 已提取分镜：显示原文+选择高亮+工具条
                 <div className="p-6 space-y-6 pb-20 relative">
                     <div
-                      className="font-mono text-sm whitespace-pre-wrap text-n700 leading-relaxed border-l-2 border-success pl-4 selection:bg-primary-light selection:text-n800 relative"
+                      className="font-document text-sm whitespace-pre-wrap text-n700 leading-relaxed border-l-2 border-success pl-4 selection:bg-primary-light selection:text-n800 relative"
                       style={{ userSelect: 'text', WebkitUserSelect: 'text', cursor: 'text' }}
                       dangerouslySetInnerHTML={{ __html: renderScriptContentWithHighlight() }}
                     />
@@ -693,7 +693,7 @@ export const ScriptColumn: React.FC<ScriptColumnProps> = ({
                 <div className="p-6 space-y-6 pb-20">
                     {/* 显示原文脚本并基于数据结构高亮 */}
                     <div
-                      className="font-mono text-sm whitespace-pre-wrap text-n700 leading-relaxed border-l-2 border-success pl-4 selection:bg-primary-light selection:text-n800"
+                      className="font-document text-sm whitespace-pre-wrap text-n700 leading-relaxed border-l-2 border-success pl-4 selection:bg-primary-light selection:text-n800"
                       style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
                       dangerouslySetInnerHTML={{ __html: renderScriptContentWithHighlight() }}
                     />

@@ -201,6 +201,61 @@ async def test_doubao_agent_plan_card_projects_runtime_env(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_doubao_agent_plan_is_preferred_when_payg_is_also_enabled(monkeypatch) -> None:
+    from services import api_config_runtime_loader as loader
+
+    env_key = get_provider_env_key("doubao")
+    assert env_key
+    endpoint_env = get_endpoint_env_key(env_key)
+    model_env = get_model_env_key(env_key)
+    for key in (env_key, endpoint_env, model_env):
+        monkeypatch.delenv(key, raising=False)
+        monkeypatch.setitem(loader._BASE_API_ENV_VALUES, key, None)
+
+    payg_row = {
+        "config_id": "doubao-payg-card",
+        "name": "Doubao PAYG",
+        "provider": "doubao",
+        "endpoint": DOUBAO_IMAGE_STANDARD_ENDPOINT,
+        "api_key_encrypted": "enc:payg-key",
+        "model_name": DOUBAO_IMAGE_PAYG_MODEL,
+        "model_bindings": [
+            {"operation": "generate", "model_name": DOUBAO_IMAGE_PAYG_MODEL}
+        ],
+        "enabled": True,
+    }
+    plan_row = {
+        "config_id": "doubao-agent-plan-card",
+        "name": "Doubao Agent Plan",
+        "provider": "doubao",
+        "endpoint": DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT,
+        "api_key_encrypted": "enc:plan-key",
+        "model_name": DOUBAO_IMAGE_PAYG_MODEL,
+        "model_bindings": [
+            {"operation": "generate", "model_name": DOUBAO_IMAGE_PAYG_MODEL}
+        ],
+        "enabled": True,
+    }
+    monkeypatch.setattr(
+        loader.ApiConfigDAO,
+        "list_enabled",
+        AsyncMock(return_value=[plan_row, payg_row]),
+    )
+    monkeypatch.setattr(
+        loader.ApiConfigDAO,
+        "decrypt_key",
+        staticmethod(lambda value: value.split(":", 1)[1]),
+    )
+
+    result = await loader.load_api_configs_to_env()
+
+    assert result["success"] is True
+    assert loader.os.environ[env_key] == "plan-key"
+    assert loader.os.environ[endpoint_env] == DOUBAO_IMAGE_AGENT_PLAN_ENDPOINT
+    assert loader.os.environ[model_env] == DOUBAO_IMAGE_AGENT_PLAN_MODEL
+
+
+@pytest.mark.asyncio
 async def test_doubao_generation_forces_agent_plan_model(monkeypatch) -> None:
     config = SimpleNamespace(
         api_key="test-agent-plan-key",

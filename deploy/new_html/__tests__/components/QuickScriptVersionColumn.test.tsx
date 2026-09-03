@@ -77,7 +77,10 @@ describe('QuickScriptVersionColumn', () => {
     expect(onExportVersion).toHaveBeenCalledWith(version);
 
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
-    fireEvent.change(screen.getByLabelText('编辑分镜脚本'), {
+    const editor = screen.getByLabelText('编辑分镜脚本');
+    expect(editor).toHaveClass('font-document');
+    expect(editor).not.toHaveClass('font-mono');
+    fireEvent.change(editor, {
       target: { value: '镜头1-1\n主角缓慢推门进入。' },
     });
     fireEvent.click(screen.getByRole('button', { name: '保存为新版' }));

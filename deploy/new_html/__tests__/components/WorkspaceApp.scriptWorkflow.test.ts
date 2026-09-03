@@ -40,6 +40,11 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('await activateWorkflowScript(exportFileId)');
     expect(source).toContain('preserve_existing_storyboards: true');
     expect(source).toContain('storyboard_items: []');
+    expect(source).toContain("buildScriptAssetDescriptionRows(\n            'character'");
+    expect(source).toContain('characters: characterRows');
+    expect(source).toContain('scenes: sceneRows');
+    expect(source).toContain('props: propRows');
+    expect(source).not.toContain("charNames.map(n => ({ name: n, description: '' }))");
     expect(source).not.toContain('当前浏览的不是本集后续采用剧本，请先在文件列表中设为后续采用。');
   });
 
@@ -128,11 +133,16 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('mergePersistedScriptConversation(latestFile, conversation, prev[selectedFileId])');
   });
 
-  it('uses one direct streaming prompt for both initial generation and revisions', () => {
+  it('uses the generation prompt initially and a scope-locked iteration prompt for revisions', () => {
     expect(source).toContain('const { aiGenerateStoryboardScript } = await loadAiModelService()');
     expect(source).toContain('result = await aiGenerateStoryboardScript(');
+    expect(source).toContain('result = await handleIterateScript(');
+    expect(source).toContain('selectScriptIterationBaseVersion(conversation)');
+    expect(source).toContain('buildScriptVersionChainContext(conversation, currentVersion)');
+    expect(source).toContain('baseVersionId: isFirstTurn ? undefined : currentVersion?.id');
+    expect(source).toContain('stabilizeScriptIterationResult(generationSource, normalizedCandidate, generationRequirements)');
     expect(source).toContain('appendStreamChunk');
-    expect(source).toContain('const finalContent = normalizeGeneratedVideoScript(rawFinalContent)');
+    expect(source).toContain('const normalizedCandidate = normalizeGeneratedVideoScript(rawFinalContent)');
     expect(source).toContain('parseVideoScriptGroups(content).map(group => [group.groupNo, group.sharedVideoPrompt])');
     expect(source).toContain('const videoPrompt = groupPrompts.get(segmentNo) || item.videoPrompt');
     expect(source).toContain("stage: 'directStoryboardScript'");
@@ -140,6 +150,12 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).not.toContain('pipelineService.generateEpisodeVideoScript');
     expect(source).not.toContain('pipelineService.iterateEpisodeVideoScript');
     expect(source).not.toContain('assertValidVideoScript(normalizedContent)');
+  });
+
+  it('reconciles rejection clicks when the server says the version was already confirmed', () => {
+    expect(source).toContain("rejection.outcome === 'already_confirmed'");
+    expect(source).toContain('currentVersionId: rejection.currentVersionId || current.currentVersionId');
+    expect(source).toContain('scriptContent: rejected.content');
   });
 
   it('runs quick generation through the retained master three-stage handlers', () => {

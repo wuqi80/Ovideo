@@ -66,10 +66,18 @@ export async function handleResponse(response: Response, apiName: string = 'API'
   if (!contentType || !contentType.includes('application/json')) {
     const text = await response.text();
     console.error(`${publicApiName} 返回非JSON响应 (${response.status}):`, sanitizeProcessingTerminology(text.substring(0, 200)));
+    const buildHttpError = (message: string) => {
+      const error: any = new Error(message);
+      error.status = response.status;
+      return error;
+    };
     if (text.startsWith('<!DOCTYPE') || text.startsWith('<html')) {
-      throw new Error(`${publicApiName} 返回了HTML页面而非JSON (${response.status})，可能是路由不存在或服务器错误`);
+      throw buildHttpError(`${publicApiName} 返回了HTML页面而非JSON (${response.status})，可能是路由不存在或服务器错误`);
     }
-    throw new Error(`${publicApiName} 返回了非JSON响应: ${sanitizeProcessingTerminology(text.substring(0, 100))}`);
+    if (text.trim().toLowerCase() === 'internal server error') {
+      throw buildHttpError(`${publicApiName} 服务暂时异常 (${response.status})，系统将自动重试`);
+    }
+    throw buildHttpError(`${publicApiName} 返回了非JSON响应 (${response.status}): ${sanitizeProcessingTerminology(text.substring(0, 100))}`);
   }
 
   let data: any;

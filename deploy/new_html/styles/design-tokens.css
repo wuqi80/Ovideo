@@ -83,9 +83,10 @@
   --bg-sunken:    var(--n30);
   --bg-hover:     var(--n20);
 
-  /* ---------- 字体：Sora 标题 / Noto Sans SC 正文 / Space Mono 编号标签 ---------- */
+  /* ---------- 字体：Sora 标题 / Noto Sans SC 正文 / Times New Roman 脚本文档 / Space Mono 技术标识 ---------- */
   --font-sans: "Noto Sans SC", "Sora", "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-display: "Sora", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-document: "Times New Roman", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
   --font-mono: "Space Mono", Inconsolata, ui-monospace, "SFMono-Regular", Consolas, monospace;
 
   /* 字号：工具型界面采用 DESIGN.md 的正文/标题比例 */
@@ -193,6 +194,12 @@ code,
 [class*="font-mono"] {
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* 长篇剧本不是代码：西文和数字使用标准衬线体，中文按系统字体回退。 */
+.font-document {
+  font-family: var(--font-document);
+  font-variant-numeric: lining-nums proportional-nums;
 }
 
 #root {

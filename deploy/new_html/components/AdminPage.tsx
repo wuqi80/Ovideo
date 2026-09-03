@@ -15,6 +15,7 @@ import { formatProcessingNodeName, sanitizeProcessingTerminology } from '../util
 import { DEFAULT_SCRIPT_MODEL_OPTIONS } from '../services/scriptModelCatalogService';
 import { SELECTABLE_MODELS, getModelDisplayName } from '../services/videoModelService';
 import { STORYBOARD_GENERATION_MODEL_OPTIONS } from '../utils/storyboardGenerationModels';
+import { DESIGN_IMAGE_MODEL_OPTIONS } from '../utils/designImageModels';
 import { PLATFORM_ROLE_OPTIONS, getPlatformRoleLabel, normalizePlatformRole } from '../utils/adminRoles';
 import { getAdminRole } from '../admin/adminAuth';
 import { formatChinaDateTime } from '../utils/dateTime';
@@ -91,6 +92,7 @@ const mapClusterNode = ([nodeId, nodeData]: [string, any]): ServerNode => {
 const MODEL_OPTIONS = Array.from(new Map([
     ...DEFAULT_SCRIPT_MODEL_OPTIONS.map(option => ({ value: String(option.value), label: option.label })),
     ...STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => ({ value: option.value, label: option.label })),
+    ...DESIGN_IMAGE_MODEL_OPTIONS.map(option => ({ value: option.id, label: option.label })),
     ...SELECTABLE_MODELS.map(model => ({ value: model, label: getModelDisplayName(model) })),
 ].map(option => [option.value, option])).values());
 
@@ -207,11 +209,10 @@ const normalizeUserRow = (raw: any): UserAccount => {
     }
     const isActiveRaw = raw?.isActive ?? raw?.is_active ?? (raw?.status ? raw.status !== 'disabled' : true);
     const allowedModels = Array.isArray(rp.allowedModels) ? rp.allowedModels : (Array.isArray(rp.allowed_models) ? rp.allowed_models : []);
-    const accessMode = rp.accessMode === 'blocked' || rp.access_mode === 'blocked'
-        ? 'blocked'
-        : (rp.accessMode === 'restricted' || rp.access_mode === 'restricted' || allowedModels.length > 0)
-            ? 'restricted'
-            : 'inherit';
+    const explicitAccessMode = rp.accessMode ?? rp.access_mode;
+    const accessMode = explicitAccessMode === 'blocked' || explicitAccessMode === 'restricted' || explicitAccessMode === 'inherit'
+        ? explicitAccessMode
+        : (allowedModels.length > 0 ? 'restricted' : 'inherit');
     const lastActiveRaw = raw?.lastActiveAt ?? raw?.last_active_at ?? 0;
     const lastActiveAt = typeof lastActiveRaw === 'number'
         ? lastActiveRaw

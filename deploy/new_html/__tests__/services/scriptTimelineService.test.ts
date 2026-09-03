@@ -12,7 +12,9 @@ import {
   getTimelineTracks,
   listEpisodeScriptSegments,
   listEpisodeScripts,
+  rejectScriptVersion,
   selectWorkflowScript,
+  confirmScriptVersion,
   selectScriptVersion,
   updateScriptMessage,
   updateEpisodeScriptById,
@@ -193,7 +195,11 @@ describe('script timeline service', () => {
     const conversation = await getScriptConversation('ep_1', 'script_1');
     await createScriptMessage('ep_1', 'script_1', { role: 'assistant', content: '', status: 'streaming' });
     await updateScriptMessage('ep_1', 'script_1', 'msg_2', { content: '镜头01', status: 'completed' });
-    await createScriptVersion('ep_1', 'script_1', { content: '镜头01', storyboardItems: [{ id: 'shot_1', originalText: '', scriptSegment: '' }] });
+    await createScriptVersion('ep_1', 'script_1', {
+      baseVersionId: 'ver_1',
+      content: '镜头01',
+      storyboardItems: [{ id: 'shot_1', originalText: '', scriptSegment: '' }],
+    });
     await selectScriptVersion('ep_1', 'script_1', 'ver_2');
 
     expect(conversation.currentVersionId).toBe('ver_1');
@@ -202,6 +208,7 @@ describe('script timeline service', () => {
     expect(mockFetch.mock.calls[2][1].method).toBe('PATCH');
     expect(mockFetch.mock.calls[3][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions');
     expect(JSON.parse(mockFetch.mock.calls[3][1].body).storyboard_items[0].id).toBe('shot_1');
+    expect(JSON.parse(mockFetch.mock.calls[3][1].body).base_version_id).toBe('ver_1');
     expect(mockFetch.mock.calls[4][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions/ver_2/select');
   });
 
@@ -227,6 +234,58 @@ describe('script timeline service', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(mockFetch.mock.calls[0][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions/ver_2/select');
     expect(mockFetch.mock.calls[1][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions/ver_2/select');
+  });
+
+  it('retries a plain-text 500 when confirming an idempotent script version', async () => {
+    vi.useFakeTimers();
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: new Headers({ 'content-type': 'text/plain; charset=utf-8' }),
+        text: async () => 'Internal Server Error',
+      })
+      .mockResolvedValueOnce(mockJsonResponse({
+        success: true,
+        version: {
+          version_id: 'ver_2',
+          script_id: 'script_1',
+          version_no: 2,
+          status: 'ready',
+          storyboard_items: [],
+        },
+      }));
+
+    const promise = confirmScriptVersion('ep_1', 'script_1', 'ver_2');
+    const assertion = expect(promise).resolves.toEqual(expect.objectContaining({ id: 'ver_2', status: 'ready' }));
+    await vi.advanceTimersByTimeAsync(300);
+    await assertion;
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions/ver_2/confirm');
+    expect(mockFetch.mock.calls[1][0]).toBe('/api/episodes/ep_1/scripts/script_1/versions/ver_2/confirm');
+  });
+
+  it('returns reconciliation state when rejection follows an already committed confirmation', async () => {
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({
+      success: true,
+      outcome: 'already_confirmed',
+      current_version_id: 'ver_2',
+      version: {
+        version_id: 'ver_2',
+        script_id: 'script_1',
+        version_no: 2,
+        status: 'ready',
+        content: '已确认脚本',
+        storyboard_items: [],
+      },
+    }));
+
+    await expect(rejectScriptVersion('ep_1', 'script_1', 'ver_2')).resolves.toEqual({
+      outcome: 'already_confirmed',
+      currentVersionId: 'ver_2',
+      version: expect.objectContaining({ id: 'ver_2', status: 'ready', content: '已确认脚本' }),
+    });
   });
 
   it('does not retry script version selection business errors', async () => {

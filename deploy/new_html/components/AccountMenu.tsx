@@ -101,18 +101,19 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
             个人中心
           </button>
           {canManage && (
-            <button
-              type="button"
+            <a
+              href={adminPath()}
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={() => {
                 setOpen(false);
-                window.location.href = adminPath();
               }}
               className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-n700 transition-colors hover:bg-n20 hover:text-primary"
               role="menuitem"
             >
               <ShieldCheck className="h-4 w-4" />
               管理后台
-            </button>
+            </a>
           )}
           <div className="my-1 border-t border-n40" />
           <button

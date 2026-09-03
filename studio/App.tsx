@@ -43,6 +43,17 @@ const SNAP_THRESHOLD = 8; // Pixels for magnetic snap
 const COLLISION_PADDING = 24; // Spacing when nodes bounce off each other
 const MIN_CANVAS_SCALE = 0.2;
 const MAX_CANVAS_SCALE = 3;
+const navigateFromStudio = (path: string) => {
+    try {
+        if (window.self !== window.top && window.top) {
+            window.top.location.assign(path);
+            return;
+        }
+    } catch {
+        // Cross-origin embedding is unsupported; fall back to the current window.
+    }
+    window.location.assign(path);
+};
 // Keep the rendered scale aligned with the percentage shown in the toolbar.
 // A value that rounds to 100% must be exactly 1 so text is not resampled.
 const snapCanvasScale = (value: number) => Math.round(value * 100) === 100 ? 1 : value;
@@ -364,7 +375,7 @@ export const App = () => {
       } catch (error) {
         console.error('[studio] failed to persist before leaving', error);
       } finally {
-        window.location.assign(runtime.returnTo);
+        navigateFromStudio(runtime.returnTo);
       }
   }, [assetHistory, workflows, nodes, connections, groups, runtime]);
 
@@ -1137,7 +1148,7 @@ export const App = () => {
       </div>
       <button
         type="button"
-        onClick={() => { window.location.href = '/credits'; }}
+        onClick={() => navigateFromStudio('/credits')}
         className="studio-header-button fixed right-5 top-5 z-[160] inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold backdrop-blur-xl transition"
         title="查看创作点数明细"
         aria-label={`可用创作点数 ${creditBalance ?? '加载中'}`}

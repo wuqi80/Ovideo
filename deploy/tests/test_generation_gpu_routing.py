@@ -25,6 +25,7 @@ def test_comfyui_requests_preserve_preferred_agent_fields():
         target_long_edge=50000,
         dpi=300,
         text_clarity=True,
+        source_file_id="file_source123",
         **common,
     )
 
@@ -37,3 +38,4 @@ def test_comfyui_requests_preserve_preferred_agent_fields():
     assert material.model_dump()["target_long_edge"] == 50000
     assert material.model_dump()["dpi"] == 300
     assert material.model_dump()["text_clarity"] is True
+    assert material.model_dump()["source_file_id"] == "file_source123"

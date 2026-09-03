@@ -125,6 +125,7 @@ def create_script_timeline_router(
         model_config = ConfigDict(protected_namespaces=())
 
         message_id: Optional[str] = None
+        base_version_id: Optional[str] = None
         content: str
         storyboard_items: list = Field(default_factory=list)
         source: str = 'ai'
@@ -319,6 +320,7 @@ def create_script_timeline_router(
                 episode_id=episode_id,
                 script_id=script_id,
                 message_id=data.message_id,
+                base_version_id=data.base_version_id,
                 content=data.content,
                 storyboard_items=data.storyboard_items,
                 source=data.source,

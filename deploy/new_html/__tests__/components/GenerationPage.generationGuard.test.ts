@@ -186,6 +186,15 @@ describe('GenerationPage reference actions', () => {
   });
 });
 
+describe('GenerationPage computer operation composition', () => {
+  it('applies the screen-back constraint only to the submitted generation prompt', () => {
+    expect(source).toContain('const identityAnchoredPrompt = buildIdentityAnchoredPrompt(');
+    expect(source).toContain('const promptToUse = applyComputerOperationOrientationConstraint(');
+    expect(source).toContain('shot.originalText');
+    expect(source).toContain('shot.scriptSegment');
+  });
+});
+
 describe('GenerationPage result card actions', () => {
   it('keeps all hover actions in a non-wrapping six-column toolbar', () => {
     expect(source).toContain('data-testid="storyboard-result-actions"');

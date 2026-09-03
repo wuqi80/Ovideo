@@ -1885,6 +1885,24 @@ class Worker:
 
                     MIME_MAP = {'.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.mp4': 'video/mp4'}
                     mime_type = MIME_MAP.get(ext.lower(), f'{file_type}/{ext.lstrip(".")}')
+                    result_metadata = {
+                        'task_id': task_id,
+                        'prompt_id': prompt_id,
+                        'original_filename': filename,
+                        'comfyui_subfolder': subfolder,
+                        'comfyui_type': downloaded_from,
+                    }
+                    if self.current_task and hasattr(self.current_task, 'data'):
+                        for metadata_key in (
+                            'requested_workflow_type',
+                            'display_name',
+                            'source_page',
+                            'source_file_id',
+                        ):
+                            metadata_value = (self.current_task.data or {}).get(metadata_key)
+                            if metadata_value is not None and metadata_value != '':
+                                result_metadata[metadata_key] = metadata_value
+
                     file_record = await FileDAO.create_file(
                         version_id=version_id,
                         user_id=user_id,
@@ -1894,13 +1912,7 @@ class Worker:
                         file_url=file_url,
                         file_size_bytes=len(file_content),
                         mime_type=mime_type,
-                        metadata={
-                            'task_id': task_id,
-                            'prompt_id': prompt_id,
-                            'original_filename': filename,
-                            'comfyui_subfolder': subfolder,
-                            'comfyui_type': downloaded_from
-                        },
+                        metadata=result_metadata,
                         entity_type=entity_type,
                         entity_id=entity_id_val,
                         file_role=file_role_val,

@@ -10,6 +10,7 @@ import {
   SPLIT_SCRIPT_INTO_SEGMENTS,
 } from '../../prompts/scriptPipelinePrompts';
 import {
+  COMPUTER_OPERATION_ORIENTATION_RULE,
   MIN_STABILITY_CONSTRAINT_CHARACTERS,
   MIN_VISUAL_STYLE_CHARACTERS,
   STABILITY_CONSTRAINT_REFERENCE,
@@ -38,6 +39,8 @@ describe('latest three-step script prompts', () => {
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('不得新增分段');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('1-2 日 内 浅浅家');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('分镜1-1');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('每个分镜必须单独输出“景别：”字段');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('时长（秒）：\n景别：\n画面描述');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(`约${MIN_VISUAL_STYLE_CHARACTERS}字为完整度基准`);
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(`约${MIN_STABILITY_CONSTRAINT_CHARACTERS}字为完整度基准`);
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('不足时继续增加约束细节');
@@ -46,6 +49,7 @@ describe('latest three-step script prompts', () => {
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('每个风格词必须能从当前分段或用户要求中找到依据');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('用户在具体分镜中主动填写、追加或确认的提示词属于用户要求');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain('必须原样保留');
+    expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).toContain(COMPUTER_OPERATION_ORIENTATION_RULE);
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).not.toContain('赛博朋克冷蓝紫色调');
     expect(GENERATE_VIDEO_SCRIPT_FROM_SEGMENT.user).not.toContain('冷峻战争写实');
   });
@@ -63,6 +67,7 @@ describe('latest three-step script prompts', () => {
     expect(ITERATE_VIDEO_SCRIPT.user).toContain('14-15秒的段落必须占30%以上');
     expect(ITERATE_VIDEO_SCRIPT.user).toContain('每组中分镜数严禁大于5个');
     expect(ITERATE_VIDEO_SCRIPT.user).toContain('分镜1-1、分镜1-2、分镜2-1');
+    expect(ITERATE_VIDEO_SCRIPT.user).toContain('每个分镜必须单独输出“景别：”字段');
     expect(ITERATE_VIDEO_SCRIPT.user).toContain(
       `分别以约${MIN_VISUAL_STYLE_CHARACTERS}字、约${MIN_STABILITY_CONSTRAINT_CHARACTERS}字为完整度基准`,
     );
@@ -83,6 +88,7 @@ describe('latest three-step script prompts', () => {
     expect(REPLAN_INVALID_SCRIPT_SEGMENTS.user).toContain('{validationError}');
     expect(REPLAN_INVALID_STORYBOARD_EXTRACTION.system).toContain('只输出最终镜头设计');
     expect(REPLAN_INVALID_STORYBOARD_EXTRACTION.user).toContain('分镜生成提示词不得为空');
+    expect(REPLAN_INVALID_STORYBOARD_EXTRACTION.user).toContain(COMPUTER_OPERATION_ORIENTATION_RULE);
     expect(REPLAN_INVALID_STORYBOARD_EXTRACTION.user).toContain('{invalidExtraction}');
   });
 
@@ -92,6 +98,7 @@ describe('latest three-step script prompts', () => {
     expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('{canonicalShotNo}');
     expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('一个输入视频分镜可以输出1个或多个镜头设计');
     expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain('必须拆成多个连续镜头设计');
+    expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).toContain(COMPUTER_OPERATION_ORIENTATION_RULE);
     expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).not.toContain('{expectedShotNumbers}');
     expect(EXTRACT_STORYBOARD_PROMPT_FROM_VIDEO_SHOT.user).not.toContain('逐个一一对应');
   });

@@ -128,6 +128,7 @@ async def test_create_version_forwards_model_and_storyboard_snapshot():
         episode_id="ep_1",
         script_id="script_1",
         message_id="msg_2",
+        base_version_id="ver_1",
         content="镜头01",
         storyboard_items=[{"id": "shot_1"}],
         source="ai",
@@ -141,6 +142,7 @@ async def test_create_version_forwards_model_and_storyboard_snapshot():
     )
     assert result["version"]["version_id"] == "ver_new"
     assert FakeConversationDAO.created_version["storyboard_items"] == [{"id": "shot_1"}]
+    assert FakeConversationDAO.created_version["base_version_id"] == "ver_1"
     assert FakeConversationDAO.created_version["set_current"] is True
 
 
@@ -192,6 +194,57 @@ async def test_confirm_and_reject_draft_are_explicit_actions():
     assert confirmed["previous_version_id"] == "ver_old"
     assert confirmed["version"]["status"] == "ready"
     assert rejected["version"]["status"] == "rejected"
+    assert rejected["outcome"] == "rejected"
+
+
+async def test_reject_reconciles_an_already_confirmed_version_without_404():
+    class AlreadyConfirmedConversationDAO(FakeConversationDAO):
+        @classmethod
+        async def reject_version(cls, script_id, version_id, user_id):
+            return {
+                "version_id": version_id,
+                "script_id": script_id,
+                "status": "ready",
+                "content": "已确认脚本",
+                "rejection_outcome": "already_confirmed",
+                "current_version_id": version_id,
+            }
+
+    result = await service.reject_script_version(
+        script_id="script_1",
+        version_id="ver_ready",
+        user_id="user_1",
+        conversation_dao=AlreadyConfirmedConversationDAO,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "already_confirmed"
+    assert result["current_version_id"] == "ver_ready"
+    assert result["version"]["status"] == "ready"
+
+
+async def test_reject_is_idempotent_for_an_already_rejected_version():
+    class AlreadyRejectedConversationDAO(FakeConversationDAO):
+        @classmethod
+        async def reject_version(cls, script_id, version_id, user_id):
+            return {
+                "version_id": version_id,
+                "script_id": script_id,
+                "status": "rejected",
+                "rejection_outcome": "already_rejected",
+                "current_version_id": "ver_current",
+            }
+
+    result = await service.reject_script_version(
+        script_id="script_1",
+        version_id="ver_rejected",
+        user_id="user_1",
+        conversation_dao=AlreadyRejectedConversationDAO,
+    )
+
+    assert result["outcome"] == "already_rejected"
+    assert result["current_version_id"] == "ver_current"
+    assert result["version"]["status"] == "rejected"
 
 
 async def test_confirm_retry_repairs_stale_events_after_primary_commit():
@@ -249,3 +302,127 @@ async def test_confirm_retry_repairs_stale_events_after_primary_commit():
     assert len(audio_slots) == 1
     assert len(audio_slots[0]) > 50
     assert RetryWorkflowDAO.stale_calls[0]["detail"]["previousVersionId"] == "ver_old"
+
+
+async def test_confirm_retry_uses_persisted_adoption_patch_for_a_draft_chain():
+    class AlreadyConfirmedConversationDAO(FakeConversationDAO):
+        @classmethod
+        async def confirm_version(cls, script_id, version_id, user_id):
+            return {
+                "version_id": version_id,
+                "script_id": script_id,
+                "status": "ready",
+                "previous_version_id": version_id,
+                "base_version_id": "ver_3",
+                "patch": {
+                    "summary": {"changed": 1},
+                    "operations": [{"before": ["V3局部内容"], "after": ["V4局部内容"]}],
+                },
+                "metadata": {
+                    "confirmationBaseVersionId": "ver_2",
+                    "confirmationPatch": {
+                        "summary": {"changed": 2},
+                        "operations": [{"before": ["V2正式内容"], "after": ["V4最终内容"]}],
+                    },
+                },
+            }
+
+    class RetryWorkflowDAO:
+        stale_calls = []
+
+        @staticmethod
+        async def list_storyboard_targets(**_kwargs):
+            return [{
+                "item_id": "item_" + "a" * 36,
+                "lineage_id": "line_1",
+                "episode_id": "ep_1",
+                "project_id": "proj_1",
+                "audio_segments": [],
+                "script_segment_source_text": "V2正式内容",
+            }]
+
+        @classmethod
+        async def create_stale_event(cls, **kwargs):
+            cls.stale_calls.append(kwargs)
+            return {"stale_event_id": f"stale_{len(cls.stale_calls)}", **kwargs}
+
+    RetryWorkflowDAO.stale_calls = []
+    result = await service.confirm_script_version(
+        episode_id="ep_1",
+        script_id="script_1",
+        version_id="ver_4",
+        user_id="user_1",
+        conversation_dao=AlreadyConfirmedConversationDAO,
+        content_workflow_dao=RetryWorkflowDAO,
+    )
+
+    assert result["previous_version_id"] == "ver_4"
+    assert RetryWorkflowDAO.stale_calls
+    detail = RetryWorkflowDAO.stale_calls[0]["detail"]
+    assert detail["previousVersionId"] == "ver_2"
+    assert detail["patchSummary"]["changed"] == 2
+
+
+async def test_confirm_decodes_jsonb_patch_strings_before_stale_propagation():
+    class JsonStringPatchConversationDAO(FakeConversationDAO):
+        @classmethod
+        async def confirm_version(cls, script_id, version_id, user_id):
+            return {
+                "version_id": version_id,
+                "script_id": script_id,
+                "status": "ready",
+                "previous_version_id": "ver_old",
+                "base_version_id": "ver_old",
+                "patch": '{"summary":{"changed":1},"operations":[]}',
+            }
+
+    class WorkflowDAO:
+        @staticmethod
+        async def list_storyboard_targets(**_kwargs):
+            return []
+
+    result = await service.confirm_script_version(
+        episode_id="ep_1",
+        script_id="script_1",
+        version_id="ver_new",
+        user_id="user_1",
+        conversation_dao=JsonStringPatchConversationDAO,
+        content_workflow_dao=WorkflowDAO,
+    )
+
+    assert result["version"]["patch"]["summary"]["changed"] == 1
+    assert result["stale_propagation_pending"] is False
+
+
+async def test_confirm_does_not_report_false_failure_after_primary_commit(caplog):
+    class ConfirmedConversationDAO(FakeConversationDAO):
+        @classmethod
+        async def confirm_version(cls, script_id, version_id, user_id):
+            return {
+                "version_id": version_id,
+                "script_id": script_id,
+                "status": "ready",
+                "previous_version_id": "ver_old",
+                "base_version_id": "ver_old",
+                "patch": {"operations": []},
+            }
+
+    class BrokenWorkflowDAO:
+        @staticmethod
+        async def list_storyboard_targets(**_kwargs):
+            raise RuntimeError("temporary stale propagation failure")
+
+    result = await service.confirm_script_version(
+        episode_id="ep_1",
+        script_id="script_1",
+        version_id="ver_new",
+        user_id="user_1",
+        conversation_dao=ConfirmedConversationDAO,
+        content_workflow_dao=BrokenWorkflowDAO,
+    )
+
+    assert result["success"] is True
+    assert result["version"]["status"] == "ready"
+    assert result["stale_events"] == []
+    assert result["stale_propagation_pending"] is True
+    assert "stale propagation failed" in caplog.text

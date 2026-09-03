@@ -71,6 +71,13 @@ def _patch_user_dao(monkeypatch):
     monkeypatch.setattr(svc, "UserDAO", _UserDAO)
 
 
+def test_default_permissions_inherit_the_platform_model_catalog():
+    permissions = svc.default_permissions()
+
+    assert permissions["accessMode"] == "inherit"
+    assert permissions["allowedModels"] == []
+
+
 @pytest.mark.asyncio
 async def test_verify_database_credentials_returns_user():
     _UserDAO.verified_user = {"user_id": "u1", "username": "yuan"}
@@ -100,6 +107,7 @@ async def test_ensure_login_user_record_creates_missing_user_with_permissions():
     assert result is True
     assert _UserDAO.created_calls[0]["username"] == "yuan"
     assert _UserDAO.updated_permissions[0][0] == "yuan"
+    assert _UserDAO.updated_permissions[0][1]["accessMode"] == "inherit"
     assert _UserDAO.updated_permissions[0][1]["canExport"] is True
 
 

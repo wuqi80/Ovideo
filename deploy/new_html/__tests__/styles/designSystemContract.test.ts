@@ -46,6 +46,18 @@ describe('创剧 design-system contract', () => {
     expect(css).toContain('rgba(91, 73, 240, 0.35)');
   });
 
+  it('uses a standard document font for scripts instead of the monospace UI font', () => {
+    const css = readProjectFile('styles/design-tokens.css');
+    const conversation = readProjectFile('components/ScriptConversationPane.tsx');
+    const quickColumn = readProjectFile('components/QuickScriptVersionColumn.tsx');
+
+    expect(css).toContain('--font-document: "Times New Roman", "Microsoft YaHei"');
+    expect(css).toContain('.font-document');
+    expect(css).toContain('font-variant-numeric: lining-nums proportional-nums');
+    expect(conversation).toContain('className="font-document min-h-0 flex-1 resize-none');
+    expect(quickColumn).toContain('className="font-document h-full w-full resize-none');
+  });
+
   it('provides one responsive overlay and dialog surface contract', () => {
     const css = readProjectFile('styles/design-tokens.css');
 

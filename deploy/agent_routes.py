@@ -31,6 +31,22 @@ MIME_MAP = {
 }
 
 
+def _source_file_id_from_task_data(task_data: dict) -> str:
+    explicit = str(task_data.get("source_file_id") or "").strip()
+    if explicit:
+        return explicit
+    requested = str(task_data.get("requested_workflow_type") or "").strip().lower()
+    if requested != "image_upscale":
+        return ""
+    for item in task_data.get("agent_files") or []:
+        if not isinstance(item, dict):
+            continue
+        match = LEGACY_FILE_DOWNLOAD_RE.fullmatch(urlparse(str(item.get("url") or "")).path)
+        if match:
+            return match.group(1)
+    return ""
+
+
 def save_output_file(content: bytes, task_id: str, filename: str, content_type: str) -> dict:
     """Save file to disk and return entry dict (file_id added later by _persist_to_db)."""
     ext = Path(filename).suffix.lower()
@@ -96,6 +112,17 @@ async def _persist_to_db(entries: list, task_id: str, task_data: dict, user_id: 
             }.get(ft, "video")
             node_output_id = str(entry.get("node_output_id") or "").strip()
             metadata = {"task_id": task_id, "source": "comfyui_agent"}
+            for key in (
+                "requested_workflow_type",
+                "display_name",
+                "source_page",
+            ):
+                value = task_data.get(key)
+                if value is not None and value != "":
+                    metadata[key] = value
+            source_file_id = _source_file_id_from_task_data(task_data)
+            if source_file_id:
+                metadata["source_file_id"] = source_file_id
             if node_output_id:
                 metadata.update({
                     "source": "node_local_output",
@@ -185,6 +212,12 @@ class ProgressRequest(BaseModel):
 
 class NodeOutputFailureRequest(BaseModel):
     error: str = Field(default="本地节点文件不可用", max_length=500)
+
+
+class NodeOutputDeleteResultRequest(BaseModel):
+    success: bool
+    freed_bytes: int = Field(default=0, ge=0)
+    error: str = Field(default="", max_length=500)
 
 
 async def _verify_agent_token(authorization: str = Header(...)) -> dict:
@@ -815,6 +848,45 @@ async def fail_node_output_from_agent(
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Download relay not found") from exc
     await registry.finish(relay, body.error)
+    return {"success": True}
+
+
+@router.get("/node-output-deletions/poll")
+async def poll_node_output_deletion(authorization: str = Header(...)):
+    """Return one permanent-delete request for this outbound Agent."""
+    agent = await _verify_agent_token(authorization)
+    from services.node_output_relay import deletions
+
+    request = await deletions.claim(str(agent.get("agent_id") or ""))
+    if request is None:
+        return {"request": None}
+    return {
+        "request": {
+            "request_id": request.request_id,
+            "output_id": request.output_id,
+        }
+    }
+
+
+@router.post("/node-output-deletions/{request_id}/complete")
+async def complete_node_output_deletion(
+    request_id: str,
+    body: NodeOutputDeleteResultRequest,
+    authorization: str = Header(...),
+):
+    agent = await _verify_agent_token(authorization)
+    from services.node_output_relay import deletions
+
+    try:
+        await deletions.finish(
+            request_id,
+            str(agent.get("agent_id") or ""),
+            success=body.success,
+            freed_bytes=body.freed_bytes,
+            error=body.error,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Delete request not found") from exc
     return {"success": True}
 
 

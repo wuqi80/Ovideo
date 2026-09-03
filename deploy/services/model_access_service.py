@@ -11,6 +11,20 @@ ACCESS_RESTRICTED = "restricted"
 ACCESS_BLOCKED = "blocked"
 VALID_ACCESS_MODES = {ACCESS_INHERIT, ACCESS_RESTRICTED, ACCESS_BLOCKED}
 
+# Accounts created before accessMode was introduced received this exact
+# allow-list as a platform default.  It was not an administrator-authored
+# restriction, so keep those existing accounts on the platform model catalog.
+LEGACY_DEFAULT_ALLOWED_MODELS = (
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-image",
+    "wan2-i2v",
+    "wan2-morph",
+    "wan26-i2v",
+    "sora2-i2v",
+    "veo-i2v",
+    "minimax-i2v",
+)
+
 # These are platform features rather than selectable generation models.  They
 # are available to every active account and are billed by the normal credit
 # rules, so a legacy per-model allow-list must not accidentally block them.
@@ -25,8 +39,9 @@ def normalize_model_access_permissions(raw: Any) -> Dict[str, Any]:
     """Normalize legacy permission JSON without changing existing accounts.
 
     Historical rows stored only ``allowedModels``. An empty or missing list did
-    not actually restrict generation, so it must mean ``inherit``. A non-empty
-    legacy list keeps its intended meaning and becomes ``restricted``.
+    not actually restrict generation, so it must mean ``inherit``. The exact
+    old platform-default list also means ``inherit``; other non-empty legacy
+    lists keep their administrator-authored restricted semantics.
     """
     source = raw if isinstance(raw, dict) else {}
     allowed = source.get("allowedModels")
@@ -36,7 +51,13 @@ def normalize_model_access_permissions(raw: Any) -> Dict[str, Any]:
 
     requested_mode = str(source.get("accessMode") or source.get("access_mode") or "").strip().lower()
     if requested_mode not in VALID_ACCESS_MODES:
-        requested_mode = ACCESS_RESTRICTED if allowed_models else ACCESS_INHERIT
+        legacy_allowed = {_model_key(item) for item in allowed_models}
+        legacy_defaults = {_model_key(item) for item in LEGACY_DEFAULT_ALLOWED_MODELS}
+        requested_mode = (
+            ACCESS_INHERIT
+            if not allowed_models or legacy_allowed == legacy_defaults
+            else ACCESS_RESTRICTED
+        )
 
     return {
         "accessMode": requested_mode,

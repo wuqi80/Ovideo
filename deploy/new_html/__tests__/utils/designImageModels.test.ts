@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   canUseDesignImageReferences,
+  countDesignImageQuotaReferences,
   DESIGN_IMAGE_BATCH_LIMIT,
   DESIGN_IMAGE_MODEL_OPTIONS,
   findDesignImageModel,
+  isDesignImageReferenceQuotaExempt,
   maxDesignImageOutputCount,
   normalizeDesignImageResolution,
+  trimDesignImageReferenceSelectionToQuota,
 } from '../../utils/designImageModels';
 
 describe('design image model capabilities', () => {
@@ -59,6 +62,37 @@ describe('design image model capabilities', () => {
     expect(maxDesignImageOutputCount(0)).toBe(15);
     expect(maxDesignImageOutputCount(6)).toBe(9);
     expect(maxDesignImageOutputCount(14)).toBe(1);
+  });
+
+  it('does not charge related-scene references against the selectable reference quota', () => {
+    const references = [
+      { id: 'current', sourceKind: 'current' as const },
+      { id: 'upload', sourceKind: 'external-upload' as const },
+      { id: 'related-a', sourceKind: 'related-scene' as const },
+      { id: 'related-b', sourceKind: 'related-scene' as const },
+    ];
+
+    expect(isDesignImageReferenceQuotaExempt('related-scene')).toBe(true);
+    expect(countDesignImageQuotaReferences(
+      ['current', 'upload', 'related-a', 'related-b'],
+      references,
+    )).toBe(2);
+    expect(maxDesignImageOutputCount(2)).toBe(13);
+  });
+
+  it('preserves related-scene references while trimming quota-consuming selections', () => {
+    const references = [
+      { id: 'current-a', sourceKind: 'current' as const },
+      { id: 'related-a', sourceKind: 'related-scene' as const },
+      { id: 'upload-a', sourceKind: 'external-upload' as const },
+      { id: 'related-b', sourceKind: 'related-scene' as const },
+    ];
+
+    expect(Array.from(trimDesignImageReferenceSelectionToQuota(
+      references.map(reference => reference.id),
+      references,
+      1,
+    ))).toEqual(['current-a', 'related-a', 'related-b']);
   });
 
   it('falls back to the model default when a persisted resolution is unsupported', () => {

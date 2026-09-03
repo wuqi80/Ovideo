@@ -41,6 +41,10 @@ import {
   mergeStoryboardDisplayItems,
 } from '../utils/storyboardSegments';
 import { parseVideoScriptGroups } from '../utils/scriptPipelineParsers';
+import {
+  buildScriptVersionChainContext,
+  selectScriptIterationBaseVersion,
+} from '../utils/scriptIteration';
 import { SegmentPromptCards } from './SegmentPromptCards';
 import {
   DEFAULT_SCRIPT_MODEL_OPTIONS,
@@ -100,7 +104,7 @@ const ScriptPatchPreview: React.FC<{ version: ScriptStoryboardVersion }> = ({ ve
         </span>
       </div>
       {operations.length > 0 && (
-        <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded border border-n40 bg-n0 p-2 font-mono text-[11px] leading-5">
+        <div className="font-document mt-2 max-h-64 space-y-2 overflow-y-auto rounded border border-n40 bg-n0 p-2 text-[11px] leading-5">
           {operations.slice(0, 20).map((operation, index) => (
             <div key={`${operation.op}-${operation.baseStart}-${operation.candidateStart}-${index}`}>
               <div className="mb-1 text-[10px] text-n100">
@@ -334,7 +338,7 @@ export const StoryboardVersionBody: React.FC<{ version: ScriptStoryboardVersion 
                   data-testid={`segment-${group.segmentNo}-shot-${entry.localShotNo}-card`}
                 >
                   <div className="mb-1 text-xs font-semibold text-primary">{entry.localShotLabel.replace(/^镜头/, '分镜')}</div>
-                  <div className="whitespace-pre-wrap break-words font-mono text-sm leading-7 text-n700">
+                  <div className="font-document whitespace-pre-wrap break-words text-sm leading-7 text-n700">
                     {cleanStoryboardShotCardText(
                       entry.item.originalText || entry.item.videoScriptBlock || entry.item.scriptSegment,
                     )}
@@ -435,11 +439,12 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
     if (!selectedFile) return null;
     const versions = conversation?.versions || [];
     const isFirstTurn = versions.length === 0;
-    const currentVersion = versions.find(version => version.id === conversation?.currentVersionId)
-      || versions[versions.length - 1];
-    const conversationContext = orderedConversationMessages.slice(-10)
-      .map(message => `${message.role}:${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
-      .join('\n');
+    const currentVersion = conversation
+      ? selectScriptIterationBaseVersion(conversation)
+      : undefined;
+    const conversationContext = conversation
+      ? buildScriptVersionChainContext(conversation, currentVersion)
+      : '';
     const billingInput = isFirstTurn
       ? `${draft}\n${draft}`
       : [currentVersion?.content || selectedFile.scriptContent || selectedFile.originalContent, draft, conversationContext].join('\n');
@@ -1183,7 +1188,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                   value={aiModel}
                   onChange={event => onChangeModel(event.target.value as AiModel)}
                   disabled={isSending}
-                  className="h-8 max-w-[190px] appearance-none border-0 bg-transparent pl-2 pr-7 text-xs text-n700 outline-none hover:text-primary focus:text-primary disabled:opacity-50"
+                  className="h-8 w-[240px] max-w-[40vw] appearance-none border-0 bg-transparent pl-2 pr-8 text-xs text-n700 outline-none hover:text-primary focus:text-primary disabled:opacity-50"
                 >
                   {modelOptions.map(option => (
                     <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
@@ -1276,7 +1281,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                   value={aiModel}
                   onChange={event => onChangeModel(event.target.value as AiModel)}
                   disabled={isSending}
-                  className="h-9 max-w-[220px] appearance-none rounded border border-n40 bg-n0 pl-3 pr-8 text-sm text-n700 outline-none hover:border-primary focus:border-primary disabled:opacity-50"
+                  className="h-9 w-[260px] max-w-[50vw] appearance-none rounded border border-n40 bg-n0 pl-3 pr-9 text-sm text-n700 outline-none hover:border-primary focus:border-primary disabled:opacity-50"
                 >
                   {modelOptions.map(option => (
                     <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
@@ -1351,7 +1356,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                 <textarea
                   value={editValue}
                   onChange={event => setEditValue(event.target.value)}
-                  className="min-h-0 flex-1 resize-none bg-n0 p-5 font-mono text-sm leading-7 text-n800 outline-none"
+                  className="font-document min-h-0 flex-1 resize-none bg-n0 p-5 text-sm leading-7 text-n800 outline-none"
                   aria-label="编辑分镜脚本内容"
                 />
               </section>
@@ -1363,7 +1368,7 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                     <span className="text-xs font-semibold text-n700">文字剧本（对照）</span>
                     <span className="text-[10px] text-n100">最初输入 · 只读</span>
                   </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words p-5 text-sm leading-7 text-n700 custom-scrollbar">
+                  <div className="font-document min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words p-5 text-sm leading-7 text-n700 custom-scrollbar">
                     {initialScriptContent || '暂无最初输入的文字剧本'}
                   </div>
                 </aside>

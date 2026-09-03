@@ -26,6 +26,8 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).toContain('className="ml-auto flex min-w-0 items-center gap-2"');
     expect(source).toContain('data-testid="script-model-hint"');
     expect(source).toContain('className="relative min-w-0"');
+    expect(source).toContain('w-[240px] max-w-[40vw]');
+    expect(source).toContain('w-[260px] max-w-[50vw]');
     expect(source).toContain('aria-label="发送"');
   });
 
@@ -36,6 +38,8 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).not.toContain('shotDurationMode');
     expect(source).toContain('await onSend(content)');
     expect(workspace).toContain('result = await aiGenerateStoryboardScript(');
+    expect(workspace).toContain('result = await handleIterateScript(');
+    expect(workspace).toContain('stabilizeScriptIterationResult(generationSource, normalizedCandidate, generationRequirements)');
     expect(workspace).toContain('appendStreamChunk');
     expect(workspace).not.toContain('pipelineService.generateEpisodeVideoScript(');
     expect(workspace).not.toContain('pipelineService.iterateEpisodeVideoScript(');

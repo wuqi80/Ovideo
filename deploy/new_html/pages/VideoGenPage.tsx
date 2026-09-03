@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { useProject } from '../contexts/ProjectContext';
 import { ArrowRight, Film, Loader, Image as ImageIcon, Upload, RefreshCw } from 'lucide-react';
@@ -26,6 +26,11 @@ import { runWhenIdle } from '../utils/idleScheduler';
 import { buildStoryboardVideoPrompt } from '../utils/storyboardVideoPrompt';
 import { buildVideoStoryboardShotLookup } from '../utils/videoTaskMerge';
 import { projectDefaultAspectRatio } from '../utils/projectCreationPreferences';
+import {
+  buildStoryboardVideoExportImageMap,
+  readStoryboardVideoExportNavigationState,
+  selectStoryboardItemsForVideoExport,
+} from '../utils/storyboardVideoExport';
 
 const VIDEO_INITIAL_STORYBOARD_COUNT = 10;
 const VideoPage = React.lazy(() => import('../components/VideoPage').then(m => ({ default: m.VideoPage })));
@@ -99,6 +104,18 @@ function isPrimaryStoryboardImageMedia(media: any): boolean {
 
 export const VideoGenPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [storyboardVideoExport] = useState(() =>
+    readStoryboardVideoExportNavigationState(location.state)
+  );
+  const storyboardVideoExportImages = useMemo(
+    () => buildStoryboardVideoExportImageMap(storyboardVideoExport),
+    [storyboardVideoExport],
+  );
+  const explicitExportCount = storyboardVideoExport?.items.length || 0;
+  const importTargetLabel = explicitExportCount > 0
+    ? `本次选定的 ${explicitExportCount} 个分镜`
+    : '全部分镜';
   const { project } = useProject();
   const projectAspectRatio = projectDefaultAspectRatio(project?.settings, '16:9');
   const {
@@ -111,6 +128,18 @@ export const VideoGenPage: React.FC = () => {
     loadSlicesQuiet,
     loadStoryboardItemsPage,
   } = useEpisode();
+
+  // Router state is a one-time transfer envelope. Keep the normalized payload
+  // in component state for this import, then remove it from browser history so
+  // refreshing the video page cannot overwrite an edited workspace again.
+  useEffect(() => {
+    if (!storyboardVideoExport || !readStoryboardVideoExportNavigationState(location.state)) return;
+    navigate(`${location.pathname}${location.search}${location.hash}`, {
+      replace: true,
+      state: null,
+    });
+  }, [location.hash, location.pathname, location.search, location.state, navigate, storyboardVideoExport]);
+
   useEffect(() => {
     loadStoryboardItemsPage({ limit: VIDEO_INITIAL_STORYBOARD_COUNT, includeTotal: true });
     const loadSupportSlices = () => {
@@ -167,13 +196,16 @@ export const VideoGenPage: React.FC = () => {
 
   const itemsWithImages = useMemo(
     () =>
-      [...storyboardItems]
+      selectStoryboardItemsForVideoExport([...storyboardItems], storyboardVideoExport)
         .filter(i => {
-          const url = (i as any).generated_image_url ?? (i as any).generatedImageUrl;
+          const itemId = getStoryboardItemId(i);
+          const url = storyboardVideoExportImages.get(itemId)
+            ?? (i as any).generated_image_url
+            ?? (i as any).generatedImageUrl;
           return !!url;
         })
         .sort((a, b) => ((a as any).sort_order ?? (a as any).sortOrder ?? 0) - ((b as any).sort_order ?? (b as any).sortOrder ?? 0)),
-    [storyboardItems]
+    [storyboardItems, storyboardVideoExport, storyboardVideoExportImages]
   );
 
   const allStoryboardItems = useMemo(
@@ -210,19 +242,35 @@ export const VideoGenPage: React.FC = () => {
     setImporting(true);
     setImportMsg(null);
     try {
-      const storyboardItemsForImport = await ensureAllStoryboardItemsForImport();
-      if (storyboardItemsForImport.length === 0) return;
+      const allStoryboardItemsForImport = await ensureAllStoryboardItemsForImport();
+      const storyboardItemsForImport = selectStoryboardItemsForVideoExport(
+        allStoryboardItemsForImport,
+        storyboardVideoExport,
+      );
+      if (storyboardItemsForImport.length === 0) {
+        setImportMsg({
+          kind: 'error',
+          text: storyboardVideoExport
+            ? '本次选定的分镜已不存在，请返回画面分镜页重新选择'
+            : '没有可导入的分镜',
+        });
+        return;
+      }
       const images: UploadedImage[] = [];
       const prompts: Record<string, string> = {};
       const meta: Record<string, StoryboardMeta> = {};
       const seedanceParams: Record<string, SeedanceParams> = {};
       const groups: TaskGroup[] = [];
       const skipped: { id: string; reason: string; sample?: string }[] = [];
-      const shotLookup = buildVideoStoryboardShotLookup(storyboardItemsForImport);
+      // Labels must be calculated from the complete list; calculating from a
+      // subset would rename a lone selected “镜头3-2” to “镜头3-1”.
+      const shotLookup = buildVideoStoryboardShotLookup(allStoryboardItemsForImport);
 
       for (const item of storyboardItemsForImport) {
-        const rawUrl = (item as any).generated_image_url ?? (item as any).generatedImageUrl;
         const itemId = getStoryboardItemId(item);
+        const rawUrl = storyboardVideoExportImages.get(itemId)
+          ?? (item as any).generated_image_url
+          ?? (item as any).generatedImageUrl;
         // 视频生成除了视觉/运镜提示，还必须继承本镜头的动作说明与对白。
         const prompt = buildStoryboardVideoPrompt(item as any);
         const sortOrder = (item as any).sort_order ?? (item as any).sortOrder ?? 0;
@@ -438,16 +486,23 @@ export const VideoGenPage: React.FC = () => {
     } finally {
       setImporting(false);
     }
-  }, [ensureAllStoryboardItemsForImport, importing, sessionScope, totalStoryboardCount]);
+  }, [
+    ensureAllStoryboardItemsForImport,
+    importing,
+    sessionScope,
+    storyboardVideoExport,
+    storyboardVideoExportImages,
+    totalStoryboardCount,
+  ]);
 
   const handleReimportAll = useCallback(() => {
     if (importing) return;
     const confirmed = window.confirm(
-      '再次导入会覆盖当前视频工作区已经导入的卡片、模型参数和任务状态。确定要覆盖并重新导入全部分镜吗？'
+      `再次导入会覆盖当前视频工作区已经导入的卡片、模型参数和任务状态。确定要覆盖并重新导入${importTargetLabel}吗？`
     );
     if (!confirmed) return;
     handleImportAll();
-  }, [handleImportAll, importing]);
+  }, [handleImportAll, importing, importTargetLabel]);
 
   useEffect(() => {
     autoImported.current = false;
@@ -469,6 +524,16 @@ export const VideoGenPage: React.FC = () => {
         if (!alive) return;
         setWorkspaceChecked(true);
         setHasWorkspaceImport(hasImported);
+
+        if (storyboardVideoExport) {
+          autoImported.current = true;
+          setImportDone(false);
+          setHasWorkspaceImport(false);
+          setShowImportPanel(false);
+          setImportMsg({ kind: 'info', text: `正在导入${importTargetLabel}及其已选画面。` });
+          handleImportAll();
+          return;
+        }
 
         if (hasImported) {
           if (isWorkspaceForDifferentStoryboard(sess, allStoryboardItems)) {
@@ -512,6 +577,8 @@ export const VideoGenPage: React.FC = () => {
     sessionScope,
     isStoryboardPagePartial,
     totalStoryboardCount,
+    storyboardVideoExport,
+    importTargetLabel,
   ]);
 
   // 最新分镜图：item_id -> 去 query 的图片 URL
@@ -519,11 +586,16 @@ export const VideoGenPage: React.FC = () => {
     const m: Record<string, string> = {};
     for (const item of allStoryboardItems) {
       const id = getStoryboardItemId(item);
-      const raw = ((item as any).generated_image_url ?? (item as any).generatedImageUrl ?? '').toString().split('?')[0];
+      const raw = (
+        storyboardVideoExportImages.get(id)
+        ?? (item as any).generated_image_url
+        ?? (item as any).generatedImageUrl
+        ?? ''
+      ).toString().split('?')[0];
       if (id && raw && !raw.startsWith('data:') && !raw.startsWith('blob:')) m[id] = raw;
     }
     return m;
-  }, [allStoryboardItems]);
+  }, [allStoryboardItems, storyboardVideoExportImages]);
 
   // 检测会话里缓存的图与最新分镜图有多少处不一致
   useEffect(() => {
@@ -642,7 +714,7 @@ export const VideoGenPage: React.FC = () => {
                 className="flex items-center gap-2 px-4 py-1.5 bg-primary hover:bg-primary-hover text-white text-sm rounded-lg transition-colors disabled:opacity-50"
               >
                 {importing ? <Loader size={14} className="animate-spin" /> : <Upload size={14} />}
-                导入全部分镜到视频工作区
+                导入{importTargetLabel}到视频工作区
               </button>
               <button
                 onClick={() => setShowImportPanel(false)}
@@ -657,7 +729,10 @@ export const VideoGenPage: React.FC = () => {
           {itemsWithImages.length > 0 && (
             <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
               {itemsWithImages.slice(0, 12).map((item, idx) => {
-                const url = (item as any).generated_image_url ?? (item as any).generatedImageUrl;
+                const itemId = getStoryboardItemId(item);
+                const url = storyboardVideoExportImages.get(itemId)
+                  ?? (item as any).generated_image_url
+                  ?? (item as any).generatedImageUrl;
                 return (
                   <div key={(item as any).item_id ?? (item as any).itemId ?? idx} className="shrink-0 w-16 h-10 rounded overflow-hidden border border-n40">
                     <img
@@ -687,11 +762,11 @@ export const VideoGenPage: React.FC = () => {
             <button
               onClick={handleReimportAll}
               disabled={importing || totalStoryboardCount === 0}
-              title="再次导入会覆盖当前视频工作区已经导入的卡片、模型参数和任务状态"
+              title={`再次导入${importTargetLabel}会覆盖当前视频工作区已经导入的卡片、模型参数和任务状态`}
               className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg border border-n40 bg-n0 text-n300 hover:text-n700 transition-colors disabled:opacity-50"
             >
               {importing ? <Loader size={12} className="animate-spin" /> : <Upload size={12} />}
-              再次导入全部分镜到视频工作区
+              再次导入{importTargetLabel}到视频工作区
             </button>
           )}
           {changedCount > 0 && (

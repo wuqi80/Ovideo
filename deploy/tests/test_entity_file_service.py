@@ -34,6 +34,18 @@ class FakeEntityFileDAO:
         return [{"file_id": "file_deleted", "metadata": '{"model":"Wan"}'}]
 
     @staticmethod
+    async def get_deleted_user_file(file_id, user_id):
+        if file_id == "missing":
+            return None
+        return {
+            "file_id": file_id,
+            "user_id": user_id,
+            "file_path": "persistent_storage/images/deleted.png",
+            "metadata": {},
+            "is_deleted": True,
+        }
+
+    @staticmethod
     async def count_deleted_user_files(user_id, file_type):
         return 1
 
@@ -78,16 +90,16 @@ class FakeEntityFileDAO:
         return file_id != "missing"
 
     @classmethod
-    async def hard_delete(cls, file_id):
-        cls.hard_deleted.append(file_id)
+    async def hard_delete(cls, file_id, user_id):
+        cls.hard_deleted.append((file_id, user_id))
         if file_id == "missing":
             return None
         return {"file_id": file_id, "freed_bytes": 123}
 
     @classmethod
-    async def hard_delete_batch(cls, file_ids):
-        cls.batch_deleted = file_ids
-        return {"deleted": len(file_ids), "freed_bytes": 456, "errors": []}
+    async def delete_deleted_user_file_record(cls, file_id, user_id):
+        cls.hard_deleted.append((file_id, user_id, "record"))
+        return file_id != "missing"
 
 
 def setup_function():
@@ -227,6 +239,8 @@ async def test_hard_delete_batch_rejects_more_than_200_files():
     with pytest.raises(entity_file_service.EntityFileBatchTooLarge):
         await entity_file_service.hard_delete_entity_files_batch(
             file_ids=[f"file_{i}" for i in range(201)],
+            user_id="user_1",
+            risk_ack=True,
             entity_file_dao=FakeEntityFileDAO,
         )
 
@@ -241,8 +255,65 @@ async def test_soft_and_hard_delete_raise_when_missing():
     with pytest.raises(entity_file_service.EntityFileNotFound):
         await entity_file_service.hard_delete_entity_file(
             file_id="missing",
+            user_id="user_1",
+            risk_ack=True,
             entity_file_dao=FakeEntityFileDAO,
         )
+
+
+async def test_hard_delete_requires_explicit_ack_and_scopes_to_current_user():
+    with pytest.raises(entity_file_service.EntityFileDeleteRiskNotAcknowledged):
+        await entity_file_service.hard_delete_entity_file(
+            file_id="file_deleted",
+            user_id="user_1",
+            risk_ack=False,
+            entity_file_dao=FakeEntityFileDAO,
+        )
+
+    result = await entity_file_service.hard_delete_entity_file(
+        file_id="file_deleted",
+        user_id="user_1",
+        risk_ack=True,
+        entity_file_dao=FakeEntityFileDAO,
+    )
+
+    assert result["freed_bytes"] == 123
+    assert FakeEntityFileDAO.hard_deleted == [("file_deleted", "user_1")]
+
+
+async def test_node_local_hard_delete_waits_for_agent_before_removing_record():
+    class NodeLocalDAO(FakeEntityFileDAO):
+        @staticmethod
+        async def get_deleted_user_file(file_id, user_id):
+            return {
+                "file_id": file_id,
+                "user_id": user_id,
+                "file_path": "agent://gpu-2/output-1",
+                "metadata": {
+                    "source": "node_local_output",
+                    "node_agent_id": "gpu-2",
+                    "node_output_id": "output-1",
+                },
+                "is_deleted": True,
+            }
+
+    calls = []
+
+    async def delete_node_output(**kwargs):
+        calls.append(kwargs)
+        return {"freed_bytes": 987}
+
+    result = await entity_file_service.hard_delete_entity_file(
+        file_id="file_remote",
+        user_id="user_1",
+        risk_ack=True,
+        entity_file_dao=NodeLocalDAO,
+        node_output_deleter=delete_node_output,
+    )
+
+    assert calls == [{"agent_id": "gpu-2", "output_id": "output-1"}]
+    assert result["freed_bytes"] == 987
+    assert FakeEntityFileDAO.hard_deleted[-1] == ("file_remote", "user_1", "record")
 
 
 async def test_run_entity_file_migration_uses_runner():

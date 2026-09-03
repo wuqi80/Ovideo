@@ -111,7 +111,12 @@ class NodeOutputTicket:
 
 
 class NodeOutputTicketRegistry:
-    """Short-lived, single-use browser tickets that never expose the JWT."""
+    """Short-lived browser tickets that never expose the JWT.
+
+    Download managers commonly probe a URL before opening the real transfer.
+    Keep a ticket reusable during its small TTL so that a disconnected probe
+    does not turn the user's immediate retry into a 401 response.
+    """
 
     def __init__(self, ttl_seconds: int = 90):
         self.ttl_seconds = max(30, int(ttl_seconds))
@@ -131,10 +136,10 @@ class NodeOutputTicketRegistry:
             self._items[ticket.token] = ticket
         return ticket
 
-    async def consume(self, token: str) -> Optional[NodeOutputTicket]:
+    async def resolve(self, token: str) -> Optional[NodeOutputTicket]:
         await self.cleanup()
         async with self._lock:
-            ticket = self._items.pop(str(token or ""), None)
+            ticket = self._items.get(str(token or ""))
         if ticket is None or ticket.expires_at < time.monotonic():
             return None
         return ticket
@@ -147,8 +152,85 @@ class NodeOutputTicketRegistry:
                 self._items.pop(key, None)
 
 
+@dataclass
+class NodeOutputDeleteRequest:
+    request_id: str
+    output_id: str
+    agent_id: str
+    created_at: float = field(default_factory=time.monotonic)
+    claimed: bool = False
+    completed: asyncio.Event = field(default_factory=asyncio.Event)
+    success: bool = False
+    freed_bytes: int = 0
+    error: Optional[str] = None
+
+
+class NodeOutputDeleteRegistry:
+    """Outbound delete requests for files retained behind a GPU Agent."""
+
+    def __init__(self, ttl_seconds: int = 180):
+        self.ttl_seconds = max(60, int(ttl_seconds))
+        self._items: Dict[str, NodeOutputDeleteRequest] = {}
+        self._lock = asyncio.Lock()
+
+    async def create(self, *, output_id: str, agent_id: str) -> NodeOutputDeleteRequest:
+        await self.cleanup()
+        request = NodeOutputDeleteRequest(
+            request_id=uuid.uuid4().hex,
+            output_id=output_id,
+            agent_id=agent_id,
+        )
+        async with self._lock:
+            self._items[request.request_id] = request
+        return request
+
+    async def claim(self, agent_id: str) -> Optional[NodeOutputDeleteRequest]:
+        await self.cleanup()
+        async with self._lock:
+            for request in self._items.values():
+                if request.agent_id == agent_id and not request.claimed and not request.completed.is_set():
+                    request.claimed = True
+                    return request
+        return None
+
+    async def finish(
+        self,
+        request_id: str,
+        agent_id: str,
+        *,
+        success: bool,
+        freed_bytes: int = 0,
+        error: Optional[str] = None,
+    ) -> NodeOutputDeleteRequest:
+        async with self._lock:
+            request = self._items.get(request_id)
+            if request is None or request.agent_id != agent_id:
+                raise KeyError(request_id)
+            request.success = bool(success)
+            request.freed_bytes = max(0, int(freed_bytes or 0))
+            request.error = str(error or "").strip() or None
+            request.completed.set()
+            return request
+
+    async def close(self, request_id: str) -> None:
+        async with self._lock:
+            self._items.pop(request_id, None)
+
+    async def cleanup(self) -> None:
+        cutoff = time.monotonic() - self.ttl_seconds
+        async with self._lock:
+            stale = [
+                key
+                for key, request in self._items.items()
+                if request.created_at < cutoff or request.completed.is_set()
+            ]
+            for key in stale:
+                self._items.pop(key, None)
+
+
 registry = NodeOutputRelayRegistry()
 tickets = NodeOutputTicketRegistry()
+deletions = NodeOutputDeleteRegistry()
 
 
 def is_eof(value: object) -> bool:

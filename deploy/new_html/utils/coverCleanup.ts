@@ -1,6 +1,6 @@
-import { deleteEntityFile, hardDeleteEntityFile } from '../services/entityFileService';
+import { deleteEntityFile } from '../services/entityFileService';
 
-export type CoverCleanupResult = 'skipped' | 'hard_deleted' | 'soft_deleted';
+export type CoverCleanupResult = 'skipped' | 'soft_deleted';
 
 export function extractEntityFileIdFromDownloadUrl(url?: string | null): string | null {
   const value = String(url || '').trim();
@@ -25,15 +25,6 @@ export async function cleanupReplacedCoverFile(
     return 'skipped';
   }
 
-  try {
-    await hardDeleteEntityFile(previousFileId);
-    return 'hard_deleted';
-  } catch (hardDeleteError) {
-    try {
-      await deleteEntityFile(previousFileId);
-      return 'soft_deleted';
-    } catch {
-      throw hardDeleteError;
-    }
-  }
+  await deleteEntityFile(previousFileId);
+  return 'soft_deleted';
 }

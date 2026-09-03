@@ -50,11 +50,13 @@ describe('DesignPage image operation modals', () => {
 
   it('keeps image-to-image controls on a stable second row', () => {
     expect(source).toContain('mt-3 grid min-h-[44px]');
-    expect(source).toContain('xl:w-[556px] xl:justify-start');
+    expect(source).toContain('xl:w-[556px] xl:justify-end xl:justify-self-end');
+    expect(source).toContain('xl:w-[556px] xl:grid-cols-[76px_minmax(0,1fr)] xl:justify-self-end');
+    expect(source).toContain('h-9 w-[76px] items-center justify-center');
     expect(source).not.toContain('xl:pl-[84px]');
     expect(source).toContain('invisible pointer-events-none');
     expect(source).toContain('生成张数');
-    expect(source).toContain('参考图 + 生成图 ≤ 15');
+    expect(source).toContain('当前/上传参考图 + 生成图 ≤ 15');
   });
 
   it('keeps white-background turnaround sheets visibly fixed to 16:9', () => {
@@ -68,6 +70,30 @@ describe('DesignPage image operation modals', () => {
     expect(source).toContain('if (!imageToImageEnabled) return;');
     expect(source).toContain('references: imageToImageEnabled');
     expect(source).toContain("sequential: imageToImageEnabled ? 'auto' : 'disabled'");
+  });
+
+  it('keeps the generation modal open while selecting text or interacting inside it', () => {
+    expect(source).toContain('onMouseDown={event => {');
+    expect(source).toContain('if (event.target === event.currentTarget) handleClose();');
+  });
+
+  it('offers images from other scenes in the current design scope as references', () => {
+    expect(source).toContain('assets={designAssets}');
+    expect(source).toContain("candidate.assetType === 'scene' && candidate.assetId !== asset.assetId");
+    expect(source).toContain("sourceKind: 'related-scene' as const");
+    expect(source).toContain("renderReferenceGroup('其他场景参考图（不计参考图额度）', relatedSceneMaterials)");
+    expect(source).toContain('来源场景：${material.name');
+    expect(source).toContain('selectedQuotaReferenceCount');
+    expect(source).toContain('其他场景已选 {selectedRelatedSceneReferenceCount}（不计额度）');
+  });
+
+  it('uploads external reference images for supported image-to-image models', () => {
+    expect(source).toContain('generationModel.supportsImageToImageBatch && (');
+    expect(source).toContain('上传参考图');
+    expect(source).toContain('multiple');
+    expect(source).toContain("uploadEntityFile(file, 'asset', asset.assetId, 'reference_image'");
+    expect(source).toContain("sourceKind: 'external-upload'");
+    expect(source).toContain("setSequential('auto')");
   });
 
   it('defaults refinement to the fast tier and exposes all four public writing tiers', () => {

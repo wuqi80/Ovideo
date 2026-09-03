@@ -23,6 +23,7 @@
 - 标题字体：`Sora`（`font-display`，700–800，负字距）；中文回退 Noto Sans SC / 系统
 - 正文与按钮：`Noto Sans SC`（`font-sans`，400–600）
 - 编号 / 时间码 / 英文小标：`Space Mono`（`font-mono`，加宽字距，常配大写）
+- 剧本、提示词等长篇可读内容：`Times New Roman` 负责英文和数字，中文回退系统字体（`font-document`）；不要使用等宽代码字体。
 - Sora 与 Space Mono 通过 `@fontsource` 构建期打包（见 index.tsx），不依赖外网 CDN
 - 中英双语标签是身份特征：`中文 · English`（英文可用 `.ui-eyebrow` 或 font-mono）
 - 页面标题 22–24px；卡片标题 15px；正文 13–14px；微标签 10–11px

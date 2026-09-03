@@ -16,6 +16,7 @@ const videoSource = readFileSync(resolve(__dirname, '../../components/VideoPage.
 const enhanceSource = readFileSync(resolve(__dirname, '../../pages/EnhancePage.tsx'), 'utf-8');
 const mediaLibrarySource = readFileSync(resolve(__dirname, '../../pages/MediaLibraryPage.tsx'), 'utf-8');
 const createSource = readFileSync(resolve(__dirname, '../../pages/CreatePage.tsx'), 'utf-8');
+const imageUpscaleSource = readFileSync(resolve(__dirname, '../../pages/ImageUpscalePage.tsx'), 'utf-8');
 
 describe('WorkflowLayout account summary', () => {
   it('delegates account actions to the dark sidebar user row', () => {
@@ -40,6 +41,27 @@ describe('WorkflowLayout account summary', () => {
 });
 
 describe('WorkflowLayout template pipeline shell', () => {
+  it('explains the large-format print use case on the image upscale page', () => {
+    expect(imageUpscaleSource).toContain('适用于宣传图、海报等大尺寸打印场景。');
+  });
+
+  it('separates image upscale controls and history into accessible tabs', () => {
+    expect(imageUpscaleSource).toContain("useState<'upscale' | 'history'>('upscale')");
+    expect(imageUpscaleSource).toContain('role="tablist" aria-label="图片高清放大功能"');
+    expect(imageUpscaleSource).toContain('<ScanLine size={16} /> 开始放大');
+    expect(imageUpscaleSource).toContain('<History size={16} /> 放大历史');
+    expect(imageUpscaleSource).toContain("activeTab === 'upscale' &&");
+    expect(imageUpscaleSource).toContain("activeTab === 'history' &&");
+    expect(imageUpscaleSource).toContain('role="tabpanel"');
+  });
+
+  it('hides episode identity and workflow steps on standalone utility pages', () => {
+    expect(source).toContain("const STANDALONE_UTILITY_PATHS = new Set(['image-upscale', 'history', 'recycle-bin'])");
+    expect(source).toContain('const isStandaloneUtilityPage = STANDALONE_UTILITY_PATHS.has(segment)');
+    expect(source.match(/!isStandaloneUtilityPage &&/g)).toHaveLength(2);
+    expect(source).toContain('workflow-shell-account ml-auto');
+  });
+
   it('keeps the four-stage pipeline stepper in one fixed header beside the dark sidebar', () => {
     expect(source).toContain("from '../components/AppSidebar'");
     expect(source).toContain('<AppSidebar');

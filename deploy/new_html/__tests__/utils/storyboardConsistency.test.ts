@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MaterialLibrary, StoryboardItem } from '../../types';
 import {
+  applyComputerOperationOrientationConstraint,
   applyConfiguredReferenceDrafts,
   buildIdentityAnchoredPrompt,
   mergeDefaultShotReferences,
@@ -9,6 +10,7 @@ import {
   resolveShotReferencePlan,
   resolveShotReferences,
 } from '../../utils/storyboardConsistency';
+import { COMPUTER_OPERATION_ORIENTATION_RULE } from '../../utils/scriptPromptStandards';
 
 const library: MaterialLibrary = {
   女1: [
@@ -36,6 +38,33 @@ const shot: StoryboardItem = {
   props: [],
   materialSelections: { 女1: 'char_1', 客厅: 'scene_0' },
 };
+
+describe('storyboard computer operation orientation', () => {
+  it('keeps the camera behind a computer screen even when the script names screen content', () => {
+    const originalPrompt = '中景，平视，女经理坐在电脑前办公，屏幕上显示销售报表。';
+    const constrained = applyComputerOperationOrientationConstraint(originalPrompt);
+
+    expect(constrained.startsWith(originalPrompt)).toBe(true);
+    expect(constrained).toContain(COMPUTER_OPERATION_ORIENTATION_RULE);
+    expect(constrained).toContain('观众看到的必须是屏幕背面或侧后方');
+  });
+
+  it('does not add a computer-operation composition rule to an unused device', () => {
+    const prompt = '办公室桌面放着一台合上的笔记本电脑。';
+    expect(applyComputerOperationOrientationConstraint(prompt)).toBe(prompt);
+  });
+
+  it('respects an explicit request to present the screen front to the audience', () => {
+    const prompt = '女经理使用电脑，随后把电脑屏幕正面展示给观众。';
+    expect(applyComputerOperationOrientationConstraint(prompt)).toBe(prompt);
+  });
+
+  it('adds the computer-operation composition rule at most once', () => {
+    const prompt = '她坐在显示器前打字。';
+    const constrained = applyComputerOperationOrientationConstraint(prompt);
+    expect(applyComputerOperationOrientationConstraint(constrained)).toBe(constrained);
+  });
+});
 
 describe('storyboard independent references', () => {
   it('uses selected project materials only as the initial default list', () => {

@@ -32,7 +32,10 @@ import {
 } from './services/scriptModelCatalogService';
 import { storyboardItemToDbUpdate } from './utils/episodeAdapters';
 import {
+  buildScriptVersionChainContext,
   ensureStoryboardCutSeparators,
+  selectScriptIterationBaseVersion,
+  stabilizeScriptIterationResult,
 } from './utils/scriptIteration';
 import {
   buildStoryboardSegmentGroups,
@@ -59,6 +62,7 @@ import { clearCreateIdeaSeed, readCreateIdeaSeed } from './utils/createIdeaSeed'
 import { ScriptWorkspaceModeSwitch } from './components/ScriptWorkspaceModeSwitch';
 import { useProject } from './contexts/ProjectContext';
 import { projectDefaultAspectRatio } from './utils/projectCreationPreferences';
+import { buildScriptAssetDescriptionRows } from './utils/scriptAssetDescriptions';
 
 const loadAiModelService = () => import('./services/aiModelService');
 const loadScriptThreeStageService = () => import('./services/scriptThreeStageService');
@@ -1907,6 +1911,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     currentScript: string,
     instruction: string,
     conversationContext: string,
+    onStream?: (chunk: string) => void,
   ): Promise<string> => {
     if (!currentScript.trim()) throw new Error('当前文件没有可修改的剧本内容');
     if (!instruction.trim()) throw new Error('请输入本轮修改意见');
@@ -1916,7 +1921,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       currentScript,
       instruction,
       conversationContext,
-      undefined,
+      onStream,
       {
         operation: 'script_rewrite',
         displayName: '剧本修改',
@@ -1944,11 +1949,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     const modelInfo = getScriptModelInfo(aiModel, scriptModelOptions);
     const requestId = `script_turn_${uuidv4()}`;
     const isFirstTurn = conversation.versions.length === 0;
-    const currentVersion = conversation.versions.find(version => version.id === conversation.currentVersionId)
-      || conversation.versions[conversation.versions.length - 1];
-    const conversationContext = conversation.messages.slice(-10)
-      .map(message => `${message.role === 'user' ? '用户' : '系统'}：${message.content.replace(/\s+/g, ' ').slice(0, 500)}`)
-      .join('\n');
+    const currentVersion = selectScriptIterationBaseVersion(conversation);
+    const conversationContext = buildScriptVersionChainContext(conversation, currentVersion);
     const billingInput = isFirstTurn
       ? content
       : [currentVersion?.content || file.scriptContent || file.originalContent, content, conversationContext].join('\n');
@@ -2048,21 +2050,33 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
         ? content
         : currentVersion?.content || file.scriptContent || file.originalContent;
       const generationRequirements = isFirstTurn ? '' : content;
-      const { aiGenerateStoryboardScript } = await loadAiModelService();
-      result = await aiGenerateStoryboardScript(
-        aiModel,
-        generationSource,
-        generationRequirements,
-        appendStreamChunk,
-        taskContext,
-        projectOrientation,
-      );
-      pipelineInputTexts = [generationSource, generationRequirements].filter(Boolean);
+      if (isFirstTurn) {
+        const { aiGenerateStoryboardScript } = await loadAiModelService();
+        result = await aiGenerateStoryboardScript(
+          aiModel,
+          generationSource,
+          generationRequirements,
+          appendStreamChunk,
+          taskContext,
+          projectOrientation,
+        );
+      } else {
+        result = await handleIterateScript(
+          generationSource,
+          generationRequirements,
+          conversationContext,
+          appendStreamChunk,
+        );
+      }
+      pipelineInputTexts = [generationSource, generationRequirements, ...(isFirstTurn ? [] : [conversationContext])].filter(Boolean);
       pipelineOutputTexts = [result];
 
       const rawFinalContent = (result || streamedContent).trim();
       if (!rawFinalContent) throw new Error('模型未返回内容，请稍后重试');
-      const finalContent = normalizeGeneratedVideoScript(rawFinalContent);
+      const normalizedCandidate = normalizeGeneratedVideoScript(rawFinalContent);
+      const finalContent = isFirstTurn
+        ? normalizedCandidate
+        : stabilizeScriptIterationResult(generationSource, normalizedCandidate, generationRequirements);
       const parsedItems = parseStoryboardVersionContent(finalContent);
       replaceStreamContent(finalContent);
       const billingParams = {
@@ -2094,6 +2108,8 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           stage: 'directStoryboardScript',
           shotNumberFormat: 'segment-local',
           sourceVersionId: isFirstTurn ? undefined : currentVersion?.id,
+          sourceVersionNo: isFirstTurn ? undefined : currentVersion?.versionNo,
+          inheritsVersionChain: !isFirstTurn,
         },
       };
       const completedMessage = await updateScriptMessage(
@@ -2104,6 +2120,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
       );
       const version = await createScriptVersion(propEpisodeId, fileId, {
         messageId: assistantMessage.id,
+        baseVersionId: isFirstTurn ? undefined : currentVersion?.id,
         content: finalContent,
         storyboardItems: parsedItems,
         source: 'ai',
@@ -2173,7 +2190,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     } finally {
       setConversationSendingId(null);
     }
-  }, [aiModel, projectOrientation, propEpisodeId, scriptConversations, scriptModelOptions, selectedFileId, updateFileWithHistory, urlProjectId]);
+  }, [aiModel, handleIterateScript, projectOrientation, propEpisodeId, scriptConversations, scriptModelOptions, selectedFileId, updateFileWithHistory, urlProjectId]);
 
   const handleConversationConfirmVersion = useCallback(async (version: ScriptStoryboardVersion) => {
     const fileId = selectedFileId;
@@ -2215,7 +2232,16 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     setConversationSendingId(fileId);
     setConversationError(null);
     try {
-      const rejected = await rejectScriptVersion(propEpisodeId, fileId, version.id);
+      const rejection = await rejectScriptVersion(propEpisodeId, fileId, version.id);
+      const rejected = rejection.version;
+      if (rejection.outcome === 'already_confirmed' && rejection.currentVersionId === rejected.id) {
+        updateFileWithHistory(fileId, current => ({
+          ...current,
+          scriptContent: rejected.content,
+          status: FileStatus.Completed,
+          lastUpdated: Date.now(),
+        }), { recordHistory: false });
+      }
       setScriptConversations(prev => {
         const current = prev[fileId];
         if (!current) return prev;
@@ -2223,6 +2249,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           ...prev,
           [fileId]: {
             ...current,
+            currentVersionId: rejection.currentVersionId || current.currentVersionId,
             versions: current.versions.map(item => item.id === rejected.id ? rejected : item),
           },
         };
@@ -2234,7 +2261,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     } finally {
       setConversationSendingId(null);
     }
-  }, [propEpisodeId, selectedFileId]);
+  }, [propEpisodeId, selectedFileId, updateFileWithHistory]);
 
   const handleConversationEditVersion = useCallback(async (
     sourceVersion: ScriptStoryboardVersion,
@@ -2268,6 +2295,7 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
     });
     const version = await createScriptVersion(propEpisodeId, fileId, {
       messageId: message.id,
+      baseVersionId: sourceVersion.id,
       content: normalizedContent,
       storyboardItems,
       source: 'manual',
@@ -3237,15 +3265,38 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
           const sceneNames = Array.from(sceneSet);
           const propNames = Array.from(propSet);
 
+          const assetDescriptionScript = [
+            workflowFile.scriptContent || '',
+            workflowFile.originalContent || '',
+          ].filter(Boolean).join('\n');
+          const characterRows = buildScriptAssetDescriptionRows(
+            'character',
+            charNames,
+            exportableItems,
+            assetDescriptionScript,
+          );
+          const sceneRows = buildScriptAssetDescriptionRows(
+            'scene',
+            sceneNames,
+            exportableItems,
+            assetDescriptionScript,
+          );
+          const propRows = buildScriptAssetDescriptionRows(
+            'prop',
+            propNames,
+            exportableItems,
+            assetDescriptionScript,
+          );
+
           try {
             await exportScript(eid, {
               project_id: pid,
               original_content: workflowFile.originalContent || '',
               script_content: workflowFile.scriptContent || '',
               storyboard_items: [],
-              characters: charNames.map(n => ({ name: n, description: '' })),
-              scenes: sceneNames.map(n => ({ name: n, description: '' })),
-              props: propNames.map(n => ({ name: n, description: '' })),
+              characters: characterRows,
+              scenes: sceneRows,
+              props: propRows,
               script_id: workflowFile.id,
               preserve_existing_storyboards: true,
             });

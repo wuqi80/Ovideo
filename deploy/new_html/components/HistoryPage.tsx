@@ -1,12 +1,109 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { History, Download, Trash2, RefreshCw, CheckSquare, Square, Film, Image as ImageIcon, Play, Clock, AlertTriangle, X, RotateCcw, ShieldAlert } from 'lucide-react';
-import { fetchDeletedUserFiles, fetchUserFiles, deleteEntityFile, restoreEntityFile, type EntityFile } from '../services/entityFileService';
+import { History, Download, Trash2, RefreshCw, CheckSquare, Square, Film, Image as ImageIcon, Play, Clock, AlertTriangle, X, ShieldAlert } from 'lucide-react';
+import { fetchDeletedUserFiles, fetchUserFiles, deleteEntityFile, hardDeleteEntityFile, hardDeleteEntityFiles, type EntityFile } from '../services/entityFileService';
 import { LazyVideo } from './LazyVideo';
 import { apiJson, secureApiUrl } from '../services/httpClient';
-import { getHistoryPromptText } from '../utils/historyPrompt';
+import {
+  enrichImageUpscaleHistory,
+  getHistoryPromptText,
+  getHistoryThumbnailFallbackSource,
+  getHistoryThumbnailSource,
+  isImageUpscaleResultFile,
+  isImageUpscaleTask,
+  type HistoryTaskSummary,
+} from '../utils/historyPrompt';
+
+interface HistoryThumbnailImageProps {
+  src: string;
+  fallbackSrc?: string;
+  alt: string;
+}
+
+const HistoryThumbnailImage: React.FC<HistoryThumbnailImageProps> = ({ src, fallbackSrc = '', alt }) => {
+  const [currentSrc, setCurrentSrc] = useState(src);
+  const [unavailable, setUnavailable] = useState(false);
+
+  useEffect(() => {
+    setCurrentSrc(src);
+    setUnavailable(false);
+  }, [src, fallbackSrc]);
+
+  if (unavailable || !currentSrc) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-n100">
+        <ImageIcon className="h-16 w-16 opacity-20" />
+        <span className="text-xs">缩略图暂不可用</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={currentSrc}
+      className="h-full w-full object-cover"
+      loading="lazy"
+      alt={alt}
+      onError={() => {
+        if (fallbackSrc && currentSrc !== fallbackSrc) {
+          setCurrentSrc(fallbackSrc);
+          return;
+        }
+        setUnavailable(true);
+      }}
+    />
+  );
+};
 
 interface HistoryPageProps {
   view?: 'history' | 'recycle';
+}
+
+interface HistoryTask extends HistoryTaskSummary {
+  status?: string;
+  result?: { images?: Array<string | { url?: string }> };
+  created_at?: string;
+  completed_at?: string;
+}
+
+async function fetchRecentHistoryTasks(): Promise<HistoryTask[]> {
+  try {
+    const data = await apiJson<{ tasks?: HistoryTask[] }>('/api/tasks?limit=100', {}, '加载任务图片');
+    return data.tasks || [];
+  } catch {
+    return [];
+  }
+}
+
+function taskImagesFromHistory(tasks: HistoryTask[]): EntityFile[] {
+  const taskFiles: EntityFile[] = [];
+  for (const task of tasks) {
+    if (task.status !== 'completed') continue;
+    const images = task.result?.images || [];
+    const isUpscaleTask = isImageUpscaleTask(task);
+    for (const image of images) {
+      const url = typeof image === 'string' ? image : image.url;
+      if (!url) continue;
+      taskFiles.push({
+        fileId: `task_${task.task_id}_${taskFiles.length}`,
+        fileUrl: url,
+        fileType: 'image',
+        fileRole: isUpscaleTask ? 'upscaled_image' : 'generated_image',
+        isSelected: false,
+        createdAt: task.completed_at || task.created_at || '',
+        metadata: {
+          task_id: task.task_id,
+          prompt: task.data?.prompt,
+          model: task.data?.model || task.task_type,
+          source: 'task',
+          requested_workflow_type: task.data?.requested_workflow_type,
+          source_page: task.data?.source_page,
+          display_name: task.data?.display_name,
+          source_file_id: task.data?.source_file_id,
+        },
+      });
+    }
+  }
+  return enrichImageUpscaleHistory(taskFiles, tasks);
 }
 
 export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) => {
@@ -17,7 +114,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'video' | 'image'>('video');
-  const [deleteModal, setDeleteModal] = useState<{ mode: 'single' | 'batch'; files: EntityFile[] } | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{ mode: 'single' | 'batch'; files: EntityFile[]; permanent: boolean } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number } | null>(null);
 
@@ -30,56 +127,26 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
         : await fetchUserFiles(undefined, 500, 0);
       let allFiles = data.items;
 
-      if (activeTab === 'history' && allFiles.length === 0) {
-        const taskFiles = await loadTaskImages();
-        allFiles = taskFiles;
-      }
+      const tasks = await fetchRecentHistoryTasks();
+      allFiles = enrichImageUpscaleHistory(allFiles, tasks);
 
       setFiles(allFiles);
     } catch (error: any) {
       console.error('加载历史记录失败:', error);
       setLoadError(error?.message || '加载历史记录失败');
-      try {
-        const taskFiles = await loadTaskImages();
-        if (taskFiles.length > 0) {
-          setFiles(taskFiles);
-          setLoadError(null);
-        }
-      } catch { /* ignore fallback error */ }
+      if (activeTab === 'history') {
+        try {
+          const taskFiles = taskImagesFromHistory(await fetchRecentHistoryTasks());
+          if (taskFiles.length > 0) {
+            setFiles(taskFiles);
+            setLoadError(null);
+          }
+        } catch { /* ignore fallback error */ }
+      }
     } finally {
       setIsLoading(false);
     }
   }, [activeTab]);
-
-  const loadTaskImages = async (): Promise<EntityFile[]> => {
-    let data: { tasks?: any[] };
-    try {
-      data = await apiJson<{ tasks?: any[] }>('/api/tasks?limit=100', {}, '加载任务图片');
-    } catch {
-      return [];
-    }
-    const taskFiles: EntityFile[] = [];
-    for (const task of (data.tasks || [])) {
-      if (task.status !== 'completed') continue;
-      const images = task.result?.images || [];
-      const isUpscaleTask = task.task_type === 'image_upscale'
-        || task.data?.requested_workflow_type === 'image_upscale';
-      for (const img of images) {
-        const url = img.url || img;
-        if (!url || typeof url !== 'string') continue;
-        taskFiles.push({
-          fileId: `task_${task.task_id}_${taskFiles.length}`,
-          fileUrl: url,
-          fileType: 'image',
-          fileRole: isUpscaleTask ? 'upscaled_image' : 'generated_image',
-          isSelected: false,
-          createdAt: task.completed_at || task.created_at || '',
-          metadata: { prompt: task.data?.prompt, model: task.data?.model || task.task_type, source: 'task' },
-        });
-      }
-    }
-    return taskFiles;
-  };
 
   const [activeTasks, setActiveTasks] = useState<Array<{
     task_id: string;
@@ -131,14 +198,14 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
   };
 
   const openDeleteModal = (file: EntityFile) => {
-    setDeleteModal({ mode: 'single', files: [file] });
+    setDeleteModal({ mode: 'single', files: [file], permanent: activeTab === 'recycle' });
     setDeleteProgress(null);
   };
 
   const openBatchDeleteModal = () => {
     if (selectedTasks.size === 0) return;
     const selected = files.filter(f => selectedTasks.has(f.fileId));
-    setDeleteModal({ mode: 'batch', files: selected });
+    setDeleteModal({ mode: 'batch', files: selected, permanent: activeTab === 'recycle' });
     setDeleteProgress(null);
   };
 
@@ -149,11 +216,23 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
     const total = ids.length;
 
     try {
-      let done = 0;
-      for (const id of ids) {
-        await deleteEntityFile(id);
-        done++;
-        setDeleteProgress({ done, total });
+      if (deleteModal.permanent) {
+        if (ids.length === 1) {
+          await hardDeleteEntityFile(ids[0]);
+        } else {
+          const result = await hardDeleteEntityFiles(ids);
+          if (result.errors.length > 0) {
+            throw new Error(`${result.deleted}/${total} 个文件已删除，其余文件仍保留在回收站`);
+          }
+        }
+        setDeleteProgress({ done: total, total });
+      } else {
+        let done = 0;
+        for (const id of ids) {
+          await deleteEntityFile(id);
+          done++;
+          setDeleteProgress({ done, total });
+        }
       }
       setSelectedTasks(new Set());
       setDeleteModal(null);
@@ -161,26 +240,6 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
     } catch (error: any) {
       console.error('删除失败:', error);
       alert(`删除失败: ${error?.message || '未知错误'}`);
-    } finally {
-      setIsDeleting(false);
-      setDeleteProgress(null);
-    }
-  };
-
-  const restoreFiles = async (targetFiles: EntityFile[]) => {
-    if (targetFiles.length === 0) return;
-    setIsDeleting(true);
-    try {
-      let done = 0;
-      for (const file of targetFiles) {
-        await restoreEntityFile(file.fileId);
-        done++;
-        setDeleteProgress({ done, total: targetFiles.length });
-      }
-      setSelectedTasks(new Set());
-      await loadHistory();
-    } catch (error: any) {
-      alert(`恢复失败: ${error?.message || '未知错误'}`);
     } finally {
       setIsDeleting(false);
       setDeleteProgress(null);
@@ -231,7 +290,19 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
   };
 
   const getThumbnailUrl = (file: EntityFile): string | null => {
+    const sourceUrl = getHistoryThumbnailSource(file);
+    if (sourceUrl) return secureApiUrl(sourceUrl, { absolute: true });
+    if (activeTab === 'recycle' && file.fileType === 'image' && file.fileId.startsWith('file_')) {
+      return secureApiUrl(`/api/entity-files/${encodeURIComponent(file.fileId)}/recycle-thumbnail`, { absolute: true });
+    }
     return getMediaUrl(file);
+  };
+
+  const getThumbnailFallbackUrl = (file: EntityFile): string | null => {
+    const fallbackSource = getHistoryThumbnailFallbackSource(file);
+    return fallbackSource
+      ? secureApiUrl(fallbackSource, { absolute: true })
+      : null;
   };
 
   const isVideo = (file: EntityFile): boolean => {
@@ -272,6 +343,9 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
             {activeTab === 'recycle' ? '回收站' : '生成历史'}
           </h2>
           <span className="text-xs text-n100">共 {files.length} 个文件</span>
+          {activeTab === 'recycle' && (
+            <span className="text-xs text-danger">仅显示你的素材；此处操作为永久删除</span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -303,11 +377,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
             </>
           ) : (
             <button
-              onClick={() => restoreFiles(files.filter(file => selectedTasks.has(file.fileId)))}
+              onClick={openBatchDeleteModal}
               disabled={selectedTasks.size === 0 || isDeleting}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover disabled:bg-n0 disabled:text-n100 text-white rounded text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-danger hover:bg-red-500 disabled:bg-n0 disabled:text-n100 text-white rounded text-xs font-medium transition-colors"
             >
-              <RotateCcw className="w-3.5 h-3.5" />批量恢复
+              <Trash2 className="w-3.5 h-3.5" />批量永久删除
             </button>
           )}
 
@@ -360,14 +434,16 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
           <div className="flex flex-col items-center justify-center h-64 text-n100">
             <History className="w-16 h-16 mb-4 opacity-20" />
             <p className="text-lg font-medium">{activeTab === 'recycle' ? '回收站为空' : '暂无历史记录'}</p>
-            <p className="text-sm mt-2">{activeTab === 'recycle' ? '删除的图片和视频会显示在这里' : '开始生成你的第一个作品吧'}</p>
+            <p className="text-sm mt-2">{activeTab === 'recycle' ? '移入回收站的本人素材会显示在这里' : '开始生成你的第一个作品吧'}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {files.map(file => {
               const mediaUrl = getMediaUrl(file);
               const thumbnailUrl = getThumbnailUrl(file);
+              const thumbnailFallbackUrl = getThumbnailFallbackUrl(file);
               const isVideoFile = isVideo(file);
+              const isLargeUpscaleResult = isImageUpscaleResultFile(file);
               const isSelected = selectedTasks.has(file.fileId);
               const canSelect = activeTab === 'recycle' || !!mediaUrl;
               const m = meta(file);
@@ -397,11 +473,20 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
                     className="relative w-full aspect-video bg-n0 cursor-pointer"
                     onClick={() => canSelect && openPreview(file)}
                   >
+                    {isLargeUpscaleResult && (
+                      <span className="absolute right-3 top-3 z-10 rounded-md border border-white/30 bg-n900/75 px-2 py-1 text-[10px] font-bold text-white shadow-sm backdrop-blur">
+                        大尺寸图
+                      </span>
+                    )}
                     {activeTab === 'recycle' ? (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-n100 gap-2">
-                        {isVideoFile ? <Film className="w-16 h-16 opacity-20" /> : <ImageIcon className="w-16 h-16 opacity-20" />}
-                        <span className="text-xs">已移入回收站</span>
-                      </div>
+                      thumbnailUrl && !isVideoFile ? (
+                        <HistoryThumbnailImage src={thumbnailUrl} alt="回收站图片缩略图" />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-n100 gap-2">
+                          {isVideoFile ? <Film className="w-16 h-16 opacity-20" /> : <ImageIcon className="w-16 h-16 opacity-20" />}
+                          <span className="text-xs">缩略图暂不可用</span>
+                        </div>
+                      )
                     ) : mediaUrl ? (
                       <>
                         {isVideoFile ? (
@@ -414,7 +499,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
                             playsInline
                           />
                         ) : (
-                          <img src={thumbnailUrl || mediaUrl} className="w-full h-full object-cover" loading="lazy" alt="" />
+                          <HistoryThumbnailImage
+                            src={thumbnailUrl || mediaUrl}
+                            fallbackSrc={thumbnailFallbackUrl || ''}
+                            alt={isLargeUpscaleResult ? '图片高清放大缩略图' : '历史图片缩略图'}
+                          />
                         )}
 
                         <div className="absolute inset-0 flex items-center justify-center bg-n900/50 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -444,11 +533,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
                     <div className="flex gap-2">
                       {activeTab === 'recycle' ? (
                         <button
-                          onClick={() => restoreFiles([file])}
+                          onClick={() => openDeleteModal(file)}
                           disabled={isDeleting}
-                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-medium transition-colors"
+                          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-danger hover:bg-red-500 text-white rounded text-xs font-medium transition-colors"
                         >
-                          <RotateCcw className="w-3 h-3" />恢复
+                          <Trash2 className="w-3 h-3" />永久删除
                         </button>
                       ) : mediaUrl ? (
                         <a
@@ -501,9 +590,15 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-n800">
-                    {deleteModal.mode === 'single' ? '确认删除' : `批量删除 ${deleteModal.files.length} 个文件`}
+                    {deleteModal.permanent
+                      ? (deleteModal.mode === 'single' ? '确认永久删除' : `永久删除 ${deleteModal.files.length} 个文件`)
+                      : (deleteModal.mode === 'single' ? '确认删除' : `批量删除 ${deleteModal.files.length} 个文件`)}
                   </h3>
-                  <p className="text-xs text-n100 mt-0.5">文件将移入回收站，可随时恢复</p>
+                  <p className={`text-xs mt-0.5 ${deleteModal.permanent ? 'font-medium text-danger' : 'text-n100'}`}>
+                    {deleteModal.permanent
+                      ? '删除后将从服务器上删除内容，且不可再次恢复'
+                      : '文件将移入回收站，尚未从服务器永久删除'}
+                  </p>
                 </div>
               </div>
               {!isDeleting && (
@@ -517,8 +612,8 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
               {deleteModal.mode === 'single' ? (
                 <div className="flex gap-4 p-3 bg-n30 rounded-md border border-n40">
                   <div className="w-24 h-24 rounded-lg overflow-hidden bg-n0 flex-shrink-0">
-                    {deleteModal.files[0]?.fileUrl ? (
-                      <img src={getMediaUrl(deleteModal.files[0]) || ''} className="w-full h-full object-cover" alt="" />
+                    {getThumbnailUrl(deleteModal.files[0]!) ? (
+                      <img src={getThumbnailUrl(deleteModal.files[0]!) || ''} className="w-full h-full object-cover" alt="待删除素材缩略图" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-8 h-8 text-n100" /></div>
                     )}
@@ -534,8 +629,8 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
                   <div className="grid grid-cols-4 gap-2">
                     {deleteModal.files.slice(0, 8).map(f => (
                       <div key={f.fileId} className="aspect-square rounded-lg overflow-hidden bg-n0 border border-n40">
-                        {f.fileUrl ? (
-                          <img src={getMediaUrl(f) || ''} className="w-full h-full object-cover" alt="" />
+                        {getThumbnailUrl(f) ? (
+                          <img src={getThumbnailUrl(f) || ''} className="w-full h-full object-cover" alt="待删除素材缩略图" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-6 h-6 text-n100" /></div>
                         )}
@@ -545,6 +640,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
                   {deleteModal.files.length > 8 && (
                     <p className="text-xs text-n100 text-center">...还有 {deleteModal.files.length - 8} 个文件</p>
                   )}
+                </div>
+              )}
+              {deleteModal.permanent && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-xs leading-5 text-danger">
+                  此操作会删除你本人素材对应的服务器文件并释放存储空间，同时删除文件记录；操作不可撤销。
                 </div>
               )}
             </div>
@@ -575,7 +675,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({ view = 'history' }) =>
                 ) : (
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
-                    移入回收站
+                    {deleteModal.permanent ? '确认永久删除' : '移入回收站'}
                   </>
                 )}
               </button>

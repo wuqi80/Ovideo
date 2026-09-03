@@ -1,5 +1,11 @@
 export type DesignImageEngine = 'nanobanana' | 'doubao';
 export type DesignImageResolution = '1K' | '2K' | '4K';
+export type DesignImageReferenceSourceKind = 'current' | 'related-scene' | 'external-upload';
+
+export interface DesignImageReferenceQuotaItem {
+  id: string;
+  sourceKind?: DesignImageReferenceSourceKind;
+}
 
 export interface DesignImageModelOption {
   id: string;
@@ -83,4 +89,49 @@ export function canUseDesignImageReferences(
 
 export function maxDesignImageOutputCount(referenceCount: number): number {
   return Math.max(1, DESIGN_IMAGE_BATCH_LIMIT - Math.max(0, referenceCount));
+}
+
+export function isDesignImageReferenceQuotaExempt(
+  sourceKind?: DesignImageReferenceSourceKind,
+): boolean {
+  return sourceKind === 'related-scene';
+}
+
+export function countDesignImageQuotaReferences(
+  selectedReferenceIds: Iterable<string>,
+  references: Iterable<DesignImageReferenceQuotaItem>,
+): number {
+  const selected = new Set(selectedReferenceIds);
+  let count = 0;
+  for (const reference of references) {
+    if (selected.has(reference.id) && !isDesignImageReferenceQuotaExempt(reference.sourceKind)) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+export function trimDesignImageReferenceSelectionToQuota(
+  selectedReferenceIds: Iterable<string>,
+  references: Iterable<DesignImageReferenceQuotaItem>,
+  maxReferences: number,
+): Set<string> {
+  const sourceKindById = new Map(
+    Array.from(references, reference => [reference.id, reference.sourceKind] as const),
+  );
+  const next = new Set<string>();
+  let counted = 0;
+  for (const id of selectedReferenceIds) {
+    const sourceKind = sourceKindById.get(id);
+    if (sourceKind === undefined && !sourceKindById.has(id)) continue;
+    if (isDesignImageReferenceQuotaExempt(sourceKind)) {
+      next.add(id);
+      continue;
+    }
+    if (counted < Math.max(0, maxReferences)) {
+      next.add(id);
+      counted += 1;
+    }
+  }
+  return next;
 }

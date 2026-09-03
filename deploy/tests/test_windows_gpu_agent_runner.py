@@ -75,6 +75,7 @@ from scripts.windows_gpu_agent_runner import (
     postprocess_gpu2_image_upscale,
     retain_gpu2_node_output,
     lookup_gpu2_node_output,
+    delete_gpu2_node_output,
     cleanup_gpu2_node_outputs,
     _runtime_profile_from_process,
     tune_gpu2_qwen_workflow,
@@ -205,6 +206,24 @@ def test_gpu2_node_local_output_cleanup_removes_expired_files(tmp_path, monkeypa
 
     assert "expired_output_id" in status["removed"]
     assert not expired_file.exists()
+
+
+def test_gpu2_node_local_output_permanent_delete_removes_file_and_registry(tmp_path, monkeypatch):
+    output_root = tmp_path / "outputs"
+    registry_path = tmp_path / "node-output-registry.json"
+    monkeypatch.setattr(gpu_runner, "GPU2_IMAGE_UPSCALE_OUTPUT_ROOT", output_root)
+    monkeypatch.setattr(gpu_runner, "GPU2_NODE_OUTPUT_REGISTRY", registry_path)
+    monkeypatch.setattr(gpu_runner, "GPU2_NODE_OUTPUT_MIN_FREE_GIB", 0)
+
+    source = tmp_path / "poster.png"
+    source.write_bytes(b"upscaled-image")
+    metadata = retain_gpu2_node_output("task-upscale", source)
+
+    result = delete_gpu2_node_output(metadata["node_output_id"])
+
+    assert result == {"success": True, "deleted": True, "freed_bytes": len(b"upscaled-image")}
+    assert lookup_gpu2_node_output(metadata["node_output_id"]) is None
+    assert json.loads(registry_path.read_text(encoding="utf-8")) == {}
 
 
 def test_shared_comfyui_guard_allows_idle_ovideo_runtime_only():
@@ -1097,6 +1116,7 @@ def test_gpu2_upscale_workflow_uses_low_vram_seedvr2_nodes():
     assert workflow["4"]["inputs"]["max_resolution"] == GPU2_IMAGE_UPSCALE_MAX_RESOLUTION
     assert GPU2_IMAGE_UPSCALE_TARGET >= 3840
     assert workflow["5"]["class_type"] == "SaveImage"
+    assert workflow["5"]["inputs"]["filename_prefix"] == "OSTORY_ScencGo_upscale"
 
 
 def test_gpu2_image_upscale_reuses_ai_master_and_writes_dpi(tmp_path):
@@ -1117,6 +1137,7 @@ def test_gpu2_image_upscale_reuses_ai_master_and_writes_dpi(tmp_path):
         assert round(image.info["dpi"][1]) == 300
     assert result["result_payload"]["text_processing"] == "deterministic_edge_enhancement"
     assert result["result_payload"]["target_long_edge"] == 4096
+    assert Path(output).name == "master_4096px_300dpi_text-clear.png"
     assert not source.exists()
 
 

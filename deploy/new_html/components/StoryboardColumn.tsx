@@ -901,8 +901,9 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                                </button>
                           </div>
                           <textarea
-                              className="w-full text-xs text-n700 bg-n30 p-2 rounded border border-n40 resize-none focus:outline-none focus:border-cyan-500/50 focus:bg-n0"
-                              rows={3}
+                              data-testid={`storyboard-image-prompt-${item.id}`}
+                              className="w-full min-h-[144px] max-h-[320px] text-xs leading-5 text-n700 bg-n30 p-2 rounded border border-n40 resize-y focus:outline-none focus:border-cyan-500/50 focus:bg-n0"
+                              rows={6}
                               value={item.imagePrompt}
                               onChange={(e) => onUpdateItem(item.id, { imagePrompt: e.target.value })}
                               disabled={item.isLocked}
@@ -922,8 +923,8 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                           </div>
                           <textarea
                               data-testid={`storyboard-video-prompt-${item.id}`}
-                              className="w-full min-h-[112px] max-h-[240px] text-xs text-n700 bg-n30 p-2 rounded border border-n40 resize-y focus:outline-none focus:border-primary focus:bg-n0"
-                              rows={5}
+                              className="w-full min-h-[192px] max-h-[400px] text-xs leading-5 text-n700 bg-n30 p-2 rounded border border-n40 resize-y focus:outline-none focus:border-primary focus:bg-n0"
+                              rows={9}
                               value={item.videoPrompt}
                               onChange={(e) => onUpdateItem(item.id, { videoPrompt: e.target.value })}
                               disabled={item.isLocked}

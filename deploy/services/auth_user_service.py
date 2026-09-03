@@ -8,23 +8,13 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from dao_user import UserDAO
-
-
-DEFAULT_ALLOWED_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-image",
-    "wan2-i2v",
-    "wan2-morph",
-    "wan26-i2v",
-    "sora2-i2v",
-    "veo-i2v",
-    "minimax-i2v",
-]
+from services.model_access_service import ACCESS_INHERIT
 
 
 def default_permissions() -> dict[str, Any]:
     return {
-        "allowedModels": list(DEFAULT_ALLOWED_MODELS),
+        "accessMode": ACCESS_INHERIT,
+        "allowedModels": [],
         "priority": "normal",
         "canExport": True,
     }

@@ -10,6 +10,7 @@ from schemas.generation import (
     ComfyUIWorkflowRequest,
     HumanMultiAngleRequest,
     ImageFusionRequest,
+    MaterialProcessRequest,
     MattingRequest,
     PanoramaFusionRequest,
 )
@@ -49,6 +50,26 @@ def build_router_and_service():
 
 def endpoint_for(router, path):
     return next(route.endpoint for route in router.routes if route.path == path)
+
+
+@pytest.mark.asyncio
+async def test_image_upscale_keeps_source_file_for_history_thumbnail():
+    router, service = build_router_and_service()
+    request = MaterialProcessRequest(
+        image_filename="source.png",
+        source_file_id="file_source123",
+        workflow_type="image_upscale",
+        target_long_edge=50000,
+        dpi=300,
+        text_clarity=True,
+    )
+
+    await endpoint_for(router, "/api/materials/process")(request, username="tester")
+
+    _, data, _ = service.calls[0]
+    assert data["requested_workflow_type"] == "image_upscale"
+    assert data["source_file_id"] == "file_source123"
+    assert data["display_name"] == "图片高清放大"
 
 
 @pytest.mark.asyncio

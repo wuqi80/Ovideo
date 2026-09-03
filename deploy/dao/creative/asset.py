@@ -151,7 +151,7 @@ class AssetDAO:
         if script_id:
             existing_assets = await conn.fetch(
                 """
-                SELECT name FROM assets
+                SELECT asset_id, name, description FROM assets
                 WHERE project_id = $1 AND episode_id = $2 AND script_id = $3 AND asset_type = $4
                 """,
                 project_id,
@@ -162,18 +162,32 @@ class AssetDAO:
         else:
             existing_assets = await conn.fetch(
                 """
-                SELECT name FROM assets
+                SELECT asset_id, name, description FROM assets
                 WHERE project_id = $1 AND episode_id = $2 AND asset_type = $3
                 """,
                 project_id,
                 episode_id,
                 asset_type,
             )
-        existing_names = {str(row["name"]) for row in existing_assets}
+        existing_by_name = {str(row["name"]): row for row in existing_assets}
         created = 0
         for item in items:
             name = str(item.get("name", "")).strip()
-            if not name or name in existing_names:
+            if not name:
+                continue
+            description = str(item.get("description", "") or "").strip()
+            existing = existing_by_name.get(name)
+            if existing:
+                existing_description = str(existing.get("description", "") or "").strip()
+                if description and not existing_description:
+                    await conn.execute(
+                        """
+                        UPDATE assets SET description = $1
+                        WHERE asset_id = $2 AND (description IS NULL OR BTRIM(description) = '')
+                        """,
+                        description,
+                        str(existing["asset_id"]),
+                    )
                 continue
             await conn.execute(
                 """
@@ -186,10 +200,14 @@ class AssetDAO:
                 script_id,
                 asset_type,
                 name,
-                item.get("description", ""),
+                description,
                 created_by,
             )
-            existing_names.add(name)
+            existing_by_name[name] = {
+                "asset_id": "",
+                "name": name,
+                "description": description,
+            }
             created += 1
         return created
 

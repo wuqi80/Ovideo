@@ -5,6 +5,7 @@ import {
   selectGpuTaskNode,
   setPreferredGpuNodeId,
 } from '../../services/clusterNodeService';
+import { crmMessage } from '../../admin/crmUI';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -119,6 +120,25 @@ describe('processing cluster routing', () => {
     ], 'missing-node');
 
     expect(selected?.name).toBe('GPU4');
+  });
+
+  it('automatically selects live capacity without using or announcing a stale GPU1 preference', async () => {
+    setPreferredGpuNodeId('GPU1');
+    const infoSpy = vi.spyOn(crmMessage, 'info').mockImplementation(() => undefined);
+    mockFetch.mockResolvedValueOnce(response({
+      success: true,
+      nodes: [
+        { id: 'agent_gpu1', agent_id: 'agent_gpu1', name: 'GPU1', status: 'unavailable' },
+        { id: 'agent_local', agent_id: 'agent_local', name: '本地处理节点', status: 'online', tasks: 0, max_concurrent: 2 },
+      ],
+    }));
+
+    const routing = await resolveGpuTaskRouting(undefined, { automatic: true });
+
+    expect(routing.preferredAgentId).toBe('agent_local');
+    expect(routing.node?.name).toBe('本地处理节点');
+    expect(infoSpy).not.toHaveBeenCalled();
+    infoSpy.mockRestore();
   });
 
   it('skips a preferred node that has reached its concurrency limit', () => {

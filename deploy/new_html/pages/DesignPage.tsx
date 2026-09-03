@@ -57,14 +57,19 @@ import {
 import { recommendDoubaoImageSize } from '../utils/doubaoImageSize';
 import { assertEnoughCredits, consumeCredits } from '../services/creditService';
 import { InlineCreditEstimate } from '../components/InlineCreditEstimate';
+import { ImagePreviewLightbox } from '../components/ImagePreviewLightbox';
 import {
   DESIGN_IMAGE_BATCH_LIMIT,
   DESIGN_IMAGE_MODEL_OPTIONS,
   canUseDesignImageReferences,
+  countDesignImageQuotaReferences,
   findDesignImageModel,
+  isDesignImageReferenceQuotaExempt,
   maxDesignImageOutputCount,
   normalizeDesignImageResolution,
+  trimDesignImageReferenceSelectionToQuota,
   type DesignImageEngine,
+  type DesignImageReferenceSourceKind,
   type DesignImageResolution,
 } from '../utils/designImageModels';
 import {
@@ -86,7 +91,13 @@ import { projectDefaultAspectRatio } from '../utils/projectCreationPreferences';
 
 type AssetTab = 'character' | 'scene' | 'prop';
 type MaterialAIEngine = DesignImageEngine;
-interface ModalMaterial { id: string; url: string; thumbnail?: string; name?: string }
+interface ModalMaterial {
+  id: string;
+  url: string;
+  thumbnail?: string;
+  name?: string;
+  sourceKind?: DesignImageReferenceSourceKind;
+}
 type AssetEntityFile = NonNullable<AssetItem['entityFiles']>[number];
 type RawAssetImage = { key: string; rawUrl: string; fileId?: string };
 
@@ -228,7 +239,7 @@ const AssetImageRow: React.FC<{
   assetId: string;
   entityFiles: AssetEntityFile[];
   legacyImages: string[];
-  onLightbox: (url: string) => void;
+  onLightbox: (images: string[], initialIndex: number) => void;
   onDeleteImage: (assetId: string, imageUrl: string, fileId?: string) => void;
   busy: boolean;
 }> = ({ assetId, entityFiles, legacyImages, onLightbox, onDeleteImage, busy }) => {
@@ -246,9 +257,9 @@ const AssetImageRow: React.FC<{
   if (images.length === 0) return null;
   return (
     <div className="flex gap-2 mb-3 overflow-x-auto pb-2">
-      {images.map(img => (
+      {images.map((img, index) => (
         <div key={img.key} className="shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-n40 hover:border-primary transition-colors group relative">
-          <button type="button" onClick={() => onLightbox(img.displayUrl)} className="w-full h-full">
+          <button type="button" onClick={() => onLightbox(images.map(item => item.displayUrl), index)} className="w-full h-full">
             <img src={img.displayUrl} alt="" className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center pointer-events-none"><ZoomIn size={14} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" /></div>
           </button>
@@ -288,7 +299,7 @@ export const DesignPage: React.FC = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ images: string[]; currentIndex: number } | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [busyAssetId, setBusyAssetId] = useState<string | null>(null);
   const [busyLabel, setBusyLabel] = useState('');
@@ -1087,7 +1098,7 @@ export const DesignPage: React.FC = () => {
                         assetId={asset.assetId}
                         entityFiles={asset.entityFiles || []}
                         legacyImages={legacyImgs}
-                        onLightbox={setLightboxUrl}
+                        onLightbox={(images, currentIndex) => setLightbox({ images, currentIndex })}
                         onDeleteImage={handleDeleteImage}
                         busy={busy}
                       />
@@ -1122,14 +1133,16 @@ export const DesignPage: React.FC = () => {
         </section>
       </div>
 
-      {lightboxUrl && (
-        <div className="fixed inset-0 z-50 bg-n900/50 flex items-center justify-center p-8" onClick={() => setLightboxUrl(null)}>
-          <button className="absolute top-6 right-6 text-white/70 hover:text-white" onClick={() => setLightboxUrl(null)}><X size={24} /></button>
-          <img src={lightboxUrl} alt="" className="max-w-full max-h-full object-contain rounded-lg" onClick={e => e.stopPropagation()} />
-        </div>
+      {lightbox && (
+        <ImagePreviewLightbox
+          images={lightbox.images}
+          currentIndex={lightbox.currentIndex}
+          onIndexChange={currentIndex => setLightbox(current => current ? { ...current, currentIndex } : null)}
+          onClose={() => setLightbox(null)}
+        />
       )}
 
-      {aiModal && <UnifiedAIModal asset={aiModal.asset} scriptText={scriptText} modelOptions={scriptModelOptions} projectId={projectId} episodeId={episodeId} onClose={() => setAiModal(null)} onSubmit={handleAIGeneration} />}
+      {aiModal && <UnifiedAIModal asset={aiModal.asset} assets={designAssets} scriptText={scriptText} modelOptions={scriptModelOptions} projectId={projectId} episodeId={episodeId} onClose={() => setAiModal(null)} onSubmit={handleAIGeneration} />}
       {cameraModal && <CameraModal asset={cameraModal.asset} materials={cameraModal.materials} onClose={() => setCameraModal(null)} onSubmit={(p) => handleCameraGenerate({ ...p, assetId: cameraModal.asset.assetId })} />}
       {processModal && <ProcessModal asset={processModal.asset} materials={processModal.materials} workflow={processModal.workflow} onClose={() => setProcessModal(null)} onSubmit={handleProcessSubmit} />}
       {batchModal && <BatchGenerateModal assets={designAssets} selectedIds={selectedIds} scriptText={scriptText} modelOptions={scriptModelOptions} onClose={() => setBatchModal(false)} onSubmit={handleBatchGenerate} />}
@@ -1278,9 +1291,9 @@ const SyncExistingDesignModal: React.FC<{
 
 /* ======================== Unified AI Modal ======================== */
 const UnifiedAIModal: React.FC<{
-  asset: AssetItem; scriptText: string; modelOptions: readonly ScriptModelOption[]; projectId?: string | null; episodeId?: string | null; onClose: () => void;
+  asset: AssetItem; assets: AssetItem[]; scriptText: string; modelOptions: readonly ScriptModelOption[]; projectId?: string | null; episodeId?: string | null; onClose: () => void;
   onSubmit: (p: { assetId: string; engine: MaterialAIEngine; geminiModel: string; prompt: string; references: string[]; aspectRatio: string; resolution: '1K' | '2K' | '4K'; sequential: string; count: number }) => void;
-}> = ({ asset, scriptText, modelOptions, projectId, episodeId, onClose, onSubmit }) => {
+}> = ({ asset, assets, scriptText, modelOptions, projectId, episodeId, onClose, onSubmit }) => {
   const { forceReloadSlices } = useEpisode();
   const { project } = useProject();
   const defaultAspectRatio = projectDefaultAspectRatio(
@@ -1320,8 +1333,39 @@ const UnifiedAIModal: React.FC<{
   );
   const [isRefining, setIsRefining] = useState(false);
   const [refineModel, setRefineModel] = useState(savedRefineModel());
+  const [uploadingReferences, setUploadingReferences] = useState(false);
+  const [uploadedReferenceMaterials, setUploadedReferenceMaterials] = useState<ModalMaterial[]>([]);
   const persistedPromptRef = useRef(storedPrompt.trim());
-  const materials = useMemo(() => assetToMaterials(asset), [asset]);
+  const materials = useMemo(() => {
+    const candidates: ModalMaterial[] = [
+      ...assetToMaterials(asset).map(material => ({ ...material, sourceKind: 'current' as const })),
+      ...uploadedReferenceMaterials,
+    ];
+    if (asset.assetType === 'scene') {
+      assets
+        .filter(candidate => candidate.assetType === 'scene' && candidate.assetId !== asset.assetId)
+        .forEach(candidate => {
+          candidates.push(...assetToMaterials(candidate).map(material => ({
+            ...material,
+            sourceKind: 'related-scene' as const,
+          })));
+        });
+    }
+    const seenUrls = new Set<string>();
+    return candidates.filter(material => {
+      if (!material.url || seenUrls.has(material.url)) return false;
+      seenUrls.add(material.url);
+      return true;
+    });
+  }, [asset, assets, uploadedReferenceMaterials]);
+  const currentMaterials = materials.filter(material => material.sourceKind === 'current');
+  const uploadedMaterials = materials.filter(material => material.sourceKind === 'external-upload');
+  const relatedSceneMaterials = materials.filter(material => material.sourceKind === 'related-scene');
+  const selectedQuotaReferenceCount = useMemo(
+    () => countDesignImageQuotaReferences(selectedRefs, materials),
+    [materials, selectedRefs],
+  );
+  const selectedRelatedSceneReferenceCount = selectedRefs.size - selectedQuotaReferenceCount;
   const generationModel = useMemo(
     () => findDesignImageModel(engine, geminiModel),
     [engine, geminiModel],
@@ -1359,15 +1403,16 @@ const UnifiedAIModal: React.FC<{
       setCount(1);
       setSelectedRefs(new Set());
     }
-    setSelectedRefs(current => {
-      if (current.size <= generationModel.maxReferences) return current;
-      return new Set(Array.from(current).slice(0, generationModel.maxReferences));
-    });
-  }, [generationModel]);
+    setSelectedRefs(current => trimDesignImageReferenceSelectionToQuota(
+      current,
+      materials,
+      generationModel.maxReferences,
+    ));
+  }, [generationModel, materials]);
 
   useEffect(() => {
-    setCount(current => Math.min(current, maxDesignImageOutputCount(selectedRefs.size)));
-  }, [selectedRefs.size]);
+    setCount(current => Math.min(current, maxDesignImageOutputCount(selectedQuotaReferenceCount)));
+  }, [selectedQuotaReferenceCount]);
 
   const selectGenerationModel = (modelId: string) => {
     const nextModel = DESIGN_IMAGE_MODEL_OPTIONS.find(option => option.id === modelId);
@@ -1410,12 +1455,15 @@ const UnifiedAIModal: React.FC<{
         next.delete(id);
         return next;
       }
-      if (next.size >= maxRefs) {
-        crmMessage.warning(`参考图最多选择 ${maxRefs} 张`);
+      const selectedMaterial = materials.find(material => material.id === id);
+      const quotaExempt = isDesignImageReferenceQuotaExempt(selectedMaterial?.sourceKind);
+      const quotaReferenceCount = countDesignImageQuotaReferences(next, materials);
+      if (!quotaExempt && quotaReferenceCount >= maxRefs) {
+        crmMessage.warning(`当前场景和上传参考图最多选择 ${maxRefs} 张`);
         return prev;
       }
-      if (next.size + 1 + count > DESIGN_IMAGE_BATCH_LIMIT) {
-        crmMessage.warning(`参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张`);
+      if (!quotaExempt && quotaReferenceCount + 1 + count > DESIGN_IMAGE_BATCH_LIMIT) {
+        crmMessage.warning(`当前场景/上传参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张`);
         return prev;
       }
       next.add(id);
@@ -1432,12 +1480,61 @@ const UnifiedAIModal: React.FC<{
     }
   };
 
+  const handleReferenceUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []).filter(file => !file.type || file.type.startsWith('image/'));
+    event.target.value = '';
+    if (!files.length || uploadingReferences || !generationModel.supportsImageToImageBatch) return;
+
+    setUploadingReferences(true);
+    const uploaded: ModalMaterial[] = [];
+    const failures: string[] = [];
+    try {
+      const { uploadEntityFile } = await import('../services/entityFileService');
+      for (const file of files) {
+        try {
+          const saved = await uploadEntityFile(file, 'asset', asset.assetId, 'reference_image', episodeId || undefined);
+          uploaded.push({
+            id: `external_${saved.fileId}`,
+            url: saved.fileUrl,
+            name: file.name,
+            sourceKind: 'external-upload',
+          });
+        } catch (error: any) {
+          failures.push(`${file.name}：${error?.message || '上传失败'}`);
+        }
+      }
+
+      if (uploaded.length) {
+        setUploadedReferenceMaterials(current => [...uploaded, ...current]);
+        setSequential('auto');
+        setSelectedRefs(current => {
+          const next = new Set(current);
+          let quotaReferenceCount = countDesignImageQuotaReferences(next, materials);
+          uploaded.forEach(material => {
+            if (quotaReferenceCount < maxRefs && quotaReferenceCount + 1 + count <= DESIGN_IMAGE_BATCH_LIMIT) {
+              next.add(material.id);
+              quotaReferenceCount += 1;
+            }
+          });
+          return next;
+        });
+        forceReloadSlices('assets').catch(() => { /* ignore */ });
+        crmMessage.success(`已上传 ${uploaded.length} 张参考图${failures.length ? `，${failures.length} 张失败` : ''}`);
+      }
+      if (!uploaded.length && failures.length) crmMessage.error(failures[0]);
+    } catch (error: any) {
+      crmMessage.error(error?.message || '参考图上传失败');
+    } finally {
+      setUploadingReferences(false);
+    }
+  };
+
   const updateGenerationCount = (rawValue: string) => {
     const requested = Number(rawValue);
     const nextCount = Number.isFinite(requested) ? Math.max(1, Math.floor(requested)) : 1;
-    const allowed = maxDesignImageOutputCount(selectedRefs.size);
+    const allowed = maxDesignImageOutputCount(selectedQuotaReferenceCount);
     if (nextCount > allowed) {
-      crmMessage.warning(`参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张，当前最多可生成 ${allowed} 张`);
+      crmMessage.warning(`当前场景/上传参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张，当前最多可生成 ${allowed} 张`);
       setCount(allowed);
       return;
     }
@@ -1497,8 +1594,8 @@ const UnifiedAIModal: React.FC<{
       crmMessage.warning('启用图生图后，请至少选择 1 张参考图');
       return;
     }
-    if (selectedRefs.size + generatedImageCount > DESIGN_IMAGE_BATCH_LIMIT) {
-      crmMessage.warning(`参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张`);
+    if (selectedQuotaReferenceCount + generatedImageCount > DESIGN_IMAGE_BATCH_LIMIT) {
+      crmMessage.warning(`当前场景/上传参考图和生成图合计最多 ${DESIGN_IMAGE_BATCH_LIMIT} 张`);
       return;
     }
     const basePrompt = stripImageStylePresets(prompt);
@@ -1526,9 +1623,68 @@ const UnifiedAIModal: React.FC<{
     });
   };
 
+  const renderReferenceGroup = (label: string, group: ModalMaterial[]) => {
+    if (!group.length) return null;
+    return (
+      <div className="space-y-1.5">
+        <div className="text-[10px] font-medium text-n300">{label}</div>
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8">
+          {group.map(material => {
+            const active = selectedRefs.has(material.id);
+            const sourceLabel = material.sourceKind === 'related-scene'
+              ? `来源场景：${material.name || '未命名场景'}`
+              : material.sourceKind === 'external-upload'
+                ? `外部上传：${material.name || '参考图'}`
+                : `当前场景：${asset.name}`;
+            return (
+              <button
+                key={material.id}
+                type="button"
+                disabled={!imageToImageEnabled}
+                onClick={() => toggleRef(material.id)}
+                title={!imageToImageEnabled ? '请先启用图生图' : `${active ? '取消参考图' : '设为参考图'}；${sourceLabel}`}
+                aria-label={sourceLabel}
+                aria-pressed={active}
+                className={`relative aspect-square overflow-hidden rounded-lg border transition-colors ${
+                  active
+                    ? 'border-success ring-2 ring-success/40'
+                    : imageToImageEnabled
+                      ? 'border-n40 hover:border-primary'
+                      : 'cursor-not-allowed border-n40 opacity-55'
+                }`}
+              >
+                <img
+                  src={secureMediaUrl(material.thumbnail || material.url) || ''}
+                  alt={sourceLabel}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+                {material.sourceKind !== 'current' && (
+                  <span className="absolute inset-x-0 bottom-0 truncate bg-n900/70 px-1 py-0.5 text-[9px] text-white">
+                    {material.sourceKind === 'external-upload' ? '外部上传' : material.name || '其他场景'}
+                  </span>
+                )}
+                {active && (
+                  <span className="absolute inset-0 flex items-center justify-center bg-success/25">
+                    <Check className="h-5 w-5 text-white drop-shadow" />
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center overflow-hidden bg-n900/50 p-3 backdrop-blur-sm sm:p-4" onClick={handleClose}>
-      <div className="relative flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-bottom max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2rem)]" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center overflow-hidden bg-n900/50 p-3 backdrop-blur-sm sm:p-4"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) handleClose();
+      }}
+    >
+      <div className="relative flex w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-bottom max-h-[calc(100vh-1.5rem)] sm:max-h-[calc(100vh-2rem)]">
         <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-4">
           <div><h3 className="text-lg font-bold text-n800">AI 生成素材 - {asset.name}</h3><p className="text-xs text-n300 mt-1">基于剧本内容智能生成，支持风格预设和参考图。提示词会自动保存。</p></div>
           <button onClick={handleClose} className="text-n300 hover:text-n800"><X className="w-5 h-5" /></button>
@@ -1537,47 +1693,43 @@ const UnifiedAIModal: React.FC<{
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-5 space-y-5">
           {/* Existing generated images / references */}
           <section>
-            <div className="flex items-center justify-between text-[11px] text-n100 mb-2">
+            <div className="mb-2 flex items-center justify-between gap-3 text-[11px] text-n100">
               <span className="font-bold uppercase">
-                生成图 / 参考图 (最多 {maxRefs})
+                生成图 / 参考图（当前/上传最多 {maxRefs}）
                 {!imageToImageEnabled && <span className="ml-2 font-normal normal-case text-n100">启用图生图后可选择</span>}
               </span>
-              <span className={selectedRefs.size > 0 ? 'text-success font-semibold' : ''}>{selectedRefs.size}/{maxRefs}</span>
+              <div className="flex shrink-0 items-center gap-2">
+                {generationModel.supportsImageToImageBatch && (
+                  <label className={`inline-flex h-7 items-center gap-1 rounded-md border border-primary px-2 text-[11px] font-medium text-primary transition-colors hover:bg-primary-light ${uploadingReferences ? 'cursor-wait opacity-60' : 'cursor-pointer'}`}>
+                    {uploadingReferences ? <Loader size={12} className="animate-spin" /> : <Upload size={12} />}
+                    {uploadingReferences ? '上传中' : '上传参考图'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={uploadingReferences}
+                      className="hidden"
+                      onChange={handleReferenceUpload}
+                    />
+                  </label>
+                )}
+                <span className={selectedQuotaReferenceCount > 0 ? 'font-semibold text-success' : ''}>{selectedQuotaReferenceCount}/{maxRefs}</span>
+                {selectedRelatedSceneReferenceCount > 0 && (
+                  <span className="whitespace-nowrap text-[10px] text-success">
+                    其他场景已选 {selectedRelatedSceneReferenceCount}（不计额度）
+                  </span>
+                )}
+              </div>
             </div>
             {materials.length === 0 ? (
-              <div className="border border-dashed border-n40 rounded-md text-center py-6 text-xs text-n100">暂无素材</div>
+              <div className="rounded-md border border-dashed border-n40 py-6 text-center text-xs text-n100">
+                {generationModel.supportsImageToImageBatch ? '暂无素材，可上传外部图片作为参考图' : '暂无素材'}
+              </div>
             ) : (
-              <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-2 max-h-44 overflow-y-auto pr-1">
-                {materials.map(material => {
-                  const active = selectedRefs.has(material.id);
-                  return (
-                    <button
-                      key={material.id}
-                      type="button"
-                      disabled={!imageToImageEnabled}
-                      onClick={() => toggleRef(material.id)}
-                      title={!imageToImageEnabled ? '请先启用图生图' : (active ? '取消参考图' : '设为参考图')}
-                      className={`relative aspect-square rounded-lg overflow-hidden border transition-colors ${
-                        active
-                          ? 'border-success ring-2 ring-success/40'
-                          : imageToImageEnabled
-                            ? 'border-n40 hover:border-primary'
-                            : 'cursor-not-allowed border-n40 opacity-55'
-                      }`}
-                    >
-                      <img
-                        src={secureMediaUrl(material.thumbnail || material.url) || ''}
-                        loading="lazy"
-                        className="w-full h-full object-cover"
-                      />
-                      {active && (
-                        <span className="absolute inset-0 flex items-center justify-center bg-success/25">
-                          <Check className="h-5 w-5 text-white drop-shadow" />
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+              <div className="max-h-52 space-y-3 overflow-y-auto pr-1">
+                {renderReferenceGroup(asset.assetType === 'scene' ? '当前场景' : '当前素材', currentMaterials)}
+                {renderReferenceGroup('本次外部上传', uploadedMaterials)}
+                {renderReferenceGroup('其他场景参考图（不计参考图额度）', relatedSceneMaterials)}
               </div>
             )}
           </section>
@@ -1645,7 +1797,7 @@ const UnifiedAIModal: React.FC<{
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-end gap-2 xl:w-[556px] xl:justify-end">
+              <div className="flex flex-wrap items-end gap-2 xl:w-[556px] xl:justify-end xl:justify-self-end">
                 <label className="relative min-w-[350px]">
                   <span className="mb-1.5 block text-[10px] font-medium text-n300">生成模型</span>
                   <div className="flex items-center gap-2">
@@ -1711,8 +1863,8 @@ const UnifiedAIModal: React.FC<{
                 )}
               </div>
 
-              <div className="flex items-center gap-2 xl:w-[556px] xl:justify-start">
-                <label className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs ${
+              <div className="grid items-center gap-2 xl:w-[556px] xl:grid-cols-[76px_minmax(0,1fr)] xl:justify-self-end">
+                <label className={`inline-flex h-9 w-[76px] items-center justify-center gap-2 rounded-md border px-2 text-xs ${
                   generationModel.supportsImageToImageBatch
                     ? 'border-n40 text-n700'
                     : 'cursor-not-allowed border-n40 bg-n20 text-n100'
@@ -1726,24 +1878,26 @@ const UnifiedAIModal: React.FC<{
                   />
                   图生图
                 </label>
-                <label className={`inline-flex h-9 items-center gap-1 text-xs text-n700 ${
-                  imageToImageEnabled ? '' : 'invisible pointer-events-none'
-                }`}>
-                  <span>生成张数</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={maxDesignImageOutputCount(selectedRefs.size)}
-                    value={count}
-                    onChange={event => updateGenerationCount(event.target.value)}
-                    className="h-9 w-16 rounded-md border border-n40 bg-n0 px-2 text-xs"
-                  />
-                </label>
-                <span className="w-[116px] whitespace-nowrap text-[10px] text-n100">
-                  {generationModel.supportsImageToImageBatch
-                    ? '参考图 + 生成图 ≤ 15'
-                    : '当前模型不支持图生图'}
-                </span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <label className={`inline-flex h-9 items-center gap-1 text-xs text-n700 ${
+                    imageToImageEnabled ? '' : 'invisible pointer-events-none'
+                  }`}>
+                    <span>生成张数</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={maxDesignImageOutputCount(selectedQuotaReferenceCount)}
+                      value={count}
+                      onChange={event => updateGenerationCount(event.target.value)}
+                      className="h-9 w-16 rounded-md border border-n40 bg-n0 px-2 text-xs"
+                    />
+                  </label>
+                  <span className="w-[116px] whitespace-nowrap text-[10px] text-n100">
+                    {generationModel.supportsImageToImageBatch
+                      ? '当前/上传参考图 + 生成图 ≤ 15'
+                      : '当前模型不支持图生图'}
+                  </span>
+                </div>
               </div>
             </div>
           </section>

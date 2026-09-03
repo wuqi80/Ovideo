@@ -178,6 +178,7 @@ class EpisodeScriptConversationDAO:
         content: str,
         storyboard_items: list,
         message_id: Optional[str] = None,
+        base_version_id: Optional[str] = None,
         source: str = "ai",
         status: str = "ready",
         model_alias: Optional[str] = None,
@@ -220,13 +221,21 @@ class EpisodeScriptConversationDAO:
                     script_id,
                 )
                 version_id = f"ver_{uuid.uuid4().hex}"
-                base_version_id = script.get("current_version_id")
+                requested_base_version_id = base_version_id
+                base_version_id = requested_base_version_id or script.get("current_version_id")
                 base_content = str(script.get("adapted_script") or "")
                 if base_version_id:
                     base_version = await conn.fetchrow(
-                        "SELECT content FROM episode_script_versions WHERE version_id = $1",
+                        """
+                        SELECT content
+                        FROM episode_script_versions
+                        WHERE version_id = $1 AND script_id = $2
+                        """,
                         base_version_id,
+                        script_id,
                     )
+                    if requested_base_version_id and not base_version:
+                        return None
                     if base_version:
                         base_content = str(base_version.get("content") or "")
                 patch = build_script_patch(base_content, content)
@@ -310,12 +319,22 @@ class EpisodeScriptConversationDAO:
                 if not version or version["status"] not in {"draft", "ready"}:
                     return None
                 previous_version_id = script.get("current_version_id")
+                confirmation_metadata = {}
+                if previous_version_id and previous_version_id != version_id:
+                    confirmation_metadata = {
+                        "confirmationBaseVersionId": previous_version_id,
+                        "confirmationPatch": build_script_patch(
+                            str(script.get("adapted_script") or ""),
+                            str(version.get("content") or ""),
+                        ),
+                    }
                 row = await conn.fetchrow(
                     """
                     UPDATE episode_script_versions
                     SET status = 'ready', confirmed_at = COALESCE(confirmed_at, CURRENT_TIMESTAMP),
                         confirmed_by = COALESCE(confirmed_by, $3),
                         rejected_at = NULL, rejected_by = NULL,
+                        metadata = COALESCE(metadata, '{}'::jsonb) || $4::jsonb,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE script_id = $1 AND version_id = $2
                     RETURNING *
@@ -323,6 +342,7 @@ class EpisodeScriptConversationDAO:
                     script_id,
                     version_id,
                     user_id,
+                    _json(confirmation_metadata, {}),
                 )
                 await conn.execute(
                     """
@@ -348,23 +368,59 @@ class EpisodeScriptConversationDAO:
         db = get_db_manager()
         if not db:
             return None
-        row = await db.fetchrow(
-            """
-            UPDATE episode_script_versions
-            SET status = 'rejected', rejected_at = CURRENT_TIMESTAMP,
-                rejected_by = $3, updated_at = CURRENT_TIMESTAMP
-            WHERE script_id = $1 AND version_id = $2 AND status = 'draft'
-              AND NOT EXISTS (
-                  SELECT 1 FROM episode_scripts es
-                  WHERE es.script_id = $1 AND es.current_version_id = $2
-              )
-            RETURNING *
-            """,
-            script_id,
-            version_id,
-            user_id,
-        )
-        return dict(row) if row else None
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                script = await conn.fetchrow(
+                    "SELECT current_version_id FROM episode_scripts WHERE script_id = $1 FOR UPDATE",
+                    script_id,
+                )
+                if not script:
+                    return None
+                version = await conn.fetchrow(
+                    """
+                    SELECT * FROM episode_script_versions
+                    WHERE script_id = $1 AND version_id = $2
+                    FOR UPDATE
+                    """,
+                    script_id,
+                    version_id,
+                )
+                if not version:
+                    return None
+
+                current_version_id = script.get("current_version_id")
+                current_status = str(version.get("status") or "")
+                if current_status == "rejected":
+                    result = dict(version)
+                    result["rejection_outcome"] = "already_rejected"
+                    result["current_version_id"] = current_version_id
+                    return result
+                if current_status != "draft" or current_version_id == version_id:
+                    result = dict(version)
+                    result["rejection_outcome"] = (
+                        "already_confirmed" if current_status == "ready" else "not_rejectable"
+                    )
+                    result["current_version_id"] = current_version_id
+                    return result
+
+                row = await conn.fetchrow(
+                    """
+                    UPDATE episode_script_versions
+                    SET status = 'rejected', rejected_at = CURRENT_TIMESTAMP,
+                        rejected_by = $3, updated_at = CURRENT_TIMESTAMP
+                    WHERE script_id = $1 AND version_id = $2 AND status = 'draft'
+                    RETURNING *
+                    """,
+                    script_id,
+                    version_id,
+                    user_id,
+                )
+                if not row:
+                    return None
+                result = dict(row)
+                result["rejection_outcome"] = "rejected"
+                result["current_version_id"] = current_version_id
+                return result
 
     @staticmethod
     async def select_version(script_id: str, version_id: str) -> Optional[Dict[str, Any]]:

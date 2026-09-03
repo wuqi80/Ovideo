@@ -21,8 +21,8 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 316
-DEFAULT_EXPECTED_OPERATIONS = 378
+DEFAULT_EXPECTED_PATHS = 319
+DEFAULT_EXPECTED_OPERATIONS = 381
 DEFAULT_EXPECTED_FRONTEND_ROUTES = 33
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
@@ -2865,11 +2865,14 @@ def check_entity_file_routes_extracted(root: Path) -> int:
 
     route_pairs = {
         ("/api/user-files", "get"),
+        ("/api/user-files/recycle-bin", "get"),
         ("/api/entity-files", "get"),
+        ("/api/entity-files/{file_id}/recycle-thumbnail", "get"),
         ("/api/entity-files/link", "post"),
         ("/api/entity-files/{file_id}/select", "put"),
         ("/api/entity-files/upload", "post"),
         ("/api/entity-files/{file_id}", "delete"),
+        ("/api/entity-files/{file_id}/restore", "post"),
         ("/api/entity-files/{file_id}/hard", "delete"),
         ("/api/entity-files/hard-delete-batch", "post"),
         ("/api/entity-files/migrate", "post"),
@@ -2911,8 +2914,8 @@ def check_entity_file_routes_extracted(root: Path) -> int:
             if owner == "router" and method.lower() in OPENAPI_METHODS:
                 route_count += 1
 
-    if route_count != 11:
-        fail(f"routers/entity_files.py should own 11 entity-file route registrations, found {route_count}")
+    if route_count != 12:
+        fail(f"routers/entity_files.py should own 12 entity-file route registrations, found {route_count}")
 
     purity_violations = []
     for snippet in ["get_db_manager_func", "get_db_manager"]:
@@ -2942,7 +2945,9 @@ def check_entity_file_routes_extracted(root: Path) -> int:
         (service_text, "entity_file_dao.link_file(", entity_file_service_path),
         (service_text, "entity_file_dao.select_file(", entity_file_service_path),
         (service_text, "entity_file_dao.sync_legacy_url(", entity_file_service_path),
-        (service_text, "entity_file_dao.hard_delete_batch(", entity_file_service_path),
+        (service_text, "entity_file_dao.get_deleted_user_file(", entity_file_service_path),
+        (service_text, "entity_file_dao.hard_delete(", entity_file_service_path),
+        (service_text, "entity_file_dao.delete_deleted_user_file_record(", entity_file_service_path),
     ]
     forbidden_snippets = [
         (entity_files_text, "FileDAO.get_user_files(", entity_files_path),
@@ -6175,7 +6180,7 @@ def check_frontend_three_chunk_contract(root: Path) -> int:
 
 
 def check_frontend_flow_chunk_contract(root: Path) -> int:
-    """The retired React Flow canvas must be replaced by the isolated Studio app."""
+    """The retired React Flow canvas must remain isolated behind the main app shell."""
     vite_config = root / "new_html" / "vite.config.ts"
     package_json = root / "new_html" / "package.json"
     app_path = root / "new_html" / "App.tsx"
@@ -6191,7 +6196,8 @@ def check_frontend_flow_chunk_contract(root: Path) -> int:
     runtime_text = studio_runtime.read_text(encoding="utf-8")
     required_snippets = [
         (app_text, "StudioRedirectPage", "Main app keeps the canvas route through StudioRedirectPage"),
-        (redirect_text, "window.location.replace(buildStudioUrl(projectId, episodeId))", "Canvas route redirects with episode scope"),
+        (redirect_text, "<AppSidebar", "Canvas host keeps the global navigation shell"),
+        (redirect_text, 'title="专业画布"', "Canvas host embeds Studio with episode scope"),
         (studio_text, "useStudioRuntime", "Studio UI uses the Ostory runtime boundary"),
         (runtime_text, "submitSeedanceTask", "Studio video generation reuses the workflow model service"),
         (runtime_text, "minimaxTTSSync", "Studio audio generation reuses the workflow TTS service"),

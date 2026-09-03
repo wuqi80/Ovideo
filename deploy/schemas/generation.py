@@ -341,6 +341,11 @@ class MultiGridStoryboardRequest(ComfyUIRoutedRequest):
 
 class MaterialProcessRequest(ComfyUIRoutedRequest):
     image_filename: str = Field(..., description="处理节点中的图片文件名")
+    source_file_id: Optional[str] = Field(
+        None,
+        max_length=128,
+        description="原始图片文件 ID，用于历史记录缩略图",
+    )
     workflow_type: str = Field(..., description="工作流类型: upscale_hd/image_upscale/remove_watermark/three_view")
     target_long_edge: Optional[int] = Field(
         None,

@@ -1,9 +1,31 @@
 # -*- coding: utf-8 -*-
 """Entity File DAO — 按业务实体查询/管理 files 表"""
 import json
+import logging
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from db_manager import get_db_manager
+
+
+logger = logging.getLogger(__name__)
+DEPLOY_ROOT = Path(__file__).resolve().parents[2]
+USER_STORAGE_ROOT = DEPLOY_ROOT / "persistent_storage"
+
+
+def _resolve_owned_storage_path(file_path: Optional[str], storage_root: Optional[Path] = None) -> Optional[Path]:
+    if not file_path:
+        return None
+    root = (storage_root or USER_STORAGE_ROOT).resolve()
+    candidate = Path(file_path)
+    if not candidate.is_absolute():
+        candidate = DEPLOY_ROOT / candidate
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("File path is outside managed persistent storage") from exc
+    return resolved
 
 
 class EntityFileDAO:
@@ -68,6 +90,19 @@ class EntityFileDAO:
             *params,
         )
         return int(total or 0)
+
+    @staticmethod
+    async def get_deleted_user_file(file_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        db = get_db_manager()
+        if not db:
+            return None
+        row = await db.fetchrow(
+            """SELECT * FROM files
+               WHERE file_id = $1 AND user_id = $2 AND is_deleted = TRUE""",
+            file_id,
+            user_id,
+        )
+        return dict(row) if row else None
 
     @staticmethod
     async def get_entity_files(
@@ -270,68 +305,57 @@ class EntityFileDAO:
         return dict(row) if row else None
 
     @staticmethod
-    async def hard_delete(file_id: str) -> Optional[Dict[str, Any]]:
-        """硬删除：删除磁盘文件 + 数据库记录。返回被删文件信息或 None。"""
-        import os
+    async def hard_delete(
+        file_id: str,
+        user_id: str,
+        storage_root: Optional[Path] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Delete an owned recycled file from managed storage, then delete its record."""
         db = get_db_manager()
         if not db:
             return None
         row = await db.fetchrow(
-            "SELECT file_id, file_path, file_size_bytes FROM files WHERE file_id = $1",
+            """SELECT file_id, file_path, file_size_bytes FROM files
+               WHERE file_id = $1 AND user_id = $2 AND is_deleted = TRUE""",
             file_id,
+            user_id,
         )
         if not row:
             return None
 
         file_path = row["file_path"]
-        freed_bytes = row["file_size_bytes"] or 0
+        path = _resolve_owned_storage_path(file_path, storage_root)
+        freed_bytes = 0
+        if path and path.exists():
+            if not path.is_file():
+                raise OSError("Managed file path is not a regular file")
+            freed_bytes = path.stat().st_size
+            path.unlink()
 
-        if file_path:
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            except OSError as e:
-                import logging
-                logging.getLogger(__name__).warning(f"磁盘文件删除失败 {file_path}: {e}")
-
-        await db.execute("DELETE FROM files WHERE file_id = $1", file_id)
+        result = await db.execute(
+            """DELETE FROM files
+               WHERE file_id = $1 AND user_id = $2 AND is_deleted = TRUE""",
+            file_id,
+            user_id,
+        )
+        if result != "DELETE 1":
+            logger.error("Physical file was removed but its owned recycle record was not: %s", file_id)
+            raise RuntimeError("File record changed during permanent deletion")
         return {"file_id": file_id, "freed_bytes": freed_bytes}
 
     @staticmethod
-    async def hard_delete_batch(file_ids: list) -> Dict[str, Any]:
-        """批量硬删除多个文件。返回 {deleted: int, freed_bytes: int, errors: [...]}。"""
-        import os
-        import logging
-        logger = logging.getLogger(__name__)
+    async def delete_deleted_user_file_record(file_id: str, user_id: str) -> bool:
+        """Delete only an owned recycled DB record after remote storage is gone."""
         db = get_db_manager()
         if not db:
-            return {"deleted": 0, "freed_bytes": 0, "errors": ["DB 不可用"]}
-
-        rows = await db.fetch(
-            "SELECT file_id, file_path, file_size_bytes FROM files WHERE file_id = ANY($1)",
-            file_ids,
+            return False
+        result = await db.execute(
+            """DELETE FROM files
+               WHERE file_id = $1 AND user_id = $2 AND is_deleted = TRUE""",
+            file_id,
+            user_id,
         )
-
-        deleted = 0
-        freed_bytes = 0
-        errors = []
-
-        for row in rows:
-            fid = row["file_id"]
-            fpath = row["file_path"]
-            if fpath:
-                try:
-                    if os.path.exists(fpath):
-                        os.remove(fpath)
-                except OSError as e:
-                    logger.warning(f"磁盘文件删除失败 {fpath}: {e}")
-                    errors.append(f"{fid}: {e}")
-
-            await db.execute("DELETE FROM files WHERE file_id = $1", fid)
-            deleted += 1
-            freed_bytes += row["file_size_bytes"] or 0
-
-        return {"deleted": deleted, "freed_bytes": freed_bytes, "errors": errors}
+        return result == "DELETE 1"
 
     @staticmethod
     async def soft_delete_entity_files(

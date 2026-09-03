@@ -11,9 +11,12 @@ import {
   Brush,
   ChevronDown,
   Clock3,
+  Coins,
   LayoutGrid,
   Library,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   ScanLine,
   Share2,
@@ -61,9 +64,12 @@ interface AppSidebarProps {
 }
 
 const RECENT_DOTS = ['#8B6BFF', '#FF9A6B', '#3FCB8F', '#66A0F5'];
+export const APP_SIDEBAR_COLLAPSED_STORAGE_KEY = 'ostory:app-sidebar-collapsed';
 
-const itemClass = (active: boolean) =>
-  `flex w-full min-w-0 items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[13.5px] font-medium transition-colors ${
+const itemClass = (active: boolean, collapsed: boolean) =>
+  `flex w-full min-w-0 items-center rounded-[10px] py-2.5 text-left text-[13.5px] font-medium transition-colors ${
+    collapsed ? 'justify-center px-2' : 'gap-2.5 px-3'
+  } ${
     active ? 'bg-primary text-n0' : 'text-n90 hover:bg-n700 hover:text-n0'
   }`;
 
@@ -71,6 +77,13 @@ const sectionLabelClass = 'px-2.5 pb-2 pt-0 font-mono text-[10px] font-bold trac
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits, className = '' }) => {
   const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(APP_SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const managed = credits === undefined;
   const [selfCredits, setSelfCredits] = useState<number | null>(null);
   const [recent, setRecent] = useState<RecentProject[]>([]);
@@ -78,6 +91,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
   const [menuOpen, setMenuOpen] = useState(false);
   const [adminSession, setAdminSession] = useState<CurrentAdminSession | null>(null);
   const userRowRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(APP_SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+    } catch {
+      /* 浏览器禁用存储时只保留当前页面状态。 */
+    }
+  }, [collapsed]);
 
   useEffect(() => {
     if (!managed) return;
@@ -158,10 +179,6 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
       navigate('/projects');
       return;
     }
-    if (target === 'media-library') {
-      navigate(`/projects/${projectId}/media-library`);
-      return;
-    }
     try {
       const data = await apiJson<{ episodes?: RecentEpisode[] }>(
         `/api/projects/${encodeURIComponent(projectId)}/episodes`,
@@ -197,36 +214,58 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
   const initial = (username.trim().charAt(0) || 'U').toUpperCase();
 
   return (
-    <aside className={`w-[230px] shrink-0 flex-col bg-n900 px-3 py-4 text-n90 flex ${className}`}>
+    <aside
+      data-testid="app-sidebar"
+      data-collapsed={collapsed ? 'true' : 'false'}
+      className={`relative z-50 shrink-0 flex-col overflow-visible bg-n900 py-4 text-n90 transition-[width,padding] duration-200 flex ${
+        collapsed ? 'w-[72px] px-2' : 'w-[230px] px-3'
+      } ${className}`}
+    >
+      <button
+        type="button"
+        onClick={() => setCollapsed(value => !value)}
+        aria-label={collapsed ? '展开左侧导航' : '收起左侧导航'}
+        aria-expanded={!collapsed}
+        title={collapsed ? '展开左侧导航' : '收起左侧导航'}
+        className="absolute -right-3 top-5 z-[60] flex h-7 w-7 items-center justify-center rounded-full border border-n500 bg-n800 text-n100 shadow-atlas transition-colors hover:border-n300 hover:bg-n700 hover:text-n0"
+      >
+        {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
+      </button>
+
       {/* 品牌块 */}
       <button
         type="button"
         onClick={() => navigate('/projects')}
-        className="mb-4 flex w-full items-center gap-2.5 rounded-[10px] px-2 py-1.5 text-left transition-colors hover:bg-n700"
+        aria-label={BRAND_PRODUCT_NAME}
+        className={`mb-4 flex w-full items-center rounded-[10px] py-1.5 text-left transition-colors hover:bg-n700 ${
+          collapsed ? 'justify-center px-1' : 'gap-2.5 px-2'
+        }`}
         title={BRAND_PRODUCT_NAME}
       >
         <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-n0/95 p-1 shadow-glow">
           <BrandLogo variant="mark" className="h-6 w-6" />
         </span>
-        <span className="min-w-0 leading-tight">
-          <span className="block truncate font-display text-[15px] font-bold tracking-tight text-n0">{BRAND_NAME}</span>
-          <span className="block truncate font-mono text-[10px] uppercase tracking-[0.12em] text-n200">AI 视频创作平台</span>
-        </span>
+        {!collapsed && (
+          <span className="min-w-0 leading-tight">
+            <span className="block truncate font-display text-[15px] font-bold tracking-tight text-n0">{BRAND_NAME}</span>
+            <span className="block truncate font-mono text-[10px] uppercase tracking-[0.12em] text-n200">AI 视频创作平台</span>
+          </span>
+        )}
       </button>
 
       {/* 主导航（模板固定三项） */}
-      <NavLink to="/create" className={({ isActive }) => itemClass(isActive)}>
+      <NavLink to="/create" aria-label="开始新作品" title="开始新作品" className={({ isActive }) => itemClass(isActive, collapsed)}>
         <Plus size={17} className="shrink-0" />
-        <span className="truncate">开始新作品</span>
+        {!collapsed && <span className="truncate">开始新作品</span>}
       </NavLink>
-      <NavLink to="/projects" end className={({ isActive }) => itemClass(isActive)}>
+      <NavLink to="/projects" end aria-label="我的作品" title="我的作品" className={({ isActive }) => itemClass(isActive, collapsed)}>
         <LayoutGrid size={17} className="shrink-0" />
-        <span className="truncate">我的作品</span>
+        {!collapsed && <span className="truncate">我的作品</span>}
       </NavLink>
       {exportTo && (
-        <NavLink to={exportTo} className={({ isActive }) => itemClass(isActive)}>
+        <NavLink to={exportTo} aria-label="成片与分享" title="成片与分享" className={({ isActive }) => itemClass(isActive, collapsed)}>
           <Share2 size={17} className="shrink-0" />
-          <span className="truncate">成片与分享</span>
+          {!collapsed && <span className="truncate">成片与分享</span>}
         </NavLink>
       )}
 
@@ -236,19 +275,23 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
         {/* 最近项目 RECENT */}
         {recent.length > 0 && (
           <>
-            <div className={sectionLabelClass}>最近作品</div>
+            {!collapsed && <div className={sectionLabelClass}>最近作品</div>}
             {recent.map((project, index) => (
               <button
                 key={project.project_id}
                 type="button"
                 onClick={() => navigate(`/projects/${project.project_id}/episodes`)}
-                className="flex w-full min-w-0 items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-left text-[12.5px] text-n70 transition-colors hover:bg-n700 hover:text-n0"
+                aria-label={project.project_name || project.name || project.project_id}
+                title={project.project_name || project.name || project.project_id}
+                className={`flex w-full min-w-0 items-center rounded-[9px] py-2 text-left text-[12.5px] text-n70 transition-colors hover:bg-n700 hover:text-n0 ${
+                  collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'
+                }`}
               >
                 <span
                   className="h-2 w-2 shrink-0 rounded-[2px]"
                   style={{ background: RECENT_DOTS[index % RECENT_DOTS.length] }}
                 />
-                <span className="min-w-0 flex-1 truncate">{project.project_name || project.name || project.project_id}</span>
+                {!collapsed && <span className="min-w-0 flex-1 truncate">{project.project_name || project.name || project.project_id}</span>}
               </button>
             ))}
           </>
@@ -257,14 +300,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
         {/* 全员可见的工具区；工作流内使用当前项目的精确链接 */}
         {visibleTools.length > 0 && (
           <>
-            <div className={`${sectionLabelClass} pt-3`}>更多功能</div>
+            {!collapsed && <div className={`${sectionLabelClass} pt-3`}>更多功能</div>}
             {visibleTools.map(item => {
               const Icon = item.icon;
               const inner = (
                 <>
                   <Icon size={16} className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  {item.badge}
+                  {!collapsed && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+                  {!collapsed && item.badge}
                 </>
               );
               return item.to ? (
@@ -272,8 +315,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
                   key={item.key}
                   to={item.to}
                   end={item.end}
+                  aria-label={item.label}
+                  title={item.label}
                   className={({ isActive }) =>
-                    `flex w-full min-w-0 items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-left text-[12.5px] transition-colors ${
+                    `flex w-full min-w-0 items-center rounded-[9px] py-2 text-left text-[12.5px] transition-colors ${
+                      collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'
+                    } ${
                       isActive ? 'bg-primary text-n0' : 'text-n70 hover:bg-n700 hover:text-n0'
                     }`
                   }
@@ -285,7 +332,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
                   key={item.key}
                   type="button"
                   onClick={item.onClick}
-                  className="flex w-full min-w-0 items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-left text-[12.5px] text-n70 transition-colors hover:bg-n700 hover:text-n0"
+                  aria-label={item.label}
+                  title={item.label}
+                  className={`flex w-full min-w-0 items-center rounded-[9px] py-2 text-left text-[12.5px] text-n70 transition-colors hover:bg-n700 hover:text-n0 ${
+                    collapsed ? 'justify-center px-2' : 'gap-2.5 px-2.5'
+                  }`}
                 >
                   {inner}
                 </button>
@@ -299,23 +350,30 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
       <button
         type="button"
         onClick={() => navigate('/credits')}
-        className="ui-dark-panel mb-3 mt-3 w-full px-3.5 py-3 text-left transition-colors hover:border-n400"
+        aria-label="查看创作点数明细"
+        className={collapsed
+          ? 'mb-3 mt-3 flex h-10 w-full items-center justify-center rounded-[10px] border border-n600 bg-n800 text-b200 transition-colors hover:border-n400 hover:bg-n700'
+          : 'ui-dark-panel mb-3 mt-3 w-full px-3.5 py-3 text-left transition-colors hover:border-n400'}
         title="查看创作点数明细"
       >
-        <span className="flex items-center justify-between">
-          <span className="text-[11px] font-bold tracking-[0.05em] text-b200">创作点数</span>
-          <span className="text-[11px] text-n200">查看明细 →</span>
-        </span>
-        <span className="mt-1 block font-display text-[22px] font-bold text-n0">
-          {typeof shownCredits === 'number' ? shownCredits.toLocaleString() : '—'}
-          <span className="ml-1 font-sans text-[13px] font-normal text-n200">可用</span>
-        </span>
-        <span className="mt-2 block h-1.5 overflow-hidden rounded bg-n600">
-          <span
-            className="block h-full rounded"
-            style={{ width: '80%', background: 'linear-gradient(90deg,#5B49F0,#8B6BFF)' }}
-          />
-        </span>
+        {collapsed ? <Coins size={18} /> : (
+          <>
+            <span className="flex items-center justify-between">
+              <span className="text-[11px] font-bold tracking-[0.05em] text-b200">创作点数</span>
+              <span className="text-[11px] text-n200">查看明细 →</span>
+            </span>
+            <span className="mt-1 block font-display text-[22px] font-bold text-n0">
+              {typeof shownCredits === 'number' ? shownCredits.toLocaleString() : '—'}
+              <span className="ml-1 font-sans text-[13px] font-normal text-n200">可用</span>
+            </span>
+            <span className="mt-2 block h-1.5 overflow-hidden rounded bg-n600">
+              <span
+                className="block h-full rounded"
+                style={{ width: '80%', background: 'linear-gradient(90deg,#5B49F0,#8B6BFF)' }}
+              />
+            </span>
+          </>
+        )}
       </button>
 
       {/* 用户行（上拉菜单：个人中心 / 退出登录） */}
@@ -324,7 +382,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
           <div
             role="menu"
             aria-label="账号菜单"
-            className="absolute bottom-full left-0 z-30 mb-2 w-full overflow-hidden rounded-[10px] border border-n40 bg-n0 py-1 shadow-atlas"
+            className={`absolute z-50 overflow-hidden rounded-[10px] border border-n40 bg-n0 py-1 shadow-atlas ${
+              collapsed ? 'bottom-0 left-full ml-2 w-48' : 'bottom-full left-0 mb-2 w-full'
+            }`}
           >
             <button
               type="button"
@@ -338,17 +398,18 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
               <UserRound size={15} /> 个人中心
             </button>
             {adminSession && (
-              <button
-                type="button"
+              <a
+                href={adminPath()}
+                target="_blank"
+                rel="noopener noreferrer"
                 role="menuitem"
                 onClick={() => {
                   setMenuOpen(false);
-                  window.location.href = adminPath();
                 }}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-n500 transition-colors hover:bg-n20 hover:text-primary"
               >
                 <ShieldCheck size={15} /> 管理后台
-              </button>
+              </a>
             )}
             <button
               type="button"
@@ -363,9 +424,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
         <button
           type="button"
           onClick={() => setMenuOpen(open => !open)}
-          className="flex w-full items-center gap-2.5 rounded-[10px] px-2 py-1.5 text-left transition-colors hover:bg-n700"
+          className={`flex w-full items-center rounded-[10px] py-1.5 text-left transition-colors hover:bg-n700 ${
+            collapsed ? 'justify-center px-1' : 'gap-2.5 px-2'
+          }`}
+          aria-label={`账户：${username}`}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
+          title={username}
         >
           <span
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-display text-[13px] font-bold text-n0"
@@ -373,13 +438,17 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
           >
             {initial}
           </span>
-          <span className="min-w-0 flex-1 leading-tight">
-            <span className="block truncate text-[13px] font-medium text-n0">{username}</span>
-            <span className="block truncate text-[11px] text-n200">
-              {adminSession?.role === 'super_admin' ? '超级管理员' : adminSession ? '管理员' : '创作者'}
-            </span>
-          </span>
-          <ChevronDown size={15} className={`shrink-0 text-n200 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
+          {!collapsed && (
+            <>
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block truncate text-[13px] font-medium text-n0">{username}</span>
+                <span className="block truncate text-[11px] text-n200">
+                  {adminSession?.role === 'super_admin' ? '超级管理员' : adminSession ? '管理员' : '创作者'}
+                </span>
+              </span>
+              <ChevronDown size={15} className={`shrink-0 text-n200 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
+            </>
+          )}
         </button>
       </div>
     </aside>

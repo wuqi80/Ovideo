@@ -2,6 +2,7 @@ import pytest
 from fastapi import HTTPException
 
 from services.model_access_service import (
+    LEGACY_DEFAULT_ALLOWED_MODELS,
     normalize_model_access_permissions,
     require_user_model_access,
     validate_model_access_permissions,
@@ -25,6 +26,23 @@ def test_nonempty_legacy_permissions_keep_restricted_semantics():
     normalized = normalize_model_access_permissions({"allowedModels": ["gemini-2.5-flash"]})
     assert normalized["accessMode"] == "restricted"
     assert normalized["allowedModels"] == ["gemini-2.5-flash"]
+
+
+def test_historical_platform_default_allowlist_inherits_new_models():
+    normalized = normalize_model_access_permissions(
+        {"allowedModels": list(LEGACY_DEFAULT_ALLOWED_MODELS)}
+    )
+    assert normalized["accessMode"] == "inherit"
+
+
+def test_explicit_restricted_mode_preserves_historical_allowlist_as_restriction():
+    normalized = normalize_model_access_permissions(
+        {
+            "accessMode": "restricted",
+            "allowedModels": list(LEGACY_DEFAULT_ALLOWED_MODELS),
+        }
+    )
+    assert normalized["accessMode"] == "restricted"
 
 
 def test_restricted_policy_requires_at_least_one_model():
@@ -59,6 +77,22 @@ async def test_restricted_policy_matches_runtime_model_or_task_alias():
             task_type="minimax_video",
             task_data={"model": "MiniMax-H3"},
         )
+
+
+@pytest.mark.asyncio
+async def test_historical_platform_defaults_allow_doubao_image_generation():
+    FakeUserDAO.permissions = {
+        "allowedModels": list(LEGACY_DEFAULT_ALLOWED_MODELS),
+    }
+
+    permissions = await require_user_model_access(
+        "user_1",
+        user_dao=FakeUserDAO,
+        task_type="doubao_image",
+        task_data={"model": "doubao-seedream-5-0-lite-260128", "provider": "doubao"},
+    )
+
+    assert permissions["accessMode"] == "inherit"
 
 
 @pytest.mark.asyncio

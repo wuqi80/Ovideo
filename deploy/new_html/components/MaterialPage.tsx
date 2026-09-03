@@ -2395,7 +2395,7 @@ const MaterialAIModal: React.FC<{
                                 </div>
                             </div>
 
-                            <div className="flex flex-wrap items-end gap-2 xl:w-[556px] xl:justify-end">
+                            <div className="flex flex-wrap items-end gap-2 xl:w-[556px] xl:justify-end xl:justify-self-end">
                                 <label className="relative min-w-[350px]">
                                     <span className="mb-1.5 block text-[10px] font-medium text-n300">生成模型</span>
                                     <div className="flex items-center gap-2">
@@ -2460,8 +2460,8 @@ const MaterialAIModal: React.FC<{
                                 )}
                             </div>
 
-                            <div className="flex items-center gap-2 xl:w-[556px] xl:justify-start">
-                                <label className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs ${
+                            <div className="grid items-center gap-2 xl:w-[556px] xl:grid-cols-[76px_minmax(0,1fr)] xl:justify-self-end">
+                                <label className={`inline-flex h-9 w-[76px] items-center justify-center gap-2 rounded-md border px-2 text-xs ${
                                     generationModel.supportsImageToImageBatch
                                         ? 'border-n40 text-n700'
                                         : 'cursor-not-allowed border-n40 bg-n20 text-n100'
@@ -2475,22 +2475,24 @@ const MaterialAIModal: React.FC<{
                                     />
                                     图生图
                                 </label>
-                                <label className={`inline-flex h-9 items-center gap-1 text-xs text-n700 ${imageToImageEnabled ? '' : 'invisible pointer-events-none'}`}>
-                                    <span>生成张数</span>
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        max={maxDesignImageOutputCount(selectedRefs.size)}
-                                        value={count}
-                                        onChange={event => updateGenerationCount(event.target.value)}
-                                        className="h-9 w-16 rounded-md border border-n40 bg-n0 px-2 text-xs"
-                                    />
-                                </label>
-                                <span className="w-[116px] whitespace-nowrap text-[10px] text-n100">
-                                    {generationModel.supportsImageToImageBatch
-                                        ? '参考图 + 生成图 ≤ 15'
-                                        : '当前模型不支持图生图'}
-                                </span>
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <label className={`inline-flex h-9 items-center gap-1 text-xs text-n700 ${imageToImageEnabled ? '' : 'invisible pointer-events-none'}`}>
+                                        <span>生成张数</span>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={maxDesignImageOutputCount(selectedRefs.size)}
+                                            value={count}
+                                            onChange={event => updateGenerationCount(event.target.value)}
+                                            className="h-9 w-16 rounded-md border border-n40 bg-n0 px-2 text-xs"
+                                        />
+                                    </label>
+                                    <span className="w-[116px] whitespace-nowrap text-[10px] text-n100">
+                                        {generationModel.supportsImageToImageBatch
+                                            ? '参考图 + 生成图 ≤ 15'
+                                            : '当前模型不支持图生图'}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </section>

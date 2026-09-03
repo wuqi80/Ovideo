@@ -4,10 +4,11 @@ import '@testing-library/jest-dom';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import AppSidebar from '../../components/AppSidebar';
+import AppSidebar, { APP_SIDEBAR_COLLAPSED_STORAGE_KEY } from '../../components/AppSidebar';
 import { apiJson } from '../../services/httpClient';
 import { getCreditBalance } from '../../services/creditService';
 import { getCurrentAdminSession } from '../../services/adminAccessService';
+import { adminPath } from '../../admin/adminRoute';
 
 vi.mock('../../services/httpClient', () => ({
   apiFetch: vi.fn(),
@@ -35,6 +36,7 @@ const LocationProbe = () => {
 describe('AppSidebar public tools', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     (getCreditBalance as any).mockResolvedValue({ available_credits: 100 });
     (apiJson as any).mockResolvedValue({ success: true, projects: [] });
     (getCurrentAdminSession as any).mockResolvedValue(null);
@@ -53,7 +55,10 @@ describe('AppSidebar public tools', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /普通用户/ }));
-    expect(await screen.findByRole('menuitem', { name: '管理后台' })).toBeInTheDocument();
+    const adminEntry = await screen.findByRole('menuitem', { name: '管理后台' });
+    expect(adminEntry).toHaveAttribute('href', adminPath());
+    expect(adminEntry).toHaveAttribute('target', '_blank');
+    expect(adminEntry).toHaveAttribute('rel', 'noopener noreferrer');
     expect(screen.getByText('管理员')).toBeInTheDocument();
   });
 
@@ -100,6 +105,49 @@ describe('AppSidebar public tools', () => {
       expect(screen.getByTestId('location')).toHaveTextContent('/projects/proj_1/ep/ep_1/workflow/image-upscale');
     });
     expect(apiJson).toHaveBeenCalledWith('/api/projects/proj_1/episodes', {}, '最近分集');
+  });
+
+  it('opens my assets inside the episode workflow shell', async () => {
+    (apiJson as any)
+      .mockResolvedValueOnce({ success: true, projects: [{ project_id: 'proj_1', project_name: '测试项目' }] })
+      .mockResolvedValueOnce({ success: true, episodes: [{ episode_id: 'ep_1' }] });
+
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <AppSidebar />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('测试项目');
+    fireEvent.click(screen.getByRole('button', { name: '我的素材' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/projects/proj_1/ep/ep_1/workflow/media-library');
+    });
+  });
+
+  it('collapses to an icon rail, stays navigable, and remembers the preference', async () => {
+    render(
+      <MemoryRouter>
+        <AppSidebar />
+      </MemoryRouter>,
+    );
+
+    const sidebar = screen.getByTestId('app-sidebar');
+    const collapseButton = screen.getByRole('button', { name: '收起左侧导航' });
+    expect(sidebar).toHaveAttribute('data-collapsed', 'false');
+    expect(sidebar).toHaveClass('z-50', 'overflow-visible');
+    expect(collapseButton).toHaveClass('z-[60]');
+    fireEvent.click(collapseButton);
+
+    expect(screen.getByTestId('app-sidebar')).toHaveAttribute('data-collapsed', 'true');
+    expect(screen.getByRole('button', { name: '展开左侧导航' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '专业画布' })).toBeInTheDocument();
+    expect(screen.queryByText('更多功能')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(window.localStorage.getItem(APP_SIDEBAR_COLLAPSED_STORAGE_KEY)).toBe('true');
+    });
   });
 
   it('opens the standalone recycle bin from the most recent project and episode', async () => {

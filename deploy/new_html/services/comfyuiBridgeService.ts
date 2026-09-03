@@ -14,6 +14,7 @@ export interface MaterialEntityOptions {
   textClarity?: boolean;
   preferredAgentId?: string;
   preferredNodeId?: string;
+  sourceFileId?: string;
 }
 
 function normalizeImageSourceUrl(imageUrl: string): string {
@@ -73,6 +74,7 @@ export async function uploadImageToComfyUI(imageUrlOrDataUrl: string): Promise<{
   success: boolean;
   filename: string;
   storage_url: string;
+  file_id?: string;
 }> {
   if (!imageUrlOrDataUrl || imageUrlOrDataUrl.trim() === '') {
     throw new Error('图片地址为空，无法提交到处理节点。');
@@ -106,8 +108,10 @@ export async function processMaterial(
     throw new Error('Not logged in.');
   }
 
+  const explicitNodeId = entityOptions?.preferredAgentId || entityOptions?.preferredNodeId;
   const routing = await resolveGpuTaskRouting(
-    entityOptions?.preferredAgentId || entityOptions?.preferredNodeId,
+    explicitNodeId,
+    explicitNodeId ? undefined : { automatic: true },
   );
 
   return apiJson<any>('/api/materials/process', {
@@ -123,6 +127,7 @@ export async function processMaterial(
       target_long_edge: entityOptions?.targetLongEdge,
       dpi: entityOptions?.dpi,
       text_clarity: entityOptions?.textClarity ?? false,
+      source_file_id: entityOptions?.sourceFileId,
       preferred_agent_id: entityOptions?.preferredAgentId || routing.preferredAgentId,
       preferred_node_id: entityOptions?.preferredNodeId || routing.preferredNodeId,
     }),

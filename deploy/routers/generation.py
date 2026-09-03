@@ -714,6 +714,7 @@ def create_generation_router(
                     "display_name": "图片高清放大",
                     "category": "image",
                     "source_page": "image-upscale",
+                    "source_file_id": request.source_file_id,
                 })
             _attach_entity_fields(task_data, request)
             task_id = await task_service_module.get().submit(actual_workflow_type, task_data, username)

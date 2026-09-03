@@ -1,16 +1,21 @@
 # -*- coding: utf-8 -*-
 """Unified entity file routes for storyboard items, assets, and video segments."""
 
+import asyncio
 import logging
 from typing import Any, Callable, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from services.entity_file_service import (
     EntityFileBatchTooLarge,
+    EntityFileDeleteRiskNotAcknowledged,
     EntityFileMigrationFailed,
     EntityFileNotFound,
+    EntityFilePhysicalDeleteFailed,
+    get_deleted_user_file as get_deleted_user_file_service,
     hard_delete_entity_file as hard_delete_entity_file_service,
     hard_delete_entity_files_batch as hard_delete_entity_files_batch_service,
     link_entity_file as link_entity_file_service,
@@ -29,6 +34,7 @@ from services.entity_access_service import (
     require_file_access,
 )
 from services.project_access_service import resolve_user_id
+from services.file_route_service import ThumbnailFileNotFound, build_thumbnail_file
 
 
 def create_entity_files_router(
@@ -43,9 +49,11 @@ def create_entity_files_router(
     user_dao: Any,
     save_generated_file_to_db_provider: Callable[[], Callable[..., Any]],
     logger: logging.Logger,
+    get_media_user_dependency: Any = None,
 ) -> APIRouter:
     router = APIRouter()
     get_current_user = get_current_user_dependency
+    get_media_user = get_media_user_dependency or get_current_user_dependency
     FileDAO = file_dao
     EntityFileDAO = entity_file_dao
     scope_dependencies = {
@@ -102,6 +110,21 @@ def create_entity_files_router(
 
     class HardDeleteBatchRequest(BaseModel):
         file_ids: List[str]
+        risk_ack: bool = False
+
+    async def delete_node_output(*, agent_id: str, output_id: str) -> dict:
+        from services.node_output_relay import deletions
+
+        request = await deletions.create(output_id=output_id, agent_id=agent_id)
+        try:
+            await asyncio.wait_for(request.completed.wait(), timeout=45)
+            if not request.success:
+                raise RuntimeError(request.error or "Local node rejected permanent deletion")
+            return {"freed_bytes": request.freed_bytes}
+        except asyncio.TimeoutError as exc:
+            raise RuntimeError("Local node did not confirm permanent deletion") from exc
+        finally:
+            await deletions.close(request.request_id)
 
     @router.get("/api/user-files")
     async def get_user_files(
@@ -135,6 +158,41 @@ def create_entity_files_router(
             offset=offset,
             entity_file_dao=EntityFileDAO,
         )
+
+    @router.get("/api/entity-files/{file_id}/recycle-thumbnail")
+    async def get_recycle_thumbnail(
+        file_id: str,
+        user_id: str = Depends(get_media_user),
+    ):
+        canonical_id = await canonical_user_id(user_id)
+        try:
+            row = await get_deleted_user_file_service(
+                file_id=file_id,
+                user_id=canonical_id,
+                entity_file_dao=EntityFileDAO,
+            )
+            if str(row.get("file_type") or "").lower() != "image":
+                raise ThumbnailFileNotFound("not_an_image")
+
+            class DeletedFileThumbnailDAO:
+                @staticmethod
+                async def get_file(requested_file_id: str):
+                    return row if requested_file_id == file_id else None
+
+            thumbnail = await build_thumbnail_file(
+                url=f"/api/files/{file_id}/download",
+                width=640,
+                height=360,
+                file_dao=DeletedFileThumbnailDAO,
+                logger=logger,
+            )
+            return FileResponse(
+                thumbnail.path,
+                media_type=thumbnail.media_type,
+                headers={**thumbnail.headers, "Cache-Control": "private, max-age=300"},
+            )
+        except (EntityFileNotFound, ThumbnailFileNotFound) as exc:
+            raise HTTPException(404, "回收站缩略图不存在") from exc
 
     @router.get("/api/entity-files")
     async def get_entity_files(
@@ -266,13 +324,24 @@ def create_entity_files_router(
     @router.delete("/api/entity-files/{file_id}/hard")
     async def hard_delete_entity_file(
         file_id: str,
+        risk_ack: bool = False,
         user_id: str = Depends(get_current_user),
     ):
-        await guard_file(file_id, user_id, "member")
+        canonical_id = await canonical_user_id(user_id)
         try:
-            return await hard_delete_entity_file_service(file_id=file_id, entity_file_dao=EntityFileDAO)
+            return await hard_delete_entity_file_service(
+                file_id=file_id,
+                user_id=canonical_id,
+                risk_ack=risk_ack,
+                entity_file_dao=EntityFileDAO,
+                node_output_deleter=delete_node_output,
+            )
+        except EntityFileDeleteRiskNotAcknowledged as exc:
+            raise HTTPException(400, "请先确认永久删除风险") from exc
+        except EntityFilePhysicalDeleteFailed as exc:
+            raise HTTPException(503, f"服务器文件删除失败，记录已保留：{exc}") from exc
         except EntityFileNotFound as exc:
-            raise HTTPException(404, "文件不存在") from exc
+            raise HTTPException(404, "回收站中未找到本人文件") from exc
 
     @router.post("/api/entity-files/hard-delete-batch")
     async def hard_delete_entity_files_batch(
@@ -281,13 +350,17 @@ def create_entity_files_router(
     ):
         if len(request.file_ids) > 200:
             raise HTTPException(400, "Batch hard delete accepts at most 200 files")
-        for file_id in dict.fromkeys(request.file_ids):
-            await guard_file(file_id, user_id, "member")
+        canonical_id = await canonical_user_id(user_id)
         try:
             return await hard_delete_entity_files_batch_service(
                 file_ids=request.file_ids,
+                user_id=canonical_id,
+                risk_ack=request.risk_ack,
                 entity_file_dao=EntityFileDAO,
+                node_output_deleter=delete_node_output,
             )
+        except EntityFileDeleteRiskNotAcknowledged as exc:
+            raise HTTPException(400, "请先确认永久删除风险") from exc
         except EntityFileBatchTooLarge as exc:
             raise HTTPException(400, "单次最多删除 200 个文件") from exc
 

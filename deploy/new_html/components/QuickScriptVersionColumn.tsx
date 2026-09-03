@@ -257,7 +257,7 @@ export const QuickScriptVersionColumn: React.FC<QuickScriptVersionColumnProps> =
             value={draft}
             onChange={event => setDraft(event.target.value)}
             aria-label="编辑分镜脚本"
-            className="h-full w-full resize-none border-0 bg-n0 p-5 font-mono text-sm leading-7 text-n700 outline-none"
+            className="font-document h-full w-full resize-none border-0 bg-n0 p-5 text-sm leading-7 text-n700 outline-none"
             spellCheck={false}
           />
         ) : versionFile ? (

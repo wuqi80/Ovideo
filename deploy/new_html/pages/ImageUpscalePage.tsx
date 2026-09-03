@@ -18,6 +18,7 @@ import { processMaterial, uploadImageToComfyUI } from '../services/comfyuiBridge
 import { waitForComfyUITask } from '../services/comfyuiTaskWaitService';
 import { estimateCredits } from '../services/creditService';
 import { apiBlob, apiJson } from '../services/httpClient';
+import { formatImageUpscaleDeletionTime } from '../utils/imageUpscaleRetention';
 
 const LONG_EDGE_PRESETS = [4096, 8192, 16000, 32000, 50000] as const;
 const DPI_PRESETS = [72, 150, 300] as const;
@@ -44,6 +45,11 @@ function upscaleResultUrl(task: UpscaleHistoryTask): string {
   const first = task.result?.images?.[0];
   if (typeof first === 'string') return first;
   return typeof first?.url === 'string' ? first.url : '';
+}
+
+function upscaleResultExpiresAt(task: UpscaleHistoryTask): string | null {
+  const first = task.result?.images?.[0];
+  return typeof first?.expires_at === 'string' ? first.expires_at : null;
 }
 
 function formatHistoryTime(value?: string | null): string {
@@ -134,6 +140,7 @@ export const ImageUpscalePage: React.FC = () => {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState('');
   const [historyDownloadId, setHistoryDownloadId] = useState('');
+  const [activeTab, setActiveTab] = useState<'upscale' | 'history'>('upscale');
 
   const estimatedOutput = useMemo(
     () => outputSize(sourceSize, targetLongEdge),
@@ -188,8 +195,9 @@ export const ImageUpscalePage: React.FC = () => {
   }, [previewUrl]);
 
   useEffect(() => {
+    if (activeTab !== 'history') return;
     void loadHistory();
-  }, [loadHistory]);
+  }, [activeTab, loadHistory]);
 
   const selectFile = useCallback((selected: File | null) => {
     if (!selected) return;
@@ -247,6 +255,7 @@ export const ImageUpscalePage: React.FC = () => {
         targetLongEdge,
         dpi,
         textClarity,
+        sourceFileId: upload.file_id,
       });
       setTaskId(submitted.task_id);
       setStatus('running');
@@ -345,13 +354,40 @@ export const ImageUpscalePage: React.FC = () => {
             </div>
             <h1 className="font-display text-2xl font-bold tracking-tight text-n900">图片高清放大</h1>
             <p className="mt-1 text-sm text-n300">AI 修复细节后按原比例输出，最长边最高 50,000px，最高写入 300 DPI。</p>
+            <p className="mt-1 text-xs text-n200">适用于宣传图、海报等大尺寸打印场景。</p>
           </div>
           <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-2.5 text-xs leading-5 text-n500">
             <span className="font-semibold text-warning">图片放大独立队列</span> · 每位用户最多 2 个 · 成功后扣除 {estimatedCost} 点
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(390px,0.75fr)]">
+        <div className="mb-5 flex border-b border-n50" role="tablist" aria-label="图片高清放大功能">
+          <button
+            id="image-upscale-tab"
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'upscale'}
+            aria-controls="image-upscale-panel"
+            onClick={() => setActiveTab('upscale')}
+            className={`inline-flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition-colors ${activeTab === 'upscale' ? 'border-primary text-primary' : 'border-transparent text-n300 hover:text-n700'}`}
+          >
+            <ScanLine size={16} /> 开始放大
+          </button>
+          <button
+            id="image-upscale-history-tab"
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'history'}
+            aria-controls="image-upscale-history-panel"
+            onClick={() => setActiveTab('history')}
+            className={`inline-flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition-colors ${activeTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-n300 hover:text-n700'}`}
+          >
+            <History size={16} /> 放大历史
+          </button>
+        </div>
+
+        {activeTab === 'upscale' && (
+        <div id="image-upscale-panel" role="tabpanel" aria-labelledby="image-upscale-tab" className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(390px,0.75fr)]">
           <section className="overflow-hidden rounded-2xl border border-n50 bg-n0 shadow-soft">
             <div className="flex items-center justify-between border-b border-n40 px-5 py-4">
               <div>
@@ -502,8 +538,10 @@ export const ImageUpscalePage: React.FC = () => {
             </section>
           </aside>
         </div>
+        )}
 
-        <section className="mt-5 overflow-hidden rounded-2xl border border-n50 bg-n0 shadow-soft">
+        {activeTab === 'history' && (
+        <section id="image-upscale-history-panel" role="tabpanel" aria-labelledby="image-upscale-history-tab" className="overflow-hidden rounded-2xl border border-n50 bg-n0 shadow-soft">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-n40 px-5 py-4">
             <div>
               <h2 className="flex items-center gap-2 font-display text-base font-bold text-n800"><History size={17} className="text-primary" /> 图片放大历史</h2>
@@ -536,6 +574,13 @@ export const ImageUpscalePage: React.FC = () => {
                 const outputDpi = Number(task.data?.dpi || 0);
                 const textMode = Boolean(task.data?.text_clarity);
                 const active = ['pending', 'queued', 'processing', 'running'].includes(normalizedStatus);
+                const deletionTime = normalizedStatus === 'completed'
+                  ? formatImageUpscaleDeletionTime(
+                    upscaleResultExpiresAt(task),
+                    task.completed_at,
+                    task.created_at,
+                  )
+                  : '';
                 const statusClass = normalizedStatus === 'completed'
                   ? 'bg-success/10 text-success'
                   : active
@@ -557,7 +602,7 @@ export const ImageUpscalePage: React.FC = () => {
                       )}
                       {task.error && <div className="mt-1 truncate text-[11px] text-danger">{task.error}</div>}
                     </div>
-                    <div className="text-xs text-n300">{normalizedStatus === 'completed' ? '结果保留 30 天' : active ? '等待本地节点处理' : ''}</div>
+                    <div className="text-xs text-n300">{normalizedStatus === 'completed' ? deletionTime : active ? '等待本地节点处理' : ''}</div>
                     <button
                       type="button"
                       onClick={() => { void downloadHistoryResult(task); }}
@@ -573,6 +618,7 @@ export const ImageUpscalePage: React.FC = () => {
             </div>
           )}
         </section>
+        )}
       </div>
     </div>
   );

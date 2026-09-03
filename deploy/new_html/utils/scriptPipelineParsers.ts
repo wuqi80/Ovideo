@@ -96,11 +96,32 @@ export function formatVideoScriptShotNumber(segmentNo: number, localShotNo: numb
     return `分镜${segmentNo}-${localShotNo}`;
 }
 
-/** 从单个镜头正文中移除分段级提示词，分段提示词由独立卡片展示和持久化。 */
+const VIDEO_SCRIPT_PROMPT_SECTION_PATTERN = /^\s*【(?:视觉风格|正向稳定约束)】/;
+const VIDEO_SCRIPT_SEGMENT_HEADER_PATTERN = /^\s*分段\s*\d+\s*[:：]?\s*$/;
+
+/**
+ * 从单个镜头/分段正文中移除分段级提示词，分段提示词由独立卡片展示和持久化。
+ * 模型偶尔会把提示词区提前插到两个镜头之间；此时只移除提示词区，后续镜头必须保留。
+ */
 export function stripVideoScriptGroupPromptSections(value: string): string {
-    const text = String(value || '');
-    const promptStart = text.search(/^[ \t]*【(?:视觉风格|正向稳定约束)】/m);
-    return (promptStart >= 0 ? text.slice(0, promptStart) : text).trim();
+    const kept: string[] = [];
+    let insidePromptSection = false;
+
+    for (const line of String(value || '').split(/\r?\n/)) {
+        if (VIDEO_SCRIPT_PROMPT_SECTION_PATTERN.test(line)) {
+            insidePromptSection = true;
+            continue;
+        }
+        if (
+            insidePromptSection
+            && (normalizeShotHeader(line) || VIDEO_SCRIPT_SEGMENT_HEADER_PATTERN.test(line))
+        ) {
+            insidePromptSection = false;
+        }
+        if (!insidePromptSection) kept.push(line);
+    }
+
+    return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /** 精确提取指定镜头文本块，避免把镜头2-2误识别为镜头2-1。 */
@@ -167,11 +188,30 @@ export function parseVideoScriptBlocks(text: string): VideoScriptBlock[] {
 
 function extractBracketSection(text: string, label: string): string {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = text.match(new RegExp(
-        `【${escaped}】\\s*([\\s\\S]*?)(?=\\n\\s*【(?:视觉风格|正向稳定约束)】|\\n\\s*分段\\s*\\d+|$)`,
-        'i',
-    ));
-    return (match?.[1] || '').trim();
+    const targetPattern = new RegExp(`^\\s*【${escaped}】\\s*(.*)$`, 'i');
+    const collected: string[] = [];
+    let collecting = false;
+
+    for (const line of String(text || '').split(/\r?\n/)) {
+        const targetMatch = line.match(targetPattern);
+        if (targetMatch) {
+            if (collecting) break;
+            collecting = true;
+            collected.push(targetMatch[1]);
+            continue;
+        }
+        if (!collecting) continue;
+        if (
+            VIDEO_SCRIPT_PROMPT_SECTION_PATTERN.test(line)
+            || normalizeShotHeader(line)
+            || VIDEO_SCRIPT_SEGMENT_HEADER_PATTERN.test(line)
+        ) {
+            break;
+        }
+        collected.push(line);
+    }
+
+    return collected.join('\n').trim();
 }
 
 function shotRange(blocks: VideoScriptBlock[], groupNo: number): string {
@@ -265,13 +305,88 @@ export function combineVideoScriptOutputs(outputs: string[]): string {
     return combined.join('\n\n');
 }
 
+const SHOT_SIZE_LABEL_PATTERN = /^\s*景别\s*[：:]/;
+const SHOT_SECTION_BOUNDARY_PATTERN = /^\s*(?:分段\s*\d+\s*[：:]?|【(?:视觉风格|正向稳定约束)】)/;
+const SHOT_SIZE_TOKENS = [
+    '局部大特写',
+    '大特写',
+    '局部特写',
+    '大全景',
+    '大远景',
+    '中近景',
+    '中远景',
+    '半身景',
+    '全景',
+    '远景',
+    '中景',
+    '近景',
+    '特写',
+] as const;
+
+function inferShotSize(lines: string[]): string {
+    const prioritizedLines = [
+        ...lines.filter(line => /^\s*画面描述\s*[：:]/.test(line)),
+        ...lines.filter(line => /^\s*(?:镜头运动|运镜方式)\s*[：:]/.test(line)),
+    ];
+    for (const line of prioritizedLines) {
+        const matched = SHOT_SIZE_TOKENS.find(token => line.includes(token));
+        if (matched) return matched;
+    }
+    return '中景';
+}
+
 /**
- * 补足新生成/新编辑脚本的分段级提示词长度，并保持镜头正文与分段编号不变。
- * 缺失字段不会在这里伪造，交由后续校验明确拒绝。
+ * 确保 Stage 2 的每个分镜都有独立“景别”字段。
+ * 优先从原有画面描述、镜头运动中提取；无法判断时使用稳定默认值“中景”。
+ * 除新增/补足该字段外，不改写用户或模型已有的镜头正文。
+ */
+export function ensureExplicitVideoScriptShotSizes(content: string): string {
+    const lines = String(content || '').split(/\r?\n/);
+
+    for (let index = 0; index < lines.length; index += 1) {
+        if (!normalizeShotHeader(lines[index])) continue;
+
+        let blockEnd = index + 1;
+        while (
+            blockEnd < lines.length
+            && !normalizeShotHeader(lines[blockEnd])
+            && !SHOT_SECTION_BOUNDARY_PATTERN.test(lines[blockEnd])
+        ) {
+            blockEnd += 1;
+        }
+
+        const blockLines = lines.slice(index + 1, blockEnd);
+        const shotSize = inferShotSize(blockLines);
+        const existingOffset = blockLines.findIndex(line => SHOT_SIZE_LABEL_PATTERN.test(line));
+
+        if (existingOffset >= 0) {
+            const existingIndex = index + 1 + existingOffset;
+            const existingValue = lines[existingIndex].replace(SHOT_SIZE_LABEL_PATTERN, '').trim();
+            if (!existingValue || existingValue === '无') {
+                const indent = lines[existingIndex].match(/^\s*/)?.[0] || '';
+                lines[existingIndex] = `${indent}景别：${shotSize}`;
+            }
+            continue;
+        }
+
+        const durationOffset = blockLines.findIndex(line => /^\s*(?:时长(?:[（(]秒[)）])?|时间)\s*[：:]/.test(line));
+        const insertAt = durationOffset >= 0
+            ? index + durationOffset + 2
+            : index + 1;
+        lines.splice(insertAt, 0, `景别：${shotSize}`);
+    }
+
+    return lines.join('\n');
+}
+
+/**
+ * 补足新生成/新编辑脚本的景别与分段级提示词长度，并保持已有镜头正文与分段编号不变。
+ * 景别缺失时按镜头正文推断，其余缺失字段不在这里伪造。
  */
 export function ensureVideoScriptPromptLengths(content: string): string {
-    const groups = parseVideoScriptGroups(content);
-    if (groups.length === 0) return content.trim();
+    const normalizedContent = ensureExplicitVideoScriptShotSizes(content);
+    const groups = parseVideoScriptGroups(normalizedContent);
+    if (groups.length === 0) return normalizedContent.trim();
 
     return groups.map((group) => {
         const shotBody = stripVideoScriptGroupPromptSections(group.rawGroup);

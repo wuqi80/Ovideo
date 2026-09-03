@@ -23,6 +23,11 @@ import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { runWhenIdle } from '../utils/idleScheduler';
 import { getImageThumbnailUrl } from '../services/imageLoaderService';
 import { applyConfiguredReferenceDrafts } from '../utils/storyboardConsistency';
+import {
+  buildStoryboardVideoExportNavigationState,
+  isDurableStoryboardImageUrl,
+  normalizeStoryboardVideoExportPayload,
+} from '../utils/storyboardVideoExport';
 
 const STORYBOARD_INITIAL_SHOT_COUNT = 10;
 const GenerationPage = React.lazy(() => import('../components/GenerationPage').then(m => ({ default: m.GenerationPage })));
@@ -263,8 +268,33 @@ export const StoryboardGenPage: React.FC = () => {
   );
 
   const handleExportNext = useCallback(
-    (_data: any) => {
-      navigate(`/projects/${projectId}/ep/${episodeId}/workflow/video`);
+    async (data: unknown) => {
+      const payload = normalizeStoryboardVideoExportPayload(data);
+      if (!payload) {
+        crmMessage.error('没有可导出的视频分镜，请重新选择');
+        return;
+      }
+
+      // Entity files are the source used by the storyboard picker, while the
+      // video API projection reads generated_image_url. Best-effort backfill
+      // keeps both views consistent after a refresh; router state remains the
+      // immediate handoff even if one persistence request fails.
+      const durableImages = payload.items.filter(item => isDurableStoryboardImageUrl(item.finalImage));
+      const persistenceResults = await Promise.allSettled(
+        durableImages.map(item => updateStoryboardItem(item.shotId, {
+          generated_image_url: item.finalImage,
+        })),
+      );
+      const failedPersistenceCount = persistenceResults.filter(result => result.status === 'rejected').length;
+      if (failedPersistenceCount > 0) {
+        console.warn(
+          `[StoryboardGenPage] ${failedPersistenceCount} 个分镜图地址回写失败，本次仍通过页面状态导入视频工作区`,
+        );
+      }
+
+      navigate(`/projects/${projectId}/ep/${episodeId}/workflow/video`, {
+        state: buildStoryboardVideoExportNavigationState(payload),
+      });
     },
     [navigate, projectId, episodeId]
   );

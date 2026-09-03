@@ -64,3 +64,41 @@ async def test_filter_assets_by_type(test_db):
                           asset_type="scene", name="场景A", created_by="u1")
     chars = await AssetDAO.get_by_project("proj_1", asset_type="character")
     assert all(r["asset_type"] == "character" for r in chars)
+
+
+async def test_export_asset_creation_backfills_only_blank_existing_descriptions():
+    from dao_asset import AssetDAO
+
+    class FakeConnection:
+        def __init__(self):
+            self.executions = []
+
+        async def fetch(self, _query, *_args):
+            return [
+                {"asset_id": "asset_blank", "name": "阿壳", "description": ""},
+                {"asset_id": "asset_custom", "name": "女店主", "description": "用户已编辑的设定"},
+            ]
+
+        async def execute(self, query, *args):
+            self.executions.append((" ".join(query.split()), args))
+            return "UPDATE 1"
+
+    conn = FakeConnection()
+    created = await AssetDAO.create_missing_episode_assets_transactional(
+        conn,
+        project_id="proj_1",
+        episode_id="ep_1",
+        script_id="script_1",
+        asset_type="character",
+        items=[
+            {"name": "阿壳", "description": "银灰色圆润外壳，胸口屏幕显示淡蓝光"},
+            {"name": "女店主", "description": "不应覆盖"},
+        ],
+        created_by="user_1",
+    )
+
+    assert created == 0
+    assert len(conn.executions) == 1
+    query, args = conn.executions[0]
+    assert query.startswith("UPDATE assets SET description")
+    assert args == ("银灰色圆润外壳，胸口屏幕显示淡蓝光", "asset_blank")

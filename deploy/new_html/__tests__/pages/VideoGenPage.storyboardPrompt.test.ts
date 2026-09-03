@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const videoGenSource = readFileSync(resolve(__dirname, '../../pages/VideoGenPage.tsx'), 'utf-8');
+const storyboardGenSource = readFileSync(resolve(__dirname, '../../pages/StoryboardGenPage.tsx'), 'utf-8');
 const videoPageSource = readFileSync(resolve(__dirname, '../../components/VideoPage.tsx'), 'utf-8');
 
 describe('video workspace storyboard prompt wiring', () => {
@@ -14,10 +15,28 @@ describe('video workspace storyboard prompt wiring', () => {
   });
 
   it('loads and persists complete segmented shot identity for the video workspace', () => {
-    expect(videoGenSource).toContain('buildVideoStoryboardShotLookup(storyboardItemsForImport)');
+    expect(videoGenSource).toContain('buildVideoStoryboardShotLookup(allStoryboardItemsForImport)');
     expect(videoGenSource).toContain('storyboardShotLabel: shotInfo?.label');
     expect(videoGenSource).toContain('isStoryboardSegmentStart: shotInfo?.isFirstInSegment');
     expect(videoGenSource).toContain('loadStoryboardItemsPage({ limit: totalStoryboardCount, includeTotal: false })');
+  });
+
+  it('carries the explicit storyboard selection and selected images into the video workspace', () => {
+    expect(readFileSync(resolve(__dirname, '../../components/GenerationPage.tsx'), 'utf-8'))
+      .toContain(') || item.generatedImages?.[0]');
+    expect(storyboardGenSource).toContain('normalizeStoryboardVideoExportPayload(data)');
+    expect(storyboardGenSource).toContain('generated_image_url: item.finalImage');
+    expect(storyboardGenSource).toContain('state: buildStoryboardVideoExportNavigationState(payload)');
+    expect(videoGenSource).toContain('readStoryboardVideoExportNavigationState(location.state)');
+    expect(videoGenSource).toContain('selectStoryboardItemsForVideoExport(');
+    expect(videoGenSource).toContain('storyboardVideoExportImages.get(itemId)');
+    expect(videoGenSource).toContain('if (storyboardVideoExport) {');
+    expect(videoGenSource).toContain('正在导入${importTargetLabel}及其已选画面。');
+  });
+
+  it('consumes the one-time router handoff so refresh does not overwrite later video edits', () => {
+    expect(videoGenSource).toContain('replace: true');
+    expect(videoGenSource).toContain('state: null');
   });
 
   it('upgrades untouched persisted prompts without replacing user edits', () => {

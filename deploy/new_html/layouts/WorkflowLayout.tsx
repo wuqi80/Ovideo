@@ -43,6 +43,8 @@ const STAGES: { key: string; label: string; hint: string; primary: string; subs:
   },
 ];
 
+const STANDALONE_UTILITY_PATHS = new Set(['image-upscale', 'history', 'recycle-bin']);
+
 export const WorkflowLayout: React.FC = () => {
   const { projectId, episodeId } = useParams<{ projectId: string; episodeId: string }>();
   const navigate = useNavigate();
@@ -98,6 +100,7 @@ export const WorkflowLayout: React.FC = () => {
   const segment = location.pathname.split('/').filter(Boolean).pop() ?? '';
   const activeStageIdx = useMemo(() => STAGES.findIndex(stage => stage.subs.some(sub => sub.path === segment)), [segment]);
   const activeStage = activeStageIdx >= 0 ? STAGES[activeStageIdx] : null;
+  const isStandaloneUtilityPage = STANDALONE_UTILITY_PATHS.has(segment);
 
   const sidebarTools: AppSidebarItem[] = [
     { key: 'canvas', label: '专业画布', icon: Brush, to: `/projects/${projectId}/ep/${episodeId}/canvas` },
@@ -114,58 +117,62 @@ export const WorkflowLayout: React.FC = () => {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header className="workflow-shell-header flex shrink-0 items-center gap-4 border-b border-n40 bg-n20/90 px-5">
             {/* 左：分集标题 */}
-            <div className="min-w-[130px] max-w-[210px] shrink-0 leading-tight">
-              <div className="truncate font-display text-[15px] font-bold tracking-tight">{episodeTitle || '创作作品'}</div>
-              <div className="mt-0.5 truncate text-[11px] text-n200">跟着 4 步完成作品</div>
-            </div>
+            {!isStandaloneUtilityPage && (
+              <div className="min-w-[130px] max-w-[210px] shrink-0 leading-tight">
+                <div className="truncate font-display text-[15px] font-bold tracking-tight">{episodeTitle || '创作作品'}</div>
+                <div className="mt-0.5 truncate text-[11px] text-n200">跟着 4 步完成作品</div>
+              </div>
+            )}
 
             {/* 中：四阶段步骤条 */}
-            <nav
-              className="workflow-shell-nav flex min-w-0 flex-1 items-center justify-center overflow-x-auto scrollbar-atlas"
-              aria-label="流程化制作导航"
-            >
-              {STAGES.map((stage, index) => {
-                const done = activeStageIdx >= 0 && index < activeStageIdx;
-                const active = index === activeStageIdx;
-                return (
-                  <React.Fragment key={stage.key}>
-                    {index > 0 && (
-                      <span aria-hidden className={`mx-1 h-0.5 w-8 shrink-0 ${done || active ? 'bg-success' : 'bg-n40'}`} />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => navigate(stage.primary)}
-                      className="flex shrink-0 items-center gap-2 rounded px-1.5 py-1 transition-opacity hover:opacity-85"
-                    >
-                      <span
-                        className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full font-mono text-xs font-bold transition-all ${
-                          active
-                            ? 'bg-primary text-n0 ring-4 ring-primary/15'
-                            : done
-                              ? 'bg-success text-n0'
-                              : 'bg-n40 text-n200'
-                        }`}
+            {!isStandaloneUtilityPage && (
+              <nav
+                className="workflow-shell-nav flex min-w-0 flex-1 items-center justify-center overflow-x-auto scrollbar-atlas"
+                aria-label="流程化制作导航"
+              >
+                {STAGES.map((stage, index) => {
+                  const done = activeStageIdx >= 0 && index < activeStageIdx;
+                  const active = index === activeStageIdx;
+                  return (
+                    <React.Fragment key={stage.key}>
+                      {index > 0 && (
+                        <span aria-hidden className={`mx-1 h-0.5 w-8 shrink-0 ${done || active ? 'bg-success' : 'bg-n40'}`} />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => navigate(stage.primary)}
+                        className="flex shrink-0 items-center gap-2 rounded px-1.5 py-1 transition-opacity hover:opacity-85"
                       >
-                        {done ? '✓' : index + 1}
-                      </span>
-                      <span className="flex flex-col items-start leading-[1.15]">
                         <span
-                          className={`whitespace-nowrap font-display text-[12.5px] ${
-                            active ? 'font-bold text-n800' : done ? 'font-medium text-n600' : 'font-medium text-n80'
+                          className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full font-mono text-xs font-bold transition-all ${
+                            active
+                              ? 'bg-primary text-n0 ring-4 ring-primary/15'
+                              : done
+                                ? 'bg-success text-n0'
+                                : 'bg-n40 text-n200'
                           }`}
                         >
-                          {stage.label}
+                          {done ? '✓' : index + 1}
                         </span>
-                        <span className="whitespace-nowrap text-[10px] tracking-[0.03em] text-n80">{stage.hint}</span>
-                      </span>
-                    </button>
-                  </React.Fragment>
-                );
-              })}
-            </nav>
+                        <span className="flex flex-col items-start leading-[1.15]">
+                          <span
+                            className={`whitespace-nowrap font-display text-[12.5px] ${
+                              active ? 'font-bold text-n800' : done ? 'font-medium text-n600' : 'font-medium text-n80'
+                            }`}
+                          >
+                            {stage.label}
+                          </span>
+                          <span className="whitespace-nowrap text-[10px] tracking-[0.03em] text-n80">{stage.hint}</span>
+                        </span>
+                      </button>
+                    </React.Fragment>
+                  );
+                })}
+              </nav>
+            )}
 
             {/* 右：创作点数 · 通知 · 导出 */}
-            <div className="workflow-shell-account flex shrink-0 items-center justify-end gap-2">
+            <div className="workflow-shell-account ml-auto flex shrink-0 items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => navigate('/credits')}

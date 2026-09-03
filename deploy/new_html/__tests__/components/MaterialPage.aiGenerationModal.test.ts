@@ -13,7 +13,9 @@ describe('MaterialPage AI generation modal', () => {
     expect(source).toContain('DESIGN_IMAGE_MODEL_OPTIONS.map');
     expect(source).toContain("generationModel.resolutions.map");
     expect(source).toContain('图生图');
-    expect(source).toContain('xl:w-[556px] xl:justify-start');
+    expect(source).toContain('xl:w-[556px] xl:justify-end xl:justify-self-end');
+    expect(source).toContain('xl:w-[556px] xl:grid-cols-[76px_minmax(0,1fr)] xl:justify-self-end');
+    expect(source).toContain('h-9 w-[76px] items-center justify-center');
     expect(source).not.toContain('xl:pl-[84px]');
     expect(source).toContain('InlineCreditEstimate');
     expect(source).toContain('generationModel.hint');

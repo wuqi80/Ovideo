@@ -115,15 +115,15 @@ export async function restoreEntityFile(fileId: string): Promise<EntityFile> {
 }
 
 export async function hardDeleteEntityFile(fileId: string): Promise<{ freed_bytes: number }> {
-  return apiJson<{ freed_bytes: number }>(`/api/entity-files/${fileId}/hard`, {
+  return apiJson<{ freed_bytes: number }>(`/api/entity-files/${fileId}/hard?risk_ack=true`, {
     method: 'DELETE',
   }, 'hardDeleteEntityFile');
 }
 
-export async function hardDeleteEntityFiles(fileIds: string[]): Promise<{ deleted: number; freed_bytes: number; errors: string[] }> {
-  return apiJson<{ deleted: number; freed_bytes: number; errors: string[] }>('/api/entity-files/hard-delete-batch', {
+export async function hardDeleteEntityFiles(fileIds: string[]): Promise<{ deleted: number; freed_bytes: number; errors: Array<{ file_id: string; error: string }> }> {
+  return apiJson<{ deleted: number; freed_bytes: number; errors: Array<{ file_id: string; error: string }> }>('/api/entity-files/hard-delete-batch', {
     method: 'POST',
-    body: JSON.stringify({ file_ids: fileIds }),
+    body: JSON.stringify({ file_ids: fileIds, risk_ack: true }),
   }, 'hardDeleteEntityFiles');
 }
 

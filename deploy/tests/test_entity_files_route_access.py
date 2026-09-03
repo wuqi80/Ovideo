@@ -83,3 +83,22 @@ async def test_global_file_migration_requires_admin(monkeypatch):
         await handler(user_id="alice")
     assert exc.value.status_code == 403
     assert called is False
+
+
+@pytest.mark.asyncio
+async def test_permanent_delete_passes_canonical_owner_and_risk_ack(monkeypatch):
+    calls = []
+
+    async def hard_delete(**kwargs):
+        calls.append(kwargs)
+        return {"success": True, "freed_bytes": 12}
+
+    monkeypatch.setattr(routes, "hard_delete_entity_file_service", hard_delete)
+    handler = endpoint(build_router(), "/api/entity-files/{file_id}/hard", "DELETE")
+
+    result = await handler(file_id="file_deleted", risk_ack=True, user_id="alice")
+
+    assert result["freed_bytes"] == 12
+    assert calls[0]["file_id"] == "file_deleted"
+    assert calls[0]["user_id"] == "id-alice"
+    assert calls[0]["risk_ack"] is True

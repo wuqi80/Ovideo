@@ -93,6 +93,20 @@ async def get_current_user(request: Request) -> str:
     return user_id
 
 
+async def get_current_media_user(request: Request) -> str:
+    """Authenticate media elements, which can only send the JWT in the URL."""
+    authorization = request.headers.get("Authorization") or ""
+    token = authorization.replace("Bearer ", "", 1).strip() if authorization else ""
+    if not token:
+        token = str(request.query_params.get("token") or "").strip()
+    username = jwt_auth.verify_token(token) if token else None
+    if not username:
+        raise HTTPException(status_code=401, detail="Token已失效或不存在，请重新登录")
+    user_id = await resolve_authenticated_user_id(username, user_dao=UserDAO)
+    await touch_user_presence(user_id)
+    return user_id
+
+
 def _require_minimax_client():
     if get_minimax_audio_client is None:
         raise HTTPException(status_code=501, detail="MiniMax audio module is unavailable; deploy minimax_audio.py")
@@ -244,6 +258,7 @@ router.include_router(
 router.include_router(
     create_entity_files_router(
         get_current_user_dependency=get_current_user,
+        get_media_user_dependency=get_current_media_user,
         file_dao=FileDAO,
         entity_file_dao=EntityFileDAO,
         episode_dao=EpisodeDAO,
