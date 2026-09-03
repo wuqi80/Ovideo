@@ -17,6 +17,7 @@ import {
   Plus,
   ScanLine,
   Share2,
+  ShieldCheck,
   Trash2,
   UserRound,
 } from 'lucide-react';
@@ -25,6 +26,8 @@ import { getCreditBalance } from '../services/creditService';
 import { clearAccountIdentity, getStoredUsername } from '../services/accountStorage';
 import BrandLogo from './BrandLogo';
 import { BRAND_NAME, BRAND_PRODUCT_NAME } from '../config/brand';
+import { getCurrentAdminSession, type CurrentAdminSession } from '../services/adminAccessService';
+import { adminPath } from '../admin/adminRoute';
 
 export interface AppSidebarItem {
   key: string;
@@ -73,6 +76,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
   const [recent, setRecent] = useState<RecentProject[]>([]);
   const [username, setUsername] = useState(() => getStoredUsername('未登录'));
   const [menuOpen, setMenuOpen] = useState(false);
+  const [adminSession, setAdminSession] = useState<CurrentAdminSession | null>(null);
   const userRowRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -136,6 +140,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
     }
     clearAccountIdentity();
     window.location.href = '/login';
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    void getCurrentAdminSession().then(session => {
+      if (alive) setAdminSession(session);
+    });
+    return () => { alive = false; };
   }, []);
 
   const openRecentProjectTool = useCallback(async (
@@ -325,6 +337,19 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
             >
               <UserRound size={15} /> 个人中心
             </button>
+            {adminSession && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuOpen(false);
+                  window.location.href = adminPath();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-n500 transition-colors hover:bg-n20 hover:text-primary"
+              >
+                <ShieldCheck size={15} /> 管理后台
+              </button>
+            )}
             <button
               type="button"
               role="menuitem"
@@ -350,7 +375,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
           </span>
           <span className="min-w-0 flex-1 leading-tight">
             <span className="block truncate text-[13px] font-medium text-n0">{username}</span>
-            <span className="block truncate text-[11px] text-n200">创作者</span>
+            <span className="block truncate text-[11px] text-n200">
+              {adminSession?.role === 'super_admin' ? '超级管理员' : adminSession ? '管理员' : '创作者'}
+            </span>
           </span>
           <ChevronDown size={15} className={`shrink-0 text-n200 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
         </button>

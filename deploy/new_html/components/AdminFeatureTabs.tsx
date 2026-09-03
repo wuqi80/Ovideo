@@ -34,7 +34,7 @@ import {
   CrmToolbar, CrmPrimaryButton, CrmTag, CrmActionLink, CrmActionSep, CrmPagination, CrmTable,
 } from '../admin/crmUI';
 
-// Admin requests share httpClient auth/error handling; /admin paths use the admin session token.
+// Admin requests share the main creator token and remain protected by server-side role checks.
 async function apiGet<T>(url: string): Promise<T> {
   return apiJson<T>(url, { method: 'GET' }, 'Admin API');
 }

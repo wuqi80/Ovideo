@@ -26,6 +26,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TaskProvider } from './contexts/TaskContext';
 import { WorkspaceProvider } from './contexts/WorkspaceContext';
 import { runWhenIdle } from './utils/idleScheduler';
+import { ADMIN_BASE_PATH } from './admin/adminRoute';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -66,7 +67,6 @@ const AdminPage = React.lazy(() => import('./components/AdminPage').then(m => ({
 const AdminFeatureTabs = React.lazy(() => import('./components/AdminFeatureTabs'));
 const PostProcessPage = React.lazy(() => import('./components/PostProcessPage'));
 const AdminLayout = React.lazy(() => import('./admin/AdminLayout'));
-const AdminLoginPage = React.lazy(() => import('./admin/AdminLoginPage'));
 const AdminHubPage = React.lazy(() => import('./admin/AdminHubPage'));
 const AdminSettingsPage = React.lazy(() => import('./admin/AdminSettingsPage'));
 const CrmHost = React.lazy(() => import('./admin/crmUI').then(m => ({ default: m.CrmHost })));
@@ -77,12 +77,7 @@ const RouteFallback: React.FC = () => (
     </div>
 );
 
-// 2026-05-26：独立 Admin Shell
-//  - /admin/login            → AdminLoginPage（独立账号密码登录）
-//  - /admin                  → AdminLayout > AdminHubPage（导航 Hub）
-//  - /admin/settings         → AdminLayout > AdminSettingsPage（系统设置）
-//  - /admin/operations       → AdminPage 全屏（5 tab 不变，浮层"返回 Hub"）
-// Admin token 走 sessionStorage（adminAuth.ts），与主站 localStorage.auth_token 隔离。
+// 管理后台使用非公开入口。进入前必须先完成主站登录，再由后端校验管理员角色。
 
 // 当前架构：操作面板/功能面板已并入统一壳（AdminLayout 提供层级菜单 + 鉴权门）。
 // 这两个轻包装只负责把 ?tab 透传给被内嵌的组件，组件不卸载 → 切 tab 不重复拉数。
@@ -179,9 +174,8 @@ const App: React.FC = () => {
                     <Route path="/credits" element={<CreditsPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
 
-                    {/* 统一 Admin Shell（当前架构）— 一个台子、一套层级菜单，与主站 token 隔离 */}
-                    <Route path="/admin/login" element={<AdminLoginPage />} />
-                    <Route path="/admin" element={<AdminLayout />}>
+                    {/* 统一 Admin Shell：前台登录为第一层，管理员角色为第二层。 */}
+                    <Route path={ADMIN_BASE_PATH} element={<AdminLayout />}>
                         <Route index element={<AdminHubPage />} />
                         <Route path="operations" element={<AdminOperationsPanel />} />
                         <Route path="features" element={<AdminFeaturesPanel />} />

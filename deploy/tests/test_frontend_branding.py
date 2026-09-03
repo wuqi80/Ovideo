@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi.responses import FileResponse
 from PIL import Image
 
-from routers.frontend_pages import _studio_dist_dir, create_frontend_pages_router
+from routers.frontend_pages import ADMIN_ENTRY_PATH, _studio_dist_dir, create_frontend_pages_router
 
 
 DEPLOY_DIR = Path(__file__).resolve().parents[1]
@@ -126,6 +126,22 @@ def test_studio_routes_serve_the_sibling_build_directory():
 
     assert studio_paths == {"/studio", "/studio/", "/studio/{path:path}"}
     assert _studio_dist_dir() == DEPLOY_DIR.parent / "studio" / "dist"
+
+
+def test_admin_shell_uses_the_non_default_entry_and_retires_old_admin_routes():
+    router = create_frontend_pages_router()
+    route_paths = {route.path for route in router.routes}
+
+    assert ADMIN_ENTRY_PATH == "/a7k9m3q8x2v6n4p"
+    assert ADMIN_ENTRY_PATH in route_paths
+    assert f"{ADMIN_ENTRY_PATH}/{{path:path}}" in route_paths
+    assert "/admin" in route_paths
+    assert "/admin/{path:path}" in route_paths
+
+    frontend_route = (DEPLOY_DIR / "new_html" / "admin" / "adminRoute.ts").read_text(encoding="utf-8")
+    login_html = (DEPLOY_DIR / "login.html").read_text(encoding="utf-8")
+    assert f"ADMIN_BASE_PATH = '{ADMIN_ENTRY_PATH}'" in frontend_route
+    assert f"ADMIN_ENTRY_PATH = '{ADMIN_ENTRY_PATH}'" in login_html
 
 
 def test_studio_build_toolchain_is_pinned_for_the_production_host():

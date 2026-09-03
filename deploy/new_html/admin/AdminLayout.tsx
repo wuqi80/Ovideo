@@ -4,12 +4,7 @@
  * 一个台子、一套层级菜单。左侧 AdminSidebar 提供 一级/二级/三级 折叠菜单（始终在场），
  * 右侧只换内容区——彻底消除「在多个后台之间跳动」的割裂感。
  *
- * 路由（由 App.tsx 提供）：
- *   /admin               → 运营概览 (AdminDashboard)
- *   /admin/operations    → AdminPage（embedTab 由 ?tab 决定：users/stats/results/system）
- *   /admin/features      → AdminFeatureTabs（embedTab 由 ?tab 决定：accounts/groups/...）
- *   /admin/settings      → AdminSettingsPage（?item 决定：apiconfig/cluster/workflows/... 内嵌 legacy）
- *   /admin/login         → AdminLoginPage（独立，不被本 Shell 包裹）
+ * 入口路径由 adminRoute.ts 统一管理。主站登录是第一层，管理员角色是第二层。
  */
 
 import React, { useEffect, useState } from 'react';
@@ -26,29 +21,39 @@ export const AdminLayout: React.FC = () => {
     const location = useLocation();
     const [now, setNow] = useState(() => new Date());
     const [sessionRole, setSessionRole] = useState(() => getAdminRole());
+    const [accessState, setAccessState] = useState<'checking' | 'ready' | 'forbidden'>('checking');
+    const [accessError, setAccessError] = useState('');
 
-    // 本地只检查独立后台会话是否存在；角色权限由后端 require_admin 统一判定。
+    // 第一层：必须已有主站登录 token。第二层：后端确认当前用户为管理员。
     useEffect(() => {
         const token = getAdminToken();
-        const username = getAdminUsername();
-        if (!token || !username) {
+        if (!token) {
             const from = `${location.pathname}${location.search}${location.hash}`;
-            navigate(`/admin/login?redirect=${encodeURIComponent(from)}`, {
-                replace: true,
-                state: { from },
-            });
+            window.location.assign(`/login?redirect=${encodeURIComponent(from)}`);
             return;
         }
+        let active = true;
+        setAccessState('checking');
+        setAccessError('');
         apiJson<any>('/api/admin/session', { method: 'GET' }, '管理员会话校验')
             .then(session => {
+                if (!active) return;
                 const role = String(session?.role || 'admin');
-                setAdminSession(token, session?.username || username, role);
+                setAdminSession(token, session?.username || '—', role);
                 setSessionRole(role);
+                setAccessState('ready');
             })
-            .catch(() => {
+            .catch((error: any) => {
+                if (!active) return;
                 clearAdminSession();
-                navigate('/admin/login', { replace: true });
+                if (Number(error?.status) === 403) {
+                    setAccessError('当前前台账号已登录，但没有后台访问权限。');
+                } else {
+                    setAccessError('后台权限校验失败，请返回前台后重试。');
+                }
+                setAccessState('forbidden');
             });
+        return () => { active = false; };
     }, [navigate, location.pathname, location.search, location.hash]);
 
     useEffect(() => {
@@ -61,10 +66,36 @@ export const AdminLayout: React.FC = () => {
     const trail = getActiveTrail(location.pathname, location.search);
 
     const handleLogout = () => {
-        if (!confirm('确认退出管理后台？（不影响主站登录状态）')) return;
+        if (!confirm('确认退出管理后台？（保留主站登录状态）')) return;
         clearAdminSession();
-        navigate('/admin/login', { replace: true });
+        navigate('/projects', { replace: true });
     };
+
+    if (accessState === 'checking') {
+        return (
+            <div className="h-screen w-full bg-n20 flex items-center justify-center text-sm text-n300">
+                正在校验后台访问权限...
+            </div>
+        );
+    }
+
+    if (accessState === 'forbidden') {
+        return (
+            <div className="h-screen w-full bg-n20 flex items-center justify-center px-6">
+                <div className="w-full max-w-md rounded-xl border border-n40 bg-n0 p-8 text-center shadow-sm">
+                    <h1 className="text-xl font-bold text-n800">无后台访问权限</h1>
+                    <p className="mt-3 text-sm leading-6 text-n300">{accessError}</p>
+                    <button
+                        type="button"
+                        onClick={() => navigate('/projects', { replace: true })}
+                        className="mt-6 rounded-md bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+                    >
+                        返回创作前台
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="layout-safe h-screen w-full min-w-0 bg-n20 text-n700 font-sans flex overflow-hidden">

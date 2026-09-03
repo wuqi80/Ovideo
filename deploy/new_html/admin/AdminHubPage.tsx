@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { apiJson } from '../services/httpClient';
 import { getAdminRole } from './adminAuth';
+import { adminPath } from './adminRoute';
 
 interface KPI {
     users: number;
@@ -136,7 +137,7 @@ export const AdminHubPage: React.FC = () => {
                     title="生成管理"
                     subtitle="账号 · 项目分组 · 创作点数 · 素材库 · 审计日志"
                     accent="via-emerald-500/60"
-                    onClick={() => navigate('/admin/features?tab=accounts')}
+                    onClick={() => navigate(adminPath('features?tab=accounts'))}
                 >
                     <div className="grid grid-cols-3 gap-2 text-[11px] text-n100">
                         <div className="flex items-center gap-1.5"><Users size={12} className="text-n100" />账号 / 权限</div>
@@ -153,7 +154,7 @@ export const AdminHubPage: React.FC = () => {
                     title="系统设置"
                     subtitle="API 厂商配置 · 集群节点 · 工作流模板"
                     accent="via-cyan-500/60"
-                    onClick={() => navigate('/admin/settings?item=apiconfig')}
+                    onClick={() => navigate(adminPath('settings?item=apiconfig'))}
                 >
                     <div className="grid grid-cols-3 gap-2 text-[11px] text-n100">
                         <div className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-n100"></span>API 厂商</div>
@@ -166,7 +167,7 @@ export const AdminHubPage: React.FC = () => {
             {/* 集群仪表盘 — 内嵌入壳（不再弹独立窗口，保持「一个后台」体验） */}
             {isSuperAdmin && <section>
                 <div
-                    onClick={() => navigate('/admin/settings?item=cluster')}
+                    onClick={() => navigate(adminPath('settings?item=cluster'))}
                     className="group flex items-center justify-between bg-n0 hover:bg-n20 border border-n40 hover:border-primary rounded-md p-5 transition-all shadow-card hover:shadow-atlas cursor-pointer"
                 >
                     <div className="flex items-center gap-4">

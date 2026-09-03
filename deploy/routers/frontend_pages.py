@@ -13,6 +13,8 @@ ICON_CACHE_HEADERS = {
     "Expires": "0",
 }
 
+ADMIN_ENTRY_PATH = "/a7k9m3q8x2v6n4p"
+
 
 def _serve_spa():
     """Return the React SPA entry with no-cache headers for fresh build hashes."""
@@ -169,21 +171,18 @@ def create_frontend_pages_router() -> APIRouter:
     async def studio_spa(path: str):
         return _serve_studio_spa()
 
-    @router.get("/admin")
-    @router.get("/admin/")
+    @router.get(ADMIN_ENTRY_PATH)
+    @router.get(f"{ADMIN_ENTRY_PATH}/")
     async def admin_spa_root():
         return _serve_spa()
 
-    @router.get("/admin/login")
-    @router.get("/admin/operations")
-    @router.get("/admin/settings")
-    async def admin_spa_named():
-        return _serve_spa()
-
-    @router.get("/admin/login/{path:path}")
-    @router.get("/admin/operations/{path:path}")
-    @router.get("/admin/settings/{path:path}")
+    @router.get(f"{ADMIN_ENTRY_PATH}/{{path:path}}")
     async def admin_spa_subpath(path: str):
         return _serve_spa()
+
+    @router.get("/admin", include_in_schema=False)
+    @router.get("/admin/{path:path}", include_in_schema=False)
+    async def retired_admin_entry(path: str = ""):
+        return Response(status_code=404)
 
     return router

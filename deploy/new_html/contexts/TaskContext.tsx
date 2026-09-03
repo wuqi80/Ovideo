@@ -13,6 +13,7 @@ import { taskRegistry, type RegisterInput } from '../services/taskRegistry';
 import type { ServerNotificationRow } from '../services/notificationMapping';
 import { getStoredUserId } from '../services/accountStorage';
 import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
+import { isAdminPath } from '../admin/adminRoute';
 
 interface TaskContextValue {
   activeTasks: GlobalTask[];
@@ -62,7 +63,7 @@ const STUB_VALUE: TaskContextValue = {
 
 function isAdminRoute(): boolean {
   try {
-    return typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+    return typeof window !== 'undefined' && isAdminPath(window.location.pathname);
   } catch {
     return false;
   }

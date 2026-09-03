@@ -104,7 +104,7 @@ from routers.cluster_status import create_cluster_status_router
 from routers.comfyui_files import create_comfyui_files_router
 from routers.fallback_static import create_fallback_static_router
 from routers.files import cleanup_thumbnail_cache, create_files_router
-from routers.frontend_pages import create_frontend_pages_router
+from routers.frontend_pages import ADMIN_ENTRY_PATH, create_frontend_pages_router
 from routers.generation import create_generation_router
 from routers.node_outputs import create_node_output_router
 from routers.projects import create_projects_router
@@ -693,7 +693,7 @@ class CacheControlMiddleware(BaseHTTPMiddleware):
             response.headers['Pragma'] = 'no-cache'
         elif path.startswith('/assets/'):
             response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
-        elif path.startswith('/admin-legacy'):
+        elif path.startswith(f'{ADMIN_ENTRY_PATH}/legacy'):
             response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'
@@ -748,15 +748,14 @@ try:
 except Exception as e:
     logger.warning(f"无法挂载storage目录: {e}")
 
-# Mount the compatibility console under a disjoint prefix. `/admin/*` belongs to
-# the React shell; mounting static HTML there would intercept client-side routes.
-# Relative assets keep working under `/admin-legacy/`, while API calls remain on
-# their absolute `/api/admin/*` paths.
+# Mount the compatibility console only underneath the protected admin shell
+# entry. API calls remain on their authenticated `/api/admin/*` paths.
 admin_dir = os.path.join(os.path.dirname(__file__), "admin")
 if os.path.exists(admin_dir):
     try:
-        app.mount("/admin-legacy", StaticFiles(directory=admin_dir, html=True), name="admin-legacy")
-        logger.info(f"✅ 已挂载旧版管理后台 (legacy): /admin-legacy → {admin_dir}")
+        admin_legacy_path = f"{ADMIN_ENTRY_PATH}/legacy"
+        app.mount(admin_legacy_path, StaticFiles(directory=admin_dir, html=True), name="admin-legacy")
+        logger.info("✅ 已挂载旧版管理后台兼容页: %s → %s", admin_legacy_path, admin_dir)
     except Exception as e:
         logger.warning(f"无法挂载admin目录: {e}")
 
@@ -925,7 +924,7 @@ app.include_router(
 logger.info("✅ Cluster Status API 路由已注册 (/api/cluster/stats, /api/cluster/nodes, /health)")
 
 app.include_router(create_frontend_pages_router())
-logger.info("✅ Frontend Pages 路由已注册 (/, /projects, /admin shell)")
+logger.info("✅ Frontend Pages 路由已注册 (/, /projects, protected admin shell)")
 
 app.include_router(
     create_user_session_router(

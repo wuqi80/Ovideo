@@ -884,6 +884,7 @@
         const USER_ID_KEY = 'user_id';
         const BINDING_TOKEN_KEY = 'legacy_phone_binding_token';
         const BINDING_RETURN_KEY = 'legacy_phone_binding_return_to';
+        const ADMIN_ENTRY_PATH = '/a7k9m3q8x2v6n4p';
         const authForm = document.getElementById('authForm');
         const authTabs = document.getElementById('authTabs');
         const authTitle = document.getElementById('authTitle');
@@ -903,8 +904,22 @@
 
         if (location.pathname === '/legacy-login') history.replaceState(null, '', '/login');
 
+        function safeLoginRedirect(rawValue = new URLSearchParams(location.search).get('redirect')) {
+            if (!rawValue) return '';
+            try {
+                const target = new URL(rawValue, location.origin);
+                if (target.origin !== location.origin) return '';
+                if (target.pathname !== ADMIN_ENTRY_PATH && !target.pathname.startsWith(`${ADMIN_ENTRY_PATH}/`)) return '';
+                return `${target.pathname}${target.search}${target.hash}`;
+            } catch (_) {
+                return '';
+            }
+        }
+
         const hasPendingPhoneBinding = state.view === 'bind' && Boolean(sessionStorage.getItem(BINDING_TOKEN_KEY));
-        if (localStorage.getItem(TOKEN_KEY) && !hasPendingPhoneBinding) window.location.href = '/projects';
+        if (localStorage.getItem(TOKEN_KEY) && !hasPendingPhoneBinding) {
+            window.location.href = safeLoginRedirect() || '/projects';
+        }
 
         function input(id, type, label, autocomplete, required = true, attributes = '') {
             return `<div class="input-group"><input id="${id}" type="${type}" autocomplete="${autocomplete}" placeholder=" " ${required ? 'required' : ''} ${attributes}><label for="${id}">${label}</label></div>`;
@@ -1117,6 +1132,8 @@
                         });
                     if (result.requires_phone_binding && result.binding_token) {
                         sessionStorage.setItem(BINDING_TOKEN_KEY, result.binding_token);
+                        const returnTo = safeLoginRedirect();
+                        if (returnTo) sessionStorage.setItem(BINDING_RETURN_KEY, returnTo);
                         setView('bind');
                         showSuccess('账号验证成功，请绑定手机号');
                         return;
@@ -1132,22 +1149,12 @@
                     if (field('password') !== field('confirmPassword')) throw new Error('两次输入的密码不一致');
                     result = await api('/api/auth/phone/password-reset', { phone: field('phone'), code: field('code'), new_password: field('password') });
                 }
-                const bindingReturn = state.view === 'bind' ? sessionStorage.getItem(BINDING_RETURN_KEY) : '';
-                const adminBindingReturn = /^\/admin(?:\/|\?|#|$)/.test(bindingReturn || '')
-                    && !/^\/admin\/login(?:\/|\?|#|$)/.test(bindingReturn || '');
-                if (adminBindingReturn) {
-                    if (!result?.token) throw new Error('登录响应缺少会话凭证');
-                    sessionStorage.setItem('admin_session_token', result.token);
-                    sessionStorage.setItem('admin_session_username', result.username || result.user_id);
-                    sessionStorage.setItem('admin_session_login_at', String(Date.now()));
-                    sessionStorage.removeItem(BINDING_TOKEN_KEY);
-                    sessionStorage.removeItem(BINDING_RETURN_KEY);
-                    window.location.href = bindingReturn;
-                } else {
-                    saveSession(result);
-                    sessionStorage.removeItem(BINDING_RETURN_KEY);
-                    window.location.href = '/projects';
-                }
+                const bindingReturn = state.view === 'bind' ? safeLoginRedirect(sessionStorage.getItem(BINDING_RETURN_KEY)) : '';
+                const returnTo = bindingReturn || safeLoginRedirect();
+                saveSession(result);
+                sessionStorage.removeItem(BINDING_TOKEN_KEY);
+                sessionStorage.removeItem(BINDING_RETURN_KEY);
+                window.location.href = returnTo || '/projects';
             } catch (error) {
                 showError(error.message || '操作失败，请稍后重试');
                 button.disabled = false;

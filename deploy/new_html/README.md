@@ -25,11 +25,9 @@ Do not put DeepSeek, Gemini, GPT Image, MiniMax, Seedance, DashScope, or other
 provider keys in frontend `.env` files. Browser-facing `VITE_*` variables are
 public after bundling.
 
-Configure provider keys and endpoints in the backend admin page:
-
-```text
-/admin/settings?item=apiconfig
-```
+Configure provider keys and endpoints from the signed-in administrator account
+menu: `管理后台` → `API 厂商配置`. The entry URL is intentionally not documented
+as a public route.
 
 The frontend calls backend routes such as `/api/gemini/text`,
 `/api/gemini/image`, `/api/gpt-image/generate`, and `/api/video/*`; the backend

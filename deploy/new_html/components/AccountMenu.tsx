@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, LogOut, UserRound } from 'lucide-react';
+import { ChevronDown, LogOut, ShieldCheck, UserRound } from 'lucide-react';
 import { apiFetch } from '../services/httpClient';
 import { clearAccountIdentity, getStoredUsername } from '../services/accountStorage';
+import { getCurrentAdminSession } from '../services/adminAccessService';
+import { adminPath } from '../admin/adminRoute';
 
 interface AccountMenuProps {
   className?: string;
@@ -17,6 +19,15 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
   const [username, setUsername] = useState(() => getStoredUsername(labelFallback));
+  const [canManage, setCanManage] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void getCurrentAdminSession().then(session => {
+      if (active) setCanManage(Boolean(session));
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const syncUsername = () => setUsername(getStoredUsername(labelFallback));
@@ -89,6 +100,20 @@ export const AccountMenu: React.FC<AccountMenuProps> = ({
             <UserRound className="h-4 w-4" />
             个人中心
           </button>
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                window.location.href = adminPath();
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-n700 transition-colors hover:bg-n20 hover:text-primary"
+              role="menuitem"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              管理后台
+            </button>
+          )}
           <div className="my-1 border-t border-n40" />
           <button
             type="button"

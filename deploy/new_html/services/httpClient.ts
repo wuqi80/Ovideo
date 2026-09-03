@@ -1,4 +1,5 @@
 import { pickTokenForCurrentRoute } from '../admin/adminAuth';
+import { isAdminPath } from '../admin/adminRoute';
 import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 
 type HeaderMap = Record<string, string>;
@@ -19,33 +20,33 @@ interface ApiFetchConfig extends HeaderOptions {}
  * 2026-05-24：504 / 4xx / 5xx 的 detail 若是 dict，平铺到 Error 对象上，
  * 让上层能用 e.task_id / e.error 做精细处理（之前一律 [object Object]）。
  *
- * 2026-05-26 修复：401 处理改为路径感知 —
- *   - /admin/* 路径下 401 → 清 sessionStorage admin session，跳 /admin/login（保留 from 状态）
- *   - 其他路径 → 清 localStorage 主站 token，跳 /login（行为不变）
- *   - 在 /admin/login 或 /login 自身上 401 → 不再跳（防死循环）
- * 旧 bug：admin 路径下 401 清的是主站 token，跳 /login 又被 App.tsx 的 path="*" 兜底到 /projects。
+ * 后台与前台共用主站登录 token。后台路径发生 401 时清除失效的主站会话，
+ * 跳到公开登录页，并保留通过校验的同源后台回跳地址。
  *
  * 2026-07-01 修复：缺少本地 token 的受保护 API 请求也会走这里。
  * 旧行为是在 buildAuthHeaders 阶段直接抛“未登录”，请求尚未发出，因此绕过了 401 跳转。
  */
 export function handleUnauthorized(apiName: string = 'API', reason: 'response401' | 'missingToken' = 'response401'): never {
   const path = typeof window !== 'undefined' ? window.location.pathname : '';
-  const isAdminPath = path.startsWith('/admin');
-  const isLoginPage = path === '/login' || path === '/admin/login';
+  const adminRoute = isAdminPath(path);
+  const isLoginPage = path === '/login';
   const reasonText = reason === 'missingToken'
     ? '缺少登录 token'
     : '返回401，token可能已失效';
-  console.error(`${apiName} ${reasonText}（path=${path}, isAdmin=${isAdminPath}）`);
+  console.error(`${apiName} ${reasonText}（path=${path}, isAdmin=${adminRoute}）`);
 
-  if (isAdminPath) {
+  if (adminRoute) {
     try {
       sessionStorage.removeItem('admin_session_token');
       sessionStorage.removeItem('admin_session_username');
       sessionStorage.removeItem('admin_session_login_at');
+      sessionStorage.removeItem('admin_session_role');
     } catch {}
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('username');
     if (!isLoginPage) {
       const from = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      window.location.href = `/admin/login?redirect=${encodeURIComponent(from)}`;
+      window.location.href = `/login?redirect=${encodeURIComponent(from)}`;
     }
   } else {
     localStorage.removeItem('auth_token');
@@ -107,7 +108,7 @@ export async function handleResponse(response: Response, apiName: string = 'API'
 /**
  * 获取认证 token。
  *
- * Admin 路由下优先使用独立的 sessionStorage admin token，避免后台登录态和主站登录态互相污染。
+ * 前台与后台统一使用主站登录 token；后台角色由服务端逐请求校验。
  */
 export function getAuthToken(): string | null {
   return pickTokenForCurrentRoute();

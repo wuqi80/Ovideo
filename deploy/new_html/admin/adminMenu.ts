@@ -1,16 +1,17 @@
 /**
  * adminMenu.ts — 统一后台的一级 / 二级 / 三级菜单配置（单一事实来源）
  *
- * 当前架构：把原本散落在 4 个台子（/admin Hub、/admin/operations 的 5 tab、
- * AdminFeatureTabs 的 8 子 tab、/admin-legacy 的 4 页）的全部功能，
- * 收拢进一棵层级菜单树，由 AdminSidebar 渲染、AdminLayout 持久承载。
+ * 当前架构：把原本散落的后台功能收拢进一棵层级菜单树，
+ * 由 AdminSidebar 渲染、AdminLayout 持久承载。
  *
  * 约定：
  *  - 一级（section）：可折叠分组，带图标，本身不跳转。
  *  - 二级（item）：可点击跳转；若带 children 则同时可展开三级。
  *  - 三级（leaf）：带圆点的末级项，点击跳转。
- *  - `to` 形如 `/admin/features?tab=accounts`——同一路由用 query 切面板（组件不卸载、不重复拉数）。
+ *  - 后台入口由 adminRoute.ts 统一提供，避免各组件硬编码。
  */
+
+import { adminPath } from './adminRoute';
 
 export interface MenuLeaf {
   id: string;
@@ -38,7 +39,7 @@ export const ADMIN_MENU: MenuSection[] = [
     label: '概览',
     icon: 'LayoutDashboard',
     children: [
-      { id: 'dashboard', label: '运营概览', to: '/admin' },
+      { id: 'dashboard', label: '运营概览', to: adminPath() },
     ],
   },
   {
@@ -46,10 +47,10 @@ export const ADMIN_MENU: MenuSection[] = [
     label: '用户与组织',
     icon: 'Users',
     children: [
-      { id: 'accounts', label: '账号管理', to: '/admin/features?tab=accounts' },
-      { id: 'permissions', label: '用户权限', to: '/admin/operations?tab=users' },
-      { id: 'groups', label: '项目分组', to: '/admin/features?tab=groups' },
-      { id: 'organizations', label: '组织管理', to: '/admin/features?tab=organizations' },
+      { id: 'accounts', label: '账号管理', to: adminPath('features?tab=accounts') },
+      { id: 'permissions', label: '用户权限', to: adminPath('operations?tab=users') },
+      { id: 'groups', label: '项目分组', to: adminPath('features?tab=groups') },
+      { id: 'organizations', label: '组织管理', to: adminPath('features?tab=organizations') },
     ],
   },
   {
@@ -57,10 +58,10 @@ export const ADMIN_MENU: MenuSection[] = [
     label: '创作点数体系',
     icon: 'Coins',
     children: [
-      { id: 'credit_rules', label: '创作点数规则', to: '/admin/features?tab=credit_rules' },
-      { id: 'credit_accounts', label: '创作点数账户', to: '/admin/features?tab=credit_accounts' },
-      { id: 'credit_transactions', label: '创作点数台账', to: '/admin/features?tab=credit_transactions' },
-      { id: 'recharge_orders', label: '充值台账', to: '/admin/features?tab=recharge_orders' },
+      { id: 'credit_rules', label: '创作点数规则', to: adminPath('features?tab=credit_rules') },
+      { id: 'credit_accounts', label: '创作点数账户', to: adminPath('features?tab=credit_accounts') },
+      { id: 'credit_transactions', label: '创作点数台账', to: adminPath('features?tab=credit_transactions') },
+      { id: 'recharge_orders', label: '充值台账', to: adminPath('features?tab=recharge_orders') },
     ],
   },
   {
@@ -68,10 +69,10 @@ export const ADMIN_MENU: MenuSection[] = [
     label: '内容与审计',
     icon: 'ImageIcon',
     children: [
-      { id: 'media', label: '素材库管理', to: '/admin/features?tab=media' },
-      { id: 'recyclebin', label: '文件回收站', to: '/admin/settings?item=recyclebin' },
-      { id: 'results', label: '生成结果审计', to: '/admin/operations?tab=results' },
-      { id: 'audit', label: '审计日志', to: '/admin/features?tab=audit' },
+      { id: 'media', label: '素材库管理', to: adminPath('features?tab=media') },
+      { id: 'recyclebin', label: '文件回收站', to: adminPath('settings?item=recyclebin') },
+      { id: 'results', label: '生成结果审计', to: adminPath('operations?tab=results') },
+      { id: 'audit', label: '审计日志', to: adminPath('features?tab=audit') },
     ],
   },
   {
@@ -79,9 +80,9 @@ export const ADMIN_MENU: MenuSection[] = [
     label: '数据监控',
     icon: 'BarChart3',
     children: [
-      { id: 'tasks', label: '任务监控', to: '/admin/settings?item=dashboard' },
-      { id: 'stats', label: '生成统计分析', to: '/admin/operations?tab=stats' },
-      { id: 'cluster_monitor', label: '集群节点监控', to: '/admin/operations?tab=system' },
+      { id: 'tasks', label: '任务监控', to: adminPath('settings?item=dashboard') },
+      { id: 'stats', label: '生成统计分析', to: adminPath('operations?tab=stats') },
+      { id: 'cluster_monitor', label: '集群节点监控', to: adminPath('operations?tab=system') },
     ],
   },
   {
@@ -89,9 +90,9 @@ export const ADMIN_MENU: MenuSection[] = [
     label: '系统设置',
     icon: 'Settings',
     children: [
-      { id: 'apiconfig', label: 'API 厂商配置', to: '/admin/settings?item=apiconfig' },
-      { id: 'cluster', label: '集群节点', to: '/admin/settings?item=cluster' },
-      { id: 'workflows', label: '工作流模板', to: '/admin/settings?item=workflows' },
+      { id: 'apiconfig', label: 'API 厂商配置', to: adminPath('settings?item=apiconfig') },
+      { id: 'cluster', label: '集群节点', to: adminPath('settings?item=cluster') },
+      { id: 'workflows', label: '工作流模板', to: adminPath('settings?item=workflows') },
     ],
   },
 ];
@@ -99,7 +100,7 @@ export const ADMIN_MENU: MenuSection[] = [
 /** 返回当前地址对应的菜单路径（用于顶栏面包屑），如 ['系统设置','API 与模型','API 厂商配置']。 */
 export function getActiveTrail(pathname: string, search: string): string[] {
   const cur = new URLSearchParams(search);
-  if (pathname === '/admin/settings' && cur.get('item') === 'legacy-apiconfig') {
+  if (pathname === adminPath('settings') && cur.get('item') === 'legacy-apiconfig') {
     return ['系统设置', 'API 厂商配置'];
   }
 

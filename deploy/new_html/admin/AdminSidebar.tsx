@@ -17,6 +17,7 @@ import {
 import { ADMIN_MENU, isToActive, MenuSection, MenuItem } from './adminMenu';
 import { BrandLogo } from '../components/BrandLogo';
 import { getAdminRole } from './adminAuth';
+import { adminPath } from './adminRoute';
 
 const ICONS: Record<string, React.FC<{ className?: string }>> = {
   LayoutDashboard, Users, Coins, ImageIcon, BarChart3, Settings,
@@ -34,7 +35,7 @@ export const AdminSidebar: React.FC = () => {
   // 计算当前激活的三级/二级项 id，用于高亮 + 自动展开祖先
   const active = useMemo(() => {
     const currentItem = new URLSearchParams(search).get('item');
-    if (pathname === '/admin/settings' && currentItem === 'legacy-apiconfig') {
+    if (pathname === adminPath('settings') && currentItem === 'legacy-apiconfig') {
       return { sectionId: 'settings', itemId: 'apiconfig', leafId: undefined as string | undefined };
     }
 

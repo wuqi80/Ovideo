@@ -21,7 +21,7 @@ import { formatChinaDateTime } from '../utils/dateTime';
 
 interface AdminPageProps {
     // 2026-05-26：改为可选 — AdminPage 既可被 WorkspaceApp 内嵌（带文件/素材库降级数据），
-    // 也可作为独立路由 /admin 渲染（此时由后端 API 直接驱动，不需要本地兜底数据）。
+    // 也可作为后台壳中的独立面板渲染（由后端 API 直接驱动，不需要本地兜底数据）。
     files?: ProjectFile[];
     materialLibrary?: MaterialLibrary;
     // 2026-05-26：embedded 模式 — 在 AdminLayout 内渲染时为 true，

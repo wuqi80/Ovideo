@@ -6,11 +6,9 @@ environment variables or browser localStorage.
 
 ## Where To Configure
 
-Open the admin API configuration page:
-
-```text
-/admin/settings?item=apiconfig
-```
+Sign in to the creator frontend with an administrator account, then use
+`账号菜单` → `管理后台` → `API 厂商配置`. The entry URL is intentionally not
+documented as a public route.
 
 Use the provider cards to configure:
 

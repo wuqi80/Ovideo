@@ -21,9 +21,9 @@ from typing import Iterable
 HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 
-DEFAULT_EXPECTED_PATHS = 321
-DEFAULT_EXPECTED_OPERATIONS = 383
-DEFAULT_EXPECTED_FRONTEND_ROUTES = 36
+DEFAULT_EXPECTED_PATHS = 316
+DEFAULT_EXPECTED_OPERATIONS = 378
+DEFAULT_EXPECTED_FRONTEND_ROUTES = 33
 
 # Known legacy overlap: routers.projects still owns the old project JSON model
 # while routers.project_core exposes the newer DAO-backed project model. This is
@@ -115,14 +115,11 @@ EXPECTED_ENDPOINTS = {
     ("/studio", "GET"): ("routers.frontend_pages", "studio_spa_root"),
     ("/studio/", "GET"): ("routers.frontend_pages", "studio_spa_root"),
     ("/studio/{path:path}", "GET"): ("routers.frontend_pages", "studio_spa"),
-    ("/admin", "GET"): ("routers.frontend_pages", "admin_spa_root"),
-    ("/admin/", "GET"): ("routers.frontend_pages", "admin_spa_root"),
-    ("/admin/login", "GET"): ("routers.frontend_pages", "admin_spa_named"),
-    ("/admin/operations", "GET"): ("routers.frontend_pages", "admin_spa_named"),
-    ("/admin/settings", "GET"): ("routers.frontend_pages", "admin_spa_named"),
-    ("/admin/login/{path:path}", "GET"): ("routers.frontend_pages", "admin_spa_subpath"),
-    ("/admin/operations/{path:path}", "GET"): ("routers.frontend_pages", "admin_spa_subpath"),
-    ("/admin/settings/{path:path}", "GET"): ("routers.frontend_pages", "admin_spa_subpath"),
+    ("/a7k9m3q8x2v6n4p", "GET"): ("routers.frontend_pages", "admin_spa_root"),
+    ("/a7k9m3q8x2v6n4p/", "GET"): ("routers.frontend_pages", "admin_spa_root"),
+    ("/a7k9m3q8x2v6n4p/{path:path}", "GET"): ("routers.frontend_pages", "admin_spa_subpath"),
+    ("/admin", "GET"): ("routers.frontend_pages", "retired_admin_entry"),
+    ("/admin/{path:path}", "GET"): ("routers.frontend_pages", "retired_admin_entry"),
     ("/api/logout", "POST"): ("routers.user_session", "logout"),
     ("/api/user/info", "GET"): ("routers.user_session", "get_user_info"),
     ("/api/me/profile", "GET"): ("routers.user_session", "get_my_profile"),
@@ -782,14 +779,11 @@ def check_frontend_pages_routes_extracted(root: Path) -> int:
         "/studio",
         "/studio/",
         "/studio/{path:path}",
+        "/a7k9m3q8x2v6n4p",
+        "/a7k9m3q8x2v6n4p/",
+        "/a7k9m3q8x2v6n4p/{path:path}",
         "/admin",
-        "/admin/",
-        "/admin/login",
-        "/admin/operations",
-        "/admin/settings",
-        "/admin/login/{path:path}",
-        "/admin/operations/{path:path}",
-        "/admin/settings/{path:path}",
+        "/admin/{path:path}",
     }
     cluster_tree = parse_py_file(cluster_main_path)
     violations: list[str] = []
@@ -4814,7 +4808,7 @@ def check_frontend_ai_proxy_contract(root: Path) -> int:
     ]
     required_doc_snippets = [
         (new_html / ".env.example", "Do not put third-party AI provider API keys in this file."),
-        (new_html / "README.md", "/admin/settings?item=apiconfig"),
+        (new_html / "README.md", "`管理后台` → `API 厂商配置`"),
         (new_html / "GEMINI_API_CONFIG.md", "Frontend services call backend proxies:"),
     ]
     forbidden_doc_snippets = [
@@ -4891,7 +4885,6 @@ def check_frontend_http_client_contract(root: Path) -> int:
     video_card = new_html / "components" / "video" / "VideoCard.tsx"
     seedance_panel_with_candidates = new_html / "components" / "video" / "SeedancePanelWithCandidates.tsx"
     dash_scope_card_with_candidates = new_html / "components" / "video" / "DashScopeCardWithCandidates.tsx"
-    admin_login_page = new_html / "admin" / "AdminLoginPage.tsx"
     design_page = new_html / "pages" / "DesignPage.tsx"
     material_page = new_html / "components" / "MaterialPage.tsx"
     generation_page = new_html / "components" / "GenerationPage.tsx"
@@ -4936,7 +4929,6 @@ def check_frontend_http_client_contract(root: Path) -> int:
         history_page,
         account_menu,
         project_context,
-        admin_login_page,
         design_page,
         material_page,
         generation_page,
@@ -5262,9 +5254,6 @@ def check_frontend_http_client_contract(root: Path) -> int:
         (design_page, "from '../services/assetMutationService'"),
         (voice_sidebar, "from '../../services/audioGenerationService'"),
         (music_modal, "from '../../services/audioGenerationService'"),
-        (admin_login_page, "import { apiJson } from '../services/httpClient'"),
-        (admin_login_page, "phoneLogin ? '/api/auth/phone/login' : '/api/login'"),
-        (admin_login_page, "{ requireAuth: false }"),
         (design_page, "import { apiBlob, secureApiUrl } from '../services/httpClient'"),
         (design_page, "secureApiUrl(normalized, { absolute: true })"),
         (design_page, "apiBlob(secured, { method: 'GET' }, '下载图片'"),

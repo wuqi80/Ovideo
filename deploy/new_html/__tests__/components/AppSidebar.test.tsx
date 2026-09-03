@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AppSidebar from '../../components/AppSidebar';
 import { apiJson } from '../../services/httpClient';
 import { getCreditBalance } from '../../services/creditService';
+import { getCurrentAdminSession } from '../../services/adminAccessService';
 
 vi.mock('../../services/httpClient', () => ({
   apiFetch: vi.fn(),
@@ -22,6 +23,10 @@ vi.mock('../../services/accountStorage', () => ({
   getStoredUsername: vi.fn(() => '普通用户'),
 }));
 
+vi.mock('../../services/adminAccessService', () => ({
+  getCurrentAdminSession: vi.fn(),
+}));
+
 const LocationProbe = () => {
   const location = useLocation();
   return <output data-testid="location">{location.pathname}</output>;
@@ -32,6 +37,24 @@ describe('AppSidebar public tools', () => {
     vi.clearAllMocks();
     (getCreditBalance as any).mockResolvedValue({ available_credits: 100 });
     (apiJson as any).mockResolvedValue({ success: true, projects: [] });
+    (getCurrentAdminSession as any).mockResolvedValue(null);
+  });
+
+  it('shows the management entry only after the signed-in account passes the admin role check', async () => {
+    (getCurrentAdminSession as any).mockResolvedValue({
+      user_id: 'admin_1',
+      username: 'admin',
+      role: 'admin',
+    });
+    render(
+      <MemoryRouter>
+        <AppSidebar />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /普通用户/ }));
+    expect(await screen.findByRole('menuitem', { name: '管理后台' })).toBeInTheDocument();
+    expect(screen.getByText('管理员')).toBeInTheDocument();
   });
 
   it('shows every more-feature entry when a page does not provide scoped tools', async () => {

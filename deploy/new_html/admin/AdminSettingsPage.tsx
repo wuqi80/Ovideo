@@ -40,6 +40,7 @@ import {
     bindingsForCategory,
     providerAccessModeForEndpoint,
 } from '../utils/apiConfigPresentation';
+import { adminPath } from './adminRoute';
 
 const LEGACY_VER = '20260701-qwen-agent-v2';
 const LEGACY_PAGE_BY_ITEM: Record<string, string> = {
@@ -4581,7 +4582,7 @@ export const AdminSettingsPage: React.FC = () => {
             <iframe
                 key={page}
                 title="legacy-admin"
-                src={`/admin-legacy/?embed=1&v=${LEGACY_VER}&page=${page}#${page}`}
+                src={`${adminPath('legacy')}/?embed=1&v=${LEGACY_VER}&page=${page}#${page}`}
                 className="w-full h-full min-w-0 border-0 block bg-n20"
             />
         </div>

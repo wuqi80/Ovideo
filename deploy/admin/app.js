@@ -12,6 +12,7 @@ let apiProviderRuntimeStatusMap = new Map();
 let apiProviderHealthMap = new Map();
 let apiProviderCatalogPromise = null;
 let workflowCatalogItems = [];
+const ADMIN_SHELL_PATH = '/a7k9m3q8x2v6n4p';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({
@@ -376,7 +377,7 @@ function getLegacyAdminToken() {
 
 async function apiCall(url, options = {}) {
   try {
-    // 安全(C3)：带上 admin JWT。本控制台作为 /admin-legacy 同源 iframe 嵌在 admin 壳里，
+    // 安全(C3)：带上 admin JWT。本控制台只作为后台壳的同源 iframe 嵌入，
     // 共享 sessionStorage，可读到壳登录时写入的 admin_session_token（与 AdminHubPage 一致）。
     const token = getLegacyAdminToken();
     const authHeader = token ? { 'Authorization': `Bearer ${token}` } : {};
@@ -389,6 +390,9 @@ async function apiCall(url, options = {}) {
         sessionStorage.removeItem('admin_session_token');
         sessionStorage.removeItem('admin_session_username');
         sessionStorage.removeItem('admin_session_login_at');
+        sessionStorage.removeItem('admin_session_role');
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('username');
       } catch (_) {}
       redirectToAdminLoginForLegacy();
       throw new Error('未授权，请重新登录');
@@ -1356,7 +1360,7 @@ async function saveGlobalSettings() {
 
 /* ────────────────── Init ────────────────── */
 // 当前架构：支持被统一后台壳以 <iframe> 内嵌。
-//  - URL hash 深链：/admin-legacy/#cluster 直接打开对应页（dashboard/cluster/workflows/apiconfig）
+//  - URL hash 深链用于打开对应页（dashboard/cluster/workflows/apiconfig）
 //  - ?embed=1：隐藏旧版自带侧栏（导航交给壳的层级菜单），只显示内容区，营造「一个后台」体验
 const VALID_PAGES = ['dashboard', 'cluster', 'workflows', 'apiconfig'];
 // 目标页优先取 ?page=（壳内嵌时每个叶子 URL 各不相同，最可靠），回退到 #hash。
@@ -1372,11 +1376,8 @@ function legacyShellItem(page) {
 }
 
 function redirectToAdminLoginForLegacy() {
-  const from = '/admin/settings?item=' + encodeURIComponent(legacyShellItem(targetPage()));
-  try {
-    sessionStorage.setItem('admin_post_login_redirect', from);
-  } catch (_) {}
-  const loginUrl = '/admin/login?redirect=' + encodeURIComponent(from);
+  const from = ADMIN_SHELL_PATH + '/settings?item=' + encodeURIComponent(legacyShellItem(targetPage()));
+  const loginUrl = '/login?redirect=' + encodeURIComponent(from);
   if (window.top && window.top !== window.self) {
     window.top.location.href = loginUrl;
   } else {
@@ -1389,7 +1390,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 直接访问（非 iframe 内嵌）→ 折叠回统一后台壳，避免出现「第二个后台」独立形态；
   // 顺带享受壳的登录鉴权门（旧版静态页本身无鉴权）。被壳以 ?embed=1 嵌入时跳过此逻辑。
   if (!embed && window.self === window.top) {
-    location.replace('/admin/settings?item=' + legacyShellItem(targetPage()));
+    location.replace(ADMIN_SHELL_PATH + '/settings?item=' + legacyShellItem(targetPage()));
     return;
   }
   if (embed) document.body.classList.add('embedded');

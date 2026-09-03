@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 const accountsSource = readFileSync(resolve(__dirname, '../../components/AdminFeatureTabs.tsx'), 'utf-8');
 const authSource = readFileSync(resolve(__dirname, '../../admin/adminAuth.ts'), 'utf-8');
-const loginSource = readFileSync(resolve(__dirname, '../../admin/AdminLoginPage.tsx'), 'utf-8');
 const layoutSource = readFileSync(resolve(__dirname, '../../admin/AdminLayout.tsx'), 'utf-8');
 
 describe('admin username management contract', () => {
@@ -17,10 +16,10 @@ describe('admin username management contract', () => {
 
   it('uses the backend role gate instead of a hard-coded username whitelist', () => {
     expect(authSource).not.toContain('isAdminWhitelisted');
-    expect(loginSource).not.toContain('isAdminWhitelisted');
     expect(layoutSource).not.toContain('isAdminWhitelisted');
-    expect(loginSource).toContain("verifyAdminSession(data.token)");
-    expect(loginSource).toContain("'/api/admin/session'");
+    expect(layoutSource).toContain("'/api/admin/session'");
+    expect(layoutSource).toContain("Number(error?.status) === 403");
+    expect(layoutSource).toContain('当前前台账号已登录，但没有后台访问权限');
   });
 
   it('shows phone numbers and accepts both normalized and raw recent-login fields', () => {

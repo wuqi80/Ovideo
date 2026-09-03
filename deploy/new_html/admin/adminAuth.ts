@@ -1,24 +1,23 @@
 /**
- * adminAuth.ts — 独立 admin 会话凭据存取
+ * adminAuth.ts — 后台角色校验结果缓存
  *
  * 设计要点：
- *  - 主站登录：`localStorage.auth_token`（持久）
- *  - 后台登录：`sessionStorage.admin_session_token`（仅当前标签页生命周期）
- *  - 同一浏览器可以同时以两身份运行（主站普通用户 + 另一标签 admin 后台）
- *  - apiService.getAuthToken 检测到当前路径 `/admin/*` 时优先返回本 token
- *  - 后台退出 = 清 sessionStorage，主站完全不受影响
+ *  - 主站登录：`localStorage.auth_token`（持久），也是进入后台的第一层凭据
+ *  - 后台仅缓存已校验的身份显示信息，不提供第二套账号密码登录
+ *  - 后端 `/api/admin/session` 与 `require_admin` 是管理员角色的第二层真实闸门
  *  - 后端 require_admin 仍是唯一真实闸门，前端只做 UX 兜底
  */
+
+import { isAdminPath } from './adminRoute';
 
 export const ADMIN_TOKEN_KEY = 'admin_session_token';
 export const ADMIN_USERNAME_KEY = 'admin_session_username';
 export const ADMIN_LOGIN_AT_KEY = 'admin_session_login_at';
 export const ADMIN_ROLE_KEY = 'admin_session_role';
-export const ADMIN_POST_LOGIN_REDIRECT_KEY = 'admin_post_login_redirect';
 
 export function getAdminToken(): string | null {
     try {
-        return sessionStorage.getItem(ADMIN_TOKEN_KEY);
+        return localStorage.getItem('auth_token');
     } catch {
         return null;
     }
@@ -60,36 +59,16 @@ export function clearAdminSession(): void {
     } catch {}
 }
 
-export function setAdminPostLoginRedirect(target: string): void {
-    try {
-        sessionStorage.setItem(ADMIN_POST_LOGIN_REDIRECT_KEY, target);
-    } catch {}
-}
-
-export function getAndClearAdminPostLoginRedirect(): string | null {
-    try {
-        const target = sessionStorage.getItem(ADMIN_POST_LOGIN_REDIRECT_KEY);
-        sessionStorage.removeItem(ADMIN_POST_LOGIN_REDIRECT_KEY);
-        return target;
-    } catch {
-        return null;
-    }
-}
-
 /**
  * 路径感知的 token 优先级：
- *   - /admin/* 路径下 + 存在 admin_session_token → 返回 admin token（后端 require_admin 闸门）
- *   - 其他路径 → 返回主站 localStorage.auth_token
+ * 后台与前台使用同一主站 token；后台页面只在角色校验成功后渲染。
  *
- * 该函数被 apiService.getAuthToken() 间接调用；也被 AdminFeatureTabs 直接用。
+ * 该函数被 apiService.getAuthToken() 间接调用。
  */
 export function pickTokenForCurrentRoute(): string | null {
     if (typeof window === 'undefined') return null;
     try {
-        if (window.location.pathname.startsWith('/admin')) {
-            const adminToken = sessionStorage.getItem(ADMIN_TOKEN_KEY);
-            if (adminToken) return adminToken;
-        }
+        if (isAdminPath(window.location.pathname)) return localStorage.getItem('auth_token');
     } catch {}
     try {
         return localStorage.getItem('auth_token');

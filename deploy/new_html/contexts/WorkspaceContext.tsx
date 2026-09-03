@@ -11,6 +11,7 @@ import React, {
   createContext, useContext, useEffect, useState, useCallback, useMemo,
 } from 'react';
 import type { Organization } from '../services/organizationService';
+import { isAdminPath } from '../admin/adminRoute';
 
 export type WorkspaceId = 'personal' | string;   // 'personal' 或 org_id
 
@@ -60,7 +61,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       if (
         typeof window !== 'undefined'
-        && (window.location.pathname.startsWith('/admin') || window.location.pathname.startsWith('/share/final/'))
+        && (isAdminPath(window.location.pathname) || window.location.pathname.startsWith('/share/final/'))
       ) {
         return;
       }
