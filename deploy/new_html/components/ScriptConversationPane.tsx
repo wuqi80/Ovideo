@@ -49,13 +49,14 @@ import { SegmentPromptCards } from './SegmentPromptCards';
 import {
   DEFAULT_SCRIPT_MODEL_OPTIONS,
   formatScriptModelHistoryLabel,
-  formatScriptModelSelectLabel,
   getScriptModelBillingKey,
   getScriptModelOption,
   type ScriptModelOption,
 } from '../services/scriptModelCatalogService';
 import type { ScriptWorkspaceMode } from '../utils/scriptWorkspaceMode';
 import { ScriptWorkspaceModeSwitch } from './ScriptWorkspaceModeSwitch';
+import { ModelPicker } from './ModelPicker';
+import { buildScriptModelPickerOptions } from './modelPickerCatalogs';
 
 export const SCRIPT_MODEL_OPTIONS = DEFAULT_SCRIPT_MODEL_OPTIONS;
 
@@ -409,6 +410,10 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
   composerHeightRef.current = composerHeight;
   const selectedModelOption = getScriptModelOption(aiModel, modelOptions);
   const selectedModelHint = selectedModelOption.hint.trim();
+  const modelPickerOptions = useMemo(
+    () => buildScriptModelPickerOptions(modelOptions),
+    [modelOptions],
+  );
 
   const versionByMessageId = useMemo(() => new Map(
     (conversation?.versions || [])
@@ -1182,20 +1187,17 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                   {selectedModelHint}
                 </span>
               )}
-              <label className="relative min-w-0">
-                <span className="sr-only">选择剧本模型</span>
-                <select
-                  value={aiModel}
-                  onChange={event => onChangeModel(event.target.value as AiModel)}
-                  disabled={isSending}
-                  className="h-8 w-[240px] max-w-[40vw] appearance-none border-0 bg-transparent pl-2 pr-8 text-xs text-n700 outline-none hover:text-primary focus:text-primary disabled:opacity-50"
-                >
-                  {modelOptions.map(option => (
-                    <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
-              </label>
+              <ModelPicker
+                value={aiModel}
+                options={modelPickerOptions}
+                onChange={onChangeModel}
+                disabled={isSending}
+                compact
+                className="w-[240px] max-w-[40vw]"
+                ariaLabel="选择剧本模型"
+                title="剧本模型"
+                kind="text"
+              />
             </div>
             <button
               type="button"
@@ -1275,20 +1277,17 @@ export const ScriptConversationPane: React.FC<ScriptConversationPaneProps> = ({
                   {selectedModelHint}
                 </span>
               )}
-              <label className="relative min-w-0">
-                <span className="sr-only">选择剧本模型</span>
-                <select
-                  value={aiModel}
-                  onChange={event => onChangeModel(event.target.value as AiModel)}
-                  disabled={isSending}
-                  className="h-9 w-[260px] max-w-[50vw] appearance-none rounded border border-n40 bg-n0 pl-3 pr-9 text-sm text-n700 outline-none hover:border-primary focus:border-primary disabled:opacity-50"
-                >
-                  {modelOptions.map(option => (
-                    <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />
-              </label>
+              <ModelPicker
+                value={aiModel}
+                options={modelPickerOptions}
+                onChange={onChangeModel}
+                disabled={isSending}
+                fullWidth
+                className="w-[260px] max-w-[50vw]"
+                ariaLabel="选择剧本模型"
+                title="剧本模型"
+                kind="text"
+              />
             </div>
             <button
               type="button"

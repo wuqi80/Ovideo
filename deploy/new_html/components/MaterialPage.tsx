@@ -34,11 +34,15 @@ import {
 } from '../prompts/imagePrompts';
 import { useScriptModelOptions } from '../hooks/useScriptModelOptions';
 import {
-  formatScriptModelSelectLabel,
   getScriptModelBillingKey,
   getScriptModelOption,
 } from '../services/scriptModelCatalogService';
 import { InlineCreditEstimate } from './InlineCreditEstimate';
+import { ModelPicker } from './ModelPicker';
+import {
+  buildDesignImageModelPickerOptions,
+  buildScriptModelPickerOptions,
+} from './modelPickerCatalogs';
 import {
   DESIGN_IMAGE_BATCH_LIMIT,
   DESIGN_IMAGE_MODEL_OPTIONS,
@@ -2296,6 +2300,16 @@ const MaterialAIModal: React.FC<{
         [engine, geminiModel],
     );
     const refineModelOptions = modelOptions;
+    const refineModelPickerOptions = useMemo(
+        () => buildScriptModelPickerOptions(refineModelOptions, option => (
+            `${option.hint} · ${designPromptRefinementFallbackCost(getScriptModelBillingKey(option))}创作点数`
+        )),
+        [refineModelOptions],
+    );
+    const generationModelPickerOptions = useMemo(
+        () => buildDesignImageModelPickerOptions(),
+        [],
+    );
     const refinementModel = useMemo(
         () => getScriptModelOption(refineModel, refineModelOptions),
         [refineModel, refineModelOptions],
@@ -2585,19 +2599,17 @@ const MaterialAIModal: React.FC<{
                                     {isRefining ? <Loader size={12} className="animate-spin" /> : <Wand2 size={12} />}
                                     AI 润色
                                 </button>
-                                <label className="relative -ml-px">
-                                    <span className="sr-only">选择润色模型</span>
-                                    <select
-                                        value={refineModel}
-                                        onChange={event => setRefineModel(event.target.value as AiModel)}
-                                        className="h-8 min-w-[210px] appearance-none rounded-r-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
-                                    >
-                                        {refineModelOptions.map(option => (
-                                            <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)} · {designPromptRefinementFallbackCost(getScriptModelBillingKey(option))}创作点数</option>
-                                        ))}
-                                    </select>
-                                    <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
-                                </label>
+                                <ModelPicker
+                                    value={refineModel}
+                                    options={refineModelPickerOptions}
+                                    onChange={setRefineModel}
+                                    disabled={isRefining}
+                                    compact
+                                    className="min-w-[210px]"
+                                    ariaLabel="选择润色模型"
+                                    title="润色模型"
+                                    kind="text"
+                                />
                             </div>
                         </div>
                         <textarea
@@ -2628,26 +2640,19 @@ const MaterialAIModal: React.FC<{
                             </div>
 
                             <div className="flex flex-wrap items-end gap-2 xl:w-[556px] xl:justify-end xl:justify-self-end">
-                                <label className="relative min-w-[350px]">
+                                <div className="min-w-[350px]">
                                     <span className="mb-1.5 block text-[10px] font-medium text-n300">生成模型</span>
-                                    <div className="flex items-center gap-2">
-                                        <span className="inline-flex h-9 min-w-[76px] items-center justify-center whitespace-nowrap px-1 text-[11px] font-medium text-n300">
-                                            {generationModel.hint}
-                                        </span>
-                                        <span className="relative min-w-0 flex-1">
-                                            <select
-                                                value={generationModel.id}
-                                                onChange={event => selectGenerationModel(event.target.value)}
-                                                className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
-                                            >
-                                                {DESIGN_IMAGE_MODEL_OPTIONS.map(option => (
-                                                    <option key={option.id} value={option.id}>{option.label}</option>
-                                                ))}
-                                            </select>
-                                            <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />
-                                        </span>
-                                    </div>
-                                </label>
+                                    <ModelPicker
+                                        value={generationModel.id}
+                                        options={generationModelPickerOptions}
+                                        onChange={selectGenerationModel}
+                                        fullWidth
+                                        className="min-w-[350px]"
+                                        ariaLabel="选择生成模型"
+                                        title="生成模型"
+                                        kind="image"
+                                    />
+                                </div>
 
                                 <label className="relative w-[100px]">
                                     <span className="mb-1.5 block text-[10px] font-medium text-n300">比例</span>

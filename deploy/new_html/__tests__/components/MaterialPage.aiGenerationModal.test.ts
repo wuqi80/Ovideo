@@ -10,7 +10,7 @@ describe('MaterialPage AI generation modal', () => {
     expect(source).toContain('生成图 / 参考图 (最多 {maxRefs})');
     expect(source).toContain('AI 润色');
     expect(source).toContain('MATERIAL_IMAGE_STYLE_PRESETS.map');
-    expect(source).toContain('DESIGN_IMAGE_MODEL_OPTIONS.map');
+    expect(source).toContain('buildDesignImageModelPickerOptions()');
     expect(source).toContain("generationModel.resolutions.map");
     expect(source).toContain('图生图');
     expect(source).toContain('xl:w-[556px] xl:justify-end xl:justify-self-end');
@@ -18,8 +18,7 @@ describe('MaterialPage AI generation modal', () => {
     expect(source).toContain('h-9 w-[76px] items-center justify-center');
     expect(source).not.toContain('xl:pl-[84px]');
     expect(source).toContain('InlineCreditEstimate');
-    expect(source).toContain('generationModel.hint');
-    expect(source).toContain('<option key={option.id} value={option.id}>{option.label}</option>');
+    expect(source).toContain('options={generationModelPickerOptions}');
     expect(source).not.toContain('{option.label} · {option.runtime}');
     expect(source).toContain('const refineModelOptions = modelOptions');
     expect(source).toContain('designPromptRefinementFallbackCost(getScriptModelBillingKey(option))');

@@ -9,13 +9,15 @@ import {
     STUDIO_AUDIO_MODEL_OPTIONS,
     STUDIO_IMAGE_MODEL_OPTIONS,
     STUDIO_TEXT_MODEL_OPTIONS,
+    getStudioVideoModelUnavailableReason,
     getStudioVideoModelOptions,
     normalizeStudioAudioModel,
     normalizeStudioImageModel,
     normalizeStudioTextModel,
     normalizeStudioVideoModel,
 } from '../services/modelOptions';
-import { MINIMAX_HAILUO_LIMIT_EVENT, isMiniMaxHailuoHiddenToday } from '@app/services/videoModelService';
+import { MINIMAX_HAILUO_LIMIT_EVENT, isComfyUIModel, type VideoModel } from '@app/services/videoModelService';
+import { ModelPicker, type ModelPickerOption } from '@app/components/ModelPicker';
 import {
     buildStudioNodeCreditRequest,
     summarizeStudioCreditQuote,
@@ -322,13 +324,6 @@ const NodeComponent: React.FC<NodeProps> = ({
   useEffect(() => {
     const refresh = () => {
       setVideoModelLimitRevision(value => value + 1);
-      if (
-        node.type === NodeType.VIDEO_GENERATOR
-        && normalizeStudioVideoModel(node.data.model) === 'MINI'
-        && isMiniMaxHailuoHiddenToday()
-      ) {
-        onUpdate(node.id, { model: 'Seedance2Fast' });
-      }
     };
     window.addEventListener(MINIMAX_HAILUO_LIMIT_EVENT, refresh);
     window.addEventListener('focus', refresh);
@@ -336,7 +331,7 @@ const NodeComponent: React.FC<NodeProps> = ({
       window.removeEventListener(MINIMAX_HAILUO_LIMIT_EVENT, refresh);
       window.removeEventListener('focus', refresh);
     };
-  }, [node.data.model, node.id, node.type, onUpdate]);
+  }, []);
   const creditRequest = buildStudioNodeCreditRequest(node, localPrompt);
   const creditRequestKey = creditRequest ? JSON.stringify(creditRequest) : '';
   const creditSummary = creditRequest ? summarizeStudioCreditQuote(creditRequest, creditQuote) : null;
@@ -672,6 +667,36 @@ const NodeComponent: React.FC<NodeProps> = ({
             : (node.type === NodeType.IMAGE_GENERATOR || node.type === NodeType.IMAGE_EDITOR)
                 ? normalizeStudioImageModel(node.data.model)
                 : normalizeStudioTextModel(node.data.model);
+     const modelPickerOptions: readonly ModelPickerOption<string>[] = models.map(model => {
+        const videoModel = node.type === NodeType.VIDEO_GENERATOR ? model.v as VideoModel : null;
+        const unavailableReason = videoModel
+            ? getStudioVideoModelUnavailableReason(videoModel)
+            : model.v === 'disabled'
+                ? '当前版本已停用'
+                : undefined;
+        return {
+            value: model.v,
+            label: model.l,
+            description: node.type === NodeType.VIDEO_GENERATOR
+                ? (videoModel && isComfyUIModel(videoModel) ? '本地节点视频生成模型' : '在线视频生成模型')
+                : node.type === NodeType.AUDIO_GENERATOR
+                    ? '高清语音生成模型'
+                    : node.type === NodeType.IMAGE_GENERATOR || node.type === NodeType.IMAGE_EDITOR
+                        ? '在线图像生成模型'
+                        : '在线文本生成模型',
+            group: videoModel && isComfyUIModel(videoModel) ? '本地节点' : '在线 API',
+            badge: videoModel && isComfyUIModel(videoModel) ? '本地节点' : undefined,
+            available: !unavailableReason,
+            unavailableReason,
+        };
+     });
+     const pickerKind = node.type === NodeType.VIDEO_GENERATOR
+        ? 'video'
+        : node.type === NodeType.AUDIO_GENERATOR
+            ? 'audio'
+            : node.type === NodeType.IMAGE_GENERATOR || node.type === NodeType.IMAGE_EDITOR
+                ? 'image'
+                : 'text';
 
      return (
         <div className={`absolute top-full left-[1%] w-[98%] pt-2 z-50 flex flex-col items-center justify-start transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
@@ -698,10 +723,16 @@ const NodeComponent: React.FC<NodeProps> = ({
                 </div>
                 <div className="flex items-center gap-2 px-2 pb-1 pt-1 relative z-20">
                     <div className="flex min-w-0 flex-1 items-center gap-1">
-                         <div className="relative min-w-0 group/model">
-                             <div className="studio-node-control-trigger flex min-w-0 items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[11px] font-bold"><span className="block max-w-[92px] truncate whitespace-nowrap">{models.find(m => m.v === selectedModel)?.l || 'AI Model'}</span><ChevronDown className="shrink-0" size={10} /></div>
-                             <div className="absolute bottom-full left-0 pb-2 w-72 opacity-0 translate-y-2 pointer-events-none group-hover/model:opacity-100 group-hover/model:translate-y-0 group-hover/model:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu max-h-80 overflow-y-auto rounded-xl shadow-xl custom-scrollbar">{models.map(m => (<div key={m.v} onClick={() => onUpdate(node.id, { model: m.v })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer whitespace-nowrap ${selectedModel === m.v ? 'studio-node-menu-item-active' : ''}`}>{m.l}</div>))}</div></div>
-                         </div>
+                         <ModelPicker
+                             value={selectedModel}
+                             options={modelPickerOptions}
+                             onChange={model => onUpdate(node.id, { model })}
+                             compact
+                             className="max-w-[132px]"
+                             ariaLabel="选择画布模型"
+                             title="画布模型"
+                             kind={pickerKind}
+                         />
                          {node.type !== NodeType.VIDEO_ANALYZER && node.type !== NodeType.AUDIO_GENERATOR && (<div className="relative shrink-0 whitespace-nowrap group/ratio"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[11px] font-bold"><Scaling size={12} /><span>{node.data.aspectRatio || '16:9'}</span></div><div className="absolute bottom-full left-0 pb-2 w-20 opacity-0 translate-y-2 pointer-events-none group-hover/ratio:opacity-100 group-hover/ratio:translate-y-0 group-hover/ratio:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('VIDEO') ? VIDEO_ASPECT_RATIOS : IMAGE_ASPECT_RATIOS).map(r => (<div key={r} onClick={() => handleAspectRatioSelect(r)} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${node.data.aspectRatio === r ? 'studio-node-menu-item-active' : ''}`}>{r}</div>))}</div></div></div>)}
                          {(node.type.includes('IMAGE') || node.type === NodeType.VIDEO_GENERATOR) && (<div className="relative shrink-0 whitespace-nowrap group/resolution"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[11px] font-bold"><Monitor size={12} /><span>{node.data.resolution || (node.type.includes('IMAGE') ? '1k' : '720p')}</span></div><div className="absolute bottom-full left-0 pb-2 w-20 opacity-0 translate-y-2 pointer-events-none group-hover/resolution:opacity-100 group-hover/resolution:translate-y-0 group-hover/resolution:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('IMAGE') ? IMAGE_RESOLUTIONS : VIDEO_RESOLUTIONS).map(r => (<div key={r} onClick={() => onUpdate(node.id, { resolution: r })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${node.data.resolution === r ? 'studio-node-menu-item-active' : ''}`}>{r}</div>))}</div></div></div>)}
                          {(node.type.includes('IMAGE') || node.type === NodeType.VIDEO_GENERATOR) && (<div className="relative shrink-0 whitespace-nowrap group/count"><div className="studio-node-control-trigger flex items-center gap-1 px-2 py-1 rounded-lg cursor-pointer transition-colors text-[11px] font-bold"><Layers size={12} /><span>{node.type.includes('IMAGE') ? (node.data.imageCount || 1) : (node.data.videoCount || 1)}</span></div><div className="absolute bottom-full left-0 pb-2 w-16 opacity-0 translate-y-2 pointer-events-none group-hover/count:opacity-100 group-hover/count:translate-y-0 group-hover/count:pointer-events-auto transition-all duration-200 z-[200]"><div className="studio-node-menu rounded-xl shadow-xl overflow-hidden">{(node.type.includes('IMAGE') ? IMAGE_COUNTS : VIDEO_COUNTS).map(c => (<div key={c} onClick={() => onUpdate(node.id, node.type.includes('IMAGE') ? { imageCount: c } : { videoCount: c })} className={`studio-node-menu-item px-3 py-2 text-[10px] font-bold cursor-pointer ${((node.type.includes('IMAGE') ? node.data.imageCount : node.data.videoCount) || 1) === c ? 'studio-node-menu-item-active' : ''}`}>{c}</div>))}</div></div></div>)}

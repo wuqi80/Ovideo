@@ -30,7 +30,7 @@ describe('VideoModelPicker', () => {
     const onChange = vi.fn();
     render(<VideoModelPicker value="MINI" options={options} onChange={onChange} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /MiniMax Hailuo 2.3/ }));
+    fireEvent.click(screen.getByLabelText('选择视频生成模型'));
     const modelRows = screen.getAllByRole('option');
     expect(modelRows).toHaveLength(2);
     expect(modelRows[0]).toHaveTextContent('MiniMax Hailuo 2.3');

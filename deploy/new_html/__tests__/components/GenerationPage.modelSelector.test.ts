@@ -9,11 +9,13 @@ const source = readFileSync(
 
 describe('generation page model selectors', () => {
   it('places the shared default selector in the header and the current-shot override in the config card', () => {
-    expect(source).toContain('aria-label="默认生成模型"');
-    expect(source).toContain('aria-label="当前镜头生成模型"');
-    expect(source).toContain('<option value="">跟随默认 · {globalModelOption.shortLabel}</option>');
+    expect(source).toContain('ariaLabel="默认生成模型"');
+    expect(source).toContain('ariaLabel="当前镜头生成模型"');
+    expect(source).toContain('label: `跟随默认 · ${getStoryboardGenerationModelOption(globalModel).shortLabel}`');
     expect(source).not.toContain('aria-label={`${shotLabel}生成模型`}');
-    expect(source.match(/STORYBOARD_GENERATION_MODEL_OPTIONS\.map/g)).toHaveLength(2);
+    expect(source).toContain('buildStoryboardModelPickerOptions(');
+    expect(source).toContain('options={storyboardModelPickerOptions}');
+    expect(source).toContain('options={shotModelPickerOptions}');
     expect(source).not.toContain('const models: GenerationModel[]');
     expect(source).not.toContain('点击切换模型');
   });

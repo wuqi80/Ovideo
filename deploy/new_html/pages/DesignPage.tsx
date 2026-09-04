@@ -38,7 +38,6 @@ import { usePersistedPageState } from '../hooks/usePersistedPageState';
 import { useScriptModelOptions } from '../hooks/useScriptModelOptions';
 import { apiBlob, secureApiUrl } from '../services/httpClient';
 import {
-  formatScriptModelSelectLabel,
   getScriptModelBillingKey,
   getScriptModelOption,
   type ScriptModelOption,
@@ -58,6 +57,11 @@ import { recommendDoubaoImageSize } from '../utils/doubaoImageSize';
 import { assertEnoughCredits, consumeCredits } from '../services/creditService';
 import { InlineCreditEstimate } from '../components/InlineCreditEstimate';
 import { ImagePreviewLightbox } from '../components/ImagePreviewLightbox';
+import { ModelPicker } from '../components/ModelPicker';
+import {
+  buildDesignImageModelPickerOptions,
+  buildScriptModelPickerOptions,
+} from '../components/modelPickerCatalogs';
 import {
   DESIGN_IMAGE_BATCH_LIMIT,
   DESIGN_IMAGE_MODEL_OPTIONS,
@@ -1498,6 +1502,16 @@ const UnifiedAIModal: React.FC<{
     [engine, geminiModel],
   );
   const refineModelOptions = modelOptions;
+  const refineModelPickerOptions = useMemo(
+    () => buildScriptModelPickerOptions(refineModelOptions, option => (
+      `${option.hint} · ${designPromptRefinementFallbackCost(getScriptModelBillingKey(option))}创作点数`
+    )),
+    [refineModelOptions],
+  );
+  const generationModelPickerOptions = useMemo(
+    () => buildDesignImageModelPickerOptions(),
+    [],
+  );
   const refinementModel = useMemo(
     () => getScriptModelOption(refineModel, refineModelOptions),
     [refineModel, refineModelOptions],
@@ -1881,19 +1895,17 @@ const UnifiedAIModal: React.FC<{
                   {isRefining ? <Loader size={12} className="animate-spin" /> : <Wand2 size={12} />}
                   AI 润色
                 </button>
-                <label className="relative -ml-px">
-                  <span className="sr-only">选择润色模型</span>
-                  <select
-                    value={refineModel}
-                    onChange={event => setRefineModel(event.target.value as AiModel)}
-                    className="h-8 min-w-[210px] appearance-none rounded-r-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
-                  >
-                    {refineModelOptions.map(option => (
-                      <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)} · {designPromptRefinementFallbackCost(getScriptModelBillingKey(option))}创作点数</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
-                </label>
+                <ModelPicker
+                  value={refineModel}
+                  options={refineModelPickerOptions}
+                  onChange={setRefineModel}
+                  disabled={isRefining}
+                  compact
+                  className="min-w-[210px]"
+                  ariaLabel="选择润色模型"
+                  title="润色模型"
+                  kind="text"
+                />
               </div>
             </div>
             <textarea
@@ -1925,26 +1937,19 @@ const UnifiedAIModal: React.FC<{
               </div>
 
               <div className="flex flex-wrap items-end gap-2 xl:w-[556px] xl:justify-end xl:justify-self-end">
-                <label className="relative min-w-[350px]">
+                <div className="min-w-[350px]">
                   <span className="mb-1.5 block text-[10px] font-medium text-n300">生成模型</span>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex h-9 min-w-[76px] items-center justify-center whitespace-nowrap px-1 text-[11px] font-medium text-n300">
-                      {generationModel.hint}
-                    </span>
-                    <span className="relative min-w-0 flex-1">
-                      <select
-                        value={generationModel.id}
-                        onChange={event => selectGenerationModel(event.target.value)}
-                        className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary"
-                      >
-                        {DESIGN_IMAGE_MODEL_OPTIONS.map(option => (
-                          <option key={option.id} value={option.id}>{option.label}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />
-                    </span>
-                  </div>
-                </label>
+                  <ModelPicker
+                    value={generationModel.id}
+                    options={generationModelPickerOptions}
+                    onChange={selectGenerationModel}
+                    fullWidth
+                    className="min-w-[350px]"
+                    ariaLabel="选择生成模型"
+                    title="生成模型"
+                    kind="image"
+                  />
+                </div>
 
                 <label className="relative w-[100px]">
                   <span className="mb-1.5 block text-[10px] font-medium text-n300">比例</span>
@@ -2070,6 +2075,14 @@ const BatchGenerateModal: React.FC<{
     [engine, geminiModel],
   );
   const refineModelOptions = modelOptions;
+  const refineModelPickerOptions = useMemo(
+    () => buildScriptModelPickerOptions(refineModelOptions),
+    [refineModelOptions],
+  );
+  const generationModelPickerOptions = useMemo(
+    () => buildDesignImageModelPickerOptions(),
+    [],
+  );
 
   const toggle = (id: string) => setChecked(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const charCount = assets.filter(a => a.assetType === 'character' && checked.has(a.assetId)).length;
@@ -2142,18 +2155,18 @@ const BatchGenerateModal: React.FC<{
           </div>
           <div className="space-y-4 border border-n40 rounded-md p-4">
             <span className="text-[11px] font-bold text-n100 uppercase">统一配置</span>
-            <label className="block">
+            <div>
               <span className="mb-1.5 block text-[11px] text-n100">生成模型</span>
-              <div className="flex items-center gap-2">
-                <span className="min-w-[64px] text-[11px] font-medium text-n300">{batchGenerationModel.hint}</span>
-                <span className="relative min-w-0 flex-1">
-                  <select value={batchGenerationModel.id} onChange={event => selectBatchGenerationModel(event.target.value)} className="h-9 w-full appearance-none rounded-md border border-n40 bg-n0 pl-3 pr-8 text-xs text-n700 outline-none hover:border-primary focus:border-primary">
-                    {DESIGN_IMAGE_MODEL_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-n300" />
-                </span>
-              </div>
-            </label>
+              <ModelPicker
+                value={batchGenerationModel.id}
+                options={generationModelPickerOptions}
+                onChange={selectBatchGenerationModel}
+                fullWidth
+                ariaLabel="选择批量生成模型"
+                title="生成模型"
+                kind="image"
+              />
+            </div>
             <div>
               <span className="text-[11px] font-bold text-n100 uppercase block mb-1.5">风格</span>
               <div className="flex flex-wrap gap-1.5">{STYLE_PRESETS.map(s => (<button key={s.id} onClick={() => setStyle(style === s.id ? '' : s.id)} className={`text-[11px] px-2.5 py-1 rounded border ${style === s.id ? 'bg-primary text-white border-primary' : 'bg-n0 text-n300 border-n40 hover:text-n800'}`}>{s.label}</button>))}</div>
@@ -2162,7 +2175,18 @@ const BatchGenerateModal: React.FC<{
               <div><span className="text-[11px] text-n100 block mb-1">比例</span><select value={aspectRatio} onChange={e => setAspectRatio(e.target.value)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{['1:1', '3:4', '4:3', '9:16', '16:9'].map(r => <option key={r} value={r}>{r}</option>)}</select></div>
               <div><span className="text-[11px] text-n100 block mb-1">分辨率</span><select value={resolution} onChange={e => setResolution(e.target.value as DesignImageResolution)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{batchGenerationModel.resolutions.map(size => <option key={size} value={size}>{size}</option>)}</select></div>
             </div>
-            <div><span className="text-[11px] text-n100 block mb-1">AI 推断模型</span><select value={refineModel} onChange={e => setRefineModel(e.target.value as AiModel)} className="w-full bg-n0 border border-n40 rounded-lg text-xs text-n800 px-2 py-1.5">{refineModelOptions.map(option => <option key={option.value} value={option.value}>{formatScriptModelSelectLabel(option)}</option>)}</select></div>
+            <div>
+              <span className="mb-1 block text-[11px] text-n100">AI 推断模型</span>
+              <ModelPicker
+                value={refineModel}
+                options={refineModelPickerOptions}
+                onChange={setRefineModel}
+                fullWidth
+                ariaLabel="选择 AI 推断模型"
+                title="AI 推断模型"
+                kind="text"
+              />
+            </div>
             <label className="flex items-center gap-2 text-xs text-n700 p-3 bg-n30 rounded-lg border border-n40">
               <input type="checkbox" checked={threeView} onChange={e => setThreeView(e.target.checked)} className="accent-indigo-500" />
               人物/道具默认生成白底四视图

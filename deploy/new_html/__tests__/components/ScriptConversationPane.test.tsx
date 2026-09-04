@@ -12,7 +12,7 @@ const app = readFileSync(resolve(__dirname, '../../App.tsx'), 'utf-8');
 describe('ScriptConversationPane workflow', () => {
   it('uses a persistent conversation composer with runtime model labels', () => {
     expect(source).toContain('modelOptions = SCRIPT_MODEL_OPTIONS');
-    expect(source).toContain('{modelOptions.map(option => (');
+    expect(source).toContain('buildScriptModelPickerOptions(modelOptions)');
     expect(workspace).toContain('const scriptModelOptions = useScriptModelOptions()');
     expect(workspace).toContain('modelOptions={scriptModelOptions}');
     expect(source).toContain('继续输入修改意见');
@@ -25,7 +25,8 @@ describe('ScriptConversationPane workflow', () => {
     expect(source).not.toContain('{modelOption.runtime}');
     expect(source).toContain('className="ml-auto flex min-w-0 items-center gap-2"');
     expect(source).toContain('data-testid="script-model-hint"');
-    expect(source).toContain('className="relative min-w-0"');
+    expect(source).toContain('<ModelPicker');
+    expect(source).toContain('ariaLabel="选择剧本模型"');
     expect(source).toContain('w-[240px] max-w-[40vw]');
     expect(source).toContain('w-[260px] max-w-[50vw]');
     expect(source).toContain('aria-label="发送"');

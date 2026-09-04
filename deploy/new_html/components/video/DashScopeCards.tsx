@@ -38,6 +38,17 @@ import {
     VIDEO_CONTROL_SELECT_CLASS,
 } from './videoControlStyles';
 import { VideoDurationControl } from './VideoDurationControl';
+import { ModelPicker, type ModelPickerOption } from '../ModelPicker';
+
+const VIDU_MODEL_PICKER_OPTIONS: readonly ModelPickerOption<ViduSubModel>[] = [
+    { value: 'q3-mix', label: 'Vidu Q3 Mix · 多参考模型', description: '多参考素材融合优先', group: '在线 API' },
+    { value: 'q3', label: 'Vidu Q3 · 全能模型', description: '平衡质量、速度和音频能力', group: '在线 API' },
+    { value: 'q3-pro', label: 'Vidu Q3 Pro · 高质量模型', description: '画面质量优先', group: '在线 API' },
+    { value: 'q3-turbo', label: 'Vidu Q3 Turbo · 快速模型', description: '速度优先，兼容首尾帧', group: '在线 API' },
+    { value: 'q2', label: 'Vidu Q2 · 标准模型', description: '标准视频生成', group: '在线 API' },
+    { value: 'q2-pro', label: 'Vidu Q2 Pro · 高质量模型', description: 'Q2 系列质量优先', group: '在线 API' },
+    { value: 'q2-turbo', label: 'Vidu Q2 Turbo · 快速模型', description: 'Q2 系列速度优先', group: '在线 API' },
+] as const;
 
 // ─── 主题色板（对应修真境界视觉气质） ─────────────────────────────────────────
 
@@ -722,26 +733,17 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
 
             {/* 核心参数：子模型 + 时长 + 分辨率 + 水印。分辨率不再藏在折叠区。 */}
             <div className={VIDEO_CONTROL_ROW_CLASS} data-testid="vidu-control-row">
-                <label className={VIDEO_CONTROL_PILL_CLASS}>
-                    <Wand2 className="h-3 w-3 text-primary" />
-                    <select
-                        value={subModel}
-                        onChange={(e) => onChange({ ...params, sub_model_vidu: e.target.value as ViduSubModel })}
-                        disabled={disabled}
-                        className={VIDEO_CONTROL_SELECT_CLASS}
-                        aria-label="Vidu 子模型"
-                    >
-                        {/* 2026-05-25 #6 — 全部子模型一次列全，由用户自行匹配；当 first+last 同时填
-                            时上面 updateFirst/updateLast 会自动切到 turbo 子模型。 */}
-                        <option value="q3-mix">q3-mix</option>
-                        <option value="q3">q3</option>
-                        <option value="q3-pro">q3-pro</option>
-                        <option value="q3-turbo">q3-turbo</option>
-                        <option value="q2">q2</option>
-                        <option value="q2-pro">q2-pro</option>
-                        <option value="q2-turbo">q2-turbo</option>
-                    </select>
-                </label>
+                <ModelPicker
+                    value={subModel}
+                    options={VIDU_MODEL_PICKER_OPTIONS}
+                    onChange={model => onChange({ ...params, sub_model_vidu: model })}
+                    disabled={disabled}
+                    compact
+                    className="max-w-[180px]"
+                    ariaLabel="Vidu 子模型"
+                    title="Vidu 子模型"
+                    kind="video"
+                />
                 <VideoDurationControl
                     value={params.duration ?? 5}
                     min={1}

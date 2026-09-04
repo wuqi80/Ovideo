@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BookOpen, ChevronDown, Coins, LoaderCircle, Wand2, X } from 'lucide-react';
+import { BookOpen, Coins, LoaderCircle, Wand2, X } from 'lucide-react';
 import type { AiModel, ProjectFile, ScriptGenerationStageState, ScriptStoryboardVersion } from '../types';
 import {
-  formatScriptModelSelectLabel,
   getScriptModelBillingKey,
   getScriptModelOption,
   type ScriptModelOption,
 } from '../services/scriptModelCatalogService';
 import { estimateCredits, estimateTextTokens } from '../services/creditService';
+import { ModelPicker } from './ModelPicker';
+import { buildScriptModelPickerOptions } from './modelPickerCatalogs';
 
 const BRIEF_SOURCE_MAX_CHARACTERS = 80;
 type QuickStageKey = keyof NonNullable<ProjectFile['generationStages']>;
@@ -107,6 +108,10 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
   const isBusy = isLoading || isSending || isStageRunning;
   const selectedModelOption = getScriptModelOption(aiModel, modelOptions);
   const selectedModelHint = selectedModelOption.hint.trim();
+  const modelPickerOptions = useMemo(
+    () => buildScriptModelPickerOptions(modelOptions),
+    [modelOptions],
+  );
   const completedActualCreditCost = Number.isFinite(actualCreditCost) && actualCreditCost > 0 ? actualCreditCost : 0;
   const creditEstimateParams = useMemo(() => {
     if (!selectedFile?.originalContent?.trim()) return null;
@@ -210,22 +215,17 @@ export const QuickScriptSourceColumn: React.FC<QuickScriptSourceColumnProps> = (
               {selectedModelHint}
             </span>
           )}
-          <label className="relative min-w-0">
-            <span className="sr-only">选择剧本模型</span>
-            <select
-              value={aiModel}
-              onChange={event => onChangeModel(event.target.value as AiModel)}
-              disabled={isSending}
-              className="h-8 max-w-[180px] appearance-none rounded border border-n40 bg-n0 pl-2 pr-7 text-[11px] text-n700 outline-none hover:border-primary focus:border-primary disabled:opacity-50"
-            >
-              {modelOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {formatScriptModelSelectLabel(option)}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-n300" />
-          </label>
+          <ModelPicker
+            value={aiModel}
+            options={modelPickerOptions}
+            onChange={onChangeModel}
+            disabled={isSending}
+            compact
+            className="max-w-[180px]"
+            ariaLabel="选择剧本模型"
+            title="剧本模型"
+            kind="text"
+          />
         </div>
       </header>
 

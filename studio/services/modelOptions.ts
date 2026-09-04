@@ -35,9 +35,14 @@ export const STUDIO_VIDEO_MODEL_OPTIONS: ReadonlyArray<{ l: string; v: VideoMode
 );
 
 export function getStudioVideoModelOptions(): ReadonlyArray<{ l: string; v: VideoModel }> {
-  return STUDIO_VIDEO_MODEL_OPTIONS.filter(option => (
-    option.v !== 'MINI' || !isMiniMaxHailuoHiddenToday()
-  ));
+  return STUDIO_VIDEO_MODEL_OPTIONS;
+}
+
+export function getStudioVideoModelUnavailableReason(model: VideoModel): string | undefined {
+  if (model === 'MINI' && isMiniMaxHailuoHiddenToday()) {
+    return 'MiniMax Hailuo 今日调用额度已用完，明日 00:00 后自动恢复';
+  }
+  return undefined;
 }
 
 export const STUDIO_AUDIO_MODEL_OPTIONS = [

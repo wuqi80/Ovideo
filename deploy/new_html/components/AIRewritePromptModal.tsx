@@ -23,6 +23,7 @@ import {
     getScriptModelOption,
 } from '../services/scriptModelCatalogService';
 import { AiModel } from '../types';
+import { ModelPicker, type ModelPickerOption } from './ModelPicker';
 
 export interface AIRewritePromptModalProps {
     open: boolean;
@@ -57,6 +58,18 @@ export const AIRewritePromptModal: React.FC<AIRewritePromptModalProps> = (p) => 
             deepseek: `${deepseek}（中文优化）`,
         };
     }, [scriptModelOptions]);
+    const rewriteModelPickerOptions = useMemo<readonly ModelPickerOption<RewriteBackend>[]>(() => (
+        (Object.keys(rewriteBackendLabels) as RewriteBackend[]).map(value => ({
+            value,
+            label: rewriteBackendLabels[value],
+            description: value === 'deepseek'
+                ? '适合中文提示词优化'
+                : value === 'geminiSDK'
+                    ? '兼容历史任务，实际仍由后端统一调用'
+                    : '默认全能改写通道',
+            group: '在线 API',
+        }))
+    ), [rewriteBackendLabels]);
 
     // 打开时重置
     useEffect(() => {
@@ -168,16 +181,16 @@ export const AIRewritePromptModal: React.FC<AIRewritePromptModalProps> = (p) => 
                         </div>
                         <div>
                             <div className="text-[10px] uppercase tracking-wide text-n100 mb-1">后端模型</div>
-                            <select
+                            <ModelPicker
                                 value={backend}
-                                onChange={e => setBackend(e.target.value as RewriteBackend)}
+                                options={rewriteModelPickerOptions}
+                                onChange={setBackend}
                                 disabled={loading}
-                                className="w-full px-2 py-1 bg-n0 border border-n40 rounded text-n700 text-xs focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-                            >
-                                {(Object.keys(rewriteBackendLabels) as RewriteBackend[]).map(k => (
-                                    <option key={k} value={k}>{rewriteBackendLabels[k]}</option>
-                                ))}
-                            </select>
+                                fullWidth
+                                ariaLabel="选择提示词改写模型"
+                                title="提示词改写模型"
+                                kind="text"
+                            />
                         </div>
                     </div>
 

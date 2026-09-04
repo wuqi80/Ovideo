@@ -71,7 +71,8 @@ describe('QuickScriptSourceColumn', () => {
 
     expect(screen.getByTestId('quick-script-model-hint')).toHaveTextContent('速度优先');
     const modelSelect = screen.getByLabelText('选择剧本模型');
-    expect(modelSelect).toHaveTextContent('deepseek-v4-flash · 快速写作模型');
+    fireEvent.click(modelSelect);
+    expect(screen.getByRole('option', { name: /deepseek-v4-flash/ })).toBeInTheDocument();
     expect(modelSelect).not.toHaveTextContent('速度优先');
   });
 

@@ -17,7 +17,8 @@ describe('Studio canvas interaction contracts', () => {
   });
 
   it('keeps compact node controls and action labels on one line', () => {
-    expect(nodeSource).toContain('max-w-[92px] truncate whitespace-nowrap');
+    expect(nodeSource).toContain('className="max-w-[132px]"');
+    expect(nodeSource).toContain('ariaLabel="选择画布模型"');
     expect(nodeSource).toContain('flex shrink-0 items-center justify-center gap-2 whitespace-nowrap');
     expect(nodeSource).toContain('<span className="whitespace-nowrap">');
     expect(videoModulesSource).toContain('flex min-w-max items-center gap-0.5');

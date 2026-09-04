@@ -68,6 +68,8 @@ import {
 } from '../utils/storyboardImageDrag';
 import { GpuNodeSelector, type GpuNodeSelection } from './GpuNodeSelector';
 import { InlineCreditEstimate } from './InlineCreditEstimate';
+import { ModelPicker, type ModelPickerOption } from './ModelPicker';
+import { buildStoryboardModelPickerOptions } from './modelPickerCatalogs';
 import { crmMessage } from '../admin/crmUI';
 import { assertEnoughCredits, consumeCredits } from '../services/creditService';
 import {
@@ -578,6 +580,13 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     () => clusterNodes.filter(isClusterNodeUsable),
     [clusterNodes],
   );
+  const storyboardModelPickerOptions = useMemo(
+    () => buildStoryboardModelPickerOptions(
+      STORYBOARD_GENERATION_MODEL_OPTIONS,
+      usableClusterNodes.length > 0,
+    ),
+    [usableClusterNodes.length],
+  );
   const selectedClusterNode = useMemo(
     () => clusterNodes.find((node) => (
       node.id === selectedClusterNodeId
@@ -619,6 +628,15 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
     version: 1,
     defaultValue: {},
   });
+  const shotModelPickerOptions = useMemo<readonly ModelPickerOption<GenerationModel | ''>[]>(() => ([
+    {
+      value: '',
+      label: `跟随默认 · ${getStoryboardGenerationModelOption(globalModel).shortLabel}`,
+      description: '自动使用顶部配置的默认模型',
+      group: '项目设置',
+    },
+    ...storyboardModelPickerOptions,
+  ]), [globalModel, storyboardModelPickerOptions]);
   const [configLockDrafts, setConfigLockDrafts] = useState<Record<string, boolean>>({});
   const isStoryboardConfigLocked = useCallback((item: StoryboardItem) => (
     configLockDrafts[item.id] ?? Boolean(item.isConfigConfirmed)
@@ -2973,23 +2991,20 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         <Sparkles className="w-4 h-4 text-primary" />
                       画面分镜配置
                       </h3>
-                      <label className="ml-auto flex min-w-0 items-center gap-2 text-[10px] text-n300">
+                      <div className="ml-auto flex min-w-0 items-center gap-2 text-[10px] text-n300">
                         <span className="shrink-0">默认模型</span>
-                        <select
+                        <ModelPicker
                           value={globalModel}
-                          onChange={(event) => setGlobalModel(event.target.value as GenerationModel)}
+                          options={storyboardModelPickerOptions}
+                          onChange={setGlobalModel}
                           disabled={isGenerating}
-                          aria-label="默认生成模型"
-                          className="h-8 min-w-0 max-w-[220px] rounded border border-n40 bg-n0 px-2 text-[10px] font-medium text-n700 outline-none transition-colors hover:border-primary focus:border-primary disabled:bg-n20 disabled:text-n100"
-                          title={globalModelOption.hint}
-                        >
-                          {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                          compact
+                          className="max-w-[220px]"
+                          ariaLabel="默认生成模型"
+                          title="默认生成模型"
+                          kind="image"
+                        />
+                      </div>
                       <button 
                         onClick={handleConfirmConfig}
                         disabled={!selectedShot || isGenerating}
@@ -3011,11 +3026,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         <Zap className="w-3.5 h-3.5 text-yellow-400" />
                         <span className="text-xs font-bold text-n700">当前镜头生成模型</span>
                     </div>
-                    <select
+                    <ModelPicker<GenerationModel | ''>
                         value={selectedShotModelOverride || ''}
-                        onChange={(event) => {
+                        options={shotModelPickerOptions}
+                        onChange={(nextModel) => {
                           if (!selectedShot || selectedConfigLocked) return;
-                          const nextModel = event.target.value;
                           setShotModels(previous => {
                             if (!nextModel) {
                               const next = { ...previous };
@@ -3029,16 +3044,11 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                           });
                         }}
                         disabled={!selectedShot || selectedConfigLocked || isGenerating}
-                        aria-label="当前镜头生成模型"
-                        className="h-10 w-full rounded border border-n40 bg-n0 px-3 text-xs font-medium text-n700 outline-none transition-colors hover:border-primary focus:border-primary disabled:bg-n20 disabled:text-n100"
-                    >
-                        <option value="">跟随默认 · {globalModelOption.shortLabel}</option>
-                        {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                    </select>
+                        fullWidth
+                        ariaLabel="当前镜头生成模型"
+                        title="当前镜头生成模型"
+                        kind="image"
+                    />
                     <div className="mt-2 rounded bg-n0 px-3 py-2 text-[10px] leading-4 text-n300">
                         <strong className="mr-1 text-n700">{selectedGenerationModelOption.shortLabel}</strong>
                         {selectedGenerationModelOption.hint}

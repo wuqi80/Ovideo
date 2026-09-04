@@ -71,3 +71,4 @@ deploy/new_html/pnpm-workspace.yaml
 # Local Codex artifacts and detached scratch apps
 /.codex-screenshots/
 /sunstudio/
+/temp/

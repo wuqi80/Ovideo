@@ -116,15 +116,15 @@ describe('DesignPage image operation modals', () => {
   it('defaults refinement to the fast tier and exposes all four public writing tiers', () => {
     expect(source).toContain("LS.get('design_ai_refine_model', AiModel.DeepseekChat)");
     expect(source).toContain('const refineModelOptions = modelOptions');
-    expect(source).toContain('formatScriptModelSelectLabel(option)');
+    expect(source).toContain('buildScriptModelPickerOptions(refineModelOptions');
     expect(source).toContain('designPromptRefinementFallbackCost(getScriptModelBillingKey(option))');
     expect(source).toContain('DESIGN_CREDIT_FEATURES.promptRefinement');
     expect(source).toContain("taskId: newDesignCreditUsageId('design-prompt-refinement')");
   });
 
   it('uses public image model labels and billing tiers without exposing runtimes', () => {
-    expect(source).toContain('generationModel.hint');
-    expect(source).toContain('<option key={option.id} value={option.id}>{option.label}</option>');
+    expect(source).toContain('buildDesignImageModelPickerOptions()');
+    expect(source).toContain('options={generationModelPickerOptions}');
     expect(source).toContain('model: generationModel.billingModel');
     expect(source).not.toContain('{option.label} · {option.runtime}');
   });

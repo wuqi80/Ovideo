@@ -43,10 +43,14 @@ module.exports = {
     './components/**/*.{ts,tsx}',
     './platform/**/*.{ts,tsx}',
     './services/**/*.{ts,tsx}',
+    '../deploy/new_html/components/ModelPicker.tsx',
   ],
   theme: {
     extend: {
       colors: {
+        n0: '#FFFFFF', n20: '#F4F4F1', n30: '#F0F0EC', n40: '#E5E5E0',
+        n100: '#9A9AA2', n300: '#6A6A74', n700: '#22222B', n800: '#17171C', n900: '#141419',
+        p50: '#F0EEFF', p75: '#DED6FF',
         cyan: violet,
         sky: violet,
         blue: violet,
@@ -77,6 +81,9 @@ module.exports = {
       },
       animation: {
         'in': 'studio-in 180ms ease-out both',
+      },
+      boxShadow: {
+        bottom: '0 24px 70px rgba(20,20,25,0.18)',
       },
       keyframes: {
         'studio-in': {

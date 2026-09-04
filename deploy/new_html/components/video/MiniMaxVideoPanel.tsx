@@ -14,6 +14,7 @@ import {
     VIDEO_CONTROL_PILL_CLASS,
     VIDEO_CONTROL_SELECT_CLASS,
 } from './videoControlStyles';
+import { ModelPicker, type ModelPickerOption } from '../ModelPicker';
 
 interface MiniMaxVideoPanelProps {
     value: MiniMaxVideoParams;
@@ -64,6 +65,15 @@ export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
         () => normalizeModelOptions(modelOptions, params.model),
         [modelOptions, params.model],
     );
+    const pickerModelOptions = React.useMemo<readonly ModelPickerOption<MiniMaxVideoModelName>[]>(
+        () => panelModelOptions.map(option => ({
+            value: option.value,
+            label: option.label,
+            description: option.value.endsWith('-Fast') ? '速度优先的视频生成模型' : '质量优先的视频生成模型',
+            group: '在线 API',
+        })),
+        [panelModelOptions],
+    );
     const validationError = getMiniMaxVideoParamsError(params);
 
     const setDuration = (duration: MiniMaxVideoDuration) => {
@@ -77,22 +87,16 @@ export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
     if (compact) {
         return (
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5" title={validationError || undefined}>
-                <label className={VIDEO_CONTROL_PILL_CLASS}>
-                    <Sparkles className="h-3 w-3 text-primary" />
-                    <select
-                        value={params.model}
-                        onChange={(event) => onChange(normalizeMiniMaxVideoParams({
-                            ...params,
-                            model: event.target.value as MiniMaxVideoModelName,
-                        }))}
-                        className={VIDEO_CONTROL_SELECT_CLASS}
-                        aria-label="MiniMax 模型"
-                    >
-                        {panelModelOptions.map(option => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                    </select>
-                </label>
+                <ModelPicker
+                    value={params.model}
+                    options={pickerModelOptions}
+                    onChange={model => onChange(normalizeMiniMaxVideoParams({ ...params, model }))}
+                    compact
+                    className="max-w-[190px]"
+                    ariaLabel="MiniMax 模型"
+                    title="MiniMax 模型"
+                    kind="video"
+                />
                 <label className={VIDEO_CONTROL_PILL_CLASS}>
                     <Clock3 className="h-3 w-3" />
                     <select
@@ -152,17 +156,16 @@ export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
                 />
             </div>
             <div className={VIDEO_CONTROL_BAR_CLASS} data-testid="minimax-control-row">
-                <label className={VIDEO_CONTROL_PILL_CLASS}>
-                    <Sparkles className="h-3 w-3 text-primary" />
-                    <select
-                        value={params.model}
-                        onChange={(event) => onChange({ ...params, model: event.target.value })}
-                        className={VIDEO_CONTROL_SELECT_CLASS}
-                        aria-label="MiniMax 模型"
-                    >
-                        {panelModelOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                </label>
+                <ModelPicker
+                    value={params.model}
+                    options={pickerModelOptions}
+                    onChange={model => onChange({ ...params, model })}
+                    compact
+                    className="max-w-[190px]"
+                    ariaLabel="MiniMax 模型"
+                    title="MiniMax 模型"
+                    kind="video"
+                />
                 <label className={VIDEO_CONTROL_PILL_CLASS}>
                     <Clock3 className="h-3 w-3" />
                     <select
