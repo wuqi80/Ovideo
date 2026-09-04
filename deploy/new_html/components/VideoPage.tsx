@@ -421,7 +421,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
     const getSeedanceAudioReferenceNotice = useCallback((model: VideoModel): string | undefined => (
         seedanceSupportsMultimodal(model)
             ? undefined
-            : '当前通道会兼容到 Seedance 1.5-pro / Agent Plan，参考配音会保存到卡片，但提交时会自动忽略。'
+            : 'Seedance 1.5 Pro 当前不接收参考音频；参考配音会保留在卡片中，提交时不发送。'
     ), [seedanceSupportsMultimodal]);
     const miniMaxCapability = videoCapabilityModels?.find(model => model.key === 'MINI');
     const miniMaxModelOptions = useMemo(() => (
@@ -675,6 +675,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
         return {
             ...params,
             media_inputs: (params.media_inputs || []).filter(media => media.kind !== 'audio'),
+            resolution: params.resolution === '1080p' ? '1080p' : '720p',
+            ratio: params.ratio && params.ratio !== 'adaptive' ? params.ratio : '16:9',
         };
     }, [seedanceSupportsMultimodal]);
 
@@ -734,10 +736,14 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 || group?.ids?.includes(img.id)
             )
         );
-        const seedMedia: SeedanceMediaInput[] = linkedImages.map(img => ({
+        const agentPlan = isSeedanceAgentPlanModel(model);
+        const selectedLinkedImages = agentPlan ? linkedImages.slice(0, 2) : linkedImages;
+        const seedMedia: SeedanceMediaInput[] = selectedLinkedImages.map((img, index) => ({
             kind: 'image',
             url: img.url,
-            role: 'reference_image',
+            role: agentPlan
+                ? (index === 0 ? 'first_frame' : 'last_frame')
+                : 'reference_image',
         }));
 
         // 2026-05-20 (Bug 1): duration must follow audio > planned > default, not a
@@ -2582,7 +2588,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             setSeedanceParams(uuid, { ...current, media_inputs: nextMedia });
             showToast(seedanceSupportsMultimodal(group.model)
                 ? '已把上一条视频原声设为当前参考配音'
-                : '已保存参考配音；当前兼容通道生成时会忽略音频参考');
+                : '已保存参考配音；Seedance 1.5 Pro 提交时不会发送该音频');
         } catch (error: any) {
             const message = String(error?.message || error || '未知错误');
             showToast(message.includes('no audio track')
@@ -2611,9 +2617,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             const rawParams = getSeedanceParams(group.uuid, group.model);
             const supportsMultimodal = seedanceSupportsMultimodal(group.model);
             const capabilityParams = prepareSeedanceParamsForCapability(group.model, rawParams);
-            // 2026-07-11：Seedance 1.5-pro（Agent Plan 强制覆盖）仅支持单图/首尾帧。
-            // 后端 seedance.py 对视频/音频 kind 和 3+ 张图会抛 ModelNotOpen，
-            // 前端先拦截避免用户点了扣费再失败。
+            // Seedance 1.5 Pro 仅向供应商提交单图/首尾帧。参考配音保留在
+            // 卡片状态中，并由 capability 适配层在提交前移除。
             const seedanceBlock = validateSeedanceMediaInputs(
                 capabilityParams.media_inputs,
                 supportsMultimodal,
@@ -2655,7 +2660,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
             });
             setTaskStartTimes(prev => ({ ...prev, [uuid]: Date.now() }));
             try {
-                console.log('Seedance 2.0 提交:', { uuid, sub_model: params.sub_model, media: params.media_inputs.length, prompt: params.prompt.substring(0, 40) });
+                console.log('Seedance 提交:', { uuid, model: getModelDisplayName(group.model), sub_model: params.sub_model, media: params.media_inputs.length, prompt: params.prompt.substring(0, 40) });
                 const characterName = getCharacterNameForGroup(group);
                 const videoVoiceReference = getVideoVoiceReferenceForGroup(group);
                 console.log('Seedance 音频参考:', {
@@ -4419,6 +4424,7 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                                     meta={m}
                                     onPatchGroup={patchTaskGroup}
                                     maxDuration={getSeedanceMaxDuration(group.model)}
+                                    variant={group.model === 'Seedance15' ? 'seedance15' : 'compact'}
                                 />
                             )}
                         </div>

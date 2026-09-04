@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Upload, X, AlertCircle, Info, Plus, Maximize2, Volume2, Loader2 } from 'lucide-react';
+import { Upload, X, AlertCircle, Info, Plus, Maximize2, Volume2, Loader2, ImagePlus, Film } from 'lucide-react';
 import { uploadAudio, uploadImage, uploadVideoFile } from '../services/videoMediaService';
 import {
     getModelDisplayName,
@@ -41,6 +41,8 @@ const ROLE_OPTIONS_FIRST_LAST: { value: SeedanceMediaRole | ''; label: string }[
 
 const RATIO_OPTIONS = ['adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9'] as const;
 const RESOLUTION_OPTIONS = ['480p', '720p', '1080p'] as const;
+const AGENT_PLAN_RATIO_OPTIONS = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] as const;
+const AGENT_PLAN_RESOLUTION_OPTIONS = ['720p', '1080p'] as const;
 
 const SEEDANCE_TIER_LABELS: Record<SeedanceParams['sub_model'], string> = {
     agent_plan: getModelDisplayName('Seedance15'),
@@ -65,9 +67,12 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
     const [pickerOpen, setPickerOpen] = useState(false);
     const [promptModalOpen, setPromptModalOpen] = useState(false);
     const imgInputRef = useRef<HTMLInputElement>(null);
+    const firstFrameInputRef = useRef<HTMLInputElement>(null);
+    const lastFrameInputRef = useRef<HTMLInputElement>(null);
     const videoInputRef = useRef<HTMLInputElement>(null);
     const audioInputRef = useRef<HTMLInputElement>(null);
 
+    const isAgentPlan = value.sub_model === 'agent_plan';
     const images = value.media_inputs.filter(m => m.kind === 'image');
     const videos = value.media_inputs.filter(m => m.kind === 'video');
     const audios = value.media_inputs.filter(m => m.kind === 'audio');
@@ -111,8 +116,8 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
         if (audios.length > 0 && images.length === 0 && videos.length === 0) {
             return { ok: false, msg: '不可单独输入音频，必须至少包含 1 张图或 1 段视频' };
         }
-        if (!omniEnabled && (videos.length > 0 || audios.length > 0)) {
-            return { ok: false, msg: '兼容通道不支持视频/音频参考输入' };
+        if (!omniEnabled && videos.length > 0) {
+            return { ok: false, msg: 'Seedance 1.5 Pro 不支持参考视频，请移除后再提交' };
         }
         if (!omniEnabled && images.length > 2) {
             return { ok: false, msg: '兼容通道最多支持 2 张图片（单图或首尾帧）' };
@@ -143,6 +148,37 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
         onChange({ ...value, media_inputs: value.media_inputs.filter((_, i) => i !== idx) });
     }, [value, onChange]);
 
+    const setAgentPlanFrame = useCallback((role: 'first_frame' | 'last_frame', url: string) => {
+        const otherRole = role === 'first_frame' ? 'last_frame' : 'first_frame';
+        const nextInputs = value.media_inputs.filter(m => (
+            m.kind !== 'image' || m.role === otherRole
+        ));
+        onChange({
+            ...value,
+            media_inputs: [
+                ...nextInputs,
+                { kind: 'image', url, role },
+            ],
+        });
+    }, [value, onChange]);
+
+    const onPickAgentPlanFrame = useCallback(async (
+        role: 'first_frame' | 'last_frame',
+        files: FileList | null,
+        inputRef: React.RefObject<HTMLInputElement>,
+    ) => {
+        const file = files?.[0];
+        if (!file) return;
+        setUploadBusy(true);
+        try {
+            const result = await uploadImage(file);
+            setAgentPlanFrame(role, result.url || (result as any).storage_url);
+        } finally {
+            setUploadBusy(false);
+            if (inputRef.current) inputRef.current.value = '';
+        }
+    }, [setAgentPlanFrame]);
+
     const onPickImages = useCallback(async (files: FileList | null) => {
         if (!files) return;
         setUploadBusy(true);
@@ -163,15 +199,26 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
         setUploadBusy(true);
         try {
             for (const file of Array.from(files)) {
-                if (audios.length >= 3) break;
+                if (!isAgentPlan && audios.length >= 3) break;
                 const r = await uploadAudio(file, 0, 5);
-                addMedia({ kind: 'audio', url: r.url, role: 'reference_audio' });
+                if (isAgentPlan) {
+                    onChange({
+                        ...value,
+                        media_inputs: [
+                            ...value.media_inputs.filter(m => m.kind !== 'audio'),
+                            { kind: 'audio', url: r.url, role: 'reference_audio' },
+                        ],
+                    });
+                } else {
+                    addMedia({ kind: 'audio', url: r.url, role: 'reference_audio' });
+                }
+                if (isAgentPlan) break;
             }
         } finally {
             setUploadBusy(false);
             if (audioInputRef.current) audioInputRef.current.value = '';
         }
-    }, [audios.length, addMedia]);
+    }, [audios.length, isAgentPlan, value, onChange, addMedia]);
 
     const onPickVideos = useCallback(async (files: FileList | null) => {
         if (!files) return;
@@ -192,6 +239,263 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
             if (videoInputRef.current) videoInputRef.current.value = '';
         }
     }, [videos.length, addMedia]);
+
+    const firstFrame = images.find(m => m.role === 'first_frame') || images[0];
+    const lastFrame = images.find(m => m.role === 'last_frame') || images[1];
+    const firstFrameIndex = firstFrame ? value.media_inputs.indexOf(firstFrame) : -1;
+    const lastFrameIndex = lastFrame ? value.media_inputs.indexOf(lastFrame) : -1;
+    const selectedAgentPlanResolution = AGENT_PLAN_RESOLUTION_OPTIONS.includes(value.resolution as any)
+        ? value.resolution
+        : '720p';
+    const selectedAgentPlanRatio = AGENT_PLAN_RATIO_OPTIONS.includes(value.ratio as any)
+        ? value.ratio
+        : '16:9';
+
+    if (isAgentPlan) {
+        const renderFrameSlot = (
+            role: 'first_frame' | 'last_frame',
+            label: string,
+            media: SeedanceMediaInput | undefined,
+            mediaIndex: number,
+            inputRef: React.RefObject<HTMLInputElement>,
+        ) => (
+            <div className="relative w-[84px] h-[104px] shrink-0 rounded-lg border border-n40 bg-n20 shadow-sm overflow-hidden group">
+                <input
+                    ref={inputRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={event => onPickAgentPlanFrame(role, event.target.files, inputRef)}
+                />
+                {media ? (
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => onPreviewMedia?.(media.url, 'image')}
+                            className="block w-full h-[78px] bg-n30"
+                            title={`预览${label}`}
+                        >
+                            <img src={media.url} alt={label} className="w-full h-full object-cover" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => inputRef.current?.click()}
+                            disabled={disabled || uploadBusy}
+                            className="absolute inset-x-0 bottom-0 h-[26px] bg-n0/95 text-[10px] font-medium text-n700 hover:text-primary"
+                        >
+                            {label} · 替换
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => removeMedia(mediaIndex)}
+                            disabled={disabled}
+                            className="absolute right-1 top-1 rounded-full bg-n900/70 p-0.5 text-white hover:bg-danger"
+                            aria-label={`删除${label}`}
+                        >
+                            <X size={10} />
+                        </button>
+                    </>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => inputRef.current?.click()}
+                        disabled={disabled || uploadBusy}
+                        className="flex h-full w-full flex-col items-center justify-center gap-2 text-n300 hover:border-primary hover:text-primary"
+                        title={`添加${label}`}
+                    >
+                        <ImagePlus size={20} />
+                        <span className="text-[10px] font-medium">+ {label}</span>
+                    </button>
+                )}
+            </div>
+        );
+
+        return (
+            <div className="space-y-3 rounded-xl border border-n40 bg-n0 p-3 shadow-card">
+                <div className="flex items-start gap-3 rounded-xl border border-n40 bg-n20/60 p-3">
+                    <div className="flex shrink-0 items-center gap-2 pt-0.5">
+                        {renderFrameSlot('first_frame', '首帧', firstFrame, firstFrameIndex, firstFrameInputRef)}
+                        {renderFrameSlot('last_frame', '尾帧', lastFrame, lastFrameIndex, lastFrameInputRef)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <div>
+                                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-n800">
+                                    <Film size={13} className="text-primary" />
+                                    Seedance 1.5 Pro · 首尾帧生成
+                                </div>
+                                <div className="mt-0.5 text-[9px] text-n100">首帧用于图生视频，尾帧可选；不再使用九图参考模式</div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setPromptModalOpen(true)}
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-primary hover:bg-primary-light"
+                            >
+                                <Maximize2 size={11} /> 放大编辑
+                            </button>
+                        </div>
+                        <SeedanceMentionPromptEditor
+                            value={value}
+                            onChange={onChange}
+                            candidates={candidates.filter(candidate => candidate.kind === 'text')}
+                            disabled={disabled}
+                            autoOpenOnMount={autoOpenMentionOnMount}
+                            rows={5}
+                            placeholder="输入画面内容、动作和运镜方式，例如：人物缓慢转身，镜头平稳推进……"
+                            onPreviewMedia={onPreviewMedia}
+                        />
+                    </div>
+                </div>
+
+                <section className="rounded-xl border border-n40 bg-n0 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                        <div>
+                            <div className="text-[10px] font-semibold text-n700">参考配音</div>
+                            <div className="text-[9px] text-n100">保留上一条原声或上传音频，切换支持参考音频的模型后可直接复用</div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            {onUsePreviousVideoAudio && (
+                                <button
+                                    type="button"
+                                    onClick={onUsePreviousVideoAudio}
+                                    disabled={disabled || previousVideoAudioBusy}
+                                    className="inline-flex items-center gap-1 rounded-md border border-success/40 bg-n0 px-2 py-1 text-[10px] text-success hover:bg-success hover:text-white disabled:opacity-40"
+                                >
+                                    {previousVideoAudioBusy ? <Loader2 size={11} className="animate-spin" /> : <Volume2 size={11} />}
+                                    上一条原声
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => audioInputRef.current?.click()}
+                                disabled={disabled || uploadBusy}
+                                className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-[10px] text-white hover:bg-primary-hover disabled:opacity-40"
+                            >
+                                <Upload size={11} /> 上传配音
+                            </button>
+                            <input
+                                ref={audioInputRef}
+                                type="file"
+                                accept="audio/*"
+                                hidden
+                                onChange={event => onPickAudios(event.target.files)}
+                            />
+                        </div>
+                    </div>
+                    {audios[0] ? (
+                        <div className="flex items-center justify-between gap-2 rounded-md bg-n20 px-2 py-1.5 text-[10px] text-n500">
+                            <span className="min-w-0 truncate" title={audios[0].url}><Volume2 size={11} className="mr-1 inline" />{audios[0].url.split('/').pop()}</span>
+                            <button type="button" onClick={() => removeMedia(value.media_inputs.indexOf(audios[0]))} className="text-danger">移除</button>
+                        </div>
+                    ) : (
+                        <div className="rounded-md bg-n20 px-2 py-1.5 text-[10px] text-n100">暂未选择参考配音</div>
+                    )}
+                    <div className="mt-1.5 flex items-start gap-1 text-[9px] leading-relaxed text-warning">
+                        <Info size={10} className="mt-0.5 shrink-0" />
+                        <span>{audioReferenceNotice || 'Seedance 1.5 Pro 当前不接收参考音频；音频会保留在卡片中，提交生成时不会发送。'}</span>
+                    </div>
+                </section>
+
+                <section className="space-y-2 rounded-xl border border-n40 bg-n0 p-3">
+                    <div className="grid grid-cols-[1.15fr_1fr] gap-3">
+                        <div>
+                            <div className="mb-1.5 text-[10px] font-semibold text-n700">画面比例</div>
+                            <div className="grid grid-cols-6 gap-1 rounded-lg bg-n20 p-1">
+                                {AGENT_PLAN_RATIO_OPTIONS.map(ratio => (
+                                    <button
+                                        key={ratio}
+                                        type="button"
+                                        onClick={() => patch({ ratio })}
+                                        disabled={disabled}
+                                        className={`rounded-md px-1 py-1.5 text-[9px] transition-colors ${selectedAgentPlanRatio === ratio ? 'bg-n0 font-semibold text-primary shadow-sm' : 'text-n300 hover:text-n700'}`}
+                                    >
+                                        <span className="mx-auto mb-1 block h-2.5 w-4 rounded-[2px] border border-current" />
+                                        {ratio}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="mb-1.5 text-[10px] font-semibold text-n700">选择分辨率</div>
+                            <div className="grid grid-cols-2 gap-1 rounded-lg bg-n20 p-1">
+                                {AGENT_PLAN_RESOLUTION_OPTIONS.map(resolution => (
+                                    <button
+                                        key={resolution}
+                                        type="button"
+                                        onClick={() => patch({ resolution })}
+                                        disabled={disabled}
+                                        className={`rounded-md px-2 py-2 text-[10px] transition-colors ${selectedAgentPlanResolution === resolution ? 'bg-n0 font-semibold text-primary shadow-sm' : 'text-n300 hover:text-n700'}`}
+                                    >
+                                        {resolution.toUpperCase()}{resolution === '1080p' ? ' ✦' : ''}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[10px]">
+                        <label className="flex items-center gap-2 rounded-md border border-primary bg-primary-light px-2 py-1.5 text-primary">
+                            <input type="checkbox" checked={value.generate_audio !== false} onChange={event => patch({ generate_audio: event.target.checked })} disabled={disabled} />
+                            生成配音
+                        </label>
+                        <label className="flex items-center gap-2 rounded-md border border-n40 bg-n20 px-2 py-1.5 text-n500">
+                            <input type="checkbox" checked={!!value.camera_fixed} onChange={event => patch({ camera_fixed: event.target.checked })} disabled={disabled} />
+                            固定镜头
+                        </label>
+                        <label className="flex items-center gap-2 rounded-md border border-n40 bg-n20 px-2 py-1.5 text-n500">
+                            <input type="checkbox" checked={!!value.watermark} onChange={event => patch({ watermark: event.target.checked })} disabled={disabled} />
+                            添加水印
+                        </label>
+                    </div>
+                    <details className="text-[10px] text-n300">
+                        <summary className="cursor-pointer select-none hover:text-primary">高级设置</summary>
+                        <label className="mt-2 flex items-center gap-2">
+                            <span>Seed</span>
+                            <input
+                                type="number"
+                                value={value.seed ?? -1}
+                                onChange={event => patch({ seed: parseInt(event.target.value, 10) })}
+                                disabled={disabled}
+                                className="w-32 rounded-md border border-n40 bg-n0 px-2 py-1 text-n700"
+                            />
+                            <span className="text-n100">-1 为随机</span>
+                        </label>
+                    </details>
+                </section>
+
+                <div className="flex items-start gap-1 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[10px] text-warning">
+                    <Info size={11} className="mt-0.5 shrink-0" />
+                    <span>Seedance 1.5 Pro 支持单图或首尾帧生成；请仅使用模型产物、预置虚拟人像或已授权真人素材。</span>
+                </div>
+
+                {!validation.ok && (
+                    <div className="flex items-center gap-1 rounded-md border border-danger/40 bg-r50 px-2 py-1.5 text-[10px] text-danger">
+                        <AlertCircle size={11} />{validation.msg}
+                    </div>
+                )}
+
+                {promptModalOpen && ReactDOM.createPortal(
+                    <div className="fixed inset-0 z-[9500] flex items-center justify-center bg-n900/50 backdrop-blur-sm p-4" onMouseDown={event => { if (event.target === event.currentTarget) setPromptModalOpen(false); }}>
+                        <div role="dialog" aria-label="放大编辑提示词" className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-md border border-n40 bg-n0 shadow-bottom">
+                            <div className="flex items-center justify-between border-b border-n40 px-4 py-3">
+                                <div>
+                                    <div className="text-sm font-semibold text-primary">Seedance 1.5 Pro · 提示词编辑</div>
+                                    <div className="text-[10px] text-n100">描述画面、动作、运镜和声音</div>
+                                </div>
+                                <button type="button" onClick={() => setPromptModalOpen(false)} className="rounded p-1.5 text-n300 hover:bg-n20 hover:text-n800" aria-label="关闭"><X size={16} /></button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4">
+                                <SeedanceMentionPromptEditor value={value} onChange={onChange} candidates={candidates.filter(candidate => candidate.kind === 'text')} disabled={disabled} rows={27} openUpward placeholder="描述动作、镜头、声音……" onPreviewMedia={onPreviewMedia} />
+                            </div>
+                            <div className="flex justify-end border-t border-n40 px-4 py-3">
+                                <button type="button" onClick={() => setPromptModalOpen(false)} className="rounded bg-primary px-4 py-1.5 text-xs text-white hover:bg-primary-hover">完成</button>
+                            </div>
+                        </div>
+                    </div>,
+                    document.body,
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-3 bg-n0 border border-n40 rounded-md p-3 shadow-card">

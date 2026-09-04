@@ -14,6 +14,7 @@ export interface DurationFieldForGroupProps {
     onPatchGroup: (uuid: string, patch: Partial<TaskGroup>) => void;
     disabled?: boolean;
     maxDuration?: number;
+    variant?: 'compact' | 'seedance15';
 }
 
 export const DurationFieldForGroup: React.FC<DurationFieldForGroupProps> = ({
@@ -22,6 +23,7 @@ export const DurationFieldForGroup: React.FC<DurationFieldForGroupProps> = ({
     onPatchGroup,
     disabled,
     maxDuration,
+    variant,
 }) => {
     const dur = useReactiveDuration({
         groupUuid: group.uuid,
@@ -41,6 +43,7 @@ export const DurationFieldForGroup: React.FC<DurationFieldForGroupProps> = ({
             onClear={dur.clearOverride}
             disabled={disabled}
             maxDuration={maxDuration}
+            variant={variant}
         />
     );
 };

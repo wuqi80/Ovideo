@@ -158,9 +158,11 @@ export function normalizeSeedanceMediaForSubmission(
 }
 
 /**
- * 2026-07-11：Seedance 1.5-pro 仅支持单图或首尾帧，禁止多模态多输入。
+ * Seedance 1.5 Pro 仅向供应商提交单图或首尾帧。参考配音可保存在卡片状态中，
+ * 但提交前会被 capability 适配层移除，方便用户切换到支持参考音频的模型后复用。
  * The compatibility endpoint forces model=1.5-pro for historical agent-plan requests.
- * 1.5-pro 拒绝 video/audio kind 与 3+ 张图。前端拦截避免用户点了提交才报错、浪费扣费。
+ * 供应商请求拒绝 video/audio kind 与 3+ 张图；调用方会先剔除仅保存的参考音频，
+ * 并在前端拦截参考视频与超量图片，避免用户点了提交才报错、浪费扣费。
  *
  * 返回 null 表示可通过；返回 string 是禁用原因（同时也是按钮 tooltip）。
  * supportsMultimodal=true 表示当前卡片所选模型是 Seedance 2.0 系列，不走 1.5 / Agent Plan 限制。
@@ -171,12 +173,13 @@ export function validateSeedanceMediaInputs(
 ): string | null {
     if (supportsMultimodal) return null;
     if (!media) return null;
-    const hasVideoAudio = media.some((m) => m.kind === 'video' || m.kind === 'audio');
-    if (hasVideoAudio) {
-        return 'Seedance 1.5-pro 不支持视频/音频参考输入，请移除 @视频/@音频 引用';
+    const hasVideo = media.some((m) => m.kind === 'video');
+    if (hasVideo) {
+        return 'Seedance 1.5 Pro 不支持参考视频，请移除 @视频 引用';
     }
-    if (media.length > 2) {
-        return 'Seedance 1.5-pro 最多支持 2 张图片（单图或首尾帧），请减少到 ≤2 张图';
+    const imageCount = media.filter((m) => m.kind === 'image').length;
+    if (imageCount > 2) {
+        return 'Seedance 1.5 Pro 最多支持 2 张图片（单图或首尾帧），请减少到 ≤2 张图';
     }
     return null;
 }

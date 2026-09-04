@@ -192,7 +192,7 @@ describe('Seedance model mapping', () => {
     ]);
   });
 
-  it('allows multimodal media for Seedance 2.0 models but blocks it for agent-plan compatibility', () => {
+  it('allows multimodal media for Seedance 2.0 and only blocks video for agent-plan compatibility', () => {
     const media = [
       { kind: 'image' as const, url: '/ref.png', role: 'reference_image' as const },
       { kind: 'video' as const, url: '/ref.mp4', role: 'reference_video' as const },
@@ -200,7 +200,8 @@ describe('Seedance model mapping', () => {
     ];
 
     expect(validateSeedanceMediaInputs(media, true)).toBeNull();
-    expect(validateSeedanceMediaInputs(media, false)).toContain('1.5-pro 不支持视频/音频');
+    expect(validateSeedanceMediaInputs(media, false)).toContain('Seedance 1.5 Pro 不支持参考视频');
+    expect(validateSeedanceMediaInputs(media.filter(item => item.kind !== 'video'), false)).toBeNull();
   });
 });
 

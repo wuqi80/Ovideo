@@ -10,12 +10,50 @@ export interface CardDurationFieldProps {
     onClear: () => void;
     disabled?: boolean;
     maxDuration?: number;
+    variant?: 'compact' | 'seedance15';
 }
 
 export const CardDurationField: React.FC<CardDurationFieldProps> = ({
-    duration, userOverride, onChange, onClear, disabled, maxDuration,
+    duration, userOverride, onChange, onClear, disabled, maxDuration, variant = 'compact',
 }) => {
     const maxSec = maxDuration ?? DURATION_MAX_SEC;
+    if (variant === 'seedance15') {
+        const marks = Array.from(new Set([DURATION_MIN_SEC, 5, 10, maxSec]))
+            .filter(mark => mark >= DURATION_MIN_SEC && mark <= maxSec)
+            .sort((a, b) => a - b);
+        return (
+            <div className="flex min-w-[250px] items-center gap-2 rounded-lg border border-n40 bg-n0 px-2.5 py-1.5 text-[10px] shadow-sm">
+                <div className="shrink-0">
+                    <div className="font-medium text-n700">视频时长</div>
+                    <div className="text-[9px] text-n100">{DURATION_MIN_SEC}–{maxSec} 秒</div>
+                </div>
+                <div className="min-w-0 flex-1">
+                    <input
+                        type="range"
+                        min={DURATION_MIN_SEC}
+                        max={maxSec}
+                        step={1}
+                        value={duration}
+                        disabled={disabled}
+                        className="h-1.5 w-full cursor-pointer accent-primary disabled:cursor-not-allowed"
+                        onChange={event => onChange(Number(event.target.value), true)}
+                        aria-label="Seedance 1.5 Pro 视频时长"
+                    />
+                    <div className="flex justify-between text-[8px] leading-none text-n100">
+                        {marks.map(mark => <span key={mark}>{mark}</span>)}
+                    </div>
+                </div>
+                <div className="flex h-8 w-11 shrink-0 items-center justify-center rounded-md bg-n20 font-semibold text-n700">
+                    {duration}<span className="ml-0.5 text-[9px] font-normal text-n100">s</span>
+                </div>
+                {userOverride && (
+                    <button type="button" onClick={onClear} disabled={disabled} title="恢复跟随分镜时长" className="p-0.5 text-n300 hover:text-primary">
+                        <RotateCcw size={11} />
+                    </button>
+                )}
+            </div>
+        );
+    }
     return (
         <div className="flex items-center gap-1 text-[10px]">
             <label className="text-n300">时长</label>
