@@ -12,8 +12,10 @@ import {
   ChevronDown,
   Clock3,
   Coins,
+  FolderOpen,
   LayoutGrid,
   Library,
+  Loader2,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -23,6 +25,7 @@ import {
   ShieldCheck,
   Trash2,
   UserRound,
+  X,
 } from 'lucide-react';
 import { apiFetch, apiJson } from '../services/httpClient';
 import { getCreditBalance } from '../services/creditService';
@@ -86,7 +89,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
   });
   const managed = credits === undefined;
   const [selfCredits, setSelfCredits] = useState<number | null>(null);
-  const [recent, setRecent] = useState<RecentProject[]>([]);
+  const [projects, setProjects] = useState<RecentProject[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [projectsLoadError, setProjectsLoadError] = useState(false);
+  const [canvasPickerOpen, setCanvasPickerOpen] = useState(false);
+  const [openingCanvasProjectId, setOpeningCanvasProjectId] = useState('');
   const [username, setUsername] = useState(() => getStoredUsername('未登录'));
   const [menuOpen, setMenuOpen] = useState(false);
   const [adminSession, setAdminSession] = useState<CurrentAdminSession | null>(null);
@@ -129,9 +136,11 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
     (async () => {
       try {
         const data = await apiJson<{ success?: boolean; projects?: RecentProject[] }>('/api/projects', {}, '最近项目');
-        if (alive && Array.isArray(data?.projects)) setRecent(data.projects.slice(0, 3));
+        if (alive && Array.isArray(data?.projects)) setProjects(data.projects);
       } catch {
-        /* 静默：侧栏最近项目为增强信息 */
+        if (alive) setProjectsLoadError(true);
+      } finally {
+        if (alive) setProjectsLoading(false);
       }
     })();
     return () => {
@@ -171,14 +180,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
     return () => { alive = false; };
   }, []);
 
-  const openRecentProjectTool = useCallback(async (
-    target: 'canvas' | 'media-library' | 'history' | 'recycle-bin' | 'image-upscale',
-  ) => {
-    const projectId = recent[0]?.project_id;
-    if (!projectId) {
-      navigate('/projects');
-      return;
-    }
+  const openCanvasForProject = useCallback(async (projectId: string) => {
+    if (!projectId || openingCanvasProjectId) return;
+    setOpeningCanvasProjectId(projectId);
     try {
       const data = await apiJson<{ episodes?: RecentEpisode[] }>(
         `/api/projects/${encodeURIComponent(projectId)}/episodes`,
@@ -188,32 +192,35 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
       const episode = Array.isArray(data?.episodes) ? data.episodes[0] : undefined;
       const episodeId = episode?.episode_id || episode?.episodeId || episode?.id;
       if (!episodeId) {
+        setCanvasPickerOpen(false);
         navigate(`/projects/${projectId}/episodes`);
         return;
       }
-      navigate(
-        target === 'canvas'
-          ? `/projects/${projectId}/ep/${episodeId}/canvas`
-          : `/projects/${projectId}/ep/${episodeId}/workflow/${target}`,
-      );
+      setCanvasPickerOpen(false);
+      navigate(`/projects/${projectId}/ep/${episodeId}/canvas`);
     } catch {
+      setCanvasPickerOpen(false);
       navigate(`/projects/${projectId}/episodes`);
+    } finally {
+      setOpeningCanvasProjectId('');
     }
-  }, [navigate, recent]);
+  }, [navigate, openingCanvasProjectId]);
 
   const defaultTools: AppSidebarItem[] = [
-    { key: 'canvas', label: '专业画布', icon: Brush, onClick: () => { void openRecentProjectTool('canvas'); } },
-    { key: 'media-library', label: '我的素材', icon: Library, onClick: () => { void openRecentProjectTool('media-library'); } },
-    { key: 'image-upscale', label: '图片高清放大', icon: ScanLine, onClick: () => { void openRecentProjectTool('image-upscale'); } },
-    { key: 'history', label: '生成历史', icon: Clock3, onClick: () => { void openRecentProjectTool('history'); } },
-    { key: 'recycle-bin', label: '回收站', icon: Trash2, onClick: () => { void openRecentProjectTool('recycle-bin'); } },
+    { key: 'canvas', label: '专业画布', icon: Brush, onClick: () => setCanvasPickerOpen(true) },
+    { key: 'media-library', label: '我的素材', icon: Library, to: '/tools/media-library' },
+    { key: 'image-upscale', label: '图片高清放大', icon: ScanLine, to: '/tools/image-upscale' },
+    { key: 'history', label: '生成历史', icon: Clock3, to: '/tools/history' },
+    { key: 'recycle-bin', label: '回收站', icon: Trash2, to: '/tools/recycle-bin' },
   ];
   const visibleTools = tools ?? defaultTools;
+  const recent = projects.slice(0, 3);
 
   const shownCredits = managed ? selfCredits : credits;
   const initial = (username.trim().charAt(0) || 'U').toUpperCase();
 
   return (
+    <>
     <aside
       data-testid="app-sidebar"
       data-collapsed={collapsed ? 'true' : 'false'}
@@ -303,6 +310,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
             {!collapsed && <div className={`${sectionLabelClass} pt-3`}>更多功能</div>}
             {visibleTools.map(item => {
               const Icon = item.icon;
+              const isCanvasEntry = item.key === 'canvas';
               const inner = (
                 <>
                   <Icon size={16} className="shrink-0" />
@@ -310,7 +318,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
                   {!collapsed && item.badge}
                 </>
               );
-              return item.to ? (
+              return item.to && !isCanvasEntry ? (
                 <NavLink
                   key={item.key}
                   to={item.to}
@@ -331,7 +339,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
                 <button
                   key={item.key}
                   type="button"
-                  onClick={item.onClick}
+                  onClick={isCanvasEntry ? () => setCanvasPickerOpen(true) : item.onClick}
                   aria-label={item.label}
                   title={item.label}
                   className={`flex w-full min-w-0 items-center rounded-[9px] py-2 text-left text-[12.5px] text-n70 transition-colors hover:bg-n700 hover:text-n0 ${
@@ -452,6 +460,96 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ exportTo, tools, credits
         </button>
       </div>
     </aside>
+
+    {canvasPickerOpen && (
+      <div className="app-modal-backdrop fixed inset-0 z-[140] flex items-center justify-center p-4">
+        <button
+          type="button"
+          aria-label="关闭项目选择"
+          className="absolute inset-0 bg-n900/55"
+          onClick={() => !openingCanvasProjectId && setCanvasPickerOpen(false)}
+        />
+        <section
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="canvas-project-picker-title"
+          className="app-modal-surface relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-xl"
+        >
+          <div className="flex items-start gap-3 border-b border-n40 px-5 py-4">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
+              <Brush size={19} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 id="canvas-project-picker-title" className="text-base font-bold text-n800">选择专业画布所属项目</h2>
+              <p className="mt-1 text-xs leading-5 text-n200">专业画布保存项目内容，请先选择要进入的项目。</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCanvasPickerOpen(false)}
+              disabled={Boolean(openingCanvasProjectId)}
+              className="rounded-lg p-1.5 text-n200 hover:bg-n20 hover:text-n700 disabled:opacity-50"
+              aria-label="关闭"
+            >
+              <X size={17} />
+            </button>
+          </div>
+
+          {projectsLoading ? (
+            <div className="flex min-h-36 items-center justify-center gap-2 text-sm text-n200">
+              <Loader2 size={17} className="animate-spin" /> 正在加载项目
+            </div>
+          ) : projectsLoadError ? (
+            <div className="px-6 py-10 text-center">
+              <div className="text-sm font-semibold text-danger">项目列表暂时无法加载</div>
+              <p className="mt-1 text-xs text-n200">请关闭窗口，检查网络后重试。</p>
+            </div>
+          ) : projects.length > 0 ? (
+            <div className="max-h-[420px] space-y-2 overflow-y-auto p-4 scrollbar-atlas">
+              {projects.map((project, index) => {
+                const projectName = project.project_name || project.name || project.project_id;
+                const loading = openingCanvasProjectId === project.project_id;
+                return (
+                  <button
+                    key={project.project_id}
+                    type="button"
+                    aria-label={`选择项目：${projectName}`}
+                    onClick={() => { void openCanvasForProject(project.project_id); }}
+                    disabled={Boolean(openingCanvasProjectId)}
+                    className="group flex w-full items-center gap-3 rounded-xl border border-n50 bg-n0 px-4 py-3 text-left transition-colors hover:border-b300 hover:bg-primary-light disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-n20 text-primary group-hover:bg-n0">
+                      {loading ? <Loader2 size={17} className="animate-spin" /> : <FolderOpen size={17} />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-n700">{projectName}</span>
+                      <span className="mt-0.5 block text-[11px] text-n200">{index === 0 ? '最近访问' : '进入该项目的专业画布'}</span>
+                    </span>
+                    <span className="text-xs font-medium text-primary">选择</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-6 py-10 text-center">
+              <FolderOpen size={32} className="mx-auto text-n100" />
+              <div className="mt-3 text-sm font-semibold text-n700">请先创建项目</div>
+              <p className="mt-1 text-xs text-n200">专业画布需要保存到项目中，其他工具仍可直接使用。</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setCanvasPickerOpen(false);
+                  navigate('/projects');
+                }}
+                className="mt-5 inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-xs font-semibold text-n0 hover:bg-primary-hover"
+              >
+                前往创建项目
+              </button>
+            </div>
+          )}
+        </section>
+      </div>
+    )}
+    </>
   );
 };
 

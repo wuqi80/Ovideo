@@ -95,7 +95,7 @@ class ComfyUIUploadRecord:
 
     file_record: Dict[str, Any]
     file_id: str
-    version_id: str
+    version_id: Optional[str]
     file_url: str
     download_url: str
 
@@ -277,19 +277,22 @@ async def create_comfyui_upload_record(
     redis_client: Optional[Any] = None,
     redis_comfyui_filename: Optional[str] = None,
     redis_ttl_seconds: int = 86400,
+    attach_default_version: bool = True,
     uuid_hex_provider: Callable[[], str] = lambda: uuid.uuid4().hex,
 ) -> ComfyUIUploadRecord:
-    """Create the default project/version if needed and persist a ComfyUI upload file record."""
+    """Persist a ComfyUI upload, optionally attaching it to a default project version."""
 
     file_id = f"file_{uuid_hex_provider()[:12]}"
     download_url = f"/api/files/{file_id}/download"
     resolved_file_url = file_url or download_url
-    version_id = await _ensure_default_upload_version(
-        username=username,
-        project_dao=project_dao,
-        version_dao=version_dao,
-        uuid_hex_provider=uuid_hex_provider,
-    )
+    version_id = None
+    if attach_default_version:
+        version_id = await _ensure_default_upload_version(
+            username=username,
+            project_dao=project_dao,
+            version_dao=version_dao,
+            uuid_hex_provider=uuid_hex_provider,
+        )
 
     file_record = await file_dao.create_file(
         version_id=version_id,
@@ -340,6 +343,7 @@ async def upload_image_file_to_comfyui(
     storage_root: Path = Path("persistent_storage"),
     now_provider: Callable[[], datetime] = datetime.now,
     utc_now_provider: Callable[[], datetime] = datetime.utcnow,
+    attach_default_version: bool = True,
     uuid_hex_provider: Callable[[], str] = lambda: uuid.uuid4().hex,
     upload_file: Callable[..., requests.Response] = upload_comfyui_file_response,
 ) -> Dict[str, Any]:
@@ -403,6 +407,7 @@ async def upload_image_file_to_comfyui(
         logger=logger,
         redis_client=redis_client,
         redis_comfyui_filename=comfyui_filename,
+        attach_default_version=attach_default_version,
         uuid_hex_provider=uuid_hex_provider,
     )
     file_record = record_result.file_record

@@ -238,20 +238,22 @@ export const ImageUpscalePage: React.FC = () => {
   }, [previewUrl]);
 
   const startUpscale = useCallback(async () => {
-    if (!file || !previewUrl || !projectId || !episodeId || busy) return;
+    if (!file || !previewUrl || busy) return;
     setStatus('uploading');
     setProgress(0);
     setError('');
     setResultUrl('');
     try {
-      const upload = await uploadImageToComfyUI(previewUrl);
+      const upload = await uploadImageToComfyUI(previewUrl, { standalone: !projectId });
       setStatus('queued');
       const submitted = await processMaterial(upload.filename, 'image_upscale', {
-        entityType: 'project',
-        entityId: projectId,
         fileRole: 'upscaled_image',
-        projectId,
-        episodeId,
+        ...(projectId ? {
+          entityType: 'project',
+          entityId: projectId,
+          projectId,
+          episodeId: episodeId || undefined,
+        } : {}),
         targetLongEdge,
         dpi,
         textClarity,
@@ -267,10 +269,12 @@ export const ImageUpscalePage: React.FC = () => {
           title: `图片高清放大 · ${formatPixels(targetLongEdge)}px`,
           kind: 'image-upscale',
           targetPage: 'image-upscale',
-          targetProjectId: projectId,
-          episodeId,
-          targetEntityType: 'project',
-          targetEntityId: projectId,
+          ...(projectId ? {
+            targetProjectId: projectId,
+            episodeId: episodeId || undefined,
+            targetEntityType: 'project',
+            targetEntityId: projectId,
+          } : {}),
           fileRole: 'upscaled_image',
         },
       );

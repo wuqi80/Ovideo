@@ -70,7 +70,10 @@ async function downloadImageBlob(imageUrlOrDataUrl: string): Promise<Blob> {
   return publicBlob(absolute, { method: 'GET' }, 'downloadExternalImageForComfyUI');
 }
 
-export async function uploadImageToComfyUI(imageUrlOrDataUrl: string): Promise<{
+export async function uploadImageToComfyUI(
+  imageUrlOrDataUrl: string,
+  options?: { standalone?: boolean },
+): Promise<{
   success: boolean;
   filename: string;
   storage_url: string;
@@ -88,6 +91,9 @@ export async function uploadImageToComfyUI(imageUrlOrDataUrl: string): Promise<{
   const formData = new FormData();
   formData.append('image', blob, `image_${Date.now()}.png`);
   formData.append('node_type', 'image');
+  if (options?.standalone) {
+    formData.append('standalone', 'true');
+  }
 
   return apiJson<any>('/api/comfyui/upload', {
     method: 'POST',

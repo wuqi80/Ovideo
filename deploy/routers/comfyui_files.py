@@ -165,6 +165,7 @@ def create_comfyui_files_router(
     async def comfyui_upload_proxy(
         image: UploadFile = File(...),
         node_type: Optional[str] = Form(None),
+        standalone: bool = Form(False),
         comfyui_server: Optional[str] = None,
         username: str = Depends(require_auth_dependency),
     ):
@@ -227,6 +228,7 @@ def create_comfyui_files_router(
                 comfyui_node_id=node_id,
                 logger=logger,
                 redis_client=get_redis_client(),
+                attach_default_version=not standalone,
             )
 
         except HTTPException:

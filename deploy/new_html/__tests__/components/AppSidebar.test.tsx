@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -71,10 +71,10 @@ describe('AppSidebar public tools', () => {
 
     expect(screen.getByText('更多功能')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '专业画布' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '我的素材' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '生成历史' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '回收站' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '图片高清放大' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '我的素材' })).toHaveAttribute('href', '/tools/media-library');
+    expect(screen.getByRole('link', { name: '生成历史' })).toHaveAttribute('href', '/tools/history');
+    expect(screen.getByRole('link', { name: '回收站' })).toHaveAttribute('href', '/tools/recycle-bin');
+    expect(screen.getByRole('link', { name: '图片高清放大' })).toHaveAttribute('href', '/tools/image-upscale');
     expect(
       screen.getByText('图片高清放大').compareDocumentPosition(screen.getByText('生成历史'))
       & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -86,10 +86,8 @@ describe('AppSidebar public tools', () => {
     await waitFor(() => expect(apiJson).toHaveBeenCalledWith('/api/projects', {}, '最近项目'));
   });
 
-  it('opens image upscale from the most recent project and episode', async () => {
-    (apiJson as any)
-      .mockResolvedValueOnce({ success: true, projects: [{ project_id: 'proj_1', project_name: '测试项目' }] })
-      .mockResolvedValueOnce({ success: true, episodes: [{ episode_id: 'ep_1' }] });
+  it('opens image upscale without resolving a project or episode', async () => {
+    (apiJson as any).mockResolvedValueOnce({ success: true, projects: [{ project_id: 'proj_1', project_name: '测试项目' }] });
 
     render(
       <MemoryRouter initialEntries={['/projects']}>
@@ -99,18 +97,16 @@ describe('AppSidebar public tools', () => {
     );
 
     await screen.findByText('测试项目');
-    fireEvent.click(screen.getByRole('button', { name: '图片高清放大' }));
+    fireEvent.click(screen.getByRole('link', { name: '图片高清放大' }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent('/projects/proj_1/ep/ep_1/workflow/image-upscale');
+      expect(screen.getByTestId('location')).toHaveTextContent('/tools/image-upscale');
     });
-    expect(apiJson).toHaveBeenCalledWith('/api/projects/proj_1/episodes', {}, '最近分集');
+    expect(apiJson).not.toHaveBeenCalledWith('/api/projects/proj_1/episodes', {}, '最近分集');
   });
 
-  it('opens my assets inside the episode workflow shell', async () => {
-    (apiJson as any)
-      .mockResolvedValueOnce({ success: true, projects: [{ project_id: 'proj_1', project_name: '测试项目' }] })
-      .mockResolvedValueOnce({ success: true, episodes: [{ episode_id: 'ep_1' }] });
+  it('opens my assets in the global tool shell', async () => {
+    (apiJson as any).mockResolvedValueOnce({ success: true, projects: [{ project_id: 'proj_1', project_name: '测试项目' }] });
 
     render(
       <MemoryRouter initialEntries={['/projects']}>
@@ -120,11 +116,54 @@ describe('AppSidebar public tools', () => {
     );
 
     await screen.findByText('测试项目');
-    fireEvent.click(screen.getByRole('button', { name: '我的素材' }));
+    fireEvent.click(screen.getByRole('link', { name: '我的素材' }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent('/projects/proj_1/ep/ep_1/workflow/media-library');
+      expect(screen.getByTestId('location')).toHaveTextContent('/tools/media-library');
     });
+  });
+
+  it('asks which project to open before entering professional canvas', async () => {
+    (apiJson as any)
+      .mockResolvedValueOnce({
+        success: true,
+        projects: [
+          { project_id: 'proj_1', project_name: '最近项目' },
+          { project_id: 'proj_2', project_name: '目标项目' },
+        ],
+      })
+      .mockResolvedValueOnce({ success: true, episodes: [{ episode_id: 'ep_2' }] });
+
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <AppSidebar />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('目标项目');
+    fireEvent.click(screen.getByRole('button', { name: '专业画布' }));
+
+    const picker = screen.getByRole('dialog', { name: '选择专业画布所属项目' });
+    expect(picker).toBeInTheDocument();
+    fireEvent.click(within(picker).getByRole('button', { name: /目标项目/ }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/projects/proj_2/ep/ep_2/canvas');
+    });
+    expect(apiJson).toHaveBeenCalledWith('/api/projects/proj_2/episodes', {}, '最近分集');
+  });
+
+  it('prompts users to create a project when professional canvas has no target', async () => {
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <AppSidebar />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '专业画布' }));
+    expect(await screen.findByText('请先创建项目')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '前往创建项目' })).toBeInTheDocument();
   });
 
   it('collapses to an icon rail, stays navigable, and remembers the preference', async () => {
@@ -150,10 +189,8 @@ describe('AppSidebar public tools', () => {
     });
   });
 
-  it('opens the standalone recycle bin from the most recent project and episode', async () => {
-    (apiJson as any)
-      .mockResolvedValueOnce({ success: true, projects: [{ project_id: 'proj_1', project_name: '测试项目' }] })
-      .mockResolvedValueOnce({ success: true, episodes: [{ episode_id: 'ep_1' }] });
+  it('opens the standalone recycle bin without project context', async () => {
+    (apiJson as any).mockResolvedValueOnce({ success: true, projects: [{ project_id: 'proj_1', project_name: '测试项目' }] });
 
     render(
       <MemoryRouter initialEntries={['/projects']}>
@@ -163,10 +200,10 @@ describe('AppSidebar public tools', () => {
     );
 
     await screen.findByText('测试项目');
-    fireEvent.click(screen.getByRole('button', { name: '回收站' }));
+    fireEvent.click(screen.getByRole('link', { name: '回收站' }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent('/projects/proj_1/ep/ep_1/workflow/recycle-bin');
+      expect(screen.getByTestId('location')).toHaveTextContent('/tools/recycle-bin');
     });
   });
 });

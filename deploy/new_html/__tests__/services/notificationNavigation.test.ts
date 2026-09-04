@@ -43,4 +43,17 @@ describe('buildNotificationTargetUrl', () => {
       '/projects/proj_1/episodes',
     );
   });
+
+  it('opens standalone tools even when a task has no project context', () => {
+    expect(buildNotificationTargetUrl(task({
+      targetPage: 'image-upscale',
+      targetProjectId: undefined,
+      episodeId: undefined,
+    }))).toBe('/tools/image-upscale');
+  });
+
+  it('keeps utility notifications on their global routes when project metadata exists', () => {
+    expect(buildNotificationTargetUrl(task({ targetPage: 'history' }))).toBe('/tools/history');
+    expect(buildNotificationTargetUrl(task({ targetPage: 'media-library' }))).toBe('/tools/media-library');
+  });
 });

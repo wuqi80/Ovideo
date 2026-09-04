@@ -6540,6 +6540,8 @@ def check_comfyui_file_service_contract(root: Path) -> int:
         "reupload_comfyui_video_with_uuid(",
         "upload_audio_file_to_comfyui(",
         "upload_image_file_to_comfyui(",
+        "standalone: bool = Form(False)",
+        "attach_default_version=not standalone",
         "upload_video_file_to_comfyui(",
     ]
     required_service_snippets = [
@@ -6554,6 +6556,8 @@ def check_comfyui_file_service_contract(root: Path) -> int:
         "def _extract_uploaded_filename(",
         "async def _ensure_default_upload_version(",
         "async def create_comfyui_upload_record(",
+        "attach_default_version: bool = True",
+        "if attach_default_version:",
         "async def upload_image_file_to_comfyui(",
         "storage_root / \"image\" / username",
         "redis_comfyui_filename=comfyui_filename",

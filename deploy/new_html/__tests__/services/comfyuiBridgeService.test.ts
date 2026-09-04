@@ -77,4 +77,16 @@ describe('uploadImageToComfyUI', () => {
     expect(downloadOpts.headers.Authorization).toBeUndefined();
     expect(downloadOpts.headers['Content-Type']).toBeUndefined();
   });
+
+  it('marks project-independent uploads as standalone', async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockBlobResponse())
+      .mockResolvedValueOnce(mockJsonResponse({ success: true, filename: 'image.png', storage_url: '/uploads/image.png' }));
+
+    await uploadImageToComfyUI('/storage/source.png', { standalone: true });
+
+    const [, uploadOpts] = mockFetch.mock.calls[1];
+    expect(uploadOpts.body).toBeInstanceOf(FormData);
+    expect(uploadOpts.body.get('standalone')).toBe('true');
+  });
 });

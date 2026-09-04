@@ -14,6 +14,7 @@
  *   /projects/:projectId/ep/:episodeId/workflow/history   → 流程化: 生成历史
  *   /projects/:projectId/ep/:episodeId/workflow/recycle-bin → 流程化: 回收站
  *   /projects/:projectId/ep/:episodeId/canvas            → 创剧自由画布
+ *   /tools/*                                               → 不依赖项目的用户工具
  *
  * 兼容旧路由 (向后兼容):
  *   /projects/:projectId/editor → redirect to ep/default/workflow/script
@@ -44,6 +45,7 @@ const ProjectHub = React.lazy(() => import('./components/ProjectHub'));
 const CreatePage = React.lazy(() => import('./pages/CreatePage'));
 const ProjectWorkspace = React.lazy(() => import('./components/ProjectWorkspace'));
 const WorkflowLayout = React.lazy(() => import('./layouts/WorkflowLayout').then(m => ({ default: m.WorkflowLayout })));
+const GlobalToolsLayout = React.lazy(() => import('./layouts/GlobalToolsLayout').then(m => ({ default: m.GlobalToolsLayout })));
 const EpisodeHubPage = React.lazy(() => import('./pages/EpisodeHubPage').then(m => ({ default: m.EpisodeHubPage })));
 const ScriptPage = React.lazy(() => import('./pages/ScriptPage').then(m => ({ default: m.ScriptPage })));
 const MaterialsPage = React.lazy(() => import('./pages/MaterialsPage').then(m => ({ default: m.MaterialsPage })));
@@ -122,6 +124,15 @@ const App: React.FC = () => {
                     <Route path="/projects" element={<ProjectHub />} />
                     {/* 一句话新建创作（docs/design-standard 模板 Home） */}
                     <Route path="/create" element={<CreatePage />} />
+
+                    {/* ========== 不依赖项目/分集的用户工具 ========== */}
+                    <Route path="/tools" element={<GlobalToolsLayout />}>
+                        <Route index element={<Navigate to="media-library" replace />} />
+                        <Route path="media-library" element={<MediaLibraryPage />} />
+                        <Route path="image-upscale" element={<ImageUpscalePage />} />
+                        <Route path="history" element={<HistoryPage />} />
+                        <Route path="recycle-bin" element={<RecycleBinPage />} />
+                    </Route>
 
                     {/* ========== 项目工作区 ========== */}
                     <Route path="/projects/:projectId" element={<ProjectWorkspace />}>

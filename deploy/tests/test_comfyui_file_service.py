@@ -348,6 +348,32 @@ async def test_create_comfyui_upload_record_uses_existing_version_and_download_u
 
 
 @pytest.mark.asyncio
+async def test_create_comfyui_upload_record_can_remain_project_independent():
+    _reset_fakes()
+
+    result = await comfyui_file_service.create_comfyui_upload_record(
+        username="yuan",
+        file_type="image",
+        file_name="standalone.png",
+        file_path="persistent_storage/image/yuan/202606/standalone.png",
+        file_size_bytes=42,
+        mime_type="image/png",
+        metadata={"source": "comfyui_upload"},
+        file_dao=_FileDAO,
+        project_dao=_ProjectDAO,
+        version_dao=_VersionDAO,
+        logger=_Logger,
+        attach_default_version=False,
+        uuid_hex_provider=lambda: "standalone01",
+    )
+
+    assert result.version_id is None
+    assert _ProjectDAO.saved == []
+    assert _VersionDAO.created == []
+    assert _FileDAO.created[0]["version_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_upload_image_file_to_comfyui_uploads_saves_record_and_redis(tmp_path):
     _reset_fakes()
     _ProjectDAO.projects = [{"project_id": "proj_existing"}]

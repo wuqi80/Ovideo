@@ -7,6 +7,12 @@ import type { RegisteredTask, SourcePage } from '../types';
  */
 export function buildNotificationTargetUrl(task: RegisteredTask): string | null {
     const { targetPage, episodeId, targetProjectId, targetItemId, targetEntityId } = task;
+    const globalToolTargets: Partial<Record<SourcePage, string>> = {
+        'image-upscale': '/tools/image-upscale',
+        history: '/tools/history',
+        'media-library': '/tools/media-library',
+    };
+    if (globalToolTargets[targetPage]) return globalToolTargets[targetPage]!;
     if (!targetProjectId || !episodeId) {
         return targetProjectId ? `/projects/${targetProjectId}/episodes` : null;
     }
@@ -31,11 +37,11 @@ export function buildNotificationTargetUrl(task: RegisteredTask): string | null 
         enhance: `${base}/enhance`,
         postprocess: `${base}/postprocess`,
         canvas: `/projects/${targetProjectId}/ep/${episodeId}/canvas`,
-        history: `${base}/history`,
-        'media-library': `${base}/materials`,
+        history: '/tools/history',
+        'media-library': '/tools/media-library',
         final: `${base}/final`,
         'video-reverse': `${base}/video-reverse`,
-        'image-upscale': `${base}/image-upscale`,
+        'image-upscale': '/tools/image-upscale',
         global: null,
     };
     return map[targetPage] || null;

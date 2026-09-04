@@ -1,8 +1,8 @@
 /**
  * MediaLibraryPage.tsx
- * 2026-05-26 Slice 1 — 通用素材库页面（项目级）
+ * 2026-05-26 Slice 1 — 通用素材库页面（个人全局 / 项目级复用）
  *
- * 路由: /projects/:projectId/media-library
+ * 路由: /tools/media-library 或 /projects/:projectId/media-library
  *
  * 布局:
  *  - 顶部工具栏: 上传 / 批量下载 / 视图切换 / 筛选
@@ -84,6 +84,7 @@ export const MediaLibraryPage: React.FC = () => {
   const assetScopeMode = episodeId ? episodeContext.assetScopeMode : 'project';
   const setAssetScopeMode = episodeContext.setAssetScopeMode;
   const myUserId = getStoredUserId();
+  const hasProjectContext = Boolean(projectId);
 
   const [items, setItems] = useState<MediaLibraryItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -132,7 +133,11 @@ export const MediaLibraryPage: React.FC = () => {
   const folderOptions = useMemo(() => flattenForSelect(folderTree), [folderTree]);
 
   const loadFolders = useCallback(async () => {
-    if (!projectId) return;
+    if (!projectId) {
+      setFolders([]);
+      setSelectedFolderId(null);
+      return;
+    }
     try {
       const resp = await listMediaFolders(projectId);
       setFolders(resp.folders || []);
@@ -150,11 +155,11 @@ export const MediaLibraryPage: React.FC = () => {
   );
 
   const reload = useCallback(async () => {
-    if (!projectId) return;
     setLoading(true);
     setError(null);
     try {
-      const params: any = { project_id: projectId, limit: 200 };
+      const params: any = { limit: 200 };
+      if (projectId) params.project_id = projectId;
       if (episodeId && assetScopeMode === 'episode') {
         params.episode_id = episodeId;
         params.include_shared = true;
@@ -183,7 +188,7 @@ export const MediaLibraryPage: React.FC = () => {
           break;
       }
       if (keyword.trim()) params.keyword = keyword.trim();
-      if (selectedFolderId) params.folder_id = selectedFolderId;
+      if (projectId && selectedFolderId) params.folder_id = selectedFolderId;
       const resp = await listMediaItems(params);
       setItems(resp.items || []);
       setTotal(resp.total || 0);
@@ -200,20 +205,20 @@ export const MediaLibraryPage: React.FC = () => {
 
   const handleFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    if (!files.length || !projectId) return;
+    if (!files.length) return;
     setUploading(true);
     setError(null);
     try {
       const uploadFolderId = uploadTargetFolderId || undefined;
       for (const f of files) {
         await uploadMediaItem(f, {
-          projectId,
-          episodeId: episodeId || undefined,
-          permissionScope: 'project',  // 默认项目共享，方便组员看到
+          projectId: projectId || undefined,
+          episodeId: projectId && episodeId ? episodeId : undefined,
+          permissionScope: projectId ? 'project' : 'private',
           title: f.name,
           visibility: uploadVisibility,
           orgId: uploadVisibility === 'org-default' ? (orgId || undefined) : undefined,
-          folderId: uploadFolderId,
+          folderId: projectId ? uploadFolderId : undefined,
         });
       }
       await reload();
@@ -240,7 +245,7 @@ export const MediaLibraryPage: React.FC = () => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `media_library_${projectId}.zip`;
+      a.download = `media_library_${projectId || 'personal'}.zip`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
@@ -258,6 +263,10 @@ export const MediaLibraryPage: React.FC = () => {
   };
 
   const handleChangeScope = async (item: MediaLibraryItem, scope: PermissionScope) => {
+    if (scope === 'project' && !item.project_id) {
+      setError('该素材尚未归属项目，不能设置为项目共享。');
+      return;
+    }
     try {
       const res = await updateMediaItem(item.library_item_id, { permission_scope: scope });
       setItems(prev => prev.map(i => i.library_item_id === item.library_item_id ? res.item : i));
@@ -353,13 +362,19 @@ export const MediaLibraryPage: React.FC = () => {
       {/* 顶部工具栏 */}
       <div className="responsive-toolbar workflow-stage-toolbar flex items-center gap-3 px-4 py-3">
         <button
-          onClick={() => navigate(`/projects/${projectId}/episodes`)}
+          onClick={() => navigate(projectId ? `/projects/${projectId}/episodes` : '/projects')}
           className="text-sm text-n300 hover:text-n800"
         >
-          ← 返回项目
+          ← 返回项目{projectId ? '' : '列表'}
         </button>
         <div className="text-sm font-medium ml-2">素材库</div>
-        <div className="text-xs text-n100">{episodeId && assetScopeMode === 'episode' ? '本集素材' : `项目 ${projectId}`}</div>
+        <div className="text-xs text-n100">
+          {episodeId && assetScopeMode === 'episode'
+            ? '本集素材'
+            : projectId
+              ? `项目 ${projectId}`
+              : '个人素材 · 跨项目查看'}
+        </div>
 
         <div className="toolbar-actions ml-auto">
           {episodeId && (
@@ -443,19 +458,21 @@ export const MediaLibraryPage: React.FC = () => {
           </select>
 
           {/* 上传目标文件夹选择 */}
-          <select
-            value={uploadTargetFolderId}
-            onChange={e => setUploadTargetFolderId(e.target.value)}
-            className="px-2 py-1.5 rounded bg-n0 text-xs border border-n40 max-w-[150px]"
-            title="上传到哪个文件夹"
-          >
-            <option value="">📂 未归类（不放入文件夹）</option>
-            {folderOptions.map(o => (
-              <option key={o.folder_id} value={o.folder_id}>
-                {`${'\u3000'.repeat(o.depth)}${o.name}`}
-              </option>
-            ))}
-          </select>
+          {hasProjectContext && (
+            <select
+              value={uploadTargetFolderId}
+              onChange={e => setUploadTargetFolderId(e.target.value)}
+              className="px-2 py-1.5 rounded bg-n0 text-xs border border-n40 max-w-[150px]"
+              title="上传到哪个文件夹"
+            >
+              <option value="">📂 未归类（不放入文件夹）</option>
+              {folderOptions.map(o => (
+                <option key={o.folder_id} value={o.folder_id}>
+                  {`${'\u3000'.repeat(o.depth)}${o.name}`}
+                </option>
+              ))}
+            </select>
+          )}
 
           <button
             onClick={handleUploadClick}
@@ -495,7 +512,7 @@ export const MediaLibraryPage: React.FC = () => {
           ))}
 
           {/* ── 文件夹分类（人物 / 场景 / 道具 …）── */}
-          <div className="mt-3 pt-2 border-t border-n40">
+          {hasProjectContext && <div className="mt-3 pt-2 border-t border-n40">
             <div className="flex items-center justify-between px-2 mb-1">
               <span className="text-[11px] font-semibold text-n100 uppercase tracking-wider">文件夹</span>
               <button
@@ -564,7 +581,7 @@ export const MediaLibraryPage: React.FC = () => {
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
           <div className="mt-auto pt-3 border-t border-n40 text-xs text-n100 px-2">
             共 {total} 个素材
