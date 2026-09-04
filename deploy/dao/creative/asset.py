@@ -9,6 +9,110 @@ from typing import List, Dict, Any, Optional
 from db_manager import get_db_manager
 
 
+def _json_list_value(value: Any) -> list[Any]:
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value) if value else []
+            return parsed if isinstance(parsed, list) else []
+        except (TypeError, ValueError):
+            return []
+    return value if isinstance(value, list) else []
+
+
+def _rename_bound_asset_tokens(
+    raw_tokens: Any,
+    *,
+    asset_type: str,
+    old_name: str,
+    new_name: str,
+) -> list[Any]:
+    """Rename only exact binding tokens; prompt text and unrelated assets stay untouched."""
+    tokens = _json_list_value(raw_tokens)
+    prefix = {"character": "char", "scene": "scene", "prop": "prop"}.get(asset_type)
+    if not prefix or not old_name or old_name == new_name:
+        return tokens
+    old_tag = f"{prefix}:{old_name}"
+    new_tag = f"{prefix}:{new_name}"
+    old_selection = f"sel:{old_name}:"
+    old_no_selection = f"nosel:{old_name}"
+    renamed: list[Any] = []
+    for token in tokens:
+        if token == old_tag:
+            renamed.append(new_tag)
+        elif isinstance(token, str) and token.startswith(old_selection):
+            renamed.append(f"sel:{new_name}:{token[len(old_selection):]}")
+        elif token == old_no_selection:
+            renamed.append(f"nosel:{new_name}")
+        else:
+            renamed.append(token)
+    return renamed
+
+
+async def _rename_bound_references_with_connection(
+    conn: Any,
+    asset: Dict[str, Any],
+    new_name: str,
+) -> int:
+    old_name = str(asset.get('name') or '').strip()
+    normalized_name = str(new_name or '').strip()
+    asset_type = str(asset.get('asset_type') or '')
+    if not old_name or not normalized_name or old_name == normalized_name:
+        return 0
+
+    episode_id = asset.get('episode_id')
+    script_id = asset.get('script_id')
+    if episode_id and script_id:
+        rows = await conn.fetch(
+            """SELECT item_id, bound_assets FROM storyboard_items
+               WHERE episode_id = $1 AND script_id = $2""",
+            episode_id,
+            script_id,
+        )
+    elif episode_id:
+        rows = await conn.fetch(
+            "SELECT item_id, bound_assets FROM storyboard_items WHERE episode_id = $1",
+            episode_id,
+        )
+    else:
+        rows = await conn.fetch(
+            """SELECT si.item_id, si.bound_assets
+               FROM storyboard_items si
+               JOIN episodes e ON e.episode_id = si.episode_id
+               WHERE e.project_id = $1""",
+            asset.get('project_id'),
+        )
+
+    changed = 0
+    for row in rows:
+        original = _json_list_value(row.get('bound_assets'))
+        renamed = _rename_bound_asset_tokens(
+            original,
+            asset_type=asset_type,
+            old_name=old_name,
+            new_name=normalized_name,
+        )
+        if renamed == original:
+            continue
+        await conn.execute(
+            "UPDATE storyboard_items SET bound_assets = $1::jsonb WHERE item_id = $2",
+            json.dumps(renamed, ensure_ascii=False),
+            row['item_id'],
+        )
+        changed += 1
+
+    prefix = {"character": "char", "scene": "scene", "prop": "prop"}.get(asset_type)
+    content_bindings_exists = await conn.fetchval("SELECT to_regclass('public.content_bindings')")
+    if prefix and content_bindings_exists:
+        await conn.execute(
+            """UPDATE content_bindings SET tag_key = $1, updated_at = CURRENT_TIMESTAMP
+               WHERE asset_id = $2 AND tag_key = $3""",
+            f"{prefix}:{normalized_name}",
+            asset.get('asset_id'),
+            f"{prefix}:{old_name}",
+        )
+    return changed
+
+
 class AssetDAO:
 
     @staticmethod
@@ -112,6 +216,52 @@ class AssetDAO:
         vals.append(asset_id)
         query = f"UPDATE assets SET {', '.join(sets)} WHERE asset_id = ${idx} RETURNING *"
         return await db.fetchrow(query, *vals)
+
+    @staticmethod
+    async def rename_bound_references(asset: Dict[str, Any], new_name: str) -> int:
+        """Keep storyboard/material bindings valid when a role, scene, or prop is renamed."""
+        db = get_db_manager()
+        if not db:
+            return 0
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                return await _rename_bound_references_with_connection(conn, asset, new_name)
+
+    @staticmethod
+    async def update_with_binding_rename(asset_id: str, **kwargs) -> Optional[Dict[str, Any]]:
+        """Atomically rename an asset and every storyboard/material tag that points to it."""
+        db = get_db_manager()
+        if not db:
+            return None
+        allowed = {'name', 'description', 'thumbnail_url', 'reference_images',
+                   'style_params', 'tags', 'episode_id', 'script_id'}
+        async with db.acquire() as conn:
+            async with conn.transaction():
+                current_row = await conn.fetchrow("SELECT * FROM assets WHERE asset_id = $1 FOR UPDATE", asset_id)
+                if not current_row:
+                    return None
+                current = dict(current_row)
+                sets, vals, idx = [], [], 1
+                for key, val in kwargs.items():
+                    if key in allowed and val is not None:
+                        if key in ('reference_images', 'style_params', 'tags'):
+                            sets.append(f"{key} = ${idx}::jsonb")
+                            vals.append(json.dumps(val, ensure_ascii=False))
+                        else:
+                            sets.append(f"{key} = ${idx}")
+                            vals.append(val)
+                        idx += 1
+                if not sets:
+                    return current
+                vals.append(asset_id)
+                updated = await conn.fetchrow(
+                    f"UPDATE assets SET {', '.join(sets)} WHERE asset_id = ${idx} RETURNING *",
+                    *vals,
+                )
+                requested_name = str(kwargs.get('name') or '').strip()
+                if requested_name and requested_name != str(current.get('name') or '').strip():
+                    await _rename_bound_references_with_connection(conn, current, requested_name)
+                return updated
 
     @staticmethod
     async def copy_to(

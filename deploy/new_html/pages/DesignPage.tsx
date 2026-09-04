@@ -4,7 +4,7 @@ import {
   User, Mountain, Sword, Plus, Trash2, Loader, Palette, ArrowRight, Check,
   Upload, ZoomIn, X, Sparkles, Camera, Maximize, Grid3X3,
   Wand2, Scissors, Layers, Square, CheckSquare, RefreshCw,
-  ChevronDown, GripVertical,
+  ChevronDown, GripVertical, Pencil,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
 import { useProject } from '../contexts/ProjectContext';
@@ -321,6 +321,7 @@ export const DesignPage: React.FC = () => {
   const [cameraModal, setCameraModal] = useState<{ asset: AssetItem; materials: ModalMaterial[] } | null>(null);
   const [processModal, setProcessModal] = useState<{ asset: AssetItem; materials: ModalMaterial[]; workflow: 'upscale_hd' | 'remove_watermark' } | null>(null);
   const [batchModal, setBatchModal] = useState(false);
+  const [editAsset, setEditAsset] = useState<AssetItem | null>(null);
 
   const designAssets = useMemo(
     () => filterAssetsForDesignScope(assets, episodeId, selectedScriptId),
@@ -542,6 +543,27 @@ export const DesignPage: React.FC = () => {
       }
     }
     finally { setDeletingId(null); }
+  }, [designAssets, forceReloadSlices]);
+
+  const handleUpdateAssetDetails = useCallback(async (
+    asset: AssetItem,
+    nextName: string,
+    nextDescription: string,
+  ) => {
+    const normalizedName = nextName.trim();
+    if (!normalizedName) throw new Error('名称不能为空');
+    const duplicate = designAssets.some(candidate => (
+      candidate.assetId !== asset.assetId
+      && candidate.assetType === asset.assetType
+      && candidate.name.trim() === normalizedName
+    ));
+    if (duplicate) throw new Error(`当前分集已存在同名${asset.assetType === 'character' ? '角色' : asset.assetType === 'scene' ? '场景' : '道具'}`);
+    await updateAsset(asset.assetId, {
+      name: normalizedName,
+      description: nextDescription.trim(),
+    });
+    await forceReloadSlices('assets');
+    crmMessage.success('素材信息已保存');
   }, [designAssets, forceReloadSlices]);
 
   const handleUploadImage = useCallback(async (assetId: string, file: File) => {
@@ -1100,10 +1122,21 @@ export const DesignPage: React.FC = () => {
                             {asset.description && <p className="text-[11px] text-n100 mt-1 line-clamp-2">{asset.description}</p>}
                           </div>
                         </div>
-                        <button onClick={() => handleDelete(asset.assetId)} disabled={busy}
-                          className="p-1.5 rounded-lg text-[11px] border border-r75 bg-r50 text-danger hover:bg-r50 transition-all disabled:opacity-30 shrink-0 ml-2">
-                          {deletingId === asset.assetId ? <Loader size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditAsset(asset)}
+                            disabled={busy}
+                            title={`编辑${asset.assetType === 'character' ? '角色' : asset.assetType === 'scene' ? '场景' : '道具'}`}
+                            className="p-1.5 rounded-lg text-[11px] border border-n40 bg-n0 text-n300 hover:border-primary hover:text-primary transition-all disabled:opacity-30"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                          <button onClick={() => handleDelete(asset.assetId)} disabled={busy}
+                            className="p-1.5 rounded-lg text-[11px] border border-r75 bg-r50 text-danger hover:bg-r50 transition-all disabled:opacity-30">
+                            {deletingId === asset.assetId ? <Loader size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                          </button>
+                        </div>
                       </div>
                       <AssetImageRow
                         assetId={asset.assetId}
@@ -1157,6 +1190,13 @@ export const DesignPage: React.FC = () => {
       {cameraModal && <CameraModal asset={cameraModal.asset} materials={cameraModal.materials} onClose={() => setCameraModal(null)} onSubmit={(p) => handleCameraGenerate({ ...p, assetId: cameraModal.asset.assetId })} />}
       {processModal && <ProcessModal asset={processModal.asset} materials={processModal.materials} workflow={processModal.workflow} onClose={() => setProcessModal(null)} onSubmit={handleProcessSubmit} />}
       {batchModal && <BatchGenerateModal assets={designAssets} selectedIds={selectedIds} scriptText={scriptText} modelOptions={scriptModelOptions} onClose={() => setBatchModal(false)} onSubmit={handleBatchGenerate} />}
+      {editAsset && (
+        <AssetEditModal
+          asset={editAsset}
+          onClose={() => setEditAsset(null)}
+          onSubmit={handleUpdateAssetDetails}
+        />
+      )}
       {syncModalOpen && (
         <SyncExistingDesignModal
           candidates={syncCandidates}
@@ -1165,6 +1205,82 @@ export const DesignPage: React.FC = () => {
           onSubmit={handleConfirmSyncExistingDesigns}
         />
       )}
+    </div>
+  );
+};
+
+/* ======================== Asset Edit Modal ======================== */
+const AssetEditModal: React.FC<{
+  asset: AssetItem;
+  onClose: () => void;
+  onSubmit: (asset: AssetItem, name: string, description: string) => Promise<void>;
+}> = ({ asset, onClose, onSubmit }) => {
+  const [draftName, setDraftName] = useState(asset.name);
+  const [draftDescription, setDraftDescription] = useState(asset.description || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const typeLabel = asset.assetType === 'character' ? '角色' : asset.assetType === 'scene' ? '场景' : '道具';
+
+  const handleSubmit = async () => {
+    setError('');
+    setSaving(true);
+    try {
+      await onSubmit(asset, draftName, draftDescription);
+      onClose();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[140] bg-black/45 flex items-center justify-center p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`编辑${typeLabel}`}
+        className="w-full max-w-lg rounded-xl bg-n0 border border-n40 shadow-2xl"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-n40">
+          <div>
+            <h3 className="text-base font-bold text-n800">编辑{typeLabel}</h3>
+            <p className="text-xs text-n100 mt-1">名称修改后会同步更新现有镜头中的同名绑定。</p>
+          </div>
+          <button type="button" onClick={onClose} disabled={saving} className="p-1.5 rounded text-n100 hover:text-n700 hover:bg-n20 disabled:opacity-40">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          <label className="block">
+            <span className="block text-xs text-n300 mb-1.5">名称</span>
+            <input
+              autoFocus
+              value={draftName}
+              onChange={event => setDraftName(event.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border border-n40 text-sm text-n800 focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </label>
+          <label className="block">
+            <span className="block text-xs text-n300 mb-1.5">描述 / AI 提示词</span>
+            <textarea
+              rows={7}
+              value={draftDescription}
+              onChange={event => setDraftDescription(event.target.value)}
+              placeholder={`补充${typeLabel}外观、材质、色彩与环境等细节`}
+              className="w-full min-h-40 px-3 py-2.5 rounded-lg border border-n40 text-sm leading-relaxed text-n800 resize-y focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </label>
+          {error && <p className="text-xs text-danger">{error}</p>}
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-n40">
+          <button type="button" onClick={onClose} disabled={saving} className="px-4 py-2 rounded-lg border border-n40 text-sm text-n300 hover:bg-n20 disabled:opacity-40">取消</button>
+          <button type="button" onClick={handleSubmit} disabled={saving || !draftName.trim()} className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover disabled:opacity-40 inline-flex items-center gap-1.5">
+            {saving && <Loader size={14} className="animate-spin" />}
+            {saving ? '保存中...' : '保存修改'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

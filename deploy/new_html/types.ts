@@ -68,6 +68,10 @@ export interface StoryboardItem {
   boundCharNames?: string[];
   boundSceneName?: string;
   boundPropNames?: string[];
+  /** DB 中原始绑定标记，用于保留素材选择及“已确认空绑定”等状态。 */
+  boundAssetTokens?: string[];
+  /** 角色/场景/道具已由镜头级编辑确认，禁止再从共享 Prompt 猜测补回。 */
+  bindingsInitialized?: boolean;
   materialSelections?: Record<string, string>; // 标签名 → 素材ID映射
   
   // 📸 生成数据

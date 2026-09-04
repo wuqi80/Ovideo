@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import {
   assetsToMaterialLibrary,
   applyStoryboardRecordPatch,
+  BINDINGS_INITIALIZED_TAG,
   dbItemToStoryboardItem,
   newShotToDbFields,
   normalizeStoryboardRecord,
@@ -251,7 +252,36 @@ describe('prop storyboard bindings', () => {
       props: ['扇子'],
     } as any, 0);
 
-    expect(fields.bound_assets).toEqual(['char:小悟', 'scene:办公室', 'prop:扇子']);
+    expect(fields.bound_assets).toEqual([
+      BINDINGS_INITIALIZED_TAG,
+      'char:小悟',
+      'scene:办公室',
+      'prop:扇子',
+    ]);
+  });
+
+  it('keeps an explicitly empty shot binding empty instead of inferring from a shared video prompt', () => {
+    const item = dbItemToStoryboardItem({
+      itemId: 'sb_explicit_empty',
+      sceneHeading: '',
+      actionText: '门口只有阿亮',
+      dialogue: '',
+      imagePrompt: '',
+      videoPrompt: '分段共享说明：阿亮、快递员、女店主位于茶馆室内',
+      cameraMovement: '',
+      generatedImageUrl: null,
+      boundAssets: [BINDINGS_INITIALIZED_TAG],
+      status: 'draft',
+    } as any, [
+      { assetId: 'asset_a', assetType: 'character', name: '阿亮' },
+      { assetId: 'asset_b', assetType: 'character', name: '快递员' },
+      { assetId: 'asset_c', assetType: 'character', name: '女店主' },
+      { assetId: 'asset_scene', assetType: 'scene', name: '茶馆室内' },
+    ] as any);
+
+    expect(item.characters).toEqual([]);
+    expect(item.scene).toBe('');
+    expect(item.bindingsInitialized).toBe(true);
   });
 });
 

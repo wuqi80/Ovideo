@@ -6,6 +6,8 @@ const source = readFileSync(resolve(__dirname, '../../WorkspaceApp.tsx'), 'utf-8
   .replace(/\r\n/g, '\n');
 const generationPageSource = readFileSync(resolve(__dirname, '../../components/GenerationPage.tsx'), 'utf-8')
   .replace(/\r\n/g, '\n');
+const storyboardColumnSource = readFileSync(resolve(__dirname, '../../components/StoryboardColumn.tsx'), 'utf-8')
+  .replace(/\r\n/g, '\n');
 
 describe('WorkspaceApp script workflow persistence', () => {
   it('protects the final script file without silently clearing its content', () => {
@@ -40,6 +42,9 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('await activateWorkflowScript(exportFileId)');
     expect(source).toContain('await syncStoryboardItems(\n            eid,\n            buildStoryboardDbPayload(exportableItems)');
     expect(source).toContain('preserve_existing_storyboards: true');
+    expect(source).toContain('item_id: item.id');
+    expect(source).toContain("const charSet = new Set<string>();");
+    expect(source).toContain("'meta:bindings-initialized'");
     expect(source).toContain('storyboard_items: []');
     expect(source).toContain("buildScriptAssetDescriptionRows(\n            'character'");
     expect(source).toContain('characters: characterRows');
@@ -47,6 +52,8 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('props: propRows');
     expect(source).not.toContain("charNames.map(n => ({ name: n, description: '' }))");
     expect(source).not.toContain('当前浏览的不是本集后续采用剧本，请先在文件列表中设为后续采用。');
+    expect(storyboardColumnSource).toContain('导出到角色和场景');
+    expect(storyboardColumnSource).not.toContain("'全部导出'");
   });
 
   it('downloads a complete JSON workspace backup from the file column', () => {

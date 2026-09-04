@@ -46,4 +46,15 @@ describe('MaterialsPage binding propagation', () => {
     );
     expect(updateLibrary).not.toContain("await forceReloadSlices('assets')");
   });
+
+  it('does not restore deleted shot roles from a segment-wide video prompt', () => {
+    expect(source).toContain('!item.boundAssets.includes(BINDINGS_INITIALIZED_TAG)');
+    expect(source).toContain('const tags = [...existing, BINDINGS_INITIALIZED_TAG]');
+    const autoPatch = source.slice(
+      source.indexOf('// 仅迁移没有镜头级绑定标记的历史数据'),
+      source.indexOf('const handleUpdateLibrary'),
+    );
+    expect(autoPatch).not.toContain('(item as any).videoPrompt');
+    expect(autoPatch).toContain("tags.some(tag => tag.startsWith('scene:'))");
+  });
 });

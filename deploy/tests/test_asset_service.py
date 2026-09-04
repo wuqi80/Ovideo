@@ -18,6 +18,7 @@ class FakeAssetDAO:
     updates = []
     deleted = []
     copied = None
+    renamed = None
 
     @classmethod
     async def get_by_project(cls, project_id, episode_id=None, asset_type=None, script_id=None):
@@ -40,6 +41,23 @@ class FakeAssetDAO:
         if asset_id == "missing":
             return None
         return cls.updated
+
+    @classmethod
+    async def get_by_id(cls, asset_id):
+        return next((row for row in cls.rows if row["asset_id"] == asset_id), None)
+
+    @classmethod
+    async def rename_bound_references(cls, asset, new_name):
+        cls.renamed = {"asset": dict(asset), "new_name": new_name}
+        return 1
+
+    @classmethod
+    async def update_with_binding_rename(cls, asset_id, **kwargs):
+        previous = await cls.get_by_id(asset_id)
+        updated = await cls.update(asset_id, **kwargs)
+        if previous and updated and kwargs.get("name"):
+            await cls.rename_bound_references(previous, kwargs["name"])
+        return updated
 
     @classmethod
     async def delete(cls, asset_id):
@@ -105,6 +123,7 @@ def setup_function():
     FakeAssetDAO.updates = []
     FakeAssetDAO.deleted = []
     FakeAssetDAO.copied = None
+    FakeAssetDAO.renamed = None
     FakeEntityFileDAO.copied = []
     FakeEntityFileDAO.raise_on_get = False
     FakeEntityFileDAO.files_map = {
@@ -156,6 +175,16 @@ async def test_create_asset_passes_expected_fields():
 async def test_update_asset_raises_when_missing():
     with pytest.raises(asset_service.AssetNotFound):
         await asset_service.update_asset("missing", {"name": "新名"}, asset_dao=FakeAssetDAO)
+
+
+async def test_update_asset_renames_existing_storyboard_bindings():
+    result = await asset_service.update_asset("asset_1", {"name": "新主角"}, asset_dao=FakeAssetDAO)
+
+    assert result["success"] is True
+    assert FakeAssetDAO.renamed == {
+        "asset": FakeAssetDAO.default_rows[0],
+        "new_name": "新主角",
+    }
 
 
 async def test_delete_asset_returns_success():

@@ -425,7 +425,7 @@ export const StoryboardColumn: React.FC<StoryboardColumnProps> = ({
                         title={isWorkflowScript ? '将本集采用剧本导出到后续流程' : '导出时会自动设为本集主剧本'}
                         className={`flex items-center gap-1 text-[10px] text-white px-3 py-1.5 rounded shadow-sm transition-colors font-semibold ${isExporting ? 'bg-n100 cursor-not-allowed' : 'bg-primary hover:bg-primary-hover'}`}
                     >
-                        {isExporting ? '导出中...' : '全部导出'}
+                        {isExporting ? '正在导出...' : '导出到角色和场景'}
                         {!isExporting && <ArrowRight className="w-3 h-3" />}
                       </button>
                     </>

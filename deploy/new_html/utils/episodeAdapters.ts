@@ -16,6 +16,7 @@ const SCENE_PREFIX = 'scene:';
 const PROP_PREFIX = 'prop:';
 const SEL_PREFIX = 'sel:';
 const NOSEL_PREFIX = 'nosel:';
+export const BINDINGS_INITIALIZED_TAG = 'meta:bindings-initialized';
 
 export function parseStringArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
@@ -116,6 +117,7 @@ export function parseBoundAssetTags(boundAssets: string[]): {
   assetIds: string[];
   selections: Record<string, string>;
   noSelections: Set<string>;
+  bindingsInitialized: boolean;
 } {
   const charNames: string[] = [];
   let sceneName = '';
@@ -123,8 +125,11 @@ export function parseBoundAssetTags(boundAssets: string[]): {
   const assetIds: string[] = [];
   const selections: Record<string, string> = {};
   const noSelections = new Set<string>();
+  let bindingsInitialized = false;
   for (const entry of boundAssets) {
-    if (entry.startsWith(CHAR_PREFIX)) {
+    if (entry === BINDINGS_INITIALIZED_TAG) {
+      bindingsInitialized = true;
+    } else if (entry.startsWith(CHAR_PREFIX)) {
       charNames.push(entry.slice(CHAR_PREFIX.length));
     } else if (entry.startsWith(SCENE_PREFIX)) {
       sceneName = entry.slice(SCENE_PREFIX.length);
@@ -142,7 +147,7 @@ export function parseBoundAssetTags(boundAssets: string[]): {
       assetIds.push(entry);
     }
   }
-  return { charNames, sceneName, propNames, assetIds, selections, noSelections };
+  return { charNames, sceneName, propNames, assetIds, selections, noSelections, bindingsInitialized };
 }
 
 function assetHasImages(asset: AssetItem): boolean {
@@ -154,7 +159,9 @@ function assetHasImages(asset: AssetItem): boolean {
 
 export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetItem[]): StoryboardItem {
   const boundAssets = Array.isArray(item.boundAssets) ? item.boundAssets : [];
-  const { charNames, sceneName, propNames, assetIds, selections, noSelections } = parseBoundAssetTags(boundAssets);
+  const {
+    charNames, sceneName, propNames, assetIds, selections, noSelections, bindingsInitialized,
+  } = parseBoundAssetTags(boundAssets);
   const plannedDurationSeconds = normalizePositiveIntegerSeconds(
     item.plannedDurationMs ? item.plannedDurationMs / 1000 : null,
   );
@@ -183,10 +190,10 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
     }
   }
 
-  if (assets && (characters.length === 0 || !scene || props.length === 0)) {
+  if (!bindingsInitialized && assets && (characters.length === 0 || !scene || props.length === 0)) {
     const searchText = [
       item.sceneHeading, item.actionText, item.dialogue,
-      item.imagePrompt, item.videoPrompt,
+      item.imagePrompt,
     ].filter(Boolean).join(' ');
     if (searchText && characters.length === 0) {
       characters = assets
@@ -206,11 +213,11 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
   }
 
   // Last resort: if text fields are empty (old buggy data), assign all characters
-  if (assets && characters.length === 0) {
+  if (!bindingsInitialized && assets && characters.length === 0) {
     const allChars = assets.filter(a => a.assetType === 'character' && a.name);
     if (allChars.length > 0) characters = allChars.map(a => a.name);
   }
-  if (assets && !scene) {
+  if (!bindingsInitialized && assets && !scene) {
     const allScenes = assets.filter(a => a.assetType === 'scene' && a.name);
     if (allScenes.length === 1) scene = allScenes[0].name;
   }
@@ -288,6 +295,8 @@ export function dbItemToStoryboardItem(item: StoryboardItemDB, assets?: AssetIte
     boundCharNames: charNames,
     boundSceneName: sceneName,
     boundPropNames: propNames,
+    boundAssetTokens: boundAssets,
+    bindingsInitialized,
     isLocked: item.status === 'locked',
     status: item.status,
   };
@@ -365,6 +374,7 @@ export function newShotToDbFields(shot: Omit<StoryboardItem, 'id'>, sortOrder: n
       shot.referenceConfigInitialized || shot.configuredReferences?.length
     ),
     bound_assets: [
+      BINDINGS_INITIALIZED_TAG,
       ...(shot.characters || []).map((c: string) => `${CHAR_PREFIX}${c}`),
       ...(shot.scene ? [`${SCENE_PREFIX}${shot.scene}`] : []),
       ...((shot.props || []).map((p: string) => `${PROP_PREFIX}${p}`)),

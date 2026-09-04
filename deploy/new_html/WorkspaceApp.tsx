@@ -132,11 +132,29 @@ function getStoryboardVersionTotalCreditCost(version?: ScriptStoryboardVersion):
 const LegacyHistoryPage = React.lazy(() => import('./components/HistoryPage').then(m => ({ default: m.HistoryPage })));
 
 function buildBoundAssetTags(item: Partial<StoryboardItem>): string[] {
-  return [
+  const activeNames = new Set([
+    ...(item.characters || []),
+    ...(item.scene ? [item.scene] : []),
+    ...(item.props || []),
+  ]);
+  const preservedSelections = (item.boundAssetTokens || []).filter(token => {
+    if (token.startsWith('nosel:')) return activeNames.has(token.slice('nosel:'.length));
+    if (!token.startsWith('sel:')) return false;
+    const rest = token.slice('sel:'.length);
+    const separator = rest.indexOf(':');
+    return separator > 0 && activeNames.has(rest.slice(0, separator));
+  });
+  const currentSelections = Object.entries(item.materialSelections || {})
+    .filter(([tagName, materialId]) => activeNames.has(tagName) && Boolean(materialId))
+    .map(([tagName, materialId]) => `sel:${tagName}:${materialId}`);
+  return Array.from(new Set([
+    'meta:bindings-initialized',
     ...((item.characters || []).map((c: string) => `char:${c}`)),
     ...(item.scene ? [`scene:${item.scene}`] : []),
     ...((item.props || []).map((p: string) => `prop:${p}`)),
-  ];
+    ...preservedSelections,
+    ...currentSelections,
+  ]));
 }
 
 function buildStoryboardDbPayload(items: StoryboardItem[]): any[] {
@@ -147,6 +165,7 @@ function buildStoryboardDbPayload(items: StoryboardItem[]): any[] {
       const cleanImage = rawImage.split('?')[0];
       const persistedImage = cleanImage.startsWith('http') || cleanImage.startsWith('/') ? cleanImage : '';
       return {
+        item_id: item.id,
         sort_order: index,
         scene_heading: item.originalText || item.scene || '',
         action_text: item.scriptSegment || '',
@@ -218,6 +237,8 @@ function mapWorkspaceStoryboardRowsToItems(rows: any[]): StoryboardItem[] {
       characters: boundAssets.filter((a: string) => a.startsWith('char:')).map((a: string) => a.replace('char:', '')),
       scene: boundAssets.find((a: string) => a.startsWith('scene:'))?.replace('scene:', '') || '',
       props: boundAssets.filter((a: string) => a.startsWith('prop:')).map((a: string) => a.replace('prop:', '')),
+      boundAssetTokens: boundAssets,
+      bindingsInitialized: boundAssets.includes('meta:bindings-initialized'),
       plannedDurationMs: plannedDurationSeconds ? plannedDurationSeconds * 1000 : null,
       duration: plannedDurationSeconds ? `${plannedDurationSeconds}秒` : undefined,
       scriptSegmentId: r.script_segment_id ?? r.scriptSegmentId ?? undefined,
@@ -3259,11 +3280,13 @@ const WorkspaceApp: React.FC<WorkspaceAppProps> = ({
             buildStoryboardDbPayload(exportableItems),
             workflowFile.id,
           );
-          const charSet = new Set<string>(workflowFile.extractedCharacters || []);
-          const sceneSet = new Set<string>(workflowFile.extractedScenes || []);
-          const propSet = new Set<string>(workflowFile.extractedProps || []);
-          if (workflowFile.storyboard?.items) {
-            for (const item of workflowFile.storyboard.items) {
+          // 当前镜头标签是导出的唯一事实来源。extracted* 是历史提取结果，继续合并会
+          // 把用户已经从镜头删除的角色/场景重新创建，并污染后续素材绑定。
+          const charSet = new Set<string>();
+          const sceneSet = new Set<string>();
+          const propSet = new Set<string>();
+          if (exportableItems.length) {
+            for (const item of exportableItems) {
               if (item.characters) item.characters.forEach(c => { if (c) charSet.add(c); });
               if (item.scene) sceneSet.add(item.scene);
               if (item.props) item.props.forEach(p => { if (p) propSet.add(p); });

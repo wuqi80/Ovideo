@@ -8,6 +8,7 @@ import {
   assetsToMaterialLibrary,
   dbItemToStoryboardItem,
   normalizeStoryboardRecord,
+  BINDINGS_INITIALIZED_TAG,
 } from '../utils/episodeAdapters';
 import { createAsset as apiCreateAsset } from '../services/assetMutationService';
 import { linkEntityFile } from '../services/entityFileService';
@@ -154,7 +155,8 @@ export const MaterialsPage: React.FC = () => {
     return map;
   }, [assets]);
 
-  // Auto-patch: add char:/scene:/prop: tags to storyboard items that lack them
+  // 仅迁移没有镜头级绑定标记的历史数据。新数据（包括用户明确清空角色或场景）
+  // 必须完全尊重 bound_assets，不能从分段共享的 videoPrompt 把角色补回来。
   const patchedItemIdsRef = useRef<Set<string>>(new Set());
   const patchAttemptsRef = useRef<Map<string, number>>(new Map());
   const patchRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -179,6 +181,7 @@ export const MaterialsPage: React.FC = () => {
 
     const uncheckedItems = storyboardItems.filter(item =>
       item.itemId
+      && !item.boundAssets.includes(BINDINGS_INITIALIZED_TAG)
       && !patchedItemIdsRef.current.has(item.itemId)
       && (patchAttemptsRef.current.get(item.itemId) || 0) < MATERIALS_AUTO_PATCH_MAX_ATTEMPTS
     );
@@ -190,10 +193,10 @@ export const MaterialsPage: React.FC = () => {
       for (const item of uncheckedItems) {
         const searchText = [
           item.sceneHeading, item.actionText, item.dialogue,
-          (item as any).imagePrompt, (item as any).videoPrompt,
+          (item as any).imagePrompt,
         ].filter(Boolean).join(' ');
         const existing = Array.isArray(item.boundAssets) ? [...item.boundAssets] : [];
-        const tags = [...existing];
+        const tags = [...existing, BINDINGS_INITIALIZED_TAG];
         const hasTag = (tag: string) => tags.includes(tag);
 
         const matchedChars = searchText
@@ -201,9 +204,10 @@ export const MaterialsPage: React.FC = () => {
           : charAssets;
         tags.push(...matchedChars.map(a => `char:${a.name}`).filter(tag => !hasTag(tag)));
 
-        const matchedScene = searchText
+        const hasSceneTag = tags.some(tag => tag.startsWith('scene:'));
+        const matchedScene = !hasSceneTag && searchText
           ? sceneAssets.find(a => searchText.includes(a.name))
-          : (sceneAssets.length === 1 ? sceneAssets[0] : undefined);
+          : (!hasSceneTag && !searchText && sceneAssets.length === 1 ? sceneAssets[0] : undefined);
         if (matchedScene && !hasTag(`scene:${matchedScene.name}`)) tags.push(`scene:${matchedScene.name}`);
 
         const matchedProps = searchText

@@ -361,7 +361,11 @@ async def update_asset(
     *,
     asset_dao: Any,
 ) -> Dict[str, Any]:
-    asset = await asset_dao.update(asset_id, **fields)
+    update_with_binding_rename = getattr(asset_dao, "update_with_binding_rename", None)
+    if fields.get("name") is not None and callable(update_with_binding_rename):
+        asset = await update_with_binding_rename(asset_id, **fields)
+    else:
+        asset = await asset_dao.update(asset_id, **fields)
     if not asset:
         raise AssetNotFound("Asset not found")
     return {"success": True, "asset": dict(asset)}

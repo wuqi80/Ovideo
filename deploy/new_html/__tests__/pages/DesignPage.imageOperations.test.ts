@@ -104,6 +104,15 @@ describe('DesignPage image operation modals', () => {
     expect(source).toContain('if (!confirmed) return;');
   });
 
+  it('lets users edit imported role, scene, and prop names and prompts', () => {
+    expect(source).toContain('const [editAsset, setEditAsset]');
+    expect(source).toContain('<AssetEditModal');
+    expect(source).toContain('描述 / AI 提示词');
+    expect(source).toContain('name: normalizedName');
+    expect(source).toContain('description: nextDescription.trim()');
+    expect(source).toContain('名称修改后会同步更新现有镜头中的同名绑定');
+  });
+
   it('defaults refinement to the fast tier and exposes all four public writing tiers', () => {
     expect(source).toContain("LS.get('design_ai_refine_model', AiModel.DeepseekChat)");
     expect(source).toContain('const refineModelOptions = modelOptions');

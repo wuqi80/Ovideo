@@ -4,6 +4,33 @@
 """
 import pytest
 
+from dao.creative.asset import _rename_bound_asset_tokens
+
+
+def test_rename_bound_asset_tokens_updates_only_exact_asset_references():
+    renamed = _rename_bound_asset_tokens(
+        [
+            "meta:bindings-initialized",
+            "char:阿壳",
+            "char:阿壳二号",
+            "sel:阿壳:asset_robot_0",
+            "nosel:阿壳",
+            "scene:茶馆室内",
+        ],
+        asset_type="character",
+        old_name="阿壳",
+        new_name="机器人阿壳",
+    )
+
+    assert renamed == [
+        "meta:bindings-initialized",
+        "char:机器人阿壳",
+        "char:阿壳二号",
+        "sel:机器人阿壳:asset_robot_0",
+        "nosel:机器人阿壳",
+        "scene:茶馆室内",
+    ]
+
 
 async def test_create_asset_returns_complete_record(test_db):
     from dao_asset import AssetDAO
