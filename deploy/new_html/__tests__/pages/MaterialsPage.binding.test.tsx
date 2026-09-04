@@ -48,13 +48,32 @@ describe('MaterialsPage binding propagation', () => {
   });
 
   it('does not restore deleted shot roles from a segment-wide video prompt', () => {
-    expect(source).toContain('!item.boundAssets.includes(BINDINGS_INITIALIZED_TAG)');
-    expect(source).toContain('const tags = [...existing, BINDINGS_INITIALIZED_TAG]');
+    expect(source).toContain('!boundAssets.includes(BINDINGS_INITIALIZED_TAG)');
+    expect(source).toContain('!boundAssets.includes(DEFAULT_BINDINGS_INITIALIZED_TAG)');
+    expect(source).toContain('tags = ensureDefaultBindingSnapshot(tags)');
     const autoPatch = source.slice(
       source.indexOf('// 仅迁移没有镜头级绑定标记的历史数据'),
       source.indexOf('const handleUpdateLibrary'),
     );
     expect(autoPatch).not.toContain('(item as any).videoPrompt');
     expect(autoPatch).toContain("tags.some(tag => tag.startsWith('scene:'))");
+  });
+
+  it('persists free shot-level role and scene edits separately from imported defaults', () => {
+    expect(source).toContain('const handleAddShotBinding = useCallback');
+    expect(source).toContain('const handleRemoveShotBinding = useCallback');
+    expect(source).toContain('addCurrentShotBinding(item.boundAssets || [], type, name)');
+    expect(source).toContain('removeCurrentShotBinding(item.boundAssets || [], type, name, assetNameToId[name])');
+    expect(source).toContain("asset_type: type");
+    expect(source).toContain('onAddShotBinding={handleAddShotBinding}');
+    expect(source).toContain('onRemoveShotBinding={handleRemoveShotBinding}');
+  });
+
+  it('restores the latest upstream default and clears shot-level normalized overrides', () => {
+    expect(source).toContain('const handleRestoreDefaultBindings = useCallback');
+    expect(source).toContain('restoreDefaultBindingSnapshot(item.boundAssets || [])');
+    expect(source).toContain('await clearShotBindingOverrides(shotId, tagKeys)');
+    expect(source).toContain('onRestoreDefaultBindings={handleRestoreDefaultBindings}');
+    expect(source).toContain('素材图片本身不会删除');
   });
 });

@@ -91,9 +91,15 @@ describe('WorkflowLayout template pipeline shell', () => {
     expect(source).toContain('const activeSubStageIdx =');
     expect(source).toContain('aria-label={`${activeStage.label}阶段步骤`}');
     expect(source).toContain('const done = activeSubStageIdx >= 0 && index < activeSubStageIdx');
-    expect(source).toContain("done || active ? 'bg-success' : 'bg-n40'");
+    expect(source).toContain('const subStepNumber = `${activeStageIdx + 1}-${index + 1}`');
+    expect(source).toContain('aria-label={`${sub.label}，第 ${subStepNumber} 步`}');
+    expect(source).toContain("done || active ? 'bg-success/60' : 'bg-n50'");
     expect(source).toContain("aria-current={active ? 'step' : undefined}");
-    expect(source).toContain('第 {index + 1} 步');
+    expect(source).toContain('{subStepNumber}');
+    expect(source).toContain("{active ? '当前步骤' : done ? '已完成' : '下一步'}");
+    expect(source).toContain('rounded-xl border border-n40 bg-n20/70 p-1');
+    expect(source).toContain('min-w-[40px]');
+    expect(source).not.toContain('第 {index + 1} 步');
     expect(source).not.toContain('阶段内子页签（模板 art-tabs 样式');
   });
 

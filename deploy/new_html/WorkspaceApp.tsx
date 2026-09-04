@@ -30,7 +30,7 @@ import {
   getScriptModelOption,
   type ScriptModelOption,
 } from './services/scriptModelCatalogService';
-import { storyboardItemToDbUpdate } from './utils/episodeAdapters';
+import { buildDefaultBindingSnapshot, storyboardItemToDbUpdate } from './utils/episodeAdapters';
 import {
   buildScriptVersionChainContext,
   ensureStoryboardCutSeparators,
@@ -152,6 +152,7 @@ function buildBoundAssetTags(item: Partial<StoryboardItem>): string[] {
     ...((item.characters || []).map((c: string) => `char:${c}`)),
     ...(item.scene ? [`scene:${item.scene}`] : []),
     ...((item.props || []).map((p: string) => `prop:${p}`)),
+    ...buildDefaultBindingSnapshot(item.characters || [], item.scene || '', item.props || []),
     ...preservedSelections,
     ...currentSelections,
   ]));

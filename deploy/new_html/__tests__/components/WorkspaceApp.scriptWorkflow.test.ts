@@ -45,6 +45,7 @@ describe('WorkspaceApp script workflow persistence', () => {
     expect(source).toContain('item_id: item.id');
     expect(source).toContain("const charSet = new Set<string>();");
     expect(source).toContain("'meta:bindings-initialized'");
+    expect(source).toContain("...buildDefaultBindingSnapshot(item.characters || [], item.scene || '', item.props || [])");
     expect(source).toContain('storyboard_items: []');
     expect(source).toContain("buildScriptAssetDescriptionRows(\n            'character'");
     expect(source).toContain('characters: characterRows');

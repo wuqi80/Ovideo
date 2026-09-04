@@ -91,4 +91,15 @@ describe('MaterialPage workspace layout', () => {
     expect(source).toContain('await updateAsset(targetAssetId');
     expect(source).toContain('aria-label={`删除${name}素材`}');
   });
+
+  it('allows shot-level character and scene editing without deleting shared assets', () => {
+    expect(source).toContain('data-testid="add-shot-character"');
+    expect(source).toContain('data-testid="add-shot-scene"');
+    expect(source).toContain('data-testid="restore-default-bindings"');
+    expect(source).toContain("openBindingEditor('character')");
+    expect(source).toContain("openBindingEditor('scene')");
+    expect(source).toContain('修改只作用于当前镜头');
+    expect(source).toContain('原场景素材不会被删除');
+    expect(source).toContain('从当前镜头移除${type === \'character\' ? \'角色\' : \'场景\'}，不会删除素材图片');
+  });
 });

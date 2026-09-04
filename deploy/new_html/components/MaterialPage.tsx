@@ -61,6 +61,7 @@ import {
 import { assertEnoughCredits, consumeCredits } from '../services/creditService';
 import { useProject } from '../contexts/ProjectContext';
 import { projectDefaultAspectRatio } from '../utils/projectCreationPreferences';
+import { bindingMembershipDiffersFromDefault } from '../utils/episodeAdapters';
 
 type MaterialAIEngine = DesignImageEngine;
 type BindingAssetType = 'character' | 'scene' | 'prop';
@@ -263,6 +264,10 @@ interface MaterialPageProps {
   assetNameToId?: Record<string, string>;
   assetScopeMode?: 'episode' | 'project';
   onAssetScopeModeChange?: (mode: 'episode' | 'project') => void;
+  availableBindingNames?: Record<'character' | 'scene', string[]>;
+  onAddShotBinding?: (shotId: string, type: 'character' | 'scene', name: string) => Promise<void>;
+  onRemoveShotBinding?: (shotId: string, type: 'character' | 'scene', name: string) => void | Promise<void>;
+  onRestoreDefaultBindings?: (shotId: string) => void | Promise<void>;
 }
 
 export const MaterialPage: React.FC<MaterialPageProps> = ({
@@ -285,6 +290,10 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   assetNameToId,
   assetScopeMode = 'episode',
   onAssetScopeModeChange,
+  availableBindingNames = { character: [], scene: [] },
+  onAddShotBinding,
+  onRemoveShotBinding,
+  onRestoreDefaultBindings,
 }) => {
   const selectedFile = files.find(f => f.id === selectedFileId);
   const storyboardItems = selectedFile?.storyboard?.items || [];
@@ -294,6 +303,9 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
   const [cameraGeneratingTag, setCameraGeneratingTag] = useState<string | null>(null);
   const [materialOperationStatus, setMaterialOperationStatus] = useState<MaterialOperationStatus | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [bindingEditorType, setBindingEditorType] = useState<'character' | 'scene' | null>(null);
+  const [bindingEditorName, setBindingEditorName] = useState('');
+  const [bindingEditorSubmitting, setBindingEditorSubmitting] = useState(false);
   
   // 🆕 追加分镜弹窗状态
   const [showAppendModal, setShowAppendModal] = useState(false);
@@ -982,6 +994,30 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
       crmMessage.success(`${typeLabel}素材已删除`);
   };
 
+  const openBindingEditor = (type: 'character' | 'scene') => {
+    setBindingEditorType(type);
+    setBindingEditorName('');
+  };
+
+  const submitBindingEditor = async () => {
+    if (!selectedShot || !bindingEditorType || !onAddShotBinding) return;
+    const name = bindingEditorName.trim();
+    if (!name) {
+      crmMessage.warning(`请输入${bindingEditorType === 'character' ? '角色' : '场景'}名称`);
+      return;
+    }
+    setBindingEditorSubmitting(true);
+    try {
+      await onAddShotBinding(selectedShot.id, bindingEditorType, name);
+      setBindingEditorType(null);
+      setBindingEditorName('');
+    } catch (error) {
+      crmMessage.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBindingEditorSubmitting(false);
+    }
+  };
+
   const handleSaveClick = () => {
     setIsNamingVersion(true);
     const count = selectedFile?.versions?.length || 0;
@@ -1203,6 +1239,21 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
              </div>
 
              <div className="flex items-center gap-2">
+                 {onRestoreDefaultBindings && selectedShot && (
+                   <button
+                     type="button"
+                     onClick={() => onRestoreDefaultBindings(selectedShot.id)}
+                     disabled={!bindingMembershipDiffersFromDefault(selectedShot.boundAssetTokens || [])}
+                     className="inline-flex h-8 flex-shrink-0 items-center gap-1.5 rounded border border-n40 bg-n0 px-3 text-xs font-medium text-n500 transition-colors hover:border-primary hover:bg-primary-light hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                     title={bindingMembershipDiffersFromDefault(selectedShot.boundAssetTokens || [])
+                       ? '恢复为最近一次从角色场景步骤导入的绑定'
+                       : '当前绑定与导入默认值一致'}
+                     data-testid="restore-default-bindings"
+                   >
+                     <RefreshCw className="h-3.5 w-3.5" />
+                     恢复默认
+                   </button>
+                 )}
                  <button
                    type="button"
                    onClick={() => setIsContextExpanded(expanded => !expanded)}
@@ -1375,6 +1426,17 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                  <Users className="w-4 h-4 text-primary" />
                  角色素材 (Characters)
                  <span className="text-[10px] font-normal text-n100">绑定后将自动应用于后续同名角色</span>
+                 {onAddShotBinding && (
+                   <button
+                     type="button"
+                     onClick={() => openBindingEditor('character')}
+                     className="ml-auto inline-flex h-7 items-center gap-1 rounded-md border border-primary/30 bg-primary-light px-2.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary hover:text-white"
+                     data-testid="add-shot-character"
+                   >
+                     <Plus className="h-3.5 w-3.5" />
+                     新增角色
+                   </button>
+                 )}
              </h4>
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch" data-testid="material-character-cards">
                  {!selectedShot || (selectedShot.characters || []).length === 0 ? (
@@ -1402,6 +1464,9 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                           isMaterialFullySynced?.(selectedShot.id, charName, id) ?? false
                         )}
                         onUnbind={() => onUnbindMaterial(selectedShot.id, charName)}
+                       onRemoveBinding={onRemoveShotBinding
+                         ? () => onRemoveShotBinding(selectedShot.id, 'character', charName)
+                         : undefined}
                        onViewImage={(url) => setLightboxImage(url)}
                      />
                   ))
@@ -1414,6 +1479,17 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                  <MapPin className="w-4 h-4 text-orange-400" />
                  场景素材 (Scene)
                  <span className="text-[10px] font-normal text-n100">为该场景绑定背景参考</span>
+                 {onAddShotBinding && (
+                   <button
+                     type="button"
+                     onClick={() => openBindingEditor('scene')}
+                     className="ml-auto inline-flex h-7 items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-2.5 text-[11px] font-semibold text-orange-600 transition-colors hover:bg-orange-500 hover:text-white"
+                     data-testid="add-shot-scene"
+                   >
+                     <Plus className="h-3.5 w-3.5" />
+                     {selectedShot.scene ? '更换场景' : '新增场景'}
+                   </button>
+                 )}
              </h4>
              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch" data-testid="material-scene-cards">
                  {!selectedShot.scene ? (
@@ -1439,6 +1515,9 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                           isMaterialFullySynced?.(selectedShot.id, selectedShot.scene, id) ?? false
                         )}
                         onUnbind={() => onUnbindMaterial(selectedShot.id, selectedShot.scene)}
+                       onRemoveBinding={onRemoveShotBinding
+                         ? () => onRemoveShotBinding(selectedShot.id, 'scene', selectedShot.scene)
+                         : undefined}
                        onViewImage={(url) => setLightboxImage(url)}
                      />
                   )}
@@ -1488,6 +1567,103 @@ export const MaterialPage: React.FC<MaterialPageProps> = ({
                  )}
              </div>
       </div>
+      {bindingEditorType && selectedShot && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-n900/45 px-4 backdrop-blur-[1px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="shot-binding-editor-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !bindingEditorSubmitting) setBindingEditorType(null);
+          }}
+        >
+          <div className="w-full max-w-md overflow-hidden rounded-xl border border-n40 bg-n0 shadow-bottom">
+            <div className={`flex items-center justify-between border-b border-n40 px-5 py-4 ${bindingEditorType === 'character' ? 'bg-primary-light/60' : 'bg-orange-50'}`}>
+              <div>
+                <h3 id="shot-binding-editor-title" className="text-sm font-bold text-n800">
+                  {bindingEditorType === 'character' ? '为当前镜头新增角色' : '更换当前镜头场景'}
+                </h3>
+                <p className="mt-1 text-[11px] text-n300">
+                  可选择已有素材，也可以输入新名称；修改只作用于当前镜头。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBindingEditorType(null)}
+                disabled={bindingEditorSubmitting}
+                className="rounded-md p-1.5 text-n300 transition-colors hover:bg-n0 hover:text-n800 disabled:opacity-40"
+                aria-label="关闭绑定编辑器"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              {availableBindingNames[bindingEditorType].length > 0 && (
+                <div>
+                  <div className="mb-2 text-[11px] font-semibold text-n500">已有{bindingEditorType === 'character' ? '角色' : '场景'}</div>
+                  <div className="flex max-h-28 flex-wrap gap-2 overflow-y-auto custom-scrollbar">
+                    {availableBindingNames[bindingEditorType].map(name => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setBindingEditorName(name)}
+                        className={`rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+                          bindingEditorName === name
+                            ? 'border-primary bg-primary text-white'
+                            : 'border-n40 bg-n20 text-n500 hover:border-primary hover:text-primary'
+                        }`}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <label className="block">
+                <span className="mb-2 block text-[11px] font-semibold text-n500">
+                  {bindingEditorType === 'character' ? '角色名称' : '场景名称'}
+                </span>
+                <input
+                  type="text"
+                  value={bindingEditorName}
+                  onChange={event => setBindingEditorName(event.target.value)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') void submitBindingEditor();
+                    if (event.key === 'Escape' && !bindingEditorSubmitting) setBindingEditorType(null);
+                  }}
+                  placeholder={bindingEditorType === 'character' ? '例如：茶馆老板' : '例如：茶馆门口'}
+                  className="h-10 w-full rounded-lg border border-n40 bg-n0 px-3 text-sm text-n800 outline-none transition-all placeholder:text-n100 focus:border-primary focus:ring-2 focus:ring-primary/15"
+                  autoFocus
+                />
+              </label>
+              {bindingEditorType === 'scene' && selectedShot.scene && (
+                <div className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-[11px] leading-5 text-orange-700">
+                  当前场景“{selectedShot.scene}”会被替换；原场景素材不会被删除。
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-n40 bg-n20 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setBindingEditorType(null)}
+                disabled={bindingEditorSubmitting}
+                className="h-8 rounded-md border border-n40 bg-n0 px-4 text-xs font-medium text-n500 hover:bg-n30 disabled:opacity-40"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitBindingEditor()}
+                disabled={!bindingEditorName.trim() || bindingEditorSubmitting}
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-4 text-xs font-semibold text-white hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {bindingEditorSubmitting && <Loader className="h-3.5 w-3.5 animate-spin" />}
+                {bindingEditorType === 'character' ? '添加角色' : '确认更换'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {aiModalConfig && (
         <MaterialAIModal
             config={aiModalConfig}
@@ -1817,8 +1993,9 @@ const MaterialCard: React.FC<{
     onBind: (id: string) => void;
     isSyncedToFollowing: (id: string) => boolean;
     onUnbind: () => void;
+    onRemoveBinding?: () => void | Promise<void>;
     onViewImage: (url: string) => void;
-}> = ({ name, type, materials, selectedMaterialId, aiGenerating, cameraGenerating, processingOperation, onUpload, onOpenAI, onOpenCamera, onProcessMaterial, onDeleteFromLibrary, onBind, isSyncedToFollowing, onUnbind, onViewImage }) => {
+}> = ({ name, type, materials, selectedMaterialId, aiGenerating, cameraGenerating, processingOperation, onUpload, onOpenAI, onOpenCamera, onProcessMaterial, onDeleteFromLibrary, onBind, isSyncedToFollowing, onUnbind, onRemoveBinding, onViewImage }) => {
     
     const boundMaterial = materials.find(m => m.id === selectedMaterialId);
     const hasMaterials = materials.length > 0;
@@ -1836,8 +2013,21 @@ const MaterialCard: React.FC<{
                     <div className="font-bold text-sm text-n800">{name}</div>
                     {selectedMaterialId && <CheckCircle className="w-3.5 h-3.5 text-success" />}
                 </div>
-                <div className={`text-[9px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider ${style.badge}`}>
-                    {style.label}
+                <div className="flex items-center gap-1.5">
+                  <div className={`text-[9px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider ${style.badge}`}>
+                      {style.label}
+                  </div>
+                  {onRemoveBinding && type !== 'prop' && (
+                    <button
+                      type="button"
+                      onClick={() => void onRemoveBinding()}
+                      className="rounded-md border border-danger/20 bg-n0/80 p-1 text-danger transition-colors hover:border-danger/40 hover:bg-r50"
+                      title={`从当前镜头移除${type === 'character' ? '角色' : '场景'}，不会删除素材图片`}
+                      aria-label={`从当前镜头移除${type === 'character' ? '角色' : '场景'}${name}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
             </div>
             

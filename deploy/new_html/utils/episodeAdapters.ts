@@ -17,6 +17,10 @@ const PROP_PREFIX = 'prop:';
 const SEL_PREFIX = 'sel:';
 const NOSEL_PREFIX = 'nosel:';
 export const BINDINGS_INITIALIZED_TAG = 'meta:bindings-initialized';
+export const DEFAULT_BINDINGS_INITIALIZED_TAG = 'meta:default-bindings-initialized';
+const DEFAULT_CHAR_PREFIX = 'default-char:';
+const DEFAULT_SCENE_PREFIX = 'default-scene:';
+const DEFAULT_PROP_PREFIX = 'default-prop:';
 
 export function parseStringArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
@@ -114,21 +118,37 @@ export function parseBoundAssetTags(boundAssets: string[]): {
   charNames: string[];
   sceneName: string;
   propNames: string[];
+  defaultCharNames: string[];
+  defaultSceneName: string;
+  defaultPropNames: string[];
   assetIds: string[];
   selections: Record<string, string>;
   noSelections: Set<string>;
   bindingsInitialized: boolean;
+  defaultBindingsInitialized: boolean;
 } {
   const charNames: string[] = [];
   let sceneName = '';
   const propNames: string[] = [];
+  const defaultCharNames: string[] = [];
+  let defaultSceneName = '';
+  const defaultPropNames: string[] = [];
   const assetIds: string[] = [];
   const selections: Record<string, string> = {};
   const noSelections = new Set<string>();
   let bindingsInitialized = false;
+  let defaultBindingsInitialized = false;
   for (const entry of boundAssets) {
     if (entry === BINDINGS_INITIALIZED_TAG) {
       bindingsInitialized = true;
+    } else if (entry === DEFAULT_BINDINGS_INITIALIZED_TAG) {
+      defaultBindingsInitialized = true;
+    } else if (entry.startsWith(DEFAULT_CHAR_PREFIX)) {
+      defaultCharNames.push(entry.slice(DEFAULT_CHAR_PREFIX.length));
+    } else if (entry.startsWith(DEFAULT_SCENE_PREFIX)) {
+      defaultSceneName = entry.slice(DEFAULT_SCENE_PREFIX.length);
+    } else if (entry.startsWith(DEFAULT_PROP_PREFIX)) {
+      defaultPropNames.push(entry.slice(DEFAULT_PROP_PREFIX.length));
     } else if (entry.startsWith(CHAR_PREFIX)) {
       charNames.push(entry.slice(CHAR_PREFIX.length));
     } else if (entry.startsWith(SCENE_PREFIX)) {
@@ -147,7 +167,99 @@ export function parseBoundAssetTags(boundAssets: string[]): {
       assetIds.push(entry);
     }
   }
-  return { charNames, sceneName, propNames, assetIds, selections, noSelections, bindingsInitialized };
+  return {
+    charNames,
+    sceneName,
+    propNames,
+    defaultCharNames,
+    defaultSceneName,
+    defaultPropNames,
+    assetIds,
+    selections,
+    noSelections,
+    bindingsInitialized,
+    defaultBindingsInitialized,
+  };
+}
+
+function defaultBindingSnapshotTokens(
+  characters: string[],
+  scene: string,
+  props: string[],
+): string[] {
+  return [
+    DEFAULT_BINDINGS_INITIALIZED_TAG,
+    ...characters.filter(Boolean).map(name => `${DEFAULT_CHAR_PREFIX}${name}`),
+    ...(scene ? [`${DEFAULT_SCENE_PREFIX}${scene}`] : []),
+    ...props.filter(Boolean).map(name => `${DEFAULT_PROP_PREFIX}${name}`),
+  ];
+}
+
+/**
+ * Capture the current imported bindings once. Material-stage edits keep these
+ * tokens untouched; a fresh export from the script stage writes a new snapshot.
+ */
+export function ensureDefaultBindingSnapshot(boundAssets: string[]): string[] {
+  const parsed = parseBoundAssetTags(boundAssets);
+  if (parsed.defaultBindingsInitialized) return Array.from(new Set(boundAssets));
+  return Array.from(new Set([
+    ...boundAssets,
+    ...defaultBindingSnapshotTokens(parsed.charNames, parsed.sceneName, parsed.propNames),
+  ]));
+}
+
+/** Build the latest upstream default snapshot when a script is exported. */
+export function buildDefaultBindingSnapshot(
+  characters: string[] = [],
+  scene = '',
+  props: string[] = [],
+): string[] {
+  return defaultBindingSnapshotTokens(characters, scene, props);
+}
+
+/** Restore role/scene/prop membership while retaining selections still valid. */
+export function restoreDefaultBindingSnapshot(boundAssets: string[]): string[] {
+  const parsed = parseBoundAssetTags(boundAssets);
+  if (!parsed.defaultBindingsInitialized) return Array.from(new Set(boundAssets));
+
+  const activeNames = new Set([
+    ...parsed.defaultCharNames,
+    ...(parsed.defaultSceneName ? [parsed.defaultSceneName] : []),
+    ...parsed.defaultPropNames,
+  ]);
+  const preservedMetadata = boundAssets.filter(token => token.startsWith('meta:'));
+  const preservedSelections = boundAssets.filter(token => {
+    if (token.startsWith(NOSEL_PREFIX)) return activeNames.has(token.slice(NOSEL_PREFIX.length));
+    if (!token.startsWith(SEL_PREFIX)) return false;
+    const rest = token.slice(SEL_PREFIX.length);
+    const separator = rest.indexOf(':');
+    return separator > 0 && activeNames.has(rest.slice(0, separator));
+  });
+
+  return Array.from(new Set([
+    ...preservedMetadata,
+    BINDINGS_INITIALIZED_TAG,
+    ...parsed.defaultCharNames.map(name => `${CHAR_PREFIX}${name}`),
+    ...(parsed.defaultSceneName ? [`${SCENE_PREFIX}${parsed.defaultSceneName}`] : []),
+    ...parsed.defaultPropNames.map(name => `${PROP_PREFIX}${name}`),
+    ...boundAssets.filter(token => (
+      token.startsWith(DEFAULT_CHAR_PREFIX)
+      || token.startsWith(DEFAULT_SCENE_PREFIX)
+      || token.startsWith(DEFAULT_PROP_PREFIX)
+    )),
+    ...preservedSelections,
+  ]));
+}
+
+export function bindingMembershipDiffersFromDefault(boundAssets: string[]): boolean {
+  const parsed = parseBoundAssetTags(boundAssets);
+  if (!parsed.defaultBindingsInitialized) return false;
+  const sameSet = (left: string[], right: string[]) => (
+    left.length === right.length && left.every(name => right.includes(name))
+  );
+  return !sameSet(parsed.charNames, parsed.defaultCharNames)
+    || parsed.sceneName !== parsed.defaultSceneName
+    || !sameSet(parsed.propNames, parsed.defaultPropNames);
 }
 
 function assetHasImages(asset: AssetItem): boolean {
@@ -378,6 +490,7 @@ export function newShotToDbFields(shot: Omit<StoryboardItem, 'id'>, sortOrder: n
       ...(shot.characters || []).map((c: string) => `${CHAR_PREFIX}${c}`),
       ...(shot.scene ? [`${SCENE_PREFIX}${shot.scene}`] : []),
       ...((shot.props || []).map((p: string) => `${PROP_PREFIX}${p}`)),
+      ...buildDefaultBindingSnapshot(shot.characters || [], shot.scene || '', shot.props || []),
     ],
   };
 }

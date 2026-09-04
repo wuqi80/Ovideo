@@ -9,10 +9,19 @@ import {
   dbItemToStoryboardItem,
   normalizeStoryboardRecord,
   BINDINGS_INITIALIZED_TAG,
+  DEFAULT_BINDINGS_INITIALIZED_TAG,
+  bindingMembershipDiffersFromDefault,
+  ensureDefaultBindingSnapshot,
+  parseBoundAssetTags,
+  restoreDefaultBindingSnapshot,
 } from '../utils/episodeAdapters';
 import { createAsset as apiCreateAsset } from '../services/assetMutationService';
 import { linkEntityFile } from '../services/entityFileService';
-import { putContentBinding } from '../services/contentWorkflowService';
+import {
+  deleteContentBinding,
+  listContentBindings,
+  putContentBinding,
+} from '../services/contentWorkflowService';
 import { getStoryboardItems, updateStoryboardItem as apiUpdateStoryboardItem } from '../services/episodeDataService';
 import { waitForIdle } from '../utils/idleScheduler';
 import {
@@ -21,6 +30,7 @@ import {
 } from '../utils/materialBindingState';
 import { Image as ImageIcon, Loader } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { crmConfirm, crmMessage } from '../admin/crmUI';
 import type { MaterialLibrary, Material, FileVersion, StoryboardItemDB } from '../types';
 
 const MATERIALS_STORYBOARD_INITIAL_LOAD_LIMIT = 20;
@@ -42,6 +52,62 @@ function mergeMaterialsStoryboardItems(existing: StoryboardItemDB[], incoming: S
     if (!byId.has(item.itemId)) byId.set(item.itemId, item);
   }
   return sortMaterialsStoryboardItems(Array.from(byId.values()));
+}
+
+type EditableShotBindingType = 'character' | 'scene';
+
+function bindingTokenPrefix(type: EditableShotBindingType): 'char:' | 'scene:' {
+  return type === 'character' ? 'char:' : 'scene:';
+}
+
+function contentBindingTag(type: EditableShotBindingType, name: string): string {
+  return `${type === 'character' ? 'char' : 'scene'}:${name}`;
+}
+
+function removeSelectionTokens(tokens: string[], names: string[]): string[] {
+  const targets = new Set(names);
+  return tokens.filter(token => {
+    if (token.startsWith('nosel:')) return !targets.has(token.slice('nosel:'.length));
+    if (!token.startsWith('sel:')) return true;
+    const rest = token.slice('sel:'.length);
+    const separator = rest.indexOf(':');
+    return separator <= 0 || !targets.has(rest.slice(0, separator));
+  });
+}
+
+function addCurrentShotBinding(
+  boundAssets: string[],
+  type: EditableShotBindingType,
+  name: string,
+): string[] {
+  const snapshotted = ensureDefaultBindingSnapshot(boundAssets);
+  const parsed = parseBoundAssetTags(snapshotted);
+  const replacedNames = type === 'scene' && parsed.sceneName ? [parsed.sceneName] : [];
+  const withoutReplacedSelections = removeSelectionTokens(snapshotted, replacedNames);
+  const prefix = bindingTokenPrefix(type);
+  const withoutCurrentType = type === 'scene'
+    ? withoutReplacedSelections.filter(token => !token.startsWith(prefix))
+    : withoutReplacedSelections;
+  return Array.from(new Set([
+    ...withoutCurrentType.filter(token => token !== `nosel:${name}`),
+    BINDINGS_INITIALIZED_TAG,
+    `${prefix}${name}`,
+  ]));
+}
+
+function removeCurrentShotBinding(
+  boundAssets: string[],
+  type: EditableShotBindingType,
+  name: string,
+  assetId?: string,
+): string[] {
+  const prefix = bindingTokenPrefix(type);
+  return Array.from(new Set(removeSelectionTokens(
+    ensureDefaultBindingSnapshot(boundAssets).filter(token => (
+      token !== `${prefix}${name}` && token !== assetId
+    )),
+    [name],
+  )));
 }
 
 export const MaterialsPage: React.FC = () => {
@@ -157,6 +223,8 @@ export const MaterialsPage: React.FC = () => {
 
   // 仅迁移没有镜头级绑定标记的历史数据。新数据（包括用户明确清空角色或场景）
   // 必须完全尊重 bound_assets，不能从分段共享的 videoPrompt 把角色补回来。
+  // 同时为已经初始化但尚无“默认快照”的存量镜头补一次快照，之后用户在本页的
+  // 自由增删只修改当前绑定；重新从剧本导出时才会覆盖默认快照。
   const patchedItemIdsRef = useRef<Set<string>>(new Set());
   const patchAttemptsRef = useRef<Map<string, number>>(new Map());
   const patchRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -173,18 +241,24 @@ export const MaterialsPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!storyboardItems.length || !assets.length) return;
+    if (!storyboardItems.length) return;
     const charAssets = assets.filter(a => a.assetType === 'character' && a.name);
     const sceneAssets = assets.filter(a => a.assetType === 'scene' && a.name);
     const propAssets = assets.filter(a => a.assetType === 'prop' && a.name);
-    if (!charAssets.length && !sceneAssets.length && !propAssets.length) return;
+    const hasAvailableAssets = charAssets.length > 0 || sceneAssets.length > 0 || propAssets.length > 0;
 
-    const uncheckedItems = storyboardItems.filter(item =>
-      item.itemId
-      && !item.boundAssets.includes(BINDINGS_INITIALIZED_TAG)
-      && !patchedItemIdsRef.current.has(item.itemId)
-      && (patchAttemptsRef.current.get(item.itemId) || 0) < MATERIALS_AUTO_PATCH_MAX_ATTEMPTS
-    );
+    const uncheckedItems = storyboardItems.filter(item => {
+      const boundAssets = Array.isArray(item.boundAssets) ? item.boundAssets : [];
+      const needsBindingInference = !boundAssets.includes(BINDINGS_INITIALIZED_TAG);
+      return item.itemId
+        && (
+          needsBindingInference
+          || !boundAssets.includes(DEFAULT_BINDINGS_INITIALIZED_TAG)
+        )
+        && (!needsBindingInference || hasAvailableAssets)
+        && !patchedItemIdsRef.current.has(item.itemId)
+        && (patchAttemptsRef.current.get(item.itemId) || 0) < MATERIALS_AUTO_PATCH_MAX_ATTEMPTS;
+    });
     if (!uncheckedItems.length) return;
 
     const doPatch = async () => {
@@ -196,26 +270,29 @@ export const MaterialsPage: React.FC = () => {
           (item as any).imagePrompt,
         ].filter(Boolean).join(' ');
         const existing = Array.isArray(item.boundAssets) ? [...item.boundAssets] : [];
-        const tags = [...existing, BINDINGS_INITIALIZED_TAG];
+        let tags = [...existing];
         const hasTag = (tag: string) => tags.includes(tag);
+        if (!tags.includes(BINDINGS_INITIALIZED_TAG)) {
+          tags.push(BINDINGS_INITIALIZED_TAG);
+          const matchedChars = searchText
+            ? charAssets.filter(a => searchText.includes(a.name))
+            : charAssets;
+          tags.push(...matchedChars.map(a => `char:${a.name}`).filter(tag => !hasTag(tag)));
 
-        const matchedChars = searchText
-          ? charAssets.filter(a => searchText.includes(a.name))
-          : charAssets;
-        tags.push(...matchedChars.map(a => `char:${a.name}`).filter(tag => !hasTag(tag)));
+          const hasSceneTag = tags.some(tag => tag.startsWith('scene:'));
+          const matchedScene = !hasSceneTag && searchText
+            ? sceneAssets.find(a => searchText.includes(a.name))
+            : (!hasSceneTag && !searchText && sceneAssets.length === 1 ? sceneAssets[0] : undefined);
+          if (matchedScene && !hasTag(`scene:${matchedScene.name}`)) tags.push(`scene:${matchedScene.name}`);
 
-        const hasSceneTag = tags.some(tag => tag.startsWith('scene:'));
-        const matchedScene = !hasSceneTag && searchText
-          ? sceneAssets.find(a => searchText.includes(a.name))
-          : (!hasSceneTag && !searchText && sceneAssets.length === 1 ? sceneAssets[0] : undefined);
-        if (matchedScene && !hasTag(`scene:${matchedScene.name}`)) tags.push(`scene:${matchedScene.name}`);
+          const matchedProps = searchText
+            ? propAssets.filter(a => searchText.includes(a.name))
+            : [];
+          tags.push(...matchedProps.map(a => `prop:${a.name}`).filter(tag => !hasTag(tag)));
+        }
+        tags = ensureDefaultBindingSnapshot(tags);
 
-        const matchedProps = searchText
-          ? propAssets.filter(a => searchText.includes(a.name))
-          : [];
-        tags.push(...matchedProps.map(a => `prop:${a.name}`).filter(tag => !hasTag(tag)));
-
-        if (tags.length <= existing.length) {
+        if (JSON.stringify(tags) === JSON.stringify(existing)) {
           patchedItemIdsRef.current.add(item.itemId);
           continue;
         }
@@ -347,6 +424,15 @@ export const MaterialsPage: React.FC = () => {
     return `${prefix}:${tagName}`;
   }, [assets]);
 
+  const availableBindingNames = useMemo(() => ({
+    character: Array.from(new Set(
+      assets.filter(asset => asset.assetType === 'character' && asset.name).map(asset => asset.name),
+    )).sort((left, right) => left.localeCompare(right, 'zh-CN')),
+    scene: Array.from(new Set(
+      assets.filter(asset => asset.assetType === 'scene' && asset.name).map(asset => asset.name),
+    )).sort((left, right) => left.localeCompare(right, 'zh-CN')),
+  }), [assets]);
+
   const selectedMaterial = useCallback((tagName: string, materialId: string) => (
     (effectiveLibrary[tagName] || []).find(material => material.id === materialId)
   ), [effectiveLibrary]);
@@ -392,23 +478,164 @@ export const MaterialsPage: React.FC = () => {
   const persistDisabledMaterialBinding = useCallback(async (
     item: StoryboardItemDB,
     tagName: string,
+    type?: EditableShotBindingType,
   ) => {
     if (!projectId) return;
     await putContentBinding(projectId, {
       episode_id: episodeId || undefined,
       storyboard_item_id: item.itemId,
-      tag_key: materialTagKey(tagName),
+      tag_key: type ? contentBindingTag(type, tagName) : materialTagKey(tagName),
       scope: 'shot',
       is_disabled: true,
       locked: true,
     });
   }, [episodeId, materialTagKey, projectId]);
 
+  const clearShotBindingOverrides = useCallback(async (
+    storyboardItemId: string,
+    tagKeys: string[],
+  ) => {
+    if (!projectId || !tagKeys.length) return;
+    const response = await listContentBindings(projectId, { storyboardItemId });
+    const targetKeys = new Set(tagKeys);
+    const overrides = (response.items || []).filter(binding => (
+      binding.scope === 'shot'
+      && binding.storyboard_item_id === storyboardItemId
+      && targetKeys.has(binding.tag_key)
+    ));
+    await Promise.all(overrides.map(binding => deleteContentBinding(projectId, binding.binding_id)));
+  }, [projectId]);
+
   const showMaterialToast = useCallback((message: string) => {
     setToastMsg(message);
     window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToastMsg(null), 3000);
   }, []);
+
+  const handleAddShotBinding = useCallback(async (
+    shotId: string,
+    type: EditableShotBindingType,
+    rawName: string,
+  ) => {
+    const name = rawName.trim();
+    if (!name) throw new Error(`请输入${type === 'character' ? '角色' : '场景'}名称`);
+    const item = storyboardItems.find(candidate => candidate.itemId === shotId);
+    if (!item) throw new Error('没有找到当前镜头');
+
+    const current = dbItemToStoryboardItem(item, assets);
+    if (type === 'character' && current.characters.includes(name)) {
+      showMaterialToast(`角色“${name}”已在当前镜头中`);
+      return;
+    }
+    if (type === 'scene' && current.scene === name) {
+      showMaterialToast(`场景“${name}”已是当前镜头场景`);
+      return;
+    }
+
+    const existingAsset = assets.find(asset => asset.assetType === type && asset.name.trim() === name);
+    let createdAsset = false;
+    if (!existingAsset) {
+      if (!projectId) throw new Error('缺少项目信息，无法创建素材');
+      const created = await apiCreateAsset({
+        project_id: projectId,
+        episode_id: episodeId || undefined,
+        script_id: selectedScriptId || undefined,
+        asset_type: type,
+        name,
+      });
+      if (!created?.success || !(created?.asset?.asset_id || created?.asset?.assetId)) {
+        throw new Error(`创建${type === 'character' ? '角色' : '场景'}失败`);
+      }
+      createdAsset = true;
+    }
+
+    const previousScene = type === 'scene' ? current.scene : '';
+    if (previousScene && previousScene !== name) {
+      await persistDisabledMaterialBinding(item, previousScene, 'scene');
+    }
+    await clearShotBindingOverrides(shotId, [contentBindingTag(type, name)]);
+    const updated = addCurrentShotBinding(item.boundAssets || [], type, name);
+    await updateMaterialsStoryboardItem(shotId, { bound_assets: updated, boundAssets: updated });
+    if (createdAsset) await forceReloadSlicesQuiet('assets');
+    showMaterialToast(type === 'character'
+      ? `已为当前镜头新增角色“${name}”`
+      : `已将当前镜头场景改为“${name}”`);
+  }, [
+    assets,
+    clearShotBindingOverrides,
+    episodeId,
+    forceReloadSlicesQuiet,
+    persistDisabledMaterialBinding,
+    projectId,
+    selectedScriptId,
+    showMaterialToast,
+    storyboardItems,
+    updateMaterialsStoryboardItem,
+  ]);
+
+  const handleRemoveShotBinding = useCallback(async (
+    shotId: string,
+    type: EditableShotBindingType,
+    name: string,
+  ) => {
+    const item = storyboardItems.find(candidate => candidate.itemId === shotId);
+    if (!item) return;
+    const typeLabel = type === 'character' ? '角色' : '场景';
+    const confirmed = await crmConfirm({
+      title: `从当前镜头移除${typeLabel}`,
+      message: `确定从当前镜头移除${typeLabel}“${name}”吗？素材库中的设计图不会被删除，可通过“恢复默认”或重新添加找回。`,
+      type: 'danger',
+      confirmText: '确认移除',
+    });
+    if (!confirmed) return;
+
+    try {
+      await persistDisabledMaterialBinding(item, name, type);
+      const updated = removeCurrentShotBinding(item.boundAssets || [], type, name, assetNameToId[name]);
+      await updateMaterialsStoryboardItem(shotId, { bound_assets: updated, boundAssets: updated });
+      showMaterialToast(`已从当前镜头移除${typeLabel}“${name}”`);
+    } catch (error) {
+      console.error('移除镜头素材绑定失败:', error);
+      crmMessage.error(`移除失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [
+    assetNameToId,
+    persistDisabledMaterialBinding,
+    showMaterialToast,
+    storyboardItems,
+    updateMaterialsStoryboardItem,
+  ]);
+
+  const handleRestoreDefaultBindings = useCallback(async (shotId: string) => {
+    const item = storyboardItems.find(candidate => candidate.itemId === shotId);
+    if (!item || !bindingMembershipDiffersFromDefault(item.boundAssets || [])) return;
+    const confirmed = await crmConfirm({
+      title: '恢复默认绑定',
+      message: '确定恢复为最近一次从前一步导入的角色、场景和道具绑定吗？当前镜头中的人工增删将被替换，素材图片本身不会删除。',
+      type: 'warning',
+      confirmText: '恢复默认',
+    });
+    if (!confirmed) return;
+
+    try {
+      const parsed = parseBoundAssetTags(item.boundAssets || []);
+      const tagKeys = Array.from(new Set([
+        ...parsed.charNames.map(name => `char:${name}`),
+        ...(parsed.sceneName ? [`scene:${parsed.sceneName}`] : []),
+        ...parsed.propNames.map(name => `prop:${name}`),
+        ...parsed.defaultCharNames.map(name => `char:${name}`),
+        ...(parsed.defaultSceneName ? [`scene:${parsed.defaultSceneName}`] : []),
+        ...parsed.defaultPropNames.map(name => `prop:${name}`),
+      ]));
+      await clearShotBindingOverrides(shotId, tagKeys);
+      const restored = restoreDefaultBindingSnapshot(item.boundAssets || []);
+      await updateMaterialsStoryboardItem(shotId, { bound_assets: restored, boundAssets: restored });
+      showMaterialToast('已恢复最近一次导入的默认绑定');
+    } catch (error) {
+      console.error('恢复默认绑定失败:', error);
+      crmMessage.error(`恢复失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [clearShotBindingOverrides, showMaterialToast, storyboardItems, updateMaterialsStoryboardItem]);
 
   const handleBindMaterial = useCallback(async (shotId: string, tagName: string, materialId: string) => {
     const currentIndex = storyboardItems.findIndex(si => si.itemId === shotId);
@@ -650,6 +877,10 @@ export const MaterialsPage: React.FC = () => {
         assetNameToId={assetNameToId}
         assetScopeMode={assetScopeMode}
         onAssetScopeModeChange={setAssetScopeMode}
+        availableBindingNames={availableBindingNames}
+        onAddShotBinding={handleAddShotBinding}
+        onRemoveShotBinding={handleRemoveShotBinding}
+        onRestoreDefaultBindings={handleRestoreDefaultBindings}
       />
       {toastMsg && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-success text-white text-sm rounded-lg shadow-bottom">

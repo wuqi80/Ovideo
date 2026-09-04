@@ -6,9 +6,14 @@ import {
   assetsToMaterialLibrary,
   applyStoryboardRecordPatch,
   BINDINGS_INITIALIZED_TAG,
+  DEFAULT_BINDINGS_INITIALIZED_TAG,
+  bindingMembershipDiffersFromDefault,
   dbItemToStoryboardItem,
+  ensureDefaultBindingSnapshot,
   newShotToDbFields,
   normalizeStoryboardRecord,
+  parseBoundAssetTags,
+  restoreDefaultBindingSnapshot,
   storyboardItemToDbUpdate,
 } from '../../utils/episodeAdapters';
 
@@ -257,6 +262,10 @@ describe('prop storyboard bindings', () => {
       'char:小悟',
       'scene:办公室',
       'prop:扇子',
+      DEFAULT_BINDINGS_INITIALIZED_TAG,
+      'default-char:小悟',
+      'default-scene:办公室',
+      'default-prop:扇子',
     ]);
   });
 
@@ -282,6 +291,46 @@ describe('prop storyboard bindings', () => {
     expect(item.characters).toEqual([]);
     expect(item.scene).toBe('');
     expect(item.bindingsInitialized).toBe(true);
+  });
+});
+
+describe('material binding default snapshots', () => {
+  it('captures an imported binding once without treating default tokens as asset ids', () => {
+    const snapshotted = ensureDefaultBindingSnapshot([
+      BINDINGS_INITIALIZED_TAG,
+      'char:阿亮',
+      'scene:茶馆门口',
+    ]);
+    const parsed = parseBoundAssetTags(snapshotted);
+
+    expect(parsed.defaultBindingsInitialized).toBe(true);
+    expect(parsed.defaultCharNames).toEqual(['阿亮']);
+    expect(parsed.defaultSceneName).toBe('茶馆门口');
+    expect(parsed.assetIds).toEqual([]);
+  });
+
+  it('restores imported membership while keeping valid image selections', () => {
+    const edited = [
+      BINDINGS_INITIALIZED_TAG,
+      DEFAULT_BINDINGS_INITIALIZED_TAG,
+      'default-char:阿亮',
+      'default-scene:茶馆门口',
+      'char:女店主',
+      'scene:茶馆室内',
+      'sel:阿亮:asset_a_0',
+      'sel:女店主:asset_b_0',
+    ];
+
+    expect(bindingMembershipDiffersFromDefault(edited)).toBe(true);
+    expect(restoreDefaultBindingSnapshot(edited)).toEqual([
+      BINDINGS_INITIALIZED_TAG,
+      DEFAULT_BINDINGS_INITIALIZED_TAG,
+      'char:阿亮',
+      'scene:茶馆门口',
+      'default-char:阿亮',
+      'default-scene:茶馆门口',
+      'sel:阿亮:asset_a_0',
+    ]);
   });
 });
 

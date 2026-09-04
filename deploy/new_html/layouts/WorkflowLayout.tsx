@@ -199,48 +199,60 @@ export const WorkflowLayout: React.FC = () => {
           {/* 阶段内递进步骤；单步骤阶段不重复渲染。 */}
           {activeStage && activeStage.subs.length > 1 && (
             <nav
-              className="flex h-14 shrink-0 items-center overflow-x-auto border-b border-n40 bg-n10 px-5 scrollbar-atlas"
+              className="flex h-14 shrink-0 items-center overflow-x-auto border-b border-n40 bg-n0 px-5 scrollbar-atlas"
               aria-label={`${activeStage.label}阶段步骤`}
             >
-              {activeStage.subs.map((sub, index) => {
-                const done = activeSubStageIdx >= 0 && index < activeSubStageIdx;
-                const active = index === activeSubStageIdx;
-                return (
-                  <React.Fragment key={sub.path}>
-                    {index > 0 && (
-                      <span aria-hidden className={`mx-2 h-0.5 w-8 shrink-0 ${done || active ? 'bg-success' : 'bg-n40'}`} />
-                    )}
-                    <NavLink
-                      to={sub.path}
-                      aria-current={active ? 'step' : undefined}
-                      className="flex shrink-0 items-center gap-2 rounded px-1.5 py-1 transition-opacity hover:opacity-85"
-                    >
-                      <span
-                        className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full font-mono text-xs font-bold transition-all ${
+              <div className="inline-flex items-center rounded-xl border border-n40 bg-n20/70 p-1 shadow-[0_1px_3px_rgba(20,20,25,0.05)]">
+                {activeStage.subs.map((sub, index) => {
+                  const done = activeSubStageIdx >= 0 && index < activeSubStageIdx;
+                  const active = index === activeSubStageIdx;
+                  const subStepNumber = `${activeStageIdx + 1}-${index + 1}`;
+                  return (
+                    <React.Fragment key={sub.path}>
+                      {index > 0 && (
+                        <span aria-hidden className={`mx-1 h-px w-5 shrink-0 ${done || active ? 'bg-success/60' : 'bg-n50'}`} />
+                      )}
+                      <NavLink
+                        to={sub.path}
+                        aria-current={active ? 'step' : undefined}
+                        aria-label={`${sub.label}，第 ${subStepNumber} 步`}
+                        className={`group flex h-10 min-w-[132px] shrink-0 items-center gap-2.5 rounded-lg border px-2.5 transition-all ${
                           active
-                            ? 'bg-primary text-n0 ring-4 ring-primary/15'
+                            ? 'border-primary/25 bg-n0 shadow-[0_2px_8px_rgba(91,73,240,0.12)]'
                             : done
-                              ? 'bg-success text-n0'
-                              : 'bg-n40 text-n200'
+                              ? 'border-transparent bg-transparent hover:border-n40 hover:bg-n0'
+                              : 'border-transparent bg-transparent hover:border-n40 hover:bg-n0/80'
                         }`}
                       >
-                        {done ? '✓' : index + 1}
-                      </span>
-                      <span className="flex flex-col items-start leading-[1.15]">
                         <span
-                          className={`flex items-center whitespace-nowrap font-display text-[12.5px] ${
-                            active ? 'font-bold text-n800' : done ? 'font-medium text-n600' : 'font-medium text-n200'
+                          className={`flex min-w-[40px] shrink-0 items-center justify-center rounded-md px-2 py-1 font-mono text-[11px] font-bold tabular-nums transition-colors ${
+                            active
+                              ? 'bg-primary text-n0 shadow-glow'
+                              : done
+                                ? 'bg-success-light text-success'
+                                : 'bg-n40 text-n300 group-hover:bg-primary-light group-hover:text-primary'
                           }`}
                         >
-                          {sub.label}
-                          <TaskBadge page={sub.sourcePage} />
+                          {subStepNumber}
                         </span>
-                        <span className="whitespace-nowrap text-[10px] tracking-[0.03em] text-n100">第 {index + 1} 步</span>
-                      </span>
-                    </NavLink>
-                  </React.Fragment>
-                );
-              })}
+                        <span className="flex min-w-0 flex-col items-start leading-[1.15]">
+                          <span
+                            className={`flex items-center whitespace-nowrap font-display text-[12.5px] ${
+                              active ? 'font-bold text-n800' : done ? 'font-semibold text-n600' : 'font-medium text-n300'
+                            }`}
+                          >
+                            {sub.label}
+                            <TaskBadge page={sub.sourcePage} />
+                          </span>
+                          <span className={`mt-0.5 whitespace-nowrap text-[9px] tracking-[0.04em] ${active ? 'text-primary' : done ? 'text-success' : 'text-n100'}`}>
+                            {active ? '当前步骤' : done ? '已完成' : '下一步'}
+                          </span>
+                        </span>
+                      </NavLink>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
             </nav>
           )}
 
