@@ -48,8 +48,11 @@ describe('WorkflowLayout template pipeline shell', () => {
   it('separates image upscale controls and history into accessible tabs', () => {
     expect(imageUpscaleSource).toContain("useState<'upscale' | 'history'>('upscale')");
     expect(imageUpscaleSource).toContain('role="tablist" aria-label="图片高清放大功能"');
-    expect(imageUpscaleSource).toContain('<ScanLine size={16} /> 开始放大');
-    expect(imageUpscaleSource).toContain('<History size={16} /> 放大历史');
+    expect(imageUpscaleSource).toContain('border-b border-n40 bg-n0');
+    expect(imageUpscaleSource).toContain('rounded-none bg-transparent');
+    expect(imageUpscaleSource).toContain('after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-primary');
+    expect(imageUpscaleSource).toContain('>\n            开始放大\n          </button>');
+    expect(imageUpscaleSource).toContain('>\n            放大历史\n          </button>');
     expect(imageUpscaleSource).toContain("activeTab === 'upscale' &&");
     expect(imageUpscaleSource).toContain("activeTab === 'history' &&");
     expect(imageUpscaleSource).toContain('role="tabpanel"');

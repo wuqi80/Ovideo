@@ -365,7 +365,7 @@ export const ImageUpscalePage: React.FC = () => {
           </div>
         </div>
 
-        <div className="mb-5 flex border-b border-n50" role="tablist" aria-label="图片高清放大功能">
+        <div className="mb-5 flex min-w-0 items-center gap-1 overflow-x-auto border-b border-n40 bg-n0 px-1" role="tablist" aria-label="图片高清放大功能">
           <button
             id="image-upscale-tab"
             type="button"
@@ -373,9 +373,9 @@ export const ImageUpscalePage: React.FC = () => {
             aria-selected={activeTab === 'upscale'}
             aria-controls="image-upscale-panel"
             onClick={() => setActiveTab('upscale')}
-            className={`inline-flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition-colors ${activeTab === 'upscale' ? 'border-primary text-primary' : 'border-transparent text-n300 hover:text-n700'}`}
+            className={`relative h-12 shrink-0 rounded-none bg-transparent px-3 text-sm transition-colors focus-visible:z-10 ${activeTab === 'upscale' ? 'font-medium text-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-primary' : 'text-n300 hover:text-n800'}`}
           >
-            <ScanLine size={16} /> 开始放大
+            开始放大
           </button>
           <button
             id="image-upscale-history-tab"
@@ -384,9 +384,9 @@ export const ImageUpscalePage: React.FC = () => {
             aria-selected={activeTab === 'history'}
             aria-controls="image-upscale-history-panel"
             onClick={() => setActiveTab('history')}
-            className={`inline-flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-semibold transition-colors ${activeTab === 'history' ? 'border-primary text-primary' : 'border-transparent text-n300 hover:text-n700'}`}
+            className={`relative h-12 shrink-0 rounded-none bg-transparent px-3 text-sm transition-colors focus-visible:z-10 ${activeTab === 'history' ? 'font-medium text-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-primary' : 'text-n300 hover:text-n800'}`}
           >
-            <History size={16} /> 放大历史
+            放大历史
           </button>
         </div>
 
