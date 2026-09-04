@@ -183,10 +183,10 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
         if (!files) return;
         setUploadBusy(true);
         try {
-            for (const file of Array.from(files)) {
-                if (images.length >= 9) break;
+            const uploadFiles = Array.from(files).slice(0, Math.max(0, 9 - images.length));
+            for (const file of uploadFiles) {
                 const r = await uploadImage(file);
-                addMedia({ kind: 'image', url: r.url || (r as any).storage_url });
+                addMedia({ kind: 'image', url: r.url || (r as any).storage_url, role: 'reference_image' });
             }
         } finally {
             setUploadBusy(false);
@@ -198,8 +198,8 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
         if (!files) return;
         setUploadBusy(true);
         try {
-            for (const file of Array.from(files)) {
-                if (!isAgentPlan && audios.length >= 3) break;
+            const uploadFiles = Array.from(files).slice(0, isAgentPlan ? 1 : Math.max(0, 3 - audios.length));
+            for (const file of uploadFiles) {
                 const r = await uploadAudio(file, 0, 5);
                 if (isAgentPlan) {
                     onChange({
@@ -224,8 +224,8 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
         if (!files) return;
         setUploadBusy(true);
         try {
-            for (const file of Array.from(files)) {
-                if (videos.length >= 3) break;
+            const uploadFiles = Array.from(files).slice(0, Math.max(0, 3 - videos.length));
+            for (const file of uploadFiles) {
                 const r = await uploadVideoFile(file);
                 addMedia({
                     kind: 'video',
@@ -489,6 +489,169 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                             <div className="flex justify-end border-t border-n40 px-4 py-3">
                                 <button type="button" onClick={() => setPromptModalOpen(false)} className="rounded bg-primary px-4 py-1.5 text-xs text-white hover:bg-primary-hover">完成</button>
                             </div>
+                        </div>
+                    </div>,
+                    document.body,
+                )}
+            </div>
+        );
+    }
+
+    if (supportsMultimodal) {
+        const totalReferenceCount = images.length + videos.length + audios.length;
+        const referenceHint = effectiveMode === 'reference'
+            ? `最多输入 15 个参考素材（图片 9、视频 3、配音 3）；输入文字，或输入 @ 选择参考内容。`
+            : '添加首帧与可选尾帧，再输入画面、动作和运镜；参考视频会保留但本次不提交。';
+        const modeTitle = effectiveMode === 'reference' ? '全能参考' : '首尾帧';
+
+        const renderFrame = (
+            role: 'first_frame' | 'last_frame',
+            label: string,
+            media: SeedanceMediaInput | undefined,
+            mediaIndex: number,
+            inputRef: React.RefObject<HTMLInputElement>,
+        ) => (
+            <div className="relative h-[86px] w-[72px] shrink-0 overflow-hidden rounded-xl border border-n40 bg-n20 shadow-sm">
+                <input
+                    ref={inputRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={event => onPickAgentPlanFrame(role, event.target.files, inputRef)}
+                />
+                {media ? (
+                    <>
+                        <button type="button" onClick={() => onPreviewMedia?.(media.url, 'image')} className="block h-full w-full">
+                            <img src={media.url} alt={label} className="h-full w-full object-cover" />
+                        </button>
+                        <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-n900/65 py-1 text-center text-[9px] text-white">{label}</span>
+                        <button type="button" onClick={() => removeMedia(mediaIndex)} className="absolute right-1 top-1 rounded-full bg-n900/70 p-0.5 text-white hover:bg-danger" aria-label={`删除${label}`}><X size={9} /></button>
+                    </>
+                ) : (
+                    <button type="button" onClick={() => inputRef.current?.click()} disabled={disabled || uploadBusy} className="flex h-full w-full flex-col items-center justify-center gap-1 text-n100 hover:text-primary" title={`添加${label}`}>
+                        <ImagePlus size={17} /><span className="text-[9px]">+ {label}</span>
+                    </button>
+                )}
+            </div>
+        );
+
+        return (
+            <div className="overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-card" data-testid="seedance-jimeng-composer">
+                <div className="flex min-h-[150px] gap-3 p-3">
+                    <div className="flex shrink-0 items-start gap-1.5 pt-1">
+                        {effectiveMode === 'first_last' ? (
+                            <>
+                                {renderFrame('first_frame', '首帧', firstFrame, firstFrameIndex, firstFrameInputRef)}
+                                <span className="pt-8 text-n100">→</span>
+                                {renderFrame('last_frame', '尾帧', lastFrame, lastFrameIndex, lastFrameInputRef)}
+                            </>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => setPickerOpen(true)}
+                                disabled={disabled || totalReferenceCount >= 15}
+                                className="flex h-[86px] w-[72px] rotate-[-3deg] flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-n40 bg-n20 text-n100 shadow-sm transition hover:border-primary hover:text-primary disabled:opacity-40"
+                                title="从素材库添加参考内容"
+                            >
+                                <Plus size={18} /><span className="text-[9px]">参考内容</span>
+                            </button>
+                        )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                            <div className="text-[10px] leading-4 text-n100">{referenceHint}</div>
+                            <button type="button" onClick={() => setPromptModalOpen(true)} className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-primary hover:bg-primary-light">
+                                <Maximize2 size={11} />放大编辑
+                            </button>
+                        </div>
+                        <SeedanceMentionPromptEditor
+                            value={value}
+                            onChange={onChange}
+                            candidates={candidates}
+                            disabled={disabled}
+                            autoOpenOnMount={autoOpenMentionOnMount}
+                            rows={5}
+                            placeholder={effectiveMode === 'reference'
+                                ? '输入文字描述，或输入 @ 选择参考内容……'
+                                : '描述首帧到尾帧的变化、动作与运镜……'}
+                            onPreviewMedia={onPreviewMedia}
+                        />
+                    </div>
+                </div>
+
+                <div className="border-t border-n40 bg-n20/35 px-3 py-2">
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                        {value.media_inputs.map((media, index) => (
+                            <div key={`${media.kind}-${media.url}-${index}`} className="group/ref relative flex h-11 max-w-[132px] items-center gap-1.5 overflow-hidden rounded-lg border border-n40 bg-n0 pr-6 text-[9px] text-n500">
+                                {media.kind === 'image' ? (
+                                    <img src={media.url} alt="" className="h-full w-12 shrink-0 object-cover" />
+                                ) : (
+                                    <span className="flex h-full w-12 shrink-0 items-center justify-center bg-n30 text-n300">{media.kind === 'video' ? <Film size={14} /> : <Volume2 size={14} />}</span>
+                                )}
+                                <span className="truncate" title={media.url}>{media.kind === 'image' ? '图片参考' : media.kind === 'video' ? '视频参考' : '参考配音'}</span>
+                                <button type="button" onClick={() => removeMedia(index)} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-n100 hover:bg-r50 hover:text-danger" aria-label="移除参考素材"><X size={10} /></button>
+                            </div>
+                        ))}
+                        {totalReferenceCount === 0 && <span className="text-[9px] text-n100">尚未添加额外参考素材</span>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <label className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] font-medium text-n700">
+                            <span>模式</span>
+                            <select value={effectiveMode} onChange={event => setMode(event.target.value as 'reference' | 'first_last')} disabled={disabled} className="border-0 bg-transparent p-0 text-[10px] font-semibold text-n800 focus:outline-none" aria-label="Seedance 生成模式">
+                                <option value="reference">全能参考</option>
+                                <option value="first_last">首尾帧</option>
+                            </select>
+                        </label>
+                        <label className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n300">
+                            <span>比例</span>
+                            <select value={value.ratio || 'adaptive'} onChange={event => patch({ ratio: event.target.value as SeedanceParams['ratio'] })} disabled={disabled} className="border-0 bg-transparent p-0 text-[10px] font-semibold text-n700 focus:outline-none" aria-label="画面比例">
+                                {RATIO_OPTIONS.map(ratio => <option key={ratio} value={ratio}>{ratio === 'adaptive' ? '自动' : ratio}</option>)}
+                            </select>
+                        </label>
+                        <label className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n300">
+                            <span>清晰度</span>
+                            <select value={value.resolution || '720p'} onChange={event => patch({ resolution: event.target.value as SeedanceParams['resolution'] })} disabled={disabled} className="border-0 bg-transparent p-0 text-[10px] font-semibold text-n700 focus:outline-none" aria-label="分辨率">
+                                {RESOLUTION_OPTIONS.map(resolution => {
+                                    const unavailable = resolution === '1080p' && (value.sub_model === 'fast' || value.sub_model === 'mini');
+                                    return <option key={resolution} value={resolution} disabled={unavailable}>{resolution.toUpperCase()}{unavailable ? '（当前版本不支持）' : ''}</option>;
+                                })}
+                            </select>
+                        </label>
+                        <span className="inline-flex items-center rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] font-medium text-n700">{value.duration || 5}s</span>
+                        <label className="inline-flex items-center gap-1.5 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n700">
+                            <input type="checkbox" checked={value.generate_audio !== false} onChange={event => patch({ generate_audio: event.target.checked })} disabled={disabled} />AI 配音
+                        </label>
+                        <button type="button" onClick={() => setPickerOpen(true)} disabled={disabled || totalReferenceCount >= 15} className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-primary hover:border-primary disabled:opacity-40"><Plus size={11} />素材库</button>
+                        <button type="button" onClick={() => imgInputRef.current?.click()} disabled={disabled || uploadBusy || images.length >= 9 || effectiveMode === 'first_last'} className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n500 disabled:opacity-35"><Upload size={11} />图片</button>
+                        <button type="button" onClick={() => videoInputRef.current?.click()} disabled={disabled || uploadBusy || videos.length >= 3 || effectiveMode === 'first_last'} className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n500 disabled:opacity-35"><Upload size={11} />视频</button>
+                        <button type="button" onClick={() => audioInputRef.current?.click()} disabled={disabled || uploadBusy || audios.length >= 3} className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n500 disabled:opacity-35"><Volume2 size={11} />配音</button>
+                        {onUsePreviousVideoAudio && <button type="button" onClick={onUsePreviousVideoAudio} disabled={disabled || previousVideoAudioBusy || audios.length >= 3} className="inline-flex items-center gap-1 rounded-lg border border-success/40 bg-n0 px-2 py-1.5 text-[10px] text-success disabled:opacity-35">{previousVideoAudioBusy ? <Loader2 size={11} className="animate-spin" /> : <Volume2 size={11} />}上一条原声</button>}
+                        <details className="relative text-[10px]">
+                            <summary className="cursor-pointer list-none rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-n500">高级设置</summary>
+                            <div className="absolute bottom-9 right-0 z-20 w-52 space-y-2 rounded-xl border border-n40 bg-n0 p-3 shadow-bottom">
+                                <label className="flex items-center justify-between gap-2 text-n500"><span>随机种子</span><input type="number" value={value.seed ?? -1} onChange={event => patch({ seed: parseInt(event.target.value, 10) })} className="w-20 rounded border border-n40 px-2 py-1" /></label>
+                                <label className="flex items-center gap-2 text-n500"><input type="checkbox" checked={!!value.watermark} onChange={event => patch({ watermark: event.target.checked })} />添加水印</label>
+                                <div className="text-[9px] leading-4 text-n100">{modeTitle}模式 · {referenceHint}</div>
+                            </div>
+                        </details>
+                        <input ref={imgInputRef} type="file" accept="image/*" multiple hidden onChange={event => onPickImages(event.target.files)} />
+                        <input ref={videoInputRef} type="file" accept="video/*" multiple hidden onChange={event => onPickVideos(event.target.files)} />
+                        <input ref={audioInputRef} type="file" accept="audio/*" multiple hidden onChange={event => onPickAudios(event.target.files)} />
+                    </div>
+                    {audioReferenceNotice && <div className="mt-1.5 text-[9px] text-warning">{audioReferenceNotice}</div>}
+                    {!validation.ok && <div className="mt-1.5 flex items-center gap-1 text-[10px] text-danger"><AlertCircle size={10} />{validation.msg}</div>}
+                </div>
+
+                <SeedanceAssetPickerModal open={pickerOpen} onClose={() => setPickerOpen(false)} value={value} onChange={onChange} candidates={candidates} />
+                {promptModalOpen && ReactDOM.createPortal(
+                    <div className="fixed inset-0 z-[9500] flex items-center justify-center bg-n900/50 p-4 backdrop-blur-sm" onMouseDown={event => { if (event.target === event.currentTarget) setPromptModalOpen(false); }}>
+                        <div role="dialog" aria-label="放大编辑提示词" className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-bottom">
+                            <div className="flex items-center justify-between border-b border-n40 px-4 py-3">
+                                <div><div className="text-sm font-semibold text-primary">提示词 · 放大编辑</div><div className="text-[10px] text-n100">最多 15 个参考素材；输入文字，或输入 @ 选择参考内容</div></div>
+                                <button type="button" onClick={() => setPromptModalOpen(false)} className="rounded p-1.5 text-n300 hover:bg-n20" aria-label="关闭"><X size={16} /></button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4"><SeedanceMentionPromptEditor value={value} onChange={onChange} candidates={candidates} disabled={disabled} rows={27} openUpward placeholder="输入文字描述，或输入 @ 选择参考内容……" onPreviewMedia={onPreviewMedia} /></div>
+                            <div className="flex justify-end border-t border-n40 px-4 py-3"><button type="button" onClick={() => setPromptModalOpen(false)} className="rounded-lg bg-primary px-4 py-1.5 text-xs text-white hover:bg-primary-hover">完成</button></div>
                         </div>
                     </div>,
                     document.body,

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Video } from 'lucide-react';
+import { Check, ChevronDown, Cloud, Cpu, Info, Video } from 'lucide-react';
 
 import type { VideoModel, VideoModelOption } from '../../services/videoModelService';
 
@@ -36,6 +36,14 @@ export const VideoModelPicker: React.FC<VideoModelPickerProps> = ({
     [options, value],
   );
   const selectedLabel = splitOptionLabel(selected?.label || String(value));
+  const onlineOptions = useMemo(
+    () => options.filter(option => option.provider !== 'processing_cluster'),
+    [options],
+  );
+  const localOptions = useMemo(
+    () => options.filter(option => option.provider === 'processing_cluster'),
+    [options],
+  );
 
   const refreshPosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -86,11 +94,20 @@ export const VideoModelPicker: React.FC<VideoModelPickerProps> = ({
         style={{ left: position.left, top: position.top, width: position.width }}
       >
         <div className="border-b border-n40 px-4 py-3">
-          <div className="text-xs font-bold text-n800">选择生成模型</div>
-          <div className="mt-0.5 text-[10px] text-n100">在线 API 优先，本地处理节点列在下方</div>
+          <div className="flex items-center gap-1.5 text-xs font-bold text-n800"><Video className="h-3.5 w-3.5 text-primary" />选择视频模型</div>
+          <div className="mt-0.5 text-[10px] text-n100">全部模型始终展示；灰色模型悬停可查看不可用原因</div>
         </div>
-        <div className="max-h-[350px] overflow-y-auto p-1.5">
-          {options.map(option => {
+        <div className="max-h-[420px] overflow-y-auto p-2">
+          {([
+            { key: 'online', label: '在线 API', icon: Cloud, rows: onlineOptions },
+            { key: 'local', label: '本地节点', icon: Cpu, rows: localOptions },
+          ] as const).map(section => section.rows.length > 0 && (
+            <section key={section.key} className="mb-2 last:mb-0">
+              <div className="mb-1 flex items-center gap-1.5 px-2 py-1 text-[10px] font-semibold text-n300">
+                <section.icon className="h-3 w-3" />{section.label}
+              </div>
+              <div className="space-y-0.5">
+              {section.rows.map(option => {
             const label = splitOptionLabel(option.label);
             const isLocal = option.provider === 'processing_cluster';
             const isSelected = option.value === value;
@@ -101,16 +118,16 @@ export const VideoModelPicker: React.FC<VideoModelPickerProps> = ({
                 role="option"
                 aria-selected={isSelected}
                 aria-disabled={!option.available}
-                disabled={!option.available}
                 title={!option.available ? option.unavailableReason : option.label}
                 onClick={() => {
+                  if (!option.available) return;
                   onChange(option.value);
                   setOpen(false);
                 }}
-                className={`group flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                className={`group relative flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${
                   option.available
                     ? 'hover:bg-p50'
-                    : 'cursor-not-allowed bg-n20/60 text-n100'
+                    : 'cursor-not-allowed bg-n20/80 text-n100 grayscale'
                 } ${isSelected ? 'bg-p50' : ''}`}
               >
                 <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
@@ -126,6 +143,9 @@ export const VideoModelPicker: React.FC<VideoModelPickerProps> = ({
                     {isLocal && (
                       <span className="shrink-0 rounded bg-n30 px-1.5 py-0.5 text-[9px] font-medium text-n300">本地节点</span>
                     )}
+                    {!option.available && (
+                      <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-n30 px-1.5 py-0.5 text-[9px] font-medium text-n100"><Info className="h-2.5 w-2.5" />不可用</span>
+                    )}
                   </span>
                   <span className="mt-0.5 block text-[10px] leading-4 text-n100">
                     {option.available
@@ -136,7 +156,10 @@ export const VideoModelPicker: React.FC<VideoModelPickerProps> = ({
                 {isSelected && <Check className="mt-1 h-4 w-4 shrink-0 text-primary" />}
               </button>
             );
-          })}
+              })}
+              </div>
+            </section>
+          ))}
         </div>
       </div>,
       document.body,

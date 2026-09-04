@@ -23,11 +23,12 @@ export const PLACEHOLDER_CARD_HEIGHT_CLASS = 'h-[280px] flex flex-col overflow-h
 /** 普通 I2V / Morph（Wan2、Sora2、大能…） */
 export const COMPACT_CARD_HEIGHT_CLASS = 'h-[380px] flex flex-col overflow-hidden';
 /** DashScope 三家：Kling / Vidu / HappyHorse */
-export const DASHSCOPE_CARD_HEIGHT_CLASS = 'h-[580px] flex flex-col overflow-hidden';
+export const DASHSCOPE_CARD_HEIGHT_CLASS = 'h-[520px] flex flex-col overflow-hidden';
 /** MiniMax Hailuo model, duration, resolution, optimizer, and prompt controls. */
-export const MINIMAX_CARD_HEIGHT_CLASS = 'h-[500px] flex flex-col overflow-hidden';
+export const MINIMAX_CARD_HEIGHT_CLASS = 'h-[440px] flex flex-col overflow-hidden';
 /** Seedance 多模态控制台（3 媒体框 + 全部参数自适应展示） */
-export const SEEDANCE_CARD_HEIGHT_CLASS = 'h-[680px] flex flex-col overflow-hidden';
+export const SEEDANCE_CARD_HEIGHT_CLASS = 'h-[560px] flex flex-col overflow-hidden';
+export const SEEDANCE_15_CARD_HEIGHT_CLASS = 'h-[620px] flex flex-col overflow-hidden';
 /** @deprecated 旧别名，留给 tests 兼容；新代码用 DASHSCOPE_/SEEDANCE_ 二档 */
 export const PARAMETRIC_CARD_HEIGHT_CLASS = DASHSCOPE_CARD_HEIGHT_CLASS;
 
@@ -64,6 +65,7 @@ export function isSeedanceModel(model: VideoModel): boolean {
  */
 export function getCardHeightClass(model: VideoModel, isPlaceholder = false): string {
     if (isPlaceholder) return PLACEHOLDER_CARD_HEIGHT_CLASS;
+    if (model === 'Seedance15') return SEEDANCE_15_CARD_HEIGHT_CLASS;
     if (isSeedanceModel(model)) return SEEDANCE_CARD_HEIGHT_CLASS;
     if (isDashScopeVideoModel(model)) return DASHSCOPE_CARD_HEIGHT_CLASS;
     if (model === 'MINI') return MINIMAX_CARD_HEIGHT_CLASS;

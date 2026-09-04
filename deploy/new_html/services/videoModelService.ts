@@ -358,10 +358,13 @@ export const ALL_MODELS: VideoModel[] = [
 ];
 
 export const SELECTABLE_MODELS: VideoModel[] = [
+  // Online APIs are always listed first.
   'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
   'MINI', 'Veo', 'Sora2', '大能',
   'Kling', 'Vidu', 'HappyHorse',
-  // Processing-cluster models stay visible, but follow online API models.
+  // Every processing-cluster model stays visible below the online APIs.
+  'LTXNode1', 'WanNode2', 'Wan2',
+  '一阶', '二阶', '三阶', '四阶', '五阶', '六阶', '七阶',
   'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini',
 ];
 
@@ -554,32 +557,35 @@ export function buildVideoModelOptions(
   capabilities: readonly VideoCapabilityModelLike[] | null | undefined,
   fallbackModels: readonly VideoModel[] = SELECTABLE_MODELS,
 ): VideoModelOption[] {
-  const hasManifest = Array.isArray(capabilities) && capabilities.length > 0;
-  if (!hasManifest) return [];
   const capabilityByKey = new Map<string, VideoCapabilityModelLike>();
   for (const capability of capabilities || []) {
     const key = String(capability.key || '').trim();
     if (isVideoModelKey(key)) capabilityByKey.set(key, capability);
   }
 
-  return fallbackModels.flatMap((model) => {
+  return fallbackModels.map((model) => {
     const capability = capabilityByKey.get(model);
-    if (!capability || capability.published === false) return [];
-    const available = capability?.available === true;
+    const published = capability?.published !== false;
+    const available = Boolean(capability && published && capability.available === true);
     const runtimeLabel = formatVideoModelRuntimeLabel(capability);
     const label = formatVideoModelOptionLabel(model, capability);
-    return [{
+    const unavailableReason = available
+      ? undefined
+      : !capability
+        ? '后台尚未配置该模型'
+        : !published
+          ? String(capability.unavailable_reason || '模型已在后台停用')
+          : String(capability.unavailable_reason || '模型通道暂不可用');
+    return {
       value: model,
       label,
       baseLabel: getModelDisplayName(model),
       runtimeLabel,
       available,
-      unavailableReason: available
-        ? undefined
-        : String(capability.unavailable_reason || '后台未配置可用通道，或模型服务暂不可用'),
-      provider: capability?.provider,
+      unavailableReason,
+      provider: capability?.provider || (isComfyUIModel(model) ? 'processing_cluster' : undefined),
       capability,
-    }];
+    };
   });
 }
 
@@ -590,7 +596,6 @@ export function withCurrentVideoModelOption(
 ): VideoModelOption[] {
   if (options.some(option => option.value === currentModel)) return [...options];
   const capability = (capabilities || []).find(item => item.key === currentModel);
-  if (!capability || capability.published === false) return [...options];
   const label = formatVideoModelOptionLabel(currentModel, capability);
   return [{
     value: currentModel,
@@ -598,8 +603,8 @@ export function withCurrentVideoModelOption(
     baseLabel: getModelDisplayName(currentModel),
     runtimeLabel: formatVideoModelRuntimeLabel(capability),
     available: false,
-    unavailableReason: String(capability.unavailable_reason || '当前模型暂不可用'),
-    provider: capability.provider,
+    unavailableReason: String(capability?.unavailable_reason || (capability ? '当前模型暂不可用' : '后台尚未配置该模型')),
+    provider: capability?.provider || (isComfyUIModel(currentModel) ? 'processing_cluster' : undefined),
     capability,
   }, ...options];
 }

@@ -35,7 +35,11 @@ describe('VideoModelPicker', () => {
     expect(modelRows).toHaveLength(2);
     expect(modelRows[0]).toHaveTextContent('MiniMax Hailuo 2.3');
     expect(modelRows[1]).toHaveTextContent('本地节点');
+    expect(modelRows[1]).toHaveTextContent('不可用');
     expect(modelRows[1]).toHaveTextContent('处理节点离线');
-    expect(modelRows[1]).toBeDisabled();
+    expect(modelRows[1]).toHaveAttribute('aria-disabled', 'true');
+    expect(modelRows[1]).toHaveAttribute('title', '处理节点离线');
+    fireEvent.click(modelRows[1]);
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

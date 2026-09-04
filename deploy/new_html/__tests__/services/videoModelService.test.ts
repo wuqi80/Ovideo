@@ -206,7 +206,7 @@ describe('Seedance model mapping', () => {
 });
 
 describe('buildVideoModelOptions', () => {
-  it('keeps only H3 nodes and supported provider-backed models selectable', () => {
+  it('lists every online and processing-node model in a stable order', () => {
     expect(SELECTABLE_MODELS).toEqual([
       'Seedance15',
       'Seedance2',
@@ -219,14 +219,21 @@ describe('buildVideoModelOptions', () => {
       'Kling',
       'Vidu',
       'HappyHorse',
+      'LTXNode1',
+      'WanNode2',
+      'Wan2',
+      '一阶',
+      '二阶',
+      '三阶',
+      '四阶',
+      '五阶',
+      '六阶',
+      '七阶',
       'MiniMaxH3',
       'MiniMaxH3Fast',
       'MiniMaxH3Mini',
     ]);
-    expect(SELECTABLE_MODELS).not.toContain('Wan2');
-    expect(SELECTABLE_MODELS).not.toContain('LTXNode1');
-    expect(SELECTABLE_MODELS).not.toContain('WanNode2');
-    expect(SELECTABLE_MODELS).not.toContain('一阶');
+    expect(SELECTABLE_MODELS.indexOf('HappyHorse')).toBeLessThan(SELECTABLE_MODELS.indexOf('LTXNode1'));
   });
 
   it('keeps published unavailable models disabled with a reason and exposes one concise preferred runtime label', () => {
@@ -296,18 +303,10 @@ describe('buildVideoModelOptions', () => {
       },
     ]);
 
-    expect(options.map(option => option.value)).toEqual([
-      'Seedance2',
-      'Seedance2Mini',
-      'MINI',
-      'HappyHorse',
-      'MiniMaxH3',
-      'MiniMaxH3Fast',
-      'MiniMaxH3Mini',
-    ]);
+    expect(options.map(option => option.value)).toEqual(SELECTABLE_MODELS);
     expect(options.find(option => option.value === 'Seedance2')).toMatchObject({
       available: false,
-      unavailableReason: '后台未配置可用通道，或模型服务暂不可用',
+      unavailableReason: '模型通道暂不可用',
     });
     expect(options.some(option => option.label.includes('当前不可用'))).toBe(false);
     expect(options.some(option => option.label.includes('MiniMax H3'))).toBe(true);
@@ -321,6 +320,18 @@ describe('buildVideoModelOptions', () => {
       'MiniMax-Hailuo-2.3',
       'MiniMax-Hailuo-2.3-Fast',
     ]);
+    expect(options.find(option => option.value === '一阶')).toMatchObject({
+      available: false,
+      unavailableReason: '后台尚未配置该模型',
+      provider: 'processing_cluster',
+    });
+  });
+
+  it('keeps the complete model catalog visible while capability status is loading', () => {
+    const options = buildVideoModelOptions(null);
+    expect(options.map(option => option.value)).toEqual(SELECTABLE_MODELS);
+    expect(options.every(option => !option.available)).toBe(true);
+    expect(options[0].unavailableReason).toBe('后台尚未配置该模型');
   });
 
   it('does not concatenate Kling and Vidu routing alternatives into the selector label', () => {

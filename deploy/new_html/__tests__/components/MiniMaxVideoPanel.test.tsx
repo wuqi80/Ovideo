@@ -25,12 +25,14 @@ describe('MiniMaxVideoPanel', () => {
             />,
         );
 
-        fireEvent.click(screen.getByRole('button', { name: 'MiniMax-Hailuo-2.3-Fast' }));
+        fireEvent.change(screen.getByRole('combobox', { name: 'MiniMax 模型' }), {
+            target: { value: 'MiniMax-Hailuo-2.3-Fast' },
+        });
 
         expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
             model: 'MiniMax-Hailuo-2.3-Fast',
         }));
-        expect(screen.getByRole('button', { name: 'MiniMax-Hailuo-2.3-Preview' })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: 'MiniMax-Hailuo-2.3-Preview' })).toBeInTheDocument();
     });
 
     it('disables 10 seconds while 1080P is selected instead of silently changing the resolution', () => {

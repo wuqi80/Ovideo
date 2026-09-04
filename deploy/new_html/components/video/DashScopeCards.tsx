@@ -89,20 +89,19 @@ interface ShellProps {
 // 配合 VideoPage 的 'min-h-[420px] h-full flex flex-col' 卡片外壳，让 Shell 撑满；
 // 主体内容区自己负责滚动，避免整张卡撑出滚动条破坏 grid stretch。
 const DashScopeCardShell: React.FC<ShellProps> = ({ theme, subtitle, children }) => (
-    <div className={`w-full rounded-md border ${theme.accentBorder} bg-n0 shadow-card flex flex-col flex-1 min-h-0`}>
-        <div className={`px-2.5 py-1.5 bg-gradient-to-r ${theme.gradient} flex items-center justify-between border-b border-n40 rounded-t-md shrink-0`}>
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-card" data-testid="jimeng-video-composer">
+        <div className="flex shrink-0 items-center justify-between border-b border-n40 px-3 py-2">
             <div className="flex items-center gap-1.5">
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase border ${theme.badge}`}>
+                <span className="rounded-lg bg-n20 px-2 py-1 text-[10px] font-semibold text-n700">
                     {theme.name}
                 </span>
                 <span className="text-[10px] text-n300">{subtitle}</span>
             </div>
             <div className="flex items-center gap-1 text-[9px] text-n100">
-                <Sparkles className="w-2.5 h-2.5" /> DashScope
+                <Sparkles className="w-2.5 h-2.5 text-primary" /> 即梦式参数栏
             </div>
         </div>
-        {/* 主体内容：可滚动；padding 略大让信息呼吸 */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
             {children}
         </div>
     </div>
@@ -809,11 +808,9 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
                 </label>
             </div>
 
-            {/* 高级参数：永久展开（2026-05-25 A5：<section> 替换 <details open>，
-                用户明确"参数显示都全"，不允许折叠后参数消失） */}
-            <section className="border-t border-n40 pt-2">
-                <div className="text-[10px] text-n300 mb-1.5">高级参数</div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            <details className="rounded-xl border border-n40 bg-n20/35 px-2 py-1.5">
+                <summary className="cursor-pointer select-none text-[10px] font-medium text-n500">高级设置</summary>
+                <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                     <label className={labelCls}>
                         <Maximize2 className="w-2.5 h-2.5" /> 分辨率
                         <select
@@ -874,7 +871,7 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
                         <Volume2 className="w-2.5 h-2.5" /> 有声 {!supportsAudio && <span className="text-[8px] text-warning">(仅 q3)</span>}
                     </label>
                 </div>
-            </section>
+            </details>
         </DashScopeCardShell>
     );
 };
@@ -1021,11 +1018,9 @@ export const HappyHorseCard: React.FC<DashScopeCardProps> = (props) => {
                 </label>
             </div>
 
-            {/* 高级参数：永久展开（2026-05-25 A5：<section> 替换 <details open>，
-                用户明确"参数显示都全"，不允许折叠后参数消失） */}
-            <section className="border-t border-n40 pt-2">
-                <div className="text-[10px] text-n300 mb-1.5">高级参数</div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            <details className="rounded-xl border border-n40 bg-n20/35 px-2 py-1.5">
+                <summary className="cursor-pointer select-none text-[10px] font-medium text-n500">高级设置</summary>
+                <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                     <label className={`${labelCls} cursor-pointer`}>
                         <input
                             type="checkbox"
@@ -1052,7 +1047,7 @@ export const HappyHorseCard: React.FC<DashScopeCardProps> = (props) => {
                         />
                     </label>
                 </div>
-            </section>
+            </details>
         </DashScopeCardShell>
     );
 };

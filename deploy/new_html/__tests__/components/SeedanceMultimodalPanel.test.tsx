@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../hooks/useScriptModelOptions', () => ({
@@ -62,5 +62,34 @@ describe('Seedance 1.5 Pro controls', () => {
     expect(slider).toHaveAttribute('min', '3');
     expect(slider).toHaveAttribute('max', '12');
     expect(screen.getByText('3–12 秒')).toBeInTheDocument();
+  });
+});
+
+describe('Seedance 2.0 Jimeng-style controls', () => {
+  it('shows all-reference and first/last-frame modes with explicit reference guidance', () => {
+    const onChange = vi.fn();
+    render(
+      <SeedanceMultimodalPanel
+        value={{
+          ...agentPlanValue,
+          sub_model: 'standard',
+          media_inputs: [{ kind: 'image', url: '/reference.png', role: 'reference_image' }],
+        }}
+        onChange={onChange}
+        candidates={[]}
+        supportsMultimodal
+      />,
+    );
+
+    expect(screen.getByTestId('seedance-jimeng-composer')).toBeInTheDocument();
+    expect(screen.getAllByText(/最多输入 15 个参考素材/).length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText(/输入文字描述，或输入 @ 选择参考内容/)).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '全能参考' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '首尾帧' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Seedance 生成模式'), { target: { value: 'first_last' } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      media_inputs: [expect.objectContaining({ role: 'first_frame' })],
+    }));
   });
 });
