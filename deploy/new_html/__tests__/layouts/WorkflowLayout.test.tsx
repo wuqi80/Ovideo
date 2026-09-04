@@ -77,13 +77,24 @@ describe('WorkflowLayout template pipeline shell', () => {
   it('maps the production sub-pages into four plain-language stages', () => {
     for (const stage of ['写故事', '定角色和场景', '排画面和声音', '生成短片']) expect(source).toContain(stage);
     for (const hint of ["hint: '第 1 步'", "hint: '第 2 步'", "hint: '第 3 步'", "hint: '第 4 步'"]) expect(source).toContain(hint);
-    for (const sub of ["label: '故事内容'", "label: '角色场景'", "label: '声音对白'", "label: '生成视频'", "label: '优化合成'", "label: '导出成片'"]) {
+    for (const sub of ["label: '故事内容'", "label: '角色场景'", "label: '素材绑定'", "label: '镜头画面'", "label: '声音对白'", "label: '生成视频'", "label: '优化合成'", "label: '导出成片'"]) {
       expect(source).toContain(sub);
     }
+    expect(source).not.toContain("label: '可用素材'");
     expect(source).toContain('{STAGES.map');
     expect(source).toContain("'✓'");
     expect(source).toContain('ring-primary/15');
     expect(source).toContain('activeStage.subs.length > 1');
+  });
+
+  it('renders every multi-page stage as a numbered progressive sub-stepper', () => {
+    expect(source).toContain('const activeSubStageIdx =');
+    expect(source).toContain('aria-label={`${activeStage.label}阶段步骤`}');
+    expect(source).toContain('const done = activeSubStageIdx >= 0 && index < activeSubStageIdx');
+    expect(source).toContain("done || active ? 'bg-success' : 'bg-n40'");
+    expect(source).toContain("aria-current={active ? 'step' : undefined}");
+    expect(source).toContain('第 {index + 1} 步');
+    expect(source).not.toContain('阶段内子页签（模板 art-tabs 样式');
   });
 
   it('keeps the dark sidebar with plain-language navigation and all-user advanced tools', () => {

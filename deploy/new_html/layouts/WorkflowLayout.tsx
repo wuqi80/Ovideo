@@ -23,7 +23,7 @@ const STAGES: { key: string; label: string; hint: string; primary: string; subs:
     key: 'art', label: '定角色和场景', hint: '第 2 步', primary: 'design',
     subs: [
       { path: 'design', label: '角色场景', sourcePage: 'design' },
-      { path: 'materials', label: '可用素材', sourcePage: 'materials' },
+      { path: 'materials', label: '素材绑定', sourcePage: 'materials' },
     ],
   },
   {
@@ -100,6 +100,7 @@ export const WorkflowLayout: React.FC = () => {
   const segment = location.pathname.split('/').filter(Boolean).pop() ?? '';
   const activeStageIdx = useMemo(() => STAGES.findIndex(stage => stage.subs.some(sub => sub.path === segment)), [segment]);
   const activeStage = activeStageIdx >= 0 ? STAGES[activeStageIdx] : null;
+  const activeSubStageIdx = activeStage?.subs.findIndex(sub => sub.path === segment) ?? -1;
   const isStandaloneUtilityPage = STANDALONE_UTILITY_PATHS.has(segment);
 
   const sidebarTools: AppSidebarItem[] = [
@@ -195,27 +196,52 @@ export const WorkflowLayout: React.FC = () => {
             </div>
           </header>
 
-          {/* 阶段内子页签（模板 art-tabs 样式；单子页阶段不渲染） */}
+          {/* 阶段内递进步骤；单步骤阶段不重复渲染。 */}
           {activeStage && activeStage.subs.length > 1 && (
-            <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-n40 bg-n10 px-5">
-              <span className="mr-1 font-mono text-[10px] font-bold uppercase tracking-[0.1em] text-n100">{activeStage.label}</span>
-              {activeStage.subs.map(sub => (
-                <NavLink
-                  key={sub.path}
-                  to={sub.path}
-                  className={({ isActive }) =>
-                    `inline-flex h-7 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-colors ${
-                      isActive
-                        ? 'border-b100 bg-primary-light text-primary'
-                        : 'border-n50 bg-n0 text-n300 hover:border-b300 hover:text-primary'
-                    }`
-                  }
-                >
-                  {sub.label}
-                  <TaskBadge page={sub.sourcePage} />
-                </NavLink>
-              ))}
-            </div>
+            <nav
+              className="flex h-14 shrink-0 items-center overflow-x-auto border-b border-n40 bg-n10 px-5 scrollbar-atlas"
+              aria-label={`${activeStage.label}阶段步骤`}
+            >
+              {activeStage.subs.map((sub, index) => {
+                const done = activeSubStageIdx >= 0 && index < activeSubStageIdx;
+                const active = index === activeSubStageIdx;
+                return (
+                  <React.Fragment key={sub.path}>
+                    {index > 0 && (
+                      <span aria-hidden className={`mx-2 h-0.5 w-8 shrink-0 ${done || active ? 'bg-success' : 'bg-n40'}`} />
+                    )}
+                    <NavLink
+                      to={sub.path}
+                      aria-current={active ? 'step' : undefined}
+                      className="flex shrink-0 items-center gap-2 rounded px-1.5 py-1 transition-opacity hover:opacity-85"
+                    >
+                      <span
+                        className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full font-mono text-xs font-bold transition-all ${
+                          active
+                            ? 'bg-primary text-n0 ring-4 ring-primary/15'
+                            : done
+                              ? 'bg-success text-n0'
+                              : 'bg-n40 text-n200'
+                        }`}
+                      >
+                        {done ? '✓' : index + 1}
+                      </span>
+                      <span className="flex flex-col items-start leading-[1.15]">
+                        <span
+                          className={`flex items-center whitespace-nowrap font-display text-[12.5px] ${
+                            active ? 'font-bold text-n800' : done ? 'font-medium text-n600' : 'font-medium text-n200'
+                          }`}
+                        >
+                          {sub.label}
+                          <TaskBadge page={sub.sourcePage} />
+                        </span>
+                        <span className="whitespace-nowrap text-[10px] tracking-[0.03em] text-n100">第 {index + 1} 步</span>
+                      </span>
+                    </NavLink>
+                  </React.Fragment>
+                );
+              })}
+            </nav>
           )}
 
           <main className="workflow-shell-workspace layout-safe min-h-0 min-w-0 flex-1 overflow-hidden bg-n20">
