@@ -208,9 +208,6 @@ describe('Seedance model mapping', () => {
 describe('buildVideoModelOptions', () => {
   it('keeps only H3 nodes and supported provider-backed models selectable', () => {
     expect(SELECTABLE_MODELS).toEqual([
-      'MiniMaxH3',
-      'MiniMaxH3Fast',
-      'MiniMaxH3Mini',
       'Seedance15',
       'Seedance2',
       'Seedance2Fast',
@@ -222,6 +219,9 @@ describe('buildVideoModelOptions', () => {
       'Kling',
       'Vidu',
       'HappyHorse',
+      'MiniMaxH3',
+      'MiniMaxH3Fast',
+      'MiniMaxH3Mini',
     ]);
     expect(SELECTABLE_MODELS).not.toContain('Wan2');
     expect(SELECTABLE_MODELS).not.toContain('LTXNode1');
@@ -297,13 +297,13 @@ describe('buildVideoModelOptions', () => {
     ]);
 
     expect(options.map(option => option.value)).toEqual([
-      'MiniMaxH3',
-      'MiniMaxH3Fast',
-      'MiniMaxH3Mini',
       'Seedance2',
       'Seedance2Mini',
       'MINI',
       'HappyHorse',
+      'MiniMaxH3',
+      'MiniMaxH3Fast',
+      'MiniMaxH3Mini',
     ]);
     expect(options.find(option => option.value === 'Seedance2')).toMatchObject({
       available: false,

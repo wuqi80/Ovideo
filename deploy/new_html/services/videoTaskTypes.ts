@@ -100,6 +100,7 @@ export interface VideoTask {
   data?: {
     prompt?: string;
     model?: string;
+    sub_model?: string;
     entity_id?: string;
     episode_id?: string;
     workspace_group_id?: string;

@@ -90,6 +90,11 @@ def _requested_statuses(status: Optional[str]) -> set[str]:
 def format_queue_task_status(task: Any) -> dict[str, Any]:
     return {
         "task_id": task.task_id,
+        # Keep the actual execution route and submitted model available while
+        # polling.  Video result labels must be derived from the task that
+        # produced the file, never from the card's mutable current selection.
+        "task_type": task.task_type,
+        "data": task.data,
         "status": task.status.value,
         "progress": _queue_progress(task),
         "node_id": task.node_id,
@@ -105,6 +110,8 @@ def format_db_task_status(task: dict[str, Any]) -> dict[str, Any]:
     result_data = _jsonish(task.get("result_data"), task.get("result_data"))
     return {
         "task_id": task["task_id"],
+        "task_type": task.get("task_type"),
+        "data": _jsonish(task.get("task_data"), {}),
         "status": task["status"],
         "progress": _db_progress(task),
         "node_id": task.get("node_id"),

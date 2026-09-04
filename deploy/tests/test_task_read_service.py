@@ -77,6 +77,8 @@ async def test_get_task_status_prefers_queue_task():
 
     assert result["task_id"] == "task_redis"
     assert result["status"] == "processing"
+    assert result["task_type"] == "image"
+    assert result["data"] == {"prompt": "hi"}
     assert "source" not in result
 
 
@@ -84,8 +86,10 @@ async def test_get_task_status_prefers_queue_task():
 async def test_get_task_status_falls_back_to_database():
     db_row = {
         "task_id": "task_db",
+        "task_type": "minimax_i2v",
         "status": "completed",
         "result_data": '{"url": "/storage/out.png"}',
+        "task_data": '{"model": "MINI"}',
         "error_message": None,
         "created_at": datetime(2026, 1, 1, 1, 2, 3),
         "started_at": None,
@@ -102,6 +106,8 @@ async def test_get_task_status_falls_back_to_database():
     assert result["status"] == "completed"
     assert result["progress"] == 100
     assert result["result"] == {"url": "/storage/out.png"}
+    assert result["task_type"] == "minimax_i2v"
+    assert result["data"] == {"model": "MINI"}
     assert result["source"] == "database"
 
 

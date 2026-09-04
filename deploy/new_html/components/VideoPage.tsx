@@ -87,6 +87,7 @@ import {
 import { MiniMaxVideoPanel } from './video/MiniMaxVideoPanel';
 import { CapabilityVideoPanel } from './video/CapabilityVideoPanel';
 import { MediaBadges } from './video/MediaBadges';
+import { VideoModelPicker } from './video/VideoModelPicker';
 // 2026-05-24 — DashScope 共享 API：合体(Kling) / 大乘(Vidu) / 炼虚(HappyHorse)
 // Task 3 cleanup：`makeDefaultDashScopeParams` 单一可信源在 videoModelService.ts，
 // 不再从 DashScopeCards.tsx 间接导入（旧 legacy 工厂已删除）。
@@ -3697,8 +3698,8 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                     )}
                 </div>
                 
-                {/* 类型和模型（与左侧 w-24 对齐） */}
-                <div className="flex flex-col gap-1 w-24 shrink-0">
+                {/* 类型和模型（与左侧模型选择器等宽对齐） */}
+                <div className="flex flex-col gap-1 w-40 shrink-0">
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase text-center ${
                         isPair ? 'bg-p50 text-p400' : 'bg-b50 text-b400'
                     }`}>
@@ -3950,29 +3951,19 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                 </div>
                 
                 {/* 类型和模型 */}
-                <div className="flex flex-col gap-1 w-24 shrink-0">
+                <div className="flex flex-col gap-1 w-40 shrink-0">
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase text-center ${
                         isPair ? 'bg-p50 text-p400' : 'bg-b50 text-b400'
                     }`}>
                         {isPair ? 'Morph' : 'I2V'}
                     </span>
-                    <select
+                    <VideoModelPicker
                         value={group.model}
-                        onChange={(e) => updateTaskModel(group.uuid, e.target.value as VideoModel)}
-                        className="bg-n20 border border-n40 text-[10px] text-n800 rounded px-1 py-0.5 focus:outline-none focus:border-primary cursor-pointer"
-                    >
-                        {getModelSelectOptions(group.model, selectableVideoModelOptions).map(option => (
-                            <option
-                                key={option.value}
-                                value={option.value}
-                                disabled={!option.available}
-                                title={option.unavailableReason}
-                                className={!option.available ? 'text-n100' : undefined}
-                            >
-                                {option.available ? option.label : `${option.label}（暂不可用）`}
-                            </option>
-                        ))}
-                    </select>
+                        options={getModelSelectOptions(group.model, selectableVideoModelOptions)}
+                        onChange={(model) => updateTaskModel(group.uuid, model)}
+                        compact
+                        className="w-full max-w-none"
+                    />
                     {isMiniMaxH3Model(group.model) && (
                         <>
                         <label
@@ -4232,23 +4223,12 @@ export const VideoPage: React.FC<VideoPageProps> = ({
                         </span>
                         
                         {/* 模型选择 */}
-                        <select
+                        <VideoModelPicker
                             value={group.model}
-                            onChange={(e) => updateTaskModel(group.uuid, e.target.value as VideoModel)}
-                            className="bg-n20 border border-n40 text-[10px] text-n800 rounded px-1 py-0.5 focus:outline-none focus:border-primary cursor-pointer hover:bg-n0"
-                        >
-                            {getModelSelectOptions(group.model, allVideoModelOptions).map(option => (
-                                <option
-                                    key={option.value}
-                                    value={option.value}
-                                    disabled={!option.available}
-                                    title={option.unavailableReason}
-                                    className={!option.available ? 'text-n100' : undefined}
-                                >
-                                    {option.available ? option.label : `${option.label}（暂不可用）`}
-                                </option>
-                            ))}
-                        </select>
+                            options={getModelSelectOptions(group.model, allVideoModelOptions)}
+                            onChange={(model) => updateTaskModel(group.uuid, model)}
+                            compact
+                        />
                         <span
                             data-testid="video-card-credit-estimate"
                             className="inline-flex rounded border border-warning/25 bg-y50 px-1.5 py-0.5"

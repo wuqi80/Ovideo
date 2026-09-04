@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reconcileActiveVideoTasks } from '../../services/videoTaskReconciliation';
+import { getVideoTaskModel, reconcileActiveVideoTasks } from '../../services/videoTaskReconciliation';
 import type { TaskGroup, VideoTask } from '../../services/videoTaskTypes';
 
 const groups: TaskGroup[] = [
@@ -53,7 +53,7 @@ describe('video task reconciliation', () => {
     });
   });
 
-  it('uses the newest live task and ignores completed history', () => {
+  it('uses the newest live task for card state while retaining completed history', () => {
     const result = reconcileActiveVideoTasks(groups, {}, [
       task({ task_id: 'older', created_at: '2026-08-19T08:00:00+08:00', data: { workspace_group_id: 'group-1' } }),
       task({ task_id: 'completed', status: 'completed', created_at: '2026-08-19T08:20:00+08:00', data: { workspace_group_id: 'group-1' } }),
@@ -106,6 +106,52 @@ describe('video task reconciliation', () => {
 
     expect(result.statuses['group-2'].videoModels).toEqual(['MINI']);
     expect(result.statuses['group-2'].videoGenerateTimes).toEqual([36]);
+  });
+
+  it('repairs every historical result by URL instead of only using the newest task model', () => {
+    const result = reconcileActiveVideoTasks(groups, {
+      'group-2': {
+        state: 'done',
+        videos: ['/uploads/one.mp4', '/uploads/two.mp4', '/uploads/three.mp4'],
+        videoGenerateTimes: [0, 0, 0],
+        videoModels: ['Wan2', 'Wan2', 'MINI'],
+      },
+    }, [
+      task({
+        task_id: 'hailuo-one',
+        task_type: 'minimax_i2v',
+        status: 'completed',
+        created_at: '2026-08-19T08:10:00+08:00',
+        data: { workspace_group_id: 'group-2', model: 'Wan2' },
+        result: { videos: [{ url: '/uploads/one.mp4', generateTime: 28 }] },
+      }),
+      task({
+        task_id: 'hailuo-two',
+        task_type: 'minimax_i2v',
+        status: 'completed',
+        created_at: '2026-08-19T08:20:00+08:00',
+        data: { workspace_group_id: 'group-2', model: 'Wan2' },
+        result: { videos: [{ url: '/uploads/two.mp4', generateTime: 31 }] },
+      }),
+      task({
+        task_id: 'hailuo-three',
+        task_type: 'minimax_morph',
+        status: 'completed',
+        created_at: '2026-08-19T08:30:00+08:00',
+        data: { workspace_group_id: 'group-2', model: 'MINI' },
+        result: { videos: [{ url: '/uploads/three.mp4', generateTime: 34 }] },
+      }),
+    ]);
+
+    expect(result.statuses['group-2'].videoModels).toEqual(['MINI', 'MINI', 'MINI']);
+    expect(result.statuses['group-2'].videoGenerateTimes).toEqual([28, 31, 34]);
+  });
+
+  it('derives API model keys from the executed route and Seedance sub-model', () => {
+    expect(getVideoTaskModel(task({ task_type: 'kling_morph' }))).toBe('Kling');
+    expect(getVideoTaskModel(task({ task_type: 'vidu_r2v' }))).toBe('Vidu');
+    expect(getVideoTaskModel(task({ task_type: 'seedance_i2v', data: { sub_model: 'agent_plan' } }))).toBe('Seedance15');
+    expect(getVideoTaskModel(task({ task_type: 'seedance_multi', data: { sub_model: 'fast' } }))).toBe('Seedance2Fast');
   });
 
   it('does not attach a task from another episode', () => {

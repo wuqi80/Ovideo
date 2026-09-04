@@ -16,8 +16,23 @@ function createdAtValue(task: VideoTask): number {
 
 export function getVideoTaskModel(task: VideoTask): VideoModel | undefined {
   // task_type records the route that actually ran and is authoritative for
-  // legacy MiniMax tasks whose generic request schema filled model=Wan2.
-  if (['minimax_i2v', 'minimax_morph'].includes(String(task.task_type || '').toLowerCase())) return 'MINI';
+  // API-backed tasks. Several legacy request shapes either omitted `model` or
+  // inherited the generic Wan2 schema default, so data.model alone is unsafe.
+  const taskType = String(task.task_type || '').toLowerCase();
+  if (['minimax_i2v', 'minimax_morph'].includes(taskType)) return 'MINI';
+  if (taskType.startsWith('sora2_')) return 'Sora2';
+  if (taskType.startsWith('veo_')) return 'Veo';
+  if (taskType.startsWith('wan26_')) return '大能';
+  if (taskType.startsWith('kling_')) return 'Kling';
+  if (taskType.startsWith('vidu_')) return 'Vidu';
+  if (taskType.startsWith('happyhorse_')) return 'HappyHorse';
+  if (taskType.startsWith('seedance_')) {
+    const subModel = String(task.data?.sub_model || '').toLowerCase();
+    if (subModel === 'agent_plan') return 'Seedance15';
+    if (subModel === 'fast') return 'Seedance2Fast';
+    if (subModel === 'mini') return 'Seedance2Mini';
+    return 'Seedance2';
+  }
   const raw = String(task.data?.model || '').trim() as VideoModel;
   return ALL_MODELS.includes(raw) ? raw : undefined;
 }
@@ -43,7 +58,7 @@ export function reconcileActiveVideoTasks(
     if (groupUuids.has(uuid) && segmentId) groupBySegmentId.set(String(segmentId), uuid);
   });
 
-  const latestByGroup = new Map<string, VideoTask>();
+  const tasksByGroup = new Map<string, VideoTask[]>();
   for (const task of serverTasks || []) {
     if (!task?.task_id || !RECONCILABLE_VIDEO_TASK_STATES.has(String(task.status || '').toLowerCase())) continue;
     const data = task.data || {};
@@ -58,54 +73,68 @@ export function reconcileActiveVideoTasks(
         : groupBySegmentId.get(entityId);
     if (!uuid) continue;
 
-    const previous = latestByGroup.get(uuid);
-    if (!previous || createdAtValue(task) >= createdAtValue(previous)) {
-      latestByGroup.set(uuid, task);
-    }
+    const matches = tasksByGroup.get(uuid) || [];
+    matches.push(task);
+    tasksByGroup.set(uuid, matches);
   }
 
   const statuses = { ...currentStatuses };
   const resumable: Array<{ uuid: string; taskId: string }> = [];
-  latestByGroup.forEach((task, uuid) => {
+  tasksByGroup.forEach((matchedTasks, uuid) => {
+    const orderedTasks = [...matchedTasks].sort((left, right) => createdAtValue(left) - createdAtValue(right));
+    const task = orderedTasks[orderedTasks.length - 1];
     const previous: TaskStatus = statuses[uuid] || {};
     const progress = Number(task.progress);
     const model = getVideoTaskModel(task) || previous.pendingVideoModel;
-    if (task.status === 'completed') {
-      const previousVideos = previous.videos || [];
-      const previousTimes = previous.videoGenerateTimes || [];
-      const previousModels = previousVideos.map((_, index) => previous.videoModels?.[index]);
-      const generated = (task.result?.videos || [])
+
+    // Repair every stored result from every completed task, not only the newest
+    // task for the group. A card can contain results produced by several model
+    // selections; using only the newest task left older MiniMax files carrying
+    // the legacy GenerateRequest default `Wan2` label.
+    const previousVideos = previous.videos || [];
+    const previousTimes = previous.videoGenerateTimes || [];
+    const previousModels = previousVideos.map((_, index) => previous.videoModels?.[index]);
+    const videos = [...previousVideos];
+    const times = [...previousTimes];
+    const models = [...previousModels];
+    orderedTasks
+      .filter(candidate => candidate.status === 'completed')
+      .forEach(completedTask => {
+        const completedModel = getVideoTaskModel(completedTask);
+        const generated = (completedTask.result?.videos || [])
         .map(video => ({
           url: normalizeVideoUrl(String(video?.url || '').trim()),
           generateTime: Number(video?.generateTime || 0),
         }))
         .filter(video => Boolean(video.url));
-      const videos = [...previousVideos];
-      const times = [...previousTimes];
-      const models = [...previousModels];
-      generated.forEach(video => {
-        const normalized = video.url.split('?')[0];
-        const existingIndex = videos.findIndex(existing => String(existing).split('?')[0] === normalized);
-        if (existingIndex >= 0) {
-          // Reconciliation also repairs legacy labels for results that were
-          // already restored from video_segments/session storage.
-          if (model) models[existingIndex] = model;
-          if (video.generateTime > 0) times[existingIndex] = video.generateTime;
-          return;
-        }
-        videos.push(video.url);
-        times.push(video.generateTime);
-        models.push(model);
+        generated.forEach(video => {
+          const normalized = video.url.split('?')[0];
+          const existingIndex = videos.findIndex(existing => String(existing).split('?')[0] === normalized);
+          if (existingIndex >= 0) {
+            if (completedModel) models[existingIndex] = completedModel;
+            if (video.generateTime > 0) times[existingIndex] = video.generateTime;
+            return;
+          }
+          videos.push(video.url);
+          times.push(video.generateTime);
+          models.push(completedModel);
+        });
       });
+
+    const cappedVideos = videos.slice(-12);
+    const cappedTimes = times.slice(-12);
+    const cappedModels = models.slice(-12);
+
+    if (task.status === 'completed') {
       statuses[uuid] = {
         ...previous,
         state: 'done',
         taskId: task.task_id,
         progress: 100,
-        result: videos[videos.length - 1] || previous.result || '',
-        videos,
-        videoGenerateTimes: times,
-        videoModels: models,
+        result: cappedVideos[cappedVideos.length - 1] || previous.result || '',
+        videos: cappedVideos,
+        videoGenerateTimes: cappedTimes,
+        videoModels: cappedModels,
         pendingVideoModel: undefined,
         keepResult: true,
         error: undefined,
@@ -118,6 +147,9 @@ export function reconcileActiveVideoTasks(
       state: task.status === 'queued' || task.status === 'pending' ? 'pending' : 'processing',
       taskId: task.task_id,
       progress: Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : 0,
+      videos: cappedVideos,
+      videoGenerateTimes: cappedTimes,
+      videoModels: cappedModels,
       pendingVideoModel: model,
       keepResult: true,
       error: undefined,

@@ -358,10 +358,11 @@ export const ALL_MODELS: VideoModel[] = [
 ];
 
 export const SELECTABLE_MODELS: VideoModel[] = [
-  'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini',
   'Seedance15', 'Seedance2', 'Seedance2Fast', 'Seedance2Mini',
   'MINI', 'Veo', 'Sora2', '大能',
   'Kling', 'Vidu', 'HappyHorse',
+  // Processing-cluster models stay visible, but follow online API models.
+  'MiniMaxH3', 'MiniMaxH3Fast', 'MiniMaxH3Mini',
 ];
 
 export const MINIMAX_HAILUO_LIMIT_EVENT = 'ostory:minimax-hailuo-limit-changed';
