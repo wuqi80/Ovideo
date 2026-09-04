@@ -22,7 +22,7 @@ const noopPick = () => {};
 const noopPreview = () => {};
 
 describe('KlingCard 多镜头模式', () => {
-    it('显示简化后的 mode toggle：Omni / Multi', () => {
+    it('在紧凑胶囊下拉中显示自动 / Omni / Multi 模式', () => {
         const params = makeDefaultDashScopeParams('Kling');
         render(
             <KlingCard
@@ -32,8 +32,10 @@ describe('KlingCard 多镜头模式', () => {
                 onPreviewImage={noopPreview}
             />,
         );
-        expect(screen.getByRole('button', { name: /Omni/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Multi|多镜头/i })).toBeInTheDocument();
+        const select = screen.getByLabelText('Kling 生成模式') as HTMLSelectElement;
+        expect(Array.from(select.options).map(option => option.value)).toEqual(['auto', 'omni', 'multi']);
+        expect(screen.getByTestId('kling-control-row')).toHaveClass('flex-wrap');
+        expect(select.closest('label')).toHaveClass('rounded-full');
     });
 
     it('点击 Multi mode 后调用 onChange 设置 kling_multi_shot=true + shot_type 默认 intelligence', () => {
@@ -47,7 +49,7 @@ describe('KlingCard 多镜头模式', () => {
                 onPreviewImage={noopPreview}
             />,
         );
-        fireEvent.click(screen.getByRole('button', { name: /Multi|多镜头/i }));
+        fireEvent.change(screen.getByLabelText('Kling 生成模式'), { target: { value: 'multi' } });
         expect(onChange).toHaveBeenCalled();
         const lastCall = onChange.mock.calls.at(-1)![0];
         expect(lastCall.kling_multi_shot).toBe(true);
@@ -176,7 +178,7 @@ describe('HappyHorseCard 完整参数', () => {
         expect(vals.length).toBe(9);
     });
 
-    it('显示 duration 输入（3-15 范围）', () => {
+    it('时长以当前值胶囊展示，点击后提供 3-15 秒输入', () => {
         const params = makeDefaultDashScopeParams('HappyHorse');
         render(
             <HappyHorseCard
@@ -186,7 +188,10 @@ describe('HappyHorseCard 完整参数', () => {
                 onPreviewImage={noopPreview}
             />,
         );
-        const inp = screen.getByLabelText(/时长/) as HTMLInputElement;
+        const summary = screen.getByLabelText('时长设置');
+        expect(summary.closest('details')).not.toHaveAttribute('open');
+        expect(summary).toHaveTextContent('5 秒');
+        const inp = screen.getByLabelText('时长') as HTMLInputElement;
         expect(inp.min).toBe('3');
         expect(inp.max).toBe('15');
     });

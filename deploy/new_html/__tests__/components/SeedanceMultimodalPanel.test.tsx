@@ -44,6 +44,9 @@ describe('Seedance 1.5 Pro controls', () => {
     expect(screen.getAllByText('reference.mp3').length).toBeGreaterThan(0);
     expect(screen.queryByText(/图片 .*\/9/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Seedance 2\.0 不支持直接上传/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('seedance15-control-row')).toHaveClass('flex-wrap');
+    expect(screen.getByLabelText('Seedance 1.5 画面比例').closest('label')).toHaveClass('rounded-full');
+    expect(Array.from((screen.getByLabelText('Seedance 1.5 清晰度') as HTMLSelectElement).options).map(option => option.value)).toEqual(['720p', '1080p']);
   });
 
   it('renders a bounded 3–12 second slider for Seedance 1.5 Pro', () => {
@@ -58,6 +61,8 @@ describe('Seedance 1.5 Pro controls', () => {
       />,
     );
 
+    const durationSummary = screen.getByLabelText('Seedance 1.5 Pro 时长设置');
+    expect(durationSummary.closest('details')).not.toHaveAttribute('open');
     const slider = screen.getByRole('slider', { name: 'Seedance 1.5 Pro 视频时长' });
     expect(slider).toHaveAttribute('min', '3');
     expect(slider).toHaveAttribute('max', '12');
@@ -87,6 +92,8 @@ describe('Seedance 2.0 Jimeng-style controls', () => {
     expect(screen.getByRole('option', { name: '全能参考' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: '首尾帧' })).toBeInTheDocument();
     expect(screen.getByTestId('seedance-jimeng-composer')).toHaveClass('h-full');
+    expect(screen.queryByTestId('seedance-output-selectors')).not.toBeInTheDocument();
+    expect(screen.getByTestId('seedance-control-row')).toHaveClass('flex-wrap');
 
     const ratioSelect = screen.getByLabelText('选择比例') as HTMLSelectElement;
     expect(Array.from(ratioSelect.options).map(option => option.value)).toEqual([
@@ -96,6 +103,8 @@ describe('Seedance 2.0 Jimeng-style controls', () => {
     expect(Array.from(resolutionSelect.options).map(option => option.value)).toEqual([
       '480p', '720p', '1080p',
     ]);
+    expect(ratioSelect.closest('label')).toHaveClass('rounded-full');
+    expect(resolutionSelect.closest('label')).toHaveClass('rounded-full');
 
     fireEvent.change(screen.getByLabelText('Seedance 生成模式'), { target: { value: 'first_last' } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({

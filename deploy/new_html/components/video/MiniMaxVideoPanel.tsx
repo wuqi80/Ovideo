@@ -9,6 +9,11 @@ import {
     type MiniMaxVideoParams,
     type MiniMaxVideoResolution,
 } from '../../services/videoModelService';
+import {
+    VIDEO_CONTROL_BAR_CLASS,
+    VIDEO_CONTROL_PILL_CLASS,
+    VIDEO_CONTROL_SELECT_CLASS,
+} from './videoControlStyles';
 
 interface MiniMaxVideoPanelProps {
     value: MiniMaxVideoParams;
@@ -71,39 +76,49 @@ export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
 
     if (compact) {
         return (
-            <div className="flex flex-1 min-w-0 items-center gap-1.5" title={validationError || undefined}>
-                <select
-                    value={params.model}
-                    onChange={(event) => onChange(normalizeMiniMaxVideoParams({
-                        ...params,
-                        model: event.target.value as MiniMaxVideoModelName,
-                    }))}
-                    className="w-24 shrink-0 rounded border border-n40 bg-n20 px-1.5 py-1 text-[10px] text-n700 focus:border-primary focus:outline-none"
-                    aria-label="MiniMax 模型"
-                >
-                    {panelModelOptions.map(option => (
-                        <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                </select>
-                <select
-                    value={params.duration}
-                    onChange={(event) => setDuration(Number(event.target.value) as MiniMaxVideoDuration)}
-                    className="w-[58px] shrink-0 rounded border border-n40 bg-n20 px-1.5 py-1 text-[10px] text-n700 focus:border-primary focus:outline-none"
-                    aria-label="MiniMax 时长"
-                >
-                    <option value={6}>6 秒</option>
-                    <option value={10} disabled={params.resolution === '1080P'}>10 秒</option>
-                </select>
-                <select
-                    value={params.resolution}
-                    onChange={(event) => setResolution(event.target.value as MiniMaxVideoResolution)}
-                    className="w-[70px] shrink-0 rounded border border-n40 bg-n20 px-1.5 py-1 text-[10px] text-n700 focus:border-primary focus:outline-none"
-                    aria-label="MiniMax 清晰度"
-                >
-                    <option value="768P">768P</option>
-                    <option value="1080P" disabled={params.duration === 10}>1080P</option>
-                </select>
-                <label className="flex shrink-0 items-center gap-1 text-[10px] text-n300">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5" title={validationError || undefined}>
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <Sparkles className="h-3 w-3 text-primary" />
+                    <select
+                        value={params.model}
+                        onChange={(event) => onChange(normalizeMiniMaxVideoParams({
+                            ...params,
+                            model: event.target.value as MiniMaxVideoModelName,
+                        }))}
+                        className={VIDEO_CONTROL_SELECT_CLASS}
+                        aria-label="MiniMax 模型"
+                    >
+                        {panelModelOptions.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                    </select>
+                </label>
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <Clock3 className="h-3 w-3" />
+                    <select
+                        value={params.duration}
+                        onChange={(event) => setDuration(Number(event.target.value) as MiniMaxVideoDuration)}
+                        className={VIDEO_CONTROL_SELECT_CLASS}
+                        aria-label="MiniMax 时长"
+                    >
+                        <option value={6}>6 秒</option>
+                        <option value={10} disabled={params.resolution === '1080P'}>10 秒</option>
+                    </select>
+                </label>
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <Monitor className="h-3 w-3" />
+                    <select
+                        value={params.resolution}
+                        onChange={(event) => setResolution(event.target.value as MiniMaxVideoResolution)}
+                        className={VIDEO_CONTROL_SELECT_CLASS}
+                        aria-label="MiniMax 清晰度"
+                    >
+                        <option value="768P">768P</option>
+                        <option value="1080P" disabled={params.duration === 10}>1080P</option>
+                    </select>
+                </label>
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <Wand2 className="h-3 w-3 text-primary" />
                     <input
                         type="checkbox"
                         checked={params.promptOptimizer}
@@ -136,42 +151,42 @@ export const MiniMaxVideoPanel: React.FC<MiniMaxVideoPanelProps> = ({
                     className="min-h-[88px] flex-1 resize-none overflow-y-auto rounded-xl border-0 bg-n20/70 px-3 py-2.5 text-xs leading-5 text-n700 outline-none ring-1 ring-inset ring-n40 transition focus:ring-primary"
                 />
             </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t border-n40 bg-n20/45 px-3 py-2">
-                <label className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1 text-[10px] text-n300">
+            <div className={VIDEO_CONTROL_BAR_CLASS} data-testid="minimax-control-row">
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
                     <Sparkles className="h-3 w-3 text-primary" />
                     <select
                         value={params.model}
                         onChange={(event) => onChange({ ...params, model: event.target.value })}
-                        className="max-w-[160px] border-0 bg-transparent p-0 text-[10px] font-semibold text-n700 focus:outline-none"
+                        className={VIDEO_CONTROL_SELECT_CLASS}
                         aria-label="MiniMax 模型"
                     >
                         {panelModelOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                 </label>
-                <label className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1 text-[10px] text-n300">
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
                     <Clock3 className="h-3 w-3" />
                     <select
                         value={params.duration}
                         onChange={(event) => setDuration(Number(event.target.value) as MiniMaxVideoDuration)}
-                        className="border-0 bg-transparent p-0 text-[10px] font-semibold text-n700 focus:outline-none"
+                        className={VIDEO_CONTROL_SELECT_CLASS}
                     >
                         <option value={6}>6 秒</option>
                         <option value={10} disabled={params.resolution === '1080P'}>10 秒</option>
                     </select>
                 </label>
-                <label className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1 text-[10px] text-n300">
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
                     <Monitor className="h-3 w-3" />
                     <select
                         value={params.resolution}
                         onChange={(event) => setResolution(event.target.value as MiniMaxVideoResolution)}
-                        className="border-0 bg-transparent p-0 text-[10px] font-semibold text-n700 focus:outline-none"
+                        className={VIDEO_CONTROL_SELECT_CLASS}
                     >
                         <option value="768P">768P</option>
                         <option value="1080P" disabled={params.duration === 10}>1080P</option>
                     </select>
                 </label>
                 <label className="inline-flex items-center">
-                    <span className="flex items-center gap-1.5 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n700">
+                    <span className={VIDEO_CONTROL_PILL_CLASS}>
                         <Wand2 className="h-3 w-3 text-primary" />
                         <input
                             type="checkbox"

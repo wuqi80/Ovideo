@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Upload, X, AlertCircle, Info, Plus, Maximize2, Volume2, Loader2, ImagePlus, Film } from 'lucide-react';
+import { Upload, X, AlertCircle, Info, Plus, Maximize2, Volume2, Loader2, ImagePlus, Film, Monitor, Settings2 } from 'lucide-react';
 import { uploadAudio, uploadImage, uploadVideoFile } from '../services/videoMediaService';
 import {
     getModelDisplayName,
@@ -11,6 +11,11 @@ import {
 import type { SeedanceAssetCandidate } from '../utils/seedanceMedia';
 import { SeedanceMentionPromptEditor } from './SeedanceMentionPromptEditor';
 import { SeedanceAssetPickerModal } from './SeedanceAssetPickerModal';
+import {
+    VIDEO_CONTROL_PILL_CLASS,
+    VIDEO_CONTROL_ROW_CLASS,
+    VIDEO_CONTROL_SELECT_CLASS,
+} from './video/videoControlStyles';
 
 interface Props {
     value: SeedanceParams;
@@ -396,69 +401,48 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                     </div>
                 </section>
 
-                <section className="space-y-2 rounded-xl border border-n40 bg-n0 p-3">
-                    <div className="grid grid-cols-[1.15fr_1fr] gap-3">
-                        <div>
-                            <div className="mb-1.5 text-[10px] font-semibold text-n700">画面比例</div>
-                            <div className="grid grid-cols-6 gap-1 rounded-lg bg-n20 p-1">
-                                {AGENT_PLAN_RATIO_OPTIONS.map(ratio => (
-                                    <button
-                                        key={ratio}
-                                        type="button"
-                                        onClick={() => patch({ ratio })}
-                                        disabled={disabled}
-                                        className={`rounded-md px-1 py-1.5 text-[9px] transition-colors ${selectedAgentPlanRatio === ratio ? 'bg-n0 font-semibold text-primary shadow-sm' : 'text-n300 hover:text-n700'}`}
-                                    >
-                                        <span className="mx-auto mb-1 block h-2.5 w-4 rounded-[2px] border border-current" />
-                                        {ratio}
-                                    </button>
-                                ))}
-                            </div>
+                <section className={VIDEO_CONTROL_ROW_CLASS} data-testid="seedance15-control-row">
+                    <span className={VIDEO_CONTROL_PILL_CLASS} title="Seedance 1.5 Pro 首尾帧模型">
+                        <Film size={12} className="text-primary" />Seedance 1.5 Pro
+                    </span>
+                    <label className={VIDEO_CONTROL_PILL_CLASS}>
+                        <Maximize2 size={12} />
+                        <select
+                            value={selectedAgentPlanRatio}
+                            onChange={event => patch({ ratio: event.target.value as SeedanceParams['ratio'] })}
+                            disabled={disabled}
+                            className={VIDEO_CONTROL_SELECT_CLASS}
+                            aria-label="Seedance 1.5 画面比例"
+                        >
+                            {AGENT_PLAN_RATIO_OPTIONS.map(ratio => <option key={ratio} value={ratio}>{ratio}</option>)}
+                        </select>
+                    </label>
+                    <label className={VIDEO_CONTROL_PILL_CLASS}>
+                        <Monitor size={12} />
+                        <select
+                            value={selectedAgentPlanResolution}
+                            onChange={event => patch({ resolution: event.target.value as SeedanceParams['resolution'] })}
+                            disabled={disabled}
+                            className={VIDEO_CONTROL_SELECT_CLASS}
+                            aria-label="Seedance 1.5 清晰度"
+                        >
+                            {AGENT_PLAN_RESOLUTION_OPTIONS.map(resolution => (
+                                <option key={resolution} value={resolution}>{resolution.toUpperCase()}{resolution === '1080p' ? ' ✦' : ''}</option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className={VIDEO_CONTROL_PILL_CLASS}>
+                        <input type="checkbox" checked={value.generate_audio !== false} onChange={event => patch({ generate_audio: event.target.checked })} disabled={disabled} />
+                        生成配音
+                    </label>
+                    <details className="relative">
+                        <summary className={`${VIDEO_CONTROL_PILL_CLASS} cursor-pointer list-none select-none`}><Settings2 size={12} />高级设置</summary>
+                        <div className="absolute bottom-10 right-0 z-30 w-52 space-y-2 rounded-2xl border border-n40 bg-n0 p-3 text-[10px] shadow-bottom">
+                            <label className="flex items-center justify-between gap-2 text-n500"><span>Seed</span><input type="number" value={value.seed ?? -1} onChange={event => patch({ seed: parseInt(event.target.value, 10) })} disabled={disabled} className="w-20 rounded-lg border border-n40 px-2 py-1 text-n700" /></label>
+                            <label className="flex items-center gap-2 text-n500"><input type="checkbox" checked={!!value.camera_fixed} onChange={event => patch({ camera_fixed: event.target.checked })} disabled={disabled} />固定镜头</label>
+                            <label className="flex items-center gap-2 text-n500"><input type="checkbox" checked={!!value.watermark} onChange={event => patch({ watermark: event.target.checked })} disabled={disabled} />添加水印</label>
+                            <div className="text-[9px] text-n100">Seed 设为 -1 时随机生成。</div>
                         </div>
-                        <div>
-                            <div className="mb-1.5 text-[10px] font-semibold text-n700">选择分辨率</div>
-                            <div className="grid grid-cols-2 gap-1 rounded-lg bg-n20 p-1">
-                                {AGENT_PLAN_RESOLUTION_OPTIONS.map(resolution => (
-                                    <button
-                                        key={resolution}
-                                        type="button"
-                                        onClick={() => patch({ resolution })}
-                                        disabled={disabled}
-                                        className={`rounded-md px-2 py-2 text-[10px] transition-colors ${selectedAgentPlanResolution === resolution ? 'bg-n0 font-semibold text-primary shadow-sm' : 'text-n300 hover:text-n700'}`}
-                                    >
-                                        {resolution.toUpperCase()}{resolution === '1080p' ? ' ✦' : ''}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-[10px]">
-                        <label className="flex items-center gap-2 rounded-md border border-primary bg-primary-light px-2 py-1.5 text-primary">
-                            <input type="checkbox" checked={value.generate_audio !== false} onChange={event => patch({ generate_audio: event.target.checked })} disabled={disabled} />
-                            生成配音
-                        </label>
-                        <label className="flex items-center gap-2 rounded-md border border-n40 bg-n20 px-2 py-1.5 text-n500">
-                            <input type="checkbox" checked={!!value.camera_fixed} onChange={event => patch({ camera_fixed: event.target.checked })} disabled={disabled} />
-                            固定镜头
-                        </label>
-                        <label className="flex items-center gap-2 rounded-md border border-n40 bg-n20 px-2 py-1.5 text-n500">
-                            <input type="checkbox" checked={!!value.watermark} onChange={event => patch({ watermark: event.target.checked })} disabled={disabled} />
-                            添加水印
-                        </label>
-                    </div>
-                    <details className="text-[10px] text-n300">
-                        <summary className="cursor-pointer select-none hover:text-primary">高级设置</summary>
-                        <label className="mt-2 flex items-center gap-2">
-                            <span>Seed</span>
-                            <input
-                                type="number"
-                                value={value.seed ?? -1}
-                                onChange={event => patch({ seed: parseInt(event.target.value, 10) })}
-                                disabled={disabled}
-                                className="w-32 rounded-md border border-n40 bg-n0 px-2 py-1 text-n700"
-                            />
-                            <span className="text-n100">-1 为随机</span>
-                        </label>
                     </details>
                 </section>
 
@@ -580,41 +564,6 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                 </div>
 
                 <div className="shrink-0 border-t border-n40 bg-n20/35 px-3 py-2">
-                    <div className="mb-2 grid grid-cols-2 gap-2" data-testid="seedance-output-selectors">
-                        <label className="rounded-xl border border-n40 bg-n0 px-3 py-2 shadow-sm">
-                            <span className="mb-1 block text-[9px] font-medium text-n300">选择比例</span>
-                            <select
-                                value={value.ratio || 'adaptive'}
-                                onChange={event => patch({ ratio: event.target.value as SeedanceParams['ratio'] })}
-                                disabled={disabled}
-                                className="w-full cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-n800 outline-none focus:ring-0 disabled:cursor-not-allowed"
-                                aria-label="选择比例"
-                            >
-                                {RATIO_OPTIONS.map(ratio => (
-                                    <option key={ratio} value={ratio}>{ratio === 'adaptive' ? '自动适应' : ratio}</option>
-                                ))}
-                            </select>
-                        </label>
-                        <label className="rounded-xl border border-n40 bg-n0 px-3 py-2 shadow-sm">
-                            <span className="mb-1 block text-[9px] font-medium text-n300">选择清晰度</span>
-                            <select
-                                value={value.resolution || '720p'}
-                                onChange={event => patch({ resolution: event.target.value as SeedanceParams['resolution'] })}
-                                disabled={disabled}
-                                className="w-full cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-n800 outline-none focus:ring-0 disabled:cursor-not-allowed"
-                                aria-label="选择清晰度"
-                            >
-                                {RESOLUTION_OPTIONS.map(resolution => {
-                                    const unavailable = resolution === '1080p' && (value.sub_model === 'fast' || value.sub_model === 'mini');
-                                    return (
-                                        <option key={resolution} value={resolution} disabled={unavailable}>
-                                            {resolution.toUpperCase()}{unavailable ? '（当前型号不可用）' : ''}
-                                        </option>
-                                    );
-                                })}
-                            </select>
-                        </label>
-                    </div>
                     <div className="mb-2 flex flex-wrap items-center gap-1.5">
                         {value.media_inputs.map((media, index) => (
                             <div key={`${media.kind}-${media.url}-${index}`} className="group/ref relative flex h-11 max-w-[132px] items-center gap-1.5 overflow-hidden rounded-lg border border-n40 bg-n0 pr-6 text-[9px] text-n500">
@@ -629,25 +578,39 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                         ))}
                         {totalReferenceCount === 0 && <span className="text-[9px] text-n100">尚未添加额外参考素材</span>}
                     </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                        <label className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] font-medium text-n700">
-                            <span>模式</span>
+                    <div className="flex flex-wrap items-center gap-1.5" data-testid="seedance-control-row">
+                        <label className={VIDEO_CONTROL_PILL_CLASS}>
+                            <Film size={12} className="text-primary" />
                             <select value={effectiveMode} onChange={event => setMode(event.target.value as 'reference' | 'first_last')} disabled={disabled} className="border-0 bg-transparent p-0 text-[10px] font-semibold text-n800 focus:outline-none" aria-label="Seedance 生成模式">
                                 <option value="reference">全能参考</option>
                                 <option value="first_last">首尾帧</option>
                             </select>
                         </label>
-                        <span className="inline-flex items-center rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] font-medium text-n700">{value.duration || 5}s</span>
-                        <label className="inline-flex items-center gap-1.5 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n700">
+                        <label className={VIDEO_CONTROL_PILL_CLASS}>
+                            <Maximize2 size={12} />
+                            <select value={value.ratio || 'adaptive'} onChange={event => patch({ ratio: event.target.value as SeedanceParams['ratio'] })} disabled={disabled} className={VIDEO_CONTROL_SELECT_CLASS} aria-label="选择比例">
+                                {RATIO_OPTIONS.map(ratio => <option key={ratio} value={ratio}>{ratio === 'adaptive' ? '自动适应' : ratio}</option>)}
+                            </select>
+                        </label>
+                        <label className={VIDEO_CONTROL_PILL_CLASS}>
+                            <Monitor size={12} />
+                            <select value={value.resolution || '720p'} onChange={event => patch({ resolution: event.target.value as SeedanceParams['resolution'] })} disabled={disabled} className={VIDEO_CONTROL_SELECT_CLASS} aria-label="选择清晰度">
+                                {RESOLUTION_OPTIONS.map(resolution => {
+                                    const unavailable = resolution === '1080p' && (value.sub_model === 'fast' || value.sub_model === 'mini');
+                                    return <option key={resolution} value={resolution} disabled={unavailable}>{resolution.toUpperCase()}{unavailable ? '（当前型号不可用）' : ''}</option>;
+                                })}
+                            </select>
+                        </label>
+                        <label className={VIDEO_CONTROL_PILL_CLASS}>
                             <input type="checkbox" checked={value.generate_audio !== false} onChange={event => patch({ generate_audio: event.target.checked })} disabled={disabled} />AI 配音
                         </label>
-                        <button type="button" onClick={() => setPickerOpen(true)} disabled={disabled || totalReferenceCount >= 15} className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-primary hover:border-primary disabled:opacity-40"><Plus size={11} />素材库</button>
-                        <button type="button" onClick={() => imgInputRef.current?.click()} disabled={disabled || uploadBusy || images.length >= 9 || effectiveMode === 'first_last'} className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n500 disabled:opacity-35"><Upload size={11} />图片</button>
-                        <button type="button" onClick={() => videoInputRef.current?.click()} disabled={disabled || uploadBusy || videos.length >= 3 || effectiveMode === 'first_last'} className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n500 disabled:opacity-35"><Upload size={11} />视频</button>
-                        <button type="button" onClick={() => audioInputRef.current?.click()} disabled={disabled || uploadBusy || audios.length >= 3} className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n500 disabled:opacity-35"><Volume2 size={11} />配音</button>
-                        {onUsePreviousVideoAudio && <button type="button" onClick={onUsePreviousVideoAudio} disabled={disabled || previousVideoAudioBusy || audios.length >= 3} className="inline-flex items-center gap-1 rounded-lg border border-success/40 bg-n0 px-2 py-1.5 text-[10px] text-success disabled:opacity-35">{previousVideoAudioBusy ? <Loader2 size={11} className="animate-spin" /> : <Volume2 size={11} />}上一条原声</button>}
+                        <button type="button" onClick={() => setPickerOpen(true)} disabled={disabled || totalReferenceCount >= 15} className={`${VIDEO_CONTROL_PILL_CLASS} text-primary`}><Plus size={11} />素材库</button>
+                        <button type="button" onClick={() => imgInputRef.current?.click()} disabled={disabled || uploadBusy || images.length >= 9 || effectiveMode === 'first_last'} className={VIDEO_CONTROL_PILL_CLASS}><Upload size={11} />图片</button>
+                        <button type="button" onClick={() => videoInputRef.current?.click()} disabled={disabled || uploadBusy || videos.length >= 3 || effectiveMode === 'first_last'} className={VIDEO_CONTROL_PILL_CLASS}><Upload size={11} />视频</button>
+                        <button type="button" onClick={() => audioInputRef.current?.click()} disabled={disabled || uploadBusy || audios.length >= 3} className={VIDEO_CONTROL_PILL_CLASS}><Volume2 size={11} />配音</button>
+                        {onUsePreviousVideoAudio && <button type="button" onClick={onUsePreviousVideoAudio} disabled={disabled || previousVideoAudioBusy || audios.length >= 3} className={`${VIDEO_CONTROL_PILL_CLASS} text-success`}>{previousVideoAudioBusy ? <Loader2 size={11} className="animate-spin" /> : <Volume2 size={11} />}上一条原声</button>}
                         <details className="relative text-[10px]">
-                            <summary className="cursor-pointer list-none rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-n500">高级设置</summary>
+                            <summary className={`${VIDEO_CONTROL_PILL_CLASS} cursor-pointer list-none select-none`}><Settings2 size={12} />高级设置</summary>
                             <div className="absolute bottom-9 right-0 z-20 w-52 space-y-2 rounded-xl border border-n40 bg-n0 p-3 shadow-bottom">
                                 <label className="flex items-center justify-between gap-2 text-n500"><span>随机种子</span><input type="number" value={value.seed ?? -1} onChange={event => patch({ seed: parseInt(event.target.value, 10) })} className="w-20 rounded border border-n40 px-2 py-1" /></label>
                                 <label className="flex items-center gap-2 text-n500"><input type="checkbox" checked={!!value.watermark} onChange={event => patch({ watermark: event.target.checked })} />添加水印</label>

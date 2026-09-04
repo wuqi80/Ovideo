@@ -4,6 +4,13 @@ import type {
     VideoCapabilityNumberRule,
     VideoModelCapability,
 } from '../../services/videoWorkflowService';
+import {
+    VIDEO_CONTROL_BAR_CLASS,
+    VIDEO_CONTROL_INPUT_CLASS,
+    VIDEO_CONTROL_PILL_CLASS,
+    VIDEO_CONTROL_SELECT_CLASS,
+} from './videoControlStyles';
+import { VideoDurationControl } from './VideoDurationControl';
 
 interface CapabilityVideoPanelProps {
     capability?: VideoModelCapability;
@@ -71,8 +78,8 @@ export const CapabilityVideoPanel: React.FC<CapabilityVideoPanelProps> = ({
                     className="min-h-[76px] flex-1 resize-none overflow-y-auto rounded-xl border-0 bg-n20/70 px-3 py-2.5 text-xs leading-5 text-n700 outline-none ring-1 ring-inset ring-n40 transition focus:ring-primary"
                 />
             </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-t border-n40 bg-n20/45 px-3 py-2">
-                <span className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] font-medium text-n300">
+            <div className={VIDEO_CONTROL_BAR_CLASS} data-testid="capability-control-row">
+                <span className={VIDEO_CONTROL_PILL_CLASS}>
                     <AtSign className="h-3 w-3" />分镜图参考
                 </span>
             {fieldEntries.length > 0 ? (
@@ -82,12 +89,12 @@ export const CapabilityVideoPanel: React.FC<CapabilityVideoPanelProps> = ({
                         const current = resolveCapabilityParamValue(rule, value[key]);
                         if (Array.isArray(rule)) {
                             return (
-                                <label key={key} className="inline-flex min-w-0 items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1 text-[10px] text-n300">
+                                <label key={key} className={VIDEO_CONTROL_PILL_CLASS}>
                                     <span>{label}</span>
                                     <select
                                         value={String(current)}
                                         onChange={event => setField(key, event.target.value)}
-                                        className="max-w-[116px] border-0 bg-transparent p-0 text-[10px] font-semibold text-n700 focus:outline-none"
+                                        className={VIDEO_CONTROL_SELECT_CLASS}
                                     >
                                         {rule.map(option => (
                                             <option key={String(option)} value={String(option)}>
@@ -101,7 +108,7 @@ export const CapabilityVideoPanel: React.FC<CapabilityVideoPanelProps> = ({
                         if (isRuleObject(rule) && rule.type === 'boolean') {
                             return (
                                 <label key={key} className="inline-flex min-w-0 items-center">
-                                    <span className="flex items-center gap-1.5 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n700">
+                                    <span className={VIDEO_CONTROL_PILL_CLASS}>
                                         <input
                                             type="checkbox"
                                             checked={Boolean(current)}
@@ -116,12 +123,12 @@ export const CapabilityVideoPanel: React.FC<CapabilityVideoPanelProps> = ({
                         if (isRuleObject(rule) && (rule.options as unknown[] | undefined)?.length) {
                             const options = rule.options as Array<string | number>;
                             return (
-                                <label key={key} className="inline-flex min-w-0 items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1 text-[10px] text-n300">
+                                <label key={key} className={VIDEO_CONTROL_PILL_CLASS}>
                                     <span>{label}</span>
                                     <select
                                         value={String(current)}
                                         onChange={event => setField(key, Number(event.target.value))}
-                                        className="max-w-[96px] border-0 bg-transparent p-0 text-[10px] font-semibold text-n700 focus:outline-none"
+                                        className={VIDEO_CONTROL_SELECT_CLASS}
                                     >
                                         {options.map(option => (
                                             <option key={String(option)} value={String(option)}>{option}{key === 'duration' ? ' 秒' : ''}</option>
@@ -132,8 +139,20 @@ export const CapabilityVideoPanel: React.FC<CapabilityVideoPanelProps> = ({
                         }
                         if (isRuleObject(rule) && (rule.type === 'integer' || rule.type === 'number')) {
                             const numericRule = rule as VideoCapabilityNumberRule;
+                            if (key === 'duration') {
+                                return (
+                                    <VideoDurationControl
+                                        key={key}
+                                        value={Number(current)}
+                                        min={numericRule.minimum ?? 1}
+                                        max={numericRule.maximum ?? 60}
+                                        onChange={next => setField(key, next)}
+                                        ariaLabel={label}
+                                    />
+                                );
+                            }
                             return (
-                                <label key={key} className="inline-flex min-w-0 items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1 text-[10px] text-n300">
+                                <label key={key} className={VIDEO_CONTROL_PILL_CLASS}>
                                     <span>{label}</span>
                                     <input
                                         type="number"
@@ -141,13 +160,13 @@ export const CapabilityVideoPanel: React.FC<CapabilityVideoPanelProps> = ({
                                         min={numericRule.minimum}
                                         max={numericRule.maximum}
                                         onChange={event => setField(key, Number(event.target.value))}
-                                        className="w-14 border-0 bg-transparent p-0 text-[10px] font-semibold text-n700 focus:outline-none"
+                                        className={VIDEO_CONTROL_INPUT_CLASS}
                                     />
                                 </label>
                             );
                         }
                         return (
-                            <label key={key} className="inline-flex min-w-0 items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1 text-[10px] text-n300">
+                            <label key={key} className={VIDEO_CONTROL_PILL_CLASS}>
                                 <span>{label}</span>
                                 <input
                                     value={String(current)}
@@ -159,7 +178,7 @@ export const CapabilityVideoPanel: React.FC<CapabilityVideoPanelProps> = ({
                     })}
                 </>
             ) : (
-                <span className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n100"><Settings2 className="h-3 w-3" />后台固定参数</span>
+                <span className={`${VIDEO_CONTROL_PILL_CLASS} text-n100`}><Settings2 className="h-3 w-3" />后台固定参数</span>
             )}
             </div>
         </div>

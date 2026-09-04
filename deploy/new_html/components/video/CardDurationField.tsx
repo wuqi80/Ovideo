@@ -1,7 +1,11 @@
 // new_html/components/video/CardDurationField.tsx
 import React from 'react';
-import { RotateCcw } from 'lucide-react';
+import { Clock3, RotateCcw } from 'lucide-react';
 import { DURATION_MIN_SEC, DURATION_MAX_SEC } from '../../utils/durationMapping';
+import {
+    VIDEO_CONTROL_PILL_CLASS,
+    VIDEO_CONTROL_POPOVER_CLASS,
+} from './videoControlStyles';
 
 export interface CardDurationFieldProps {
     duration: number;
@@ -22,12 +26,25 @@ export const CardDurationField: React.FC<CardDurationFieldProps> = ({
             .filter(mark => mark >= DURATION_MIN_SEC && mark <= maxSec)
             .sort((a, b) => a - b);
         return (
-            <div className="flex min-w-[250px] items-center gap-2 rounded-lg border border-n40 bg-n0 px-2.5 py-1.5 text-[10px] shadow-sm">
-                <div className="shrink-0">
-                    <div className="font-medium text-n700">视频时长</div>
-                    <div className="text-[9px] text-n100">{DURATION_MIN_SEC}–{maxSec} 秒</div>
-                </div>
-                <div className="min-w-0 flex-1">
+            <details className="group/duration relative">
+                <summary
+                    className={`${VIDEO_CONTROL_PILL_CLASS} cursor-pointer list-none select-none`}
+                    aria-label="Seedance 1.5 Pro 时长设置"
+                >
+                    <Clock3 size={12} />
+                    <span className="font-semibold text-n800">{duration} 秒</span>
+                    <span className="text-[9px] text-n100">⌄</span>
+                </summary>
+                <div className={`${VIDEO_CONTROL_POPOVER_CLASS} w-72`}>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                        <div>
+                            <div className="text-[10px] font-semibold text-n700">选择视频生成时长</div>
+                            <div className="text-[9px] text-n100">{DURATION_MIN_SEC}–{maxSec} 秒</div>
+                        </div>
+                        <div className="flex h-8 w-12 items-center justify-center rounded-lg bg-n20 text-xs font-semibold text-n800">
+                            {duration}<span className="ml-0.5 text-[9px] font-normal text-n100">s</span>
+                        </div>
+                    </div>
                     <input
                         type="range"
                         min={DURATION_MIN_SEC}
@@ -39,53 +56,52 @@ export const CardDurationField: React.FC<CardDurationFieldProps> = ({
                         onChange={event => onChange(Number(event.target.value), true)}
                         aria-label="Seedance 1.5 Pro 视频时长"
                     />
-                    <div className="flex justify-between text-[8px] leading-none text-n100">
+                    <div className="mt-1 flex justify-between text-[8px] leading-none text-n100">
                         {marks.map(mark => <span key={mark}>{mark}</span>)}
                     </div>
+                    {userOverride && (
+                        <button type="button" onClick={onClear} disabled={disabled} className="mt-3 inline-flex items-center gap-1 text-[10px] text-n300 hover:text-primary">
+                            <RotateCcw size={11} />恢复跟随分镜时长
+                        </button>
+                    )}
                 </div>
-                <div className="flex h-8 w-11 shrink-0 items-center justify-center rounded-md bg-n20 font-semibold text-n700">
-                    {duration}<span className="ml-0.5 text-[9px] font-normal text-n100">s</span>
-                </div>
-                {userOverride && (
-                    <button type="button" onClick={onClear} disabled={disabled} title="恢复跟随分镜时长" className="p-0.5 text-n300 hover:text-primary">
-                        <RotateCcw size={11} />
-                    </button>
-                )}
-            </div>
+            </details>
         );
     }
     return (
-        <div className="flex items-center gap-1 text-[10px]">
-            <label className="text-n300">时长</label>
-            <input
-                type="number"
-                min={DURATION_MIN_SEC}
-                max={maxSec}
-                step={1}
-                value={duration}
-                disabled={disabled}
-                className="w-12 px-1 py-0.5 bg-n0 border border-n40 rounded text-n700 text-center"
-                onChange={e => {
-                    const n = parseInt(e.target.value, 10);
-                    if (!Number.isFinite(n)) return;
-                    onChange(Math.max(DURATION_MIN_SEC, Math.min(maxSec, n)), true);
-                }}
-                title={userOverride
-                    ? `已手动设置（当前上限 ${maxSec}s，点 ↺ 恢复跟随音频）`
-                    : `跟随音频/脚本（当前上限 ${maxSec}s）`}
-            />
-            <span className="text-n100">s</span>
-            {userOverride && (
-                <button
-                    type="button"
-                    onClick={onClear}
-                    disabled={disabled}
-                    title="清除手动设置，恢复跟随"
-                    className="p-0.5 text-n300 hover:text-n700"
-                >
-                    <RotateCcw size={11} />
-                </button>
-            )}
-        </div>
+        <details className="group/duration relative">
+            <summary className={`${VIDEO_CONTROL_PILL_CLASS} cursor-pointer list-none select-none`} aria-label="视频时长设置">
+                <Clock3 size={12} />
+                <span className="font-semibold text-n800">{duration} 秒</span>
+                <span className="text-[9px] text-n100">⌄</span>
+            </summary>
+            <div className={`${VIDEO_CONTROL_POPOVER_CLASS} w-44`}>
+                <label className="flex items-center justify-between gap-2 text-[10px] text-n500">
+                    <span>视频时长</span>
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n20 px-2 py-1">
+                        <input
+                            type="number"
+                            min={DURATION_MIN_SEC}
+                            max={maxSec}
+                            step={1}
+                            value={duration}
+                            disabled={disabled}
+                            className="w-10 border-0 bg-transparent p-0 text-center font-semibold text-n800 outline-none"
+                            onChange={e => {
+                                const n = parseInt(e.target.value, 10);
+                                if (!Number.isFinite(n)) return;
+                                onChange(Math.max(DURATION_MIN_SEC, Math.min(maxSec, n)), true);
+                            }}
+                        />
+                        <span className="text-n100">秒</span>
+                    </span>
+                </label>
+                {userOverride && (
+                    <button type="button" onClick={onClear} disabled={disabled} className="mt-3 inline-flex items-center gap-1 text-[10px] text-n300 hover:text-primary">
+                        <RotateCcw size={11} />恢复跟随
+                    </button>
+                )}
+            </div>
+        </details>
     );
 };

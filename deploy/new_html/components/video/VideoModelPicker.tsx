@@ -177,7 +177,7 @@ export const VideoModelPicker: React.FC<VideoModelPickerProps> = ({
           refreshPosition();
           setOpen(current => !current);
         }}
-        className={`inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-n40 bg-n0 text-n700 shadow-sm transition-colors hover:border-primary hover:bg-p50 ${
+        className={`inline-flex min-h-8 min-w-0 items-center gap-1.5 rounded-full border border-n40 bg-n0 text-n700 shadow-sm transition-colors hover:border-primary hover:bg-p50 ${
           compact ? 'max-w-[170px] px-2 py-1 text-[10px]' : 'max-w-[260px] px-2.5 py-1.5 text-xs'
         } ${!selected?.available ? 'text-n100' : ''} ${className}`}
         title={selected?.available ? selected.label : selected?.unavailableReason}

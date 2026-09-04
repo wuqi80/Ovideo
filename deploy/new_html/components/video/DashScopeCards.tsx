@@ -30,6 +30,14 @@ import type {
 } from '../../services/videoModelService';
 import { getModelDisplayName } from '../../services/videoModelService';
 import { secureApiUrl } from '../../services/httpClient';
+import {
+    VIDEO_CONTROL_INPUT_CLASS,
+    VIDEO_CONTROL_PILL_CLASS,
+    VIDEO_CONTROL_POPOVER_CLASS,
+    VIDEO_CONTROL_ROW_CLASS,
+    VIDEO_CONTROL_SELECT_CLASS,
+} from './videoControlStyles';
+import { VideoDurationControl } from './VideoDurationControl';
 
 // ─── 主题色板（对应修真境界视觉气质） ─────────────────────────────────────────
 
@@ -456,30 +464,6 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
 
     return (
         <DashScopeCardShell theme={theme} subtitle={`Kling · ${dispatchSubtitle}`}>
-            {/* 2026-05-25 hotfix — 模式 toggle 简化为 2 个：Omni / Multi，可再点取消回 auto。
-                首/尾帧不再单独占位 —— storyboard 顶部 image preview 决定 i2v/morph/t2v 通道，
-                避免与 storyboard 形成双源真相。 */}
-            <div className="flex items-center gap-1 text-[10px]">
-                {([
-                    ['omni', 'Omni 多参考', Layers],
-                    ['multi', 'Multi 多镜头', Sparkles],
-                ] as [Exclude<Mode, 'auto'>, string, any][]).map(([m, label, Icon]) => (
-                    <button
-                        key={m}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => switchMode(currentMode === m ? 'auto' : m)}
-                        className={`flex-1 px-1.5 py-1 rounded border flex items-center justify-center gap-1 transition-colors ${
-                            currentMode === m
-                                ? `${theme.accentBg} ${theme.accentBorder} ${theme.accentText}`
-                                : 'bg-n0 border-n40 text-n100 hover:text-n700'
-                        }`}
-                    >
-                        <Icon className="w-3 h-3" /> {label}
-                    </button>
-                ))}
-            </div>
-
             {/* prompt（mention-aware） — 由外层 DashScopePromptEditor 适配后注入 */}
             {props.PromptEditor ? (
                 <props.PromptEditor
@@ -523,25 +507,19 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
             {/* 2026-05-24 Task 3：多镜头编辑区（intelligence/customize） */}
             {currentMode === 'multi' && (
                 <div className="flex flex-col gap-1.5 border border-b75 rounded p-2 bg-b50">
-                    {/* shot_type 切换 */}
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                        <span className="text-n300">分镜模式：</span>
-                        {(['intelligence', 'customize'] as const).map(st => (
-                            <button
-                                key={st}
-                                type="button"
-                                disabled={disabled}
-                                onClick={() => onChange({ ...params, kling_shot_type: st })}
-                                className={`px-2 py-0.5 rounded border ${
-                                    (params.kling_shot_type || 'intelligence') === st
-                                        ? `${theme.accentBg} ${theme.accentBorder} ${theme.accentText}`
-                                        : 'bg-n0 border-n40 text-n300'
-                                }`}
-                            >
-                                {st === 'intelligence' ? '智能分镜' : '自定义分镜'}
-                            </button>
-                        ))}
-                    </div>
+                    <label className={`${VIDEO_CONTROL_PILL_CLASS} self-start`}>
+                        <Sparkles className="h-3 w-3" />
+                        <select
+                            value={params.kling_shot_type || 'intelligence'}
+                            onChange={event => onChange({ ...params, kling_shot_type: event.target.value as 'intelligence' | 'customize' })}
+                            disabled={disabled}
+                            className={VIDEO_CONTROL_SELECT_CLASS}
+                            aria-label="Kling 分镜模式"
+                        >
+                            <option value="intelligence">智能分镜</option>
+                            <option value="customize">自定义分镜</option>
+                        </select>
+                    </label>
 
                     {params.kling_shot_type === 'customize' && (
                         <div className="flex flex-col gap-1.5 max-h-[160px] overflow-y-auto pr-1">
@@ -601,71 +579,48 @@ export const KlingCard: React.FC<DashScopeCardProps> = (props) => {
                 </div>
             )}
 
-            {/* 参数行 1：mode + duration + aspect_ratio */}
-            <div className="grid grid-cols-3 gap-1.5">
-                <label className={labelCls}>
-                    <Sparkles className="w-2.5 h-2.5" /> 画质
-                    <select
-                        value={params.mode || 'std'}
-                        onChange={(e) => onChange({ ...params, mode: e.target.value as KlingMode })}
-                        disabled={disabled}
-                        className={inputCls}
-                    >
-                        <option value="std">std · 720P</option>
-                        <option value="pro">pro · 1080P</option>
+            <div className={VIDEO_CONTROL_ROW_CLASS} data-testid="kling-control-row">
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <Layers className="h-3 w-3 text-primary" />
+                    <select value={currentMode} onChange={event => switchMode(event.target.value as Mode)} disabled={disabled} className={VIDEO_CONTROL_SELECT_CLASS} aria-label="Kling 生成模式">
+                        <option value="auto">自动模式</option>
+                        <option value="omni">Omni 多参考</option>
+                        <option value="multi">Multi 多镜头</option>
                     </select>
                 </label>
-                <label className={labelCls}>
-                    <Hash className="w-2.5 h-2.5" /> 时长
-                    <input
-                        type="number" min={3} max={15} step={1}
-                        value={params.duration ?? 5}
-                        onChange={(e) => onChange({ ...params, duration: Number(e.target.value) })}
-                        disabled={disabled}
-                        className={`${inputCls} w-12`}
-                    />
-                    s
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <Sparkles className="h-3 w-3" />
+                    <select value={params.mode || 'std'} onChange={event => onChange({ ...params, mode: event.target.value as KlingMode })} disabled={disabled} className={VIDEO_CONTROL_SELECT_CLASS} aria-label="Kling 清晰度">
+                        <option value="std">720P</option>
+                        <option value="pro">1080P</option>
+                    </select>
                 </label>
+                <VideoDurationControl
+                    value={params.duration ?? 5}
+                    min={3}
+                    max={15}
+                    onChange={duration => onChange({ ...params, duration })}
+                    disabled={disabled}
+                    ariaLabel="Kling 时长"
+                />
                 {showAspect && (
-                    <label className={labelCls}>
-                        <RotateCcw className="w-2.5 h-2.5" /> 比例
-                        <select
-                            value={params.aspect_ratio || '16:9'}
-                            onChange={(e) => onChange({ ...params, aspect_ratio: e.target.value as DashScopeAspectRatio })}
-                            disabled={disabled}
-                            className={inputCls}
-                        >
+                    <label className={VIDEO_CONTROL_PILL_CLASS}>
+                        <RotateCcw className="h-3 w-3" />
+                        <select value={params.aspect_ratio || '16:9'} onChange={event => onChange({ ...params, aspect_ratio: event.target.value as DashScopeAspectRatio })} disabled={disabled} className={VIDEO_CONTROL_SELECT_CLASS} aria-label="Kling 比例">
                             <option value="16:9">16:9</option>
                             <option value="9:16">9:16</option>
                             <option value="1:1">1:1</option>
                         </select>
                     </label>
                 )}
-            </div>
-
-            {/* 参数行 2：audio + watermark + sub_model */}
-            <div className="grid grid-cols-3 gap-1.5">
-                <label className={`${labelCls} cursor-pointer`}>
-                    <input
-                        type="checkbox"
-                        checked={!!params.audio}
-                        onChange={(e) => onChange({ ...params, audio: e.target.checked })}
-                        disabled={disabled}
-                    />
-                    <Volume2 className="w-2.5 h-2.5" /> 有声
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <input type="checkbox" checked={!!params.audio} onChange={event => onChange({ ...params, audio: event.target.checked })} disabled={disabled} />
+                    <Volume2 className="h-3 w-3" />有声
                 </label>
-                <label className={`${labelCls} cursor-pointer`}>
-                    <input
-                        type="checkbox"
-                        checked={!!params.watermark}
-                        onChange={(e) => onChange({ ...params, watermark: e.target.checked })}
-                        disabled={disabled}
-                    />
-                    水印
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <input type="checkbox" checked={!!params.watermark} onChange={event => onChange({ ...params, watermark: event.target.checked })} disabled={disabled} />水印
                 </label>
-                <div className="flex items-center justify-end text-[9px] text-n100">
-                    {params.sub_model_kling === 'omni' ? 'omni · 多参考' : 'standard'}
-                </div>
+                <span className={`${VIDEO_CONTROL_PILL_CLASS} text-n100`}><Film className="h-3 w-3" />{params.sub_model_kling === 'omni' ? 'omni · 多参考' : 'standard'}</span>
             </div>
         </DashScopeCardShell>
     );
@@ -766,14 +721,15 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
             </div>
 
             {/* 核心参数：子模型 + 时长 + 分辨率 + 水印。分辨率不再藏在折叠区。 */}
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                <label className={labelCls}>
-                    <Wand2 className="w-2.5 h-2.5" /> 子模型
+            <div className={VIDEO_CONTROL_ROW_CLASS} data-testid="vidu-control-row">
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <Wand2 className="h-3 w-3 text-primary" />
                     <select
                         value={subModel}
                         onChange={(e) => onChange({ ...params, sub_model_vidu: e.target.value as ViduSubModel })}
                         disabled={disabled}
-                        className={inputCls}
+                        className={VIDEO_CONTROL_SELECT_CLASS}
+                        aria-label="Vidu 子模型"
                     >
                         {/* 2026-05-25 #6 — 全部子模型一次列全，由用户自行匹配；当 first+last 同时填
                             时上面 updateFirst/updateLast 会自动切到 turbo 子模型。 */}
@@ -786,19 +742,16 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
                         <option value="q2-turbo">q2-turbo</option>
                     </select>
                 </label>
-                <label className={labelCls}>
-                    <Hash className="w-2.5 h-2.5" /> 时长
-                    <input
-                        type="number" min={1} max={maxDuration} step={1}
-                        value={params.duration ?? 5}
-                        onChange={(e) => onChange({ ...params, duration: Number(e.target.value) })}
-                        disabled={disabled}
-                        className={`${inputCls} w-12`}
-                    />
-                    s
-                </label>
-                <label className={labelCls}>
-                    <Maximize2 className="w-2.5 h-2.5" /> 清晰度
+                <VideoDurationControl
+                    value={params.duration ?? 5}
+                    min={1}
+                    max={maxDuration}
+                    onChange={duration => onChange({ ...params, duration })}
+                    disabled={disabled}
+                    ariaLabel="Vidu 时长"
+                />
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <Maximize2 className="h-3 w-3" />
                     <select
                         value={params.vidu_resolution || '720P'}
                         onChange={(e) => {
@@ -811,7 +764,7 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
                             onChange({ ...params, vidu_resolution: resolution, vidu_size: defaultSize[resolution] });
                         }}
                         disabled={disabled}
-                        className={inputCls}
+                        className={VIDEO_CONTROL_SELECT_CLASS}
                         aria-label="Vidu 分辨率/清晰度"
                     >
                         <option value="540P">540P</option>
@@ -819,7 +772,7 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
                         <option value="1080P">1080P</option>
                     </select>
                 </label>
-                <label className={`${labelCls} cursor-pointer`}>
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
                     <input
                         type="checkbox"
                         checked={!!params.watermark}
@@ -830,9 +783,9 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
                 </label>
             </div>
 
-            <details className="rounded-xl border border-n40 bg-n20/35 px-2 py-1.5">
-                <summary className="cursor-pointer select-none text-[10px] font-medium text-n500">高级设置</summary>
-                <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            <details className="relative self-start">
+                <summary className={`${VIDEO_CONTROL_PILL_CLASS} cursor-pointer list-none select-none`}>高级设置</summary>
+                <div className={`${VIDEO_CONTROL_POPOVER_CLASS} grid w-80 grid-cols-2 gap-2 sm:grid-cols-3`}>
                     <label className={labelCls}>
                         size
                         <input
@@ -969,40 +922,35 @@ export const HappyHorseCard: React.FC<DashScopeCardProps> = (props) => {
                 onPreview={onPreviewImage}
             />
 
-            {/* 核心参数：时长 + 分辨率 + 比例 */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                <label className={labelCls}>
-                    <Hash className="w-2.5 h-2.5" /> 时长
-                    <input
-                        type="number" min={3} max={15} step={1}
-                        value={params.hh_duration ?? 5}
-                        onChange={(e) => onChange({ ...params, hh_duration: Number(e.target.value) })}
-                        disabled={disabled}
-                        className={`${inputCls} w-12`}
-                        aria-label="时长"
-                    />
-                    s
-                </label>
-                <label className={labelCls}>
-                    <Maximize2 className="w-2.5 h-2.5" /> 分辨率
+            <div className={VIDEO_CONTROL_ROW_CLASS} data-testid="happyhorse-control-row">
+                <VideoDurationControl
+                    value={params.hh_duration ?? 5}
+                    min={3}
+                    max={15}
+                    onChange={hh_duration => onChange({ ...params, hh_duration })}
+                    disabled={disabled}
+                    ariaLabel="时长"
+                />
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <Maximize2 className="h-3 w-3" />
                     <select
                         value={params.hh_resolution || '1080P'}
                         onChange={(e) => onChange({ ...params, hh_resolution: e.target.value as HhResolution })}
                         disabled={disabled}
-                        className={inputCls}
+                        className={VIDEO_CONTROL_SELECT_CLASS}
                         aria-label="分辨率"
                     >
                         <option value="720P">720P</option>
                         <option value="1080P">1080P</option>
                     </select>
                 </label>
-                <label className={labelCls}>
-                    <RotateCcw className="w-2.5 h-2.5" /> 比例
+                <label className={VIDEO_CONTROL_PILL_CLASS}>
+                    <RotateCcw className="h-3 w-3" />
                     <select
                         value={params.hh_ratio || '16:9'}
                         onChange={(e) => { userSetRatioRef.current = true; onChange({ ...params, hh_ratio: e.target.value as HhRatio }); }}
                         disabled={disabled}
-                        className={inputCls}
+                        className={VIDEO_CONTROL_SELECT_CLASS}
                         aria-label="比例"
                     >
                         <option value="16:9">16:9 横版宽</option>
@@ -1018,10 +966,10 @@ export const HappyHorseCard: React.FC<DashScopeCardProps> = (props) => {
                 </label>
             </div>
 
-            <details className="rounded-xl border border-n40 bg-n20/35 px-2 py-1.5">
-                <summary className="cursor-pointer select-none text-[10px] font-medium text-n500">高级设置</summary>
-                <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                    <label className={`${labelCls} cursor-pointer`}>
+            <details className="relative self-start">
+                <summary className={`${VIDEO_CONTROL_PILL_CLASS} cursor-pointer list-none select-none`}>高级设置</summary>
+                <div className={`${VIDEO_CONTROL_POPOVER_CLASS} grid w-80 grid-cols-2 gap-2 sm:grid-cols-3`}>
+                    <label className={labelCls}>
                         <input
                             type="checkbox"
                             checked={params.hh_watermark !== false}
