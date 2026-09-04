@@ -86,6 +86,16 @@ describe('Seedance 2.0 Jimeng-style controls', () => {
     expect(screen.getByPlaceholderText(/输入文字描述，或输入 @ 选择参考内容/)).toBeInTheDocument();
     expect(screen.getByRole('option', { name: '全能参考' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: '首尾帧' })).toBeInTheDocument();
+    expect(screen.getByTestId('seedance-jimeng-composer')).toHaveClass('h-full');
+
+    const ratioSelect = screen.getByLabelText('选择比例') as HTMLSelectElement;
+    expect(Array.from(ratioSelect.options).map(option => option.value)).toEqual([
+      'adaptive', '16:9', '4:3', '1:1', '3:4', '9:16', '21:9',
+    ]);
+    const resolutionSelect = screen.getByLabelText('选择清晰度') as HTMLSelectElement;
+    expect(Array.from(resolutionSelect.options).map(option => option.value)).toEqual([
+      '480p', '720p', '1080p',
+    ]);
 
     fireEvent.change(screen.getByLabelText('Seedance 生成模式'), { target: { value: 'first_last' } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({

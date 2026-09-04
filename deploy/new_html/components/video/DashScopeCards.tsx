@@ -765,8 +765,8 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
                 />
             </div>
 
-            {/* 核心参数：子模型 + 时长 + 水印 */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            {/* 核心参数：子模型 + 时长 + 分辨率 + 水印。分辨率不再藏在折叠区。 */}
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
                 <label className={labelCls}>
                     <Wand2 className="w-2.5 h-2.5" /> 子模型
                     <select
@@ -797,6 +797,28 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
                     />
                     s
                 </label>
+                <label className={labelCls}>
+                    <Maximize2 className="w-2.5 h-2.5" /> 清晰度
+                    <select
+                        value={params.vidu_resolution || '720P'}
+                        onChange={(e) => {
+                            const resolution = e.target.value as ViduResolution;
+                            const defaultSize: Record<ViduResolution, string> = {
+                                '540P': '1024*576',
+                                '720P': '1280*720',
+                                '1080P': '1920*1080',
+                            };
+                            onChange({ ...params, vidu_resolution: resolution, vidu_size: defaultSize[resolution] });
+                        }}
+                        disabled={disabled}
+                        className={inputCls}
+                        aria-label="Vidu 分辨率/清晰度"
+                    >
+                        <option value="540P">540P</option>
+                        <option value="720P">720P</option>
+                        <option value="1080P">1080P</option>
+                    </select>
+                </label>
                 <label className={`${labelCls} cursor-pointer`}>
                     <input
                         type="checkbox"
@@ -811,28 +833,6 @@ export const ViduCard: React.FC<DashScopeCardProps> = (props) => {
             <details className="rounded-xl border border-n40 bg-n20/35 px-2 py-1.5">
                 <summary className="cursor-pointer select-none text-[10px] font-medium text-n500">高级设置</summary>
                 <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                    <label className={labelCls}>
-                        <Maximize2 className="w-2.5 h-2.5" /> 分辨率
-                        <select
-                            value={params.vidu_resolution || '720P'}
-                            onChange={(e) => {
-                                const r = e.target.value as ViduResolution;
-                                const defaultSize: Record<ViduResolution, string> = {
-                                    '540P': '1024*576',
-                                    '720P': '1280*720',
-                                    '1080P': '1920*1080',
-                                };
-                                onChange({ ...params, vidu_resolution: r, vidu_size: defaultSize[r] });
-                            }}
-                            disabled={disabled}
-                            className={inputCls}
-                            aria-label="分辨率"
-                        >
-                            <option value="540P">540P</option>
-                            <option value="720P">720P</option>
-                            <option value="1080P">1080P</option>
-                        </select>
-                    </label>
                     <label className={labelCls}>
                         size
                         <input

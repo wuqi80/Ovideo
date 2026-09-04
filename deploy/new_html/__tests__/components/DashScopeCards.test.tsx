@@ -112,6 +112,7 @@ describe('ViduCard 完整参数', () => {
         expect(Array.from(sel.options).map(o => o.value)).toEqual(
             expect.arrayContaining(['540P', '720P', '1080P']),
         );
+        expect(sel.closest('details')).toBeNull();
     });
 
     it('显示 seed 输入', () => {

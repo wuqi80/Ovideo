@@ -11,24 +11,21 @@ import { isDashScopeVideoModel, type VideoModel } from '../services/videoModelSe
  *   2. 统一 flex 骨架：header(shrink-0) + media(shrink-0 h-28) + body(flex-1 min-h-0)
  *   3. body 在卡片足够高时不出现 overflow；textarea 在 body 内填满
  *
- * 高度档（2026-05-25 第 4 次调整，Seedance/DashScope 分档拉满）：
- *   - placeholder 空镜：280px
- *   - 普通 I2V：380px
- *   - DashScope 三家（Kling 3-mode / Vidu / HappyHorse）：580px
- *   - Seedance 多模态控制台（3 媒体框 + 6 参数 + 警告）：680px
+ * 高度档（2026-09-04）：每一类卡片都使用明确的固定高度，禁止由内容撑高。
+ * 新高度为参数栏保留稳定空间，避免比例/清晰度等核心控件落到滚动区之外。
  */
 
 /** 空镜 / placeholder 卡（无图） */
-export const PLACEHOLDER_CARD_HEIGHT_CLASS = 'h-[280px] flex flex-col overflow-hidden';
+export const PLACEHOLDER_CARD_HEIGHT_CLASS = 'h-[320px] flex flex-col overflow-hidden';
 /** 普通 I2V / Morph（Wan2、Sora2、大能…） */
-export const COMPACT_CARD_HEIGHT_CLASS = 'h-[380px] flex flex-col overflow-hidden';
+export const COMPACT_CARD_HEIGHT_CLASS = 'h-[500px] flex flex-col overflow-hidden';
 /** DashScope 三家：Kling / Vidu / HappyHorse */
-export const DASHSCOPE_CARD_HEIGHT_CLASS = 'h-[520px] flex flex-col overflow-hidden';
+export const DASHSCOPE_CARD_HEIGHT_CLASS = 'h-[680px] flex flex-col overflow-hidden';
 /** MiniMax Hailuo model, duration, resolution, optimizer, and prompt controls. */
-export const MINIMAX_CARD_HEIGHT_CLASS = 'h-[440px] flex flex-col overflow-hidden';
+export const MINIMAX_CARD_HEIGHT_CLASS = 'h-[560px] flex flex-col overflow-hidden';
 /** Seedance 多模态控制台（3 媒体框 + 全部参数自适应展示） */
-export const SEEDANCE_CARD_HEIGHT_CLASS = 'h-[560px] flex flex-col overflow-hidden';
-export const SEEDANCE_15_CARD_HEIGHT_CLASS = 'h-[620px] flex flex-col overflow-hidden';
+export const SEEDANCE_CARD_HEIGHT_CLASS = 'h-[720px] flex flex-col overflow-hidden';
+export const SEEDANCE_15_CARD_HEIGHT_CLASS = 'h-[760px] flex flex-col overflow-hidden';
 /** @deprecated 旧别名，留给 tests 兼容；新代码用 DASHSCOPE_/SEEDANCE_ 二档 */
 export const PARAMETRIC_CARD_HEIGHT_CLASS = DASHSCOPE_CARD_HEIGHT_CLASS;
 

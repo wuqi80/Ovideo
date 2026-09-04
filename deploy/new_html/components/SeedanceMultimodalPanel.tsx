@@ -536,8 +536,8 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
         );
 
         return (
-            <div className="overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-card" data-testid="seedance-jimeng-composer">
-                <div className="flex min-h-[150px] gap-3 p-3">
+            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-n40 bg-n0 shadow-card" data-testid="seedance-jimeng-composer">
+                <div className="flex min-h-[168px] flex-1 gap-3 overflow-hidden p-3">
                     <div className="flex shrink-0 items-start gap-1.5 pt-1">
                         {effectiveMode === 'first_last' ? (
                             <>
@@ -557,7 +557,7 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                             </button>
                         )}
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                         <div className="mb-1 flex items-center justify-between gap-2">
                             <div className="text-[10px] leading-4 text-n100">{referenceHint}</div>
                             <button type="button" onClick={() => setPromptModalOpen(true)} className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-primary hover:bg-primary-light">
@@ -579,7 +579,42 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                     </div>
                 </div>
 
-                <div className="border-t border-n40 bg-n20/35 px-3 py-2">
+                <div className="shrink-0 border-t border-n40 bg-n20/35 px-3 py-2">
+                    <div className="mb-2 grid grid-cols-2 gap-2" data-testid="seedance-output-selectors">
+                        <label className="rounded-xl border border-n40 bg-n0 px-3 py-2 shadow-sm">
+                            <span className="mb-1 block text-[9px] font-medium text-n300">选择比例</span>
+                            <select
+                                value={value.ratio || 'adaptive'}
+                                onChange={event => patch({ ratio: event.target.value as SeedanceParams['ratio'] })}
+                                disabled={disabled}
+                                className="w-full cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-n800 outline-none focus:ring-0 disabled:cursor-not-allowed"
+                                aria-label="选择比例"
+                            >
+                                {RATIO_OPTIONS.map(ratio => (
+                                    <option key={ratio} value={ratio}>{ratio === 'adaptive' ? '自动适应' : ratio}</option>
+                                ))}
+                            </select>
+                        </label>
+                        <label className="rounded-xl border border-n40 bg-n0 px-3 py-2 shadow-sm">
+                            <span className="mb-1 block text-[9px] font-medium text-n300">选择清晰度</span>
+                            <select
+                                value={value.resolution || '720p'}
+                                onChange={event => patch({ resolution: event.target.value as SeedanceParams['resolution'] })}
+                                disabled={disabled}
+                                className="w-full cursor-pointer border-0 bg-transparent p-0 text-xs font-semibold text-n800 outline-none focus:ring-0 disabled:cursor-not-allowed"
+                                aria-label="选择清晰度"
+                            >
+                                {RESOLUTION_OPTIONS.map(resolution => {
+                                    const unavailable = resolution === '1080p' && (value.sub_model === 'fast' || value.sub_model === 'mini');
+                                    return (
+                                        <option key={resolution} value={resolution} disabled={unavailable}>
+                                            {resolution.toUpperCase()}{unavailable ? '（当前型号不可用）' : ''}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </label>
+                    </div>
                     <div className="mb-2 flex flex-wrap items-center gap-1.5">
                         {value.media_inputs.map((media, index) => (
                             <div key={`${media.kind}-${media.url}-${index}`} className="group/ref relative flex h-11 max-w-[132px] items-center gap-1.5 overflow-hidden rounded-lg border border-n40 bg-n0 pr-6 text-[9px] text-n500">
@@ -600,21 +635,6 @@ export const SeedanceMultimodalPanel: React.FC<Props> = ({
                             <select value={effectiveMode} onChange={event => setMode(event.target.value as 'reference' | 'first_last')} disabled={disabled} className="border-0 bg-transparent p-0 text-[10px] font-semibold text-n800 focus:outline-none" aria-label="Seedance 生成模式">
                                 <option value="reference">全能参考</option>
                                 <option value="first_last">首尾帧</option>
-                            </select>
-                        </label>
-                        <label className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n300">
-                            <span>比例</span>
-                            <select value={value.ratio || 'adaptive'} onChange={event => patch({ ratio: event.target.value as SeedanceParams['ratio'] })} disabled={disabled} className="border-0 bg-transparent p-0 text-[10px] font-semibold text-n700 focus:outline-none" aria-label="画面比例">
-                                {RATIO_OPTIONS.map(ratio => <option key={ratio} value={ratio}>{ratio === 'adaptive' ? '自动' : ratio}</option>)}
-                            </select>
-                        </label>
-                        <label className="inline-flex items-center gap-1 rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] text-n300">
-                            <span>清晰度</span>
-                            <select value={value.resolution || '720p'} onChange={event => patch({ resolution: event.target.value as SeedanceParams['resolution'] })} disabled={disabled} className="border-0 bg-transparent p-0 text-[10px] font-semibold text-n700 focus:outline-none" aria-label="分辨率">
-                                {RESOLUTION_OPTIONS.map(resolution => {
-                                    const unavailable = resolution === '1080p' && (value.sub_model === 'fast' || value.sub_model === 'mini');
-                                    return <option key={resolution} value={resolution} disabled={unavailable}>{resolution.toUpperCase()}{unavailable ? '（当前版本不支持）' : ''}</option>;
-                                })}
                             </select>
                         </label>
                         <span className="inline-flex items-center rounded-lg border border-n40 bg-n0 px-2 py-1.5 text-[10px] font-medium text-n700">{value.duration || 5}s</span>

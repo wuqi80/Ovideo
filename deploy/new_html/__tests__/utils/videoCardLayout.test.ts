@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
   CARD_MEDIA_HEIGHT_CLASS,
+  getCardHeightClass,
   getPreviewImageHeightClass,
   getResultVisualHeightClass,
   getVideoResultPlaceholderCount,
 } from '../../utils/videoCardLayout';
 
 describe('video card media layout', () => {
+  it('uses enlarged fixed heights for every card family', () => {
+    expect(getCardHeightClass('Wan2')).toContain('h-[500px]');
+    expect(getCardHeightClass('MINI')).toContain('h-[560px]');
+    expect(getCardHeightClass('HappyHorse')).toContain('h-[680px]');
+    expect(getCardHeightClass('Seedance2')).toContain('h-[720px]');
+    expect(getCardHeightClass('Seedance15')).toContain('h-[760px]');
+    expect(getCardHeightClass('Seedance2', true)).toContain('h-[320px]');
+  });
+
   it('keeps source and result media at the same height for every model and pair mode', () => {
     expect(getPreviewImageHeightClass('MINI', false)).toBe(CARD_MEDIA_HEIGHT_CLASS);
     expect(getPreviewImageHeightClass('Seedance2', true)).toBe(CARD_MEDIA_HEIGHT_CLASS);
