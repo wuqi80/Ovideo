@@ -22,8 +22,12 @@ describe('generation page model selectors', () => {
     expect(source).toContain('.filter(option => option.requiresCluster)');
     expect(source).toContain('selectedGenerationModelOption.hint');
     expect(source).toContain('COMFYUI_MODELS.has(selectedGenerationModel)');
-    expect(source).toContain("option.requiresCluster ? '处理集群' : '在线 API'");
-    expect(source).toContain('在线 API 模型使用后台配置，处理集群模型依赖可用节点。');
+    expect(source).not.toContain("option.requiresCluster ? '处理集群' : '在线 API'");
+    expect(source).not.toContain('【在线 API】');
+    expect(source).not.toContain('【处理集群】');
+    expect(source).toContain('此选项使用 <b>处理集群</b> 的本地节点模型');
+    expect(source).toContain('默认使用处理节点1，可手动切换，节点资源有限可能需要排队。');
+    expect(source).toContain('在线 API 模型排在前面，本地节点模型排在后面并依赖处理集群可用节点。');
   });
 
   it('offers the Doubao API model and routes current-shot generation through the selected override', () => {

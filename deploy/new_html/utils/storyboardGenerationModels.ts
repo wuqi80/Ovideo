@@ -9,6 +9,8 @@ export interface StoryboardGenerationModelOption {
 }
 // Creator-facing labels expose the actual model/version while stable operation
 // IDs remain internal so existing projects and queued tasks stay compatible.
+// Online API models stay first. Processing-cluster models are grouped below and
+// explicitly identify themselves as local-node models without bracket prefixes.
 export const STORYBOARD_GENERATION_MODEL_OPTIONS: readonly StoryboardGenerationModelOption[] = [
   {
     value: 'nanobanana',
@@ -25,41 +27,6 @@ export const STORYBOARD_GENERATION_MODEL_OPTIONS: readonly StoryboardGenerationM
     requiresCluster: false,
   },
   {
-    value: 'qwen',
-    label: 'Qwen Image Edit 2509 · 多参考图模型',
-    shortLabel: 'Qwen Image Edit 2509 · 多参考',
-    hint: '多参考图一致性优先，适合人物与场景组合',
-    requiresCluster: true,
-  },
-  {
-    value: 'qwen_lora',
-    label: 'Qwen Image Edit 2509 + Lightning LoRA · 风格强化模型',
-    shortLabel: 'Qwen 2509 + LoRA · 风格',
-    hint: '风格表现优先，适合统一视觉风格',
-    requiresCluster: true,
-  },
-  {
-    value: 'kontext',
-    label: 'Kontext v2 · 高质量生图模型',
-    shortLabel: 'Kontext v2 · 高质量',
-    hint: '质量优先，适合正式分镜画面',
-    requiresCluster: true,
-  },
-  {
-    value: 'qwenN',
-    label: 'Qwen Image Edit 2509 · 连贯编辑模型',
-    shortLabel: 'Qwen Image Edit 2509 · 连贯',
-    hint: '上下文连贯优先，适合基于单图延续画面',
-    requiresCluster: true,
-  },
-  {
-    value: 'qwenN_lora',
-    label: 'Qwen Image Edit 2509 + Lightning LoRA · 风格增强模型',
-    shortLabel: 'Qwen 2509 + LoRA · 风格增强',
-    hint: '兼顾画面质量与风格一致性',
-    requiresCluster: true,
-  },
-  {
     value: 'gpt_image_vip',
     label: 'GPT Image 2 VIP · 高清生图模型',
     shortLabel: 'GPT Image 2 VIP · 高清',
@@ -72,6 +39,41 @@ export const STORYBOARD_GENERATION_MODEL_OPTIONS: readonly StoryboardGenerationM
     shortLabel: 'GPT Image 2 · 全能',
     hint: '综合能力优先，支持比例、分辨率和质量设置',
     requiresCluster: false,
+  },
+  {
+    value: 'qwen',
+    label: 'Qwen Image Edit 2509 · 本地节点多参考图模型',
+    shortLabel: 'Qwen Image Edit 2509 · 本地节点多参考',
+    hint: '多参考图一致性优先，适合人物与场景组合',
+    requiresCluster: true,
+  },
+  {
+    value: 'qwen_lora',
+    label: 'Qwen Image Edit 2509 + Lightning LoRA · 本地节点风格强化模型',
+    shortLabel: 'Qwen 2509 + LoRA · 本地节点风格',
+    hint: '风格表现优先，适合统一视觉风格',
+    requiresCluster: true,
+  },
+  {
+    value: 'kontext',
+    label: 'Kontext V2 · 本地节点高质量生图模型',
+    shortLabel: 'Kontext V2 · 本地节点高质量',
+    hint: '质量优先，适合正式分镜画面',
+    requiresCluster: true,
+  },
+  {
+    value: 'qwenN',
+    label: 'Qwen Image Edit 2509 · 本地节点连贯编辑模型',
+    shortLabel: 'Qwen Image Edit 2509 · 本地节点连贯',
+    hint: '上下文连贯优先，适合基于单图延续画面',
+    requiresCluster: true,
+  },
+  {
+    value: 'qwenN_lora',
+    label: 'Qwen Image Edit 2509 + Lightning LoRA · 本地节点风格增强模型',
+    shortLabel: 'Qwen 2509 + LoRA · 本地节点风格增强',
+    hint: '兼顾画面质量与风格一致性',
+    requiresCluster: true,
   },
 ] as const;
 

@@ -2985,7 +2985,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         >
                           {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
                             <option key={option.value} value={option.value}>
-                              【{option.requiresCluster ? '处理集群' : '在线 API'}】{option.label}
+                              {option.label}
                             </option>
                           ))}
                         </select>
@@ -3035,7 +3035,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         <option value="">跟随默认 · {globalModelOption.shortLabel}</option>
                         {STORYBOARD_GENERATION_MODEL_OPTIONS.map(option => (
                           <option key={option.value} value={option.value}>
-                            【{option.requiresCluster ? '处理集群' : '在线 API'}】{option.label}
+                            {option.label}
                           </option>
                         ))}
                     </select>
@@ -3054,8 +3054,8 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                             <div className="flex items-start justify-between gap-2">
                                 <span>
                                     {usableClusterNodes.length > 0
-                                        ? <>此档使用 <b>处理集群</b>。默认使用处理节点1，可手动切换任意在线节点；选择会保留。</>
-                                        : <>此档使用 <b>处理集群</b>。当前未检测到在线处理节点，请稍后重试或联系管理员。</>}
+                                        ? <>此选项使用 <b>处理集群</b> 的本地节点模型，默认使用处理节点1，可手动切换，节点资源有限可能需要排队。</>
+                                        : <>此选项使用 <b>处理集群</b> 的本地节点模型。当前未检测到在线处理节点，请稍后重试或联系管理员。</>}
                                 </span>
                                 <button
                                     type="button"
@@ -3097,7 +3097,7 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
                         </div>
                     )}
                     <p className="mt-2 text-[9px] text-n100">
-                      顶部设置全局默认模型；当前镜头可以跟随默认，也可在此单独覆盖。在线 API 模型使用后台配置，处理集群模型依赖可用节点。
+                      顶部设置全局默认模型；当前镜头可以跟随默认，也可在此单独覆盖。在线 API 模型排在前面，本地节点模型排在后面并依赖处理集群可用节点。
                     </p>
 
                     <div className="mt-3 pt-3 border-t border-n40">
