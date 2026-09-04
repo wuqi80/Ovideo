@@ -116,6 +116,16 @@ def test_login_page_uses_the_compact_easy_style_split_and_three_step_preview():
     assert "把一个想法，变成一部好故事" not in login_html
 
 
+def test_unregistered_sms_login_moves_to_prefilled_registration_without_fake_delivery_notice():
+    login_html = (DEPLOY_DIR / "login.html").read_text(encoding="utf-8")
+
+    assert "result.next_action === 'register'" in login_html
+    assert "setView('register')" in login_html
+    assert "registerPhone.value = result.phone || phone" in login_html
+    assert "showError(result.message || '该手机号尚未注册，请先注册')" in login_html
+    assert "result.sent === false" in login_html
+
+
 def test_studio_routes_serve_the_sibling_build_directory():
     router = create_frontend_pages_router()
     studio_paths = {

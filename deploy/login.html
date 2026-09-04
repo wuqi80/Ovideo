@@ -1082,9 +1082,22 @@
             if (purpose === 'bind_phone') body.binding_token = sessionStorage.getItem(BINDING_TOKEN_KEY) || '';
             try {
                 const result = await api('/api/auth/sms-code', body);
+                if (result.next_action === 'register') {
+                    if (state.timer) clearInterval(state.timer);
+                    state.timer = null;
+                    state.countdown = 0;
+                    setView('register');
+                    const registerPhone = document.getElementById('phone');
+                    if (registerPhone) registerPhone.value = result.phone || phone;
+                    showError(result.message || '该手机号尚未注册，请先注册');
+                    return;
+                }
                 state.countdown = Number(result.resend_in || 60);
                 startCountdown();
-                showSuccess(result.development_code ? `开发模式验证码：${result.development_code}` : '验证码已发送，请注意查收');
+                const deliveryMessage = result.sent === false
+                    ? '如果账号存在，验证码将发送，请稍后查收'
+                    : '验证码已发送，请注意查收';
+                showSuccess(result.development_code ? `开发模式验证码：${result.development_code}` : deliveryMessage);
             } catch (error) {
                 showError(error.message);
             }

@@ -6355,6 +6355,9 @@ def check_frontend_dependency_contract(root: Path) -> int:
         ),
         (login_html, "api('/api/login'", root / "login.html"),
         (login_html, "localStorage.setItem(TOKEN_KEY", root / "login.html"),
+        (login_html, "result.next_action === 'register'", root / "login.html"),
+        (login_html, "registerPhone.value = result.phone || phone", root / "login.html"),
+        (login_html, "result.sent === false", root / "login.html"),
     ]
     for text, snippet, path in required_frontend_build_snippets:
         checks += 1
