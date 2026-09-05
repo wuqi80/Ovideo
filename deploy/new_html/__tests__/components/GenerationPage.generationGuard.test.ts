@@ -182,6 +182,7 @@ describe('GenerationPage reference actions', () => {
   it('restores defaults incrementally and blocks overflow without deleting current images', () => {
     expect(source).toContain('mergeDefaultShotReferences(');
     expect(source).toContain("alert('无法恢复自动绑定，因为超过6张图')");
+    expect(source).toContain("alert('当前已是默认绑定状态')");
     expect(source).toContain('updateCurrentShotReferences(merged.references)');
   });
 });

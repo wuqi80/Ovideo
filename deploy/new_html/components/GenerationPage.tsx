@@ -1085,6 +1085,10 @@ export const GenerationPage: React.FC<GenerationPageProps> = ({
           alert('无法恢复自动绑定，因为超过6张图');
           return;
       }
+      if (merged.references.length === referencesRef.current.length) {
+          alert('当前已是默认绑定状态');
+          return;
+      }
       updateCurrentShotReferences(merged.references);
   };
 
