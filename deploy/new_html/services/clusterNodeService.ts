@@ -122,7 +122,12 @@ export function selectGpuTaskNode(
     return nodes.find((node) => matchesClusterNode(node, requested) && isClusterNodeUsable(node));
   }
 
-  const usableNodes = nodes.filter(hasClusterNodeCapacity);
+  const onlineNodes = nodes.filter(isClusterNodeUsable);
+  const nodesWithCapacity = onlineNodes.filter(hasClusterNodeCapacity);
+  // A busy node is still an online queue target. Prefer spare capacity, but
+  // when every slot is occupied, route to the least-loaded live node so the
+  // server can enqueue instead of rejecting the task before submission.
+  const usableNodes = nodesWithCapacity.length > 0 ? nodesWithCapacity : onlineNodes;
   if (requested) {
     const requestedNode = usableNodes.find((node) => matchesClusterNode(node, requested));
     if (requestedNode) return requestedNode;

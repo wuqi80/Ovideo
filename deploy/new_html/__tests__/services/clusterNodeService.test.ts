@@ -151,6 +151,23 @@ describe('processing cluster routing', () => {
     expect(selected?.name).toBe('GPU1');
   });
 
+  it('keeps an all-busy online cluster available as a server queue target', async () => {
+    const infoSpy = vi.spyOn(crmMessage, 'info').mockImplementation(() => undefined);
+    mockFetch.mockResolvedValueOnce(response({
+      success: true,
+      nodes: [
+        { id: 'agent_gpu2', agent_id: 'agent_gpu2', name: 'GPU2', status: 'busy', tasks: 1, max_concurrent: 1 },
+      ],
+    }));
+
+    const routing = await resolveGpuTaskRouting(undefined, { automatic: true });
+
+    expect(routing.preferredAgentId).toBe('agent_gpu2');
+    expect(routing.node?.status).toBe('busy');
+    expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('已进入服务端队列等待'));
+    infoSpy.mockRestore();
+  });
+
   it('keeps a strict preferred node even when it is already busy', async () => {
     mockFetch.mockResolvedValueOnce(response({
       success: true,
