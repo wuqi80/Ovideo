@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import shutil
 import tempfile
@@ -17,7 +18,15 @@ logger = logging.getLogger(__name__)
 
 _BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _STORAGE = os.path.join(_BASE, "persistent_storage")
+_SUBTITLE_FONTS_DIR = os.environ.get(
+    "OSTORY_SUBTITLE_FONTS_DIR",
+    "/usr/share/fonts/opentype/noto",
+)
+_SUBTITLE_FONT_FAMILY = os.environ.get("OSTORY_SUBTITLE_FONT_FAMILY", "Noto Sans CJK SC")
 _DEFAULT_OUTPUT_SIZE = (1920, 1080)
+_MAX_SUBTITLE_CUES = 500
+_MAX_SUBTITLE_TEXT = 500
+_MAX_TIMELINE_MS = 24 * 60 * 60 * 1000
 _ASPECT_PRESETS: List[Tuple[str, float, Tuple[int, int]]] = [
     ("9:16", 9 / 16, (1080, 1920)),
     ("3:4", 3 / 4, (1080, 1440)),
@@ -108,9 +117,189 @@ def _audio_ms_from_segments(segments: List[Dict[str, Any]]) -> int:
 def _finite_number(value: Any, fallback: float = 0.0) -> float:
     try:
         parsed = float(value)
-        return parsed if parsed == parsed else fallback
+        return parsed if math.isfinite(parsed) else fallback
     except (TypeError, ValueError):
         return fallback
+
+
+def _normalize_subtitle_style(value: Any) -> Dict[str, Any]:
+    raw = value if isinstance(value, dict) else {}
+    position = str(raw.get("position") or "bottom")
+    if position not in {"top", "center", "bottom"}:
+        position = "bottom"
+
+    def color(name: str, fallback: str) -> str:
+        candidate = str(raw.get(name) or "").strip().upper()
+        if len(candidate) == 7 and candidate.startswith("#"):
+            try:
+                int(candidate[1:], 16)
+                return candidate
+            except ValueError:
+                pass
+        return fallback
+
+    return {
+        "font_size": max(16, min(int(_finite_number(raw.get("font_size"), 42)), 96)),
+        "text_color": color("text_color", "#FFFFFF"),
+        "background_color": color("background_color", "#000000"),
+        "background_opacity": max(
+            0.0,
+            min(_finite_number(raw.get("background_opacity"), 0.55), 1.0),
+        ),
+        "position": position,
+    }
+
+
+def _normalize_editor_subtitles(value: Any, video_duration_ms: int) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    maximum_ms = max(0, min(int(video_duration_ms), _MAX_TIMELINE_MS))
+    normalized: List[Dict[str, Any]] = []
+    for raw in value[:_MAX_SUBTITLE_CUES]:
+        if not isinstance(raw, dict):
+            continue
+        text = str(raw.get("text") or "").replace("\x00", "").strip()
+        if not text:
+            continue
+        start_ms = max(0, min(int(_finite_number(raw.get("start_ms"))), maximum_ms))
+        if start_ms >= maximum_ms:
+            continue
+        duration_ms = max(200, min(int(_finite_number(raw.get("duration_ms"), 200)), maximum_ms))
+        duration_ms = min(duration_ms, maximum_ms - start_ms)
+        if duration_ms < 200:
+            continue
+        normalized.append(
+            {
+                "cue_id": str(raw.get("cue_id") or "")[:200],
+                "text": text[:_MAX_SUBTITLE_TEXT],
+                "start_ms": start_ms,
+                "duration_ms": duration_ms,
+            }
+        )
+    return sorted(normalized, key=lambda cue: (cue["start_ms"], cue["cue_id"]))
+
+
+def _ass_timestamp(milliseconds: int) -> str:
+    centiseconds = max(0, milliseconds) // 10
+    hours, remainder = divmod(centiseconds, 360000)
+    minutes, remainder = divmod(remainder, 6000)
+    seconds, fraction = divmod(remainder, 100)
+    return f"{hours}:{minutes:02d}:{seconds:02d}.{fraction:02d}"
+
+
+def _ass_color(hex_color: str, opacity: float = 1.0) -> str:
+    red = hex_color[1:3]
+    green = hex_color[3:5]
+    blue = hex_color[5:7]
+    alpha = round((1.0 - max(0.0, min(opacity, 1.0))) * 255)
+    return f"&H{alpha:02X}{blue}{green}{red}"
+
+
+def _ass_text(value: str) -> str:
+    return (
+        value.replace("\\", r"\\")
+        .replace("{", "（")
+        .replace("}", "）")
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("\n", r"\N")
+    )
+
+
+def _ffmpeg_filter_path(path: str) -> str:
+    return path.replace("\\", "/").replace(":", r"\:").replace("'", r"\'")
+
+
+async def _burn_editor_subtitles(
+    raw_cues: Any,
+    raw_style: Any,
+    video_path: str,
+    video_duration: float,
+    tmp: str,
+    output_width: int,
+    output_height: int,
+) -> int:
+    cues = _normalize_editor_subtitles(raw_cues, max(0, int(video_duration * 1000)))
+    if not cues:
+        return 0
+    style = _normalize_subtitle_style(raw_style)
+    alignment = {"top": 8, "center": 5, "bottom": 2}[style["position"]]
+    margin_v = max(24, round(output_height * 0.06))
+    background = _ass_color(style["background_color"], style["background_opacity"])
+    outline_size = 6 if style["background_opacity"] > 0 else 2
+    font_family = "".join(
+        character for character in _SUBTITLE_FONT_FAMILY[:100]
+        if character not in {",", "\r", "\n"}
+    ).strip() or "Noto Sans CJK SC"
+    ass_path = os.path.join(tmp, "editor_subtitles.ass")
+    ass_lines = [
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        f"PlayResX: {output_width}",
+        f"PlayResY: {output_height}",
+        "ScaledBorderAndShadow: yes",
+        "WrapStyle: 0",
+        "",
+        "[V4+ Styles]",
+        "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding",
+        (
+            f"Style: Default,{font_family},{style['font_size']},"
+            f"{_ass_color(style['text_color'])},{_ass_color(style['text_color'])},"
+            f"{background},{background},0,0,0,0,100,100,0,0,3,{outline_size},0,"
+            f"{alignment},48,48,{margin_v},1"
+        ),
+        "",
+        "[Events]",
+        "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text",
+    ]
+    for cue in cues:
+        ass_lines.append(
+            "Dialogue: 0,"
+            f"{_ass_timestamp(cue['start_ms'])},"
+            f"{_ass_timestamp(cue['start_ms'] + cue['duration_ms'])},"
+            f"Default,,0,0,0,,{_ass_text(cue['text'])}"
+        )
+    with open(ass_path, "w", encoding="utf-8-sig", newline="\n") as subtitle_file:
+        subtitle_file.write("\n".join(ass_lines) + "\n")
+
+    subtitled_path = os.path.join(tmp, "final_with_subtitles.mp4")
+    ass_filter = f"ass=filename='{_ffmpeg_filter_path(ass_path)}'"
+    if os.path.isdir(_SUBTITLE_FONTS_DIR):
+        ass_filter += f":fontsdir='{_ffmpeg_filter_path(_SUBTITLE_FONTS_DIR)}'"
+    rc, _out, err = await _run(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            video_path,
+            "-vf",
+            ass_filter,
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a?",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "18",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            "-t",
+            f"{video_duration:.3f}",
+            subtitled_path,
+        ]
+    )
+    if rc != 0:
+        raise RuntimeError(f"Subtitle burn-in failed: {err[:200]}")
+    os.replace(subtitled_path, video_path)
+    return len(cues)
 
 
 def _global_audio_timeline(
@@ -406,6 +595,8 @@ def _choose_output_size(sizes: List[Tuple[int, int]]) -> Tuple[int, int, str]:
         bucket = _output_size_for_source(width, height)
         buckets[bucket] = buckets.get(bucket, 0) + 1
 
+
+
     # 多数镜头决定成片比例；票数相同则按原顺序选择先出现的比例。
     return max(buckets, key=lambda key: (buckets[key], -list(buckets).index(key)))
 
@@ -572,6 +763,8 @@ async def _compose(
     selections: Optional[Dict[str, str]] = None,
     audio_mode: str = "reference_dubbing",
     timeline: Optional[Any] = None,
+    subtitles: Optional[Any] = None,
+    subtitle_style: Optional[Any] = None,
 ) -> None:
     _ensure_media_tools()
     shots = (
@@ -871,6 +1064,16 @@ async def _compose(
         duration = await _probe_dur(out_path)
         await _mix_global_audio_tracks(episode_id, out_path, duration, tmp)
         duration = await _probe_dur(out_path)
+        subtitle_count = await _burn_editor_subtitles(
+            subtitles,
+            subtitle_style,
+            out_path,
+            duration,
+            tmp,
+            output_width,
+            output_height,
+        )
+        duration = await _probe_dur(out_path)
         size = os.path.getsize(out_path)
         file_url = f"/storage/video/{user_id}/{ym}/{out_name}"
         file_path_rel = f"persistent_storage/video/{user_id}/{ym}/{out_name}"
@@ -898,6 +1101,7 @@ async def _compose(
                 "output_height": output_height,
                 "output_aspect": output_aspect,
                 "audio_mode": audio_mode,
+                "subtitle_count": subtitle_count,
             },
         )
 
@@ -916,6 +1120,8 @@ def start_compose(
     selections: Optional[Dict[str, str]] = None,
     audio_mode: str = "reference_dubbing",
     timeline: Optional[Any] = None,
+    subtitles: Optional[Any] = None,
+    subtitle_style: Optional[Any] = None,
 ) -> Dict[str, Any]:
     current = _jobs.get(episode_id)
     if current and current.get("status") == "running":
@@ -944,6 +1150,8 @@ def start_compose(
                 selections,
                 normalized_audio_mode,
                 timeline,
+                subtitles,
+                subtitle_style,
             )
         except Exception as exc:
             job["status"] = "failed"

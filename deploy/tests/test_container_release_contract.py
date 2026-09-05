@@ -28,6 +28,7 @@ def test_release_revision_does_not_invalidate_expensive_runtime_dependencies():
 
     assert dockerfile.index("RUN pip install") < dockerfile.index("ARG GIT_SHA=unknown")
     assert "--timeout 120 --retries 10" in dockerfile
+    assert "ffmpeg fonts-noto-cjk" in dockerfile
 
 
 def test_release_preserves_runtime_and_uploaded_workflow_state():

@@ -110,6 +110,87 @@ def test_editor_timeline_normalizes_order_bounds_and_source_offsets():
     ]
 
 
+def test_editor_subtitle_normalization_bounds_timeline_style_and_text():
+    cues = episode_compose_service._normalize_editor_subtitles(
+        [
+            {"cue_id": "late", "text": "越界", "start_ms": 9999, "duration_ms": 500},
+            {"cue_id": "ok", "text": "  第一行\n第二行  ", "start_ms": -5, "duration_ms": 5000},
+            {"cue_id": "empty", "text": "   ", "start_ms": 0, "duration_ms": 1000},
+        ],
+        3000,
+    )
+    assert cues == [{
+        "cue_id": "ok",
+        "text": "第一行\n第二行",
+        "start_ms": 0,
+        "duration_ms": 3000,
+    }]
+    style = episode_compose_service._normalize_subtitle_style({
+        "font_size": 999,
+        "text_color": "#12abef",
+        "background_opacity": -1,
+        "position": "outside",
+    })
+    assert style == {
+        "font_size": 96,
+        "text_color": "#12ABEF",
+        "background_color": "#000000",
+        "background_opacity": 0.0,
+        "position": "bottom",
+    }
+    many = episode_compose_service._normalize_editor_subtitles(
+        [
+            {"cue_id": f"cue-{index}", "text": "字" * 600, "start_ms": 0, "duration_ms": 1000}
+            for index in range(501)
+        ],
+        3000,
+    )
+    assert len(many) == 500
+    assert all(len(cue["text"]) == 500 for cue in many)
+
+
+@pytest.mark.asyncio
+async def test_editor_subtitles_are_rendered_with_ass_filter(monkeypatch, tmp_path):
+    video = tmp_path / "final.mp4"
+    video.write_bytes(b"video")
+    fonts_dir = tmp_path / "fonts"
+    fonts_dir.mkdir()
+    commands = []
+
+    async def fake_run(cmd):
+        commands.append(cmd)
+        Path(cmd[-1]).write_bytes(b"subtitled")
+        return 0, "", ""
+
+    monkeypatch.setattr(episode_compose_service, "_run", fake_run)
+    monkeypatch.setattr(episode_compose_service, "_SUBTITLE_FONTS_DIR", str(fonts_dir))
+    count = await episode_compose_service._burn_editor_subtitles(
+        [{
+            "cue_id": "cue-1",
+            "text": "字幕{\\danger}\n第二行",
+            "start_ms": 500,
+            "duration_ms": 1500,
+        }],
+        {"position": "top", "font_size": 48},
+        str(video),
+        4.0,
+        str(tmp_path),
+        1920,
+        1080,
+    )
+
+    assert count == 1
+    assert video.read_bytes() == b"subtitled"
+    filter_value = commands[0][commands[0].index("-vf") + 1]
+    assert "ass=filename=" in filter_value
+    assert "fontsdir=" in filter_value
+    ass_text = (tmp_path / "editor_subtitles.ass").read_text(encoding="utf-8-sig")
+    assert "PlayResX: 1920" in ass_text
+    assert "Dialogue: 0,0:00:00.50,0:00:02.00" in ass_text
+    assert "字幕（" in ass_text
+    assert r"\N第二行" in ass_text
+
+
 @pytest.mark.asyncio
 async def test_get_shots_uses_edited_cut_order_and_allows_repeated_source(monkeypatch):
     async def fake_list_shot_takes(_episode_id):
@@ -742,6 +823,7 @@ async def test_compose_uses_portrait_canvas_for_vertical_clips(monkeypatch, tmp_
     video.write_bytes(b"x")
 
     commands = []
+    burned = []
 
     async def fake_run(cmd):
         commands.append(cmd)
@@ -760,6 +842,10 @@ async def test_compose_uses_portrait_canvas_for_vertical_clips(monkeypatch, tmp_
     async def fake_video_size(_path):
         return (720, 1280)
 
+    async def fake_burn(cues, style, _path, _duration, _tmp, width, height):
+        burned.append((cues, style, width, height))
+        return 1
+
     async def fake_get_shots(_episode_id, _selections=None):
         return [
             {
@@ -775,6 +861,7 @@ async def test_compose_uses_portrait_canvas_for_vertical_clips(monkeypatch, tmp_
         assert kwargs["metadata"]["output_height"] == 1920
         assert kwargs["metadata"]["output_aspect"] == "9:16"
         assert kwargs["metadata"]["audio_mode"] == "reference_dubbing"
+        assert kwargs["metadata"]["subtitle_count"] == 1
 
     monkeypatch.setattr(episode_compose_service, "_STORAGE", str(storage))
     monkeypatch.setattr(episode_compose_service, "_ensure_media_tools", lambda: None)
@@ -782,11 +869,21 @@ async def test_compose_uses_portrait_canvas_for_vertical_clips(monkeypatch, tmp_
     monkeypatch.setattr(episode_compose_service, "_probe_dur", fake_probe)
     monkeypatch.setattr(episode_compose_service, "_probe_has_audio", fake_has_audio)
     monkeypatch.setattr(episode_compose_service, "_probe_video_size", fake_video_size)
+    monkeypatch.setattr(episode_compose_service, "_burn_editor_subtitles", fake_burn)
     monkeypatch.setattr(episode_compose_service, "_get_shots", fake_get_shots)
     monkeypatch.setattr(episode_compose_service.EpisodeComposeDAO, "create_final_cut_records", fake_create_final_cut_records)
 
     job = {}
-    await episode_compose_service._compose("ep_1", "user_1", "proj_1", job)
+    subtitles = [{"cue_id": "cue-1", "text": "竖屏字幕", "start_ms": 0, "duration_ms": 1000}]
+    subtitle_style = {"position": "bottom"}
+    await episode_compose_service._compose(
+        "ep_1",
+        "user_1",
+        "proj_1",
+        job,
+        subtitles=subtitles,
+        subtitle_style=subtitle_style,
+    )
 
     clip_cmd = commands[0]
     filter_arg = clip_cmd[clip_cmd.index("-filter_complex") + 1]
@@ -796,6 +893,7 @@ async def test_compose_uses_portrait_canvas_for_vertical_clips(monkeypatch, tmp_
     assert job["output_height"] == 1920
     assert job["output_aspect"] == "9:16"
     assert job["status"] == "done"
+    assert burned == [(subtitles, subtitle_style, 1080, 1920)]
 
 
 @pytest.mark.asyncio

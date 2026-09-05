@@ -1,14 +1,47 @@
 import type { EnhanceMediaClip } from './enhanceSourceClips';
 
 export const MIN_TIMELINE_CLIP_DURATION = 0.1;
+export const MIN_SUBTITLE_DURATION = 0.2;
+
+export type EnhanceSubtitlePosition = 'top' | 'center' | 'bottom';
+
+export interface EnhanceSubtitleCue {
+  id: string;
+  text: string;
+  startTime: number;
+  duration: number;
+}
+
+export interface EnhanceSubtitleStyle {
+  fontSize: number;
+  textColor: string;
+  backgroundColor: string;
+  backgroundOpacity: number;
+  position: EnhanceSubtitlePosition;
+}
+
+export const DEFAULT_ENHANCE_SUBTITLE_STYLE: EnhanceSubtitleStyle = {
+  fontSize: 42,
+  textColor: '#FFFFFF',
+  backgroundColor: '#000000',
+  backgroundOpacity: 0.55,
+  position: 'bottom',
+};
 
 export interface PersistedEnhanceTimelineItem {
-  kind: 'video' | 'excluded_video';
+  kind: 'video' | 'excluded_video' | 'subtitle' | 'subtitle_style';
   clipId?: string;
-  sourceId: string;
+  sourceId?: string;
+  cueId?: string;
+  text?: string;
   startMs?: number;
   durationMs?: number;
   sourceOffsetMs?: number;
+  fontSize?: number;
+  textColor?: string;
+  backgroundColor?: string;
+  backgroundOpacity?: number;
+  position?: EnhanceSubtitlePosition;
   settings?: EnhanceMediaClip['settings'];
 }
 
@@ -18,6 +51,21 @@ export interface ComposeTimelineItem {
   start_ms: number;
   duration_ms: number;
   source_offset_ms: number;
+}
+
+export interface ComposeSubtitleCue {
+  cue_id: string;
+  text: string;
+  start_ms: number;
+  duration_ms: number;
+}
+
+export interface ComposeSubtitleStyle {
+  font_size: number;
+  text_color: string;
+  background_color: string;
+  background_opacity: number;
+  position: EnhanceSubtitlePosition;
 }
 
 export interface SnapResult {
@@ -32,6 +80,94 @@ function finite(value: unknown, fallback = 0): number {
 
 function roundTime(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function normalizeHexColor(value: unknown, fallback: string): string {
+  const color = String(value || '').trim().toUpperCase();
+  return /^#[0-9A-F]{6}$/.test(color) ? color : fallback;
+}
+
+export function normalizeEnhanceSubtitleStyle(value: unknown): EnhanceSubtitleStyle {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const position = raw.position === 'top' || raw.position === 'center' || raw.position === 'bottom'
+    ? raw.position
+    : DEFAULT_ENHANCE_SUBTITLE_STYLE.position;
+  return {
+    fontSize: Math.round(clamp(finite(raw.fontSize, DEFAULT_ENHANCE_SUBTITLE_STYLE.fontSize), 16, 96)),
+    textColor: normalizeHexColor(raw.textColor, DEFAULT_ENHANCE_SUBTITLE_STYLE.textColor),
+    backgroundColor: normalizeHexColor(raw.backgroundColor, DEFAULT_ENHANCE_SUBTITLE_STYLE.backgroundColor),
+    backgroundOpacity: roundTime(clamp(
+      finite(raw.backgroundOpacity, DEFAULT_ENHANCE_SUBTITLE_STYLE.backgroundOpacity),
+      0,
+      1,
+    )),
+    position,
+  };
+}
+
+export function normalizeEnhanceSubtitleCue(value: unknown): EnhanceSubtitleCue | null {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : null;
+  if (!raw || typeof raw.id !== 'string' || !raw.id.trim()) return null;
+  return {
+    id: raw.id.slice(0, 200),
+    text: String(raw.text || '').replace(/\r\n?/g, '\n').slice(0, 500),
+    startTime: roundTime(Math.max(0, finite(raw.startTime))),
+    duration: roundTime(clamp(finite(raw.duration, 3), MIN_SUBTITLE_DURATION, 3600)),
+  };
+}
+
+export function moveSubtitleCue(
+  subtitles: EnhanceSubtitleCue[],
+  cueId: string,
+  startTime: number,
+  timelineDuration = Number.POSITIVE_INFINITY,
+): EnhanceSubtitleCue[] {
+  return subtitles.map(cue => cue.id === cueId
+    ? {
+        ...cue,
+        startTime: roundTime(clamp(
+          finite(startTime),
+          0,
+          Math.max(0, timelineDuration - cue.duration),
+        )),
+      }
+    : cue);
+}
+
+export function trimSubtitleCue(
+  subtitles: EnhanceSubtitleCue[],
+  cueId: string,
+  side: 'left' | 'right',
+  deltaSeconds: number,
+  timelineDuration = Number.POSITIVE_INFINITY,
+): EnhanceSubtitleCue[] {
+  return subtitles.map(cue => {
+    if (cue.id !== cueId) return cue;
+    if (side === 'left') {
+      const applied = clamp(
+        finite(deltaSeconds),
+        -cue.startTime,
+        cue.duration - MIN_SUBTITLE_DURATION,
+      );
+      return {
+        ...cue,
+        startTime: roundTime(cue.startTime + applied),
+        duration: roundTime(cue.duration - applied),
+      };
+    }
+    return {
+      ...cue,
+      duration: roundTime(clamp(
+        cue.duration + finite(deltaSeconds),
+        MIN_SUBTITLE_DURATION,
+        Math.max(MIN_SUBTITLE_DURATION, timelineDuration - cue.startTime),
+      )),
+    };
+  });
 }
 
 function cloneClip(clip: EnhanceMediaClip): EnhanceMediaClip {
@@ -234,9 +370,12 @@ export function trimTimelineClip(
 export function serializeEnhanceTimeline(
   clips: EnhanceMediaClip[],
   knownVideoSourceIds: string[],
+  subtitles: EnhanceSubtitleCue[] = [],
+  subtitleStyle: EnhanceSubtitleStyle = DEFAULT_ENHANCE_SUBTITLE_STYLE,
 ): PersistedEnhanceTimelineItem[] {
   const videoClips = clips.filter(clip => clip.type === 'video');
   const presentSources = new Set(videoClips.map(clip => clip.sourceId || clip.id));
+  const normalizedStyle = normalizeEnhanceSubtitleStyle(subtitleStyle);
   return [
     ...videoClips.map(clip => ({
       kind: 'video' as const,
@@ -250,6 +389,24 @@ export function serializeEnhanceTimeline(
     ...knownVideoSourceIds
       .filter(sourceId => !presentSources.has(sourceId))
       .map(sourceId => ({ kind: 'excluded_video' as const, sourceId })),
+    ...subtitles.flatMap(cue => {
+      const normalized = normalizeEnhanceSubtitleCue(cue);
+      return normalized ? [{
+        kind: 'subtitle' as const,
+        cueId: normalized.id,
+        text: normalized.text,
+        startMs: Math.round(normalized.startTime * 1000),
+        durationMs: Math.round(normalized.duration * 1000),
+      }] : [];
+    }),
+    {
+      kind: 'subtitle_style' as const,
+      fontSize: normalizedStyle.fontSize,
+      textColor: normalizedStyle.textColor,
+      backgroundColor: normalizedStyle.backgroundColor,
+      backgroundOpacity: normalizedStyle.backgroundOpacity,
+      position: normalizedStyle.position,
+    },
   ];
 }
 
@@ -260,11 +417,14 @@ export function restoreEnhanceTimeline(
   const sourceVideos = sourceClips.filter(clip => clip.type === 'video');
   const sourceAudio = sourceClips.filter(clip => clip.type === 'audio');
   const sourceById = new Map(sourceVideos.map(clip => [clip.sourceId || clip.id, clip]));
-  const excluded = new Set(items.filter(item => item.kind === 'excluded_video').map(item => item.sourceId));
+  const excluded = new Set(items
+    .filter(item => item.kind === 'excluded_video' && item.sourceId)
+    .map(item => String(item.sourceId)));
   const restored: EnhanceMediaClip[] = [];
   const usedSources = new Set<string>();
   for (const item of items) {
     if (item.kind !== 'video') continue;
+    if (!item.sourceId) continue;
     const source = sourceById.get(item.sourceId);
     if (!source) continue;
     usedSources.add(item.sourceId);
@@ -288,6 +448,34 @@ export function restoreEnhanceTimeline(
   return [...layoutVideoClips(restored), ...sourceAudio];
 }
 
+export function restoreEnhanceSubtitles(
+  items: PersistedEnhanceTimelineItem[],
+): EnhanceSubtitleCue[] {
+  return items.flatMap(item => {
+    if (item.kind !== 'subtitle' || !item.cueId) return [];
+    const cue = normalizeEnhanceSubtitleCue({
+      id: item.cueId,
+      text: item.text,
+      startTime: finite(item.startMs) / 1000,
+      duration: finite(item.durationMs, 3000) / 1000,
+    });
+    return cue ? [cue] : [];
+  }).sort((a, b) => a.startTime - b.startTime || a.id.localeCompare(b.id));
+}
+
+export function restoreEnhanceSubtitleStyle(
+  items: PersistedEnhanceTimelineItem[],
+): EnhanceSubtitleStyle {
+  const item = items.find(candidate => candidate.kind === 'subtitle_style');
+  return normalizeEnhanceSubtitleStyle(item ? {
+    fontSize: item.fontSize,
+    textColor: item.textColor,
+    backgroundColor: item.backgroundColor,
+    backgroundOpacity: item.backgroundOpacity,
+    position: item.position,
+  } : DEFAULT_ENHANCE_SUBTITLE_STYLE);
+}
+
 export function composeTimelineItems(clips: EnhanceMediaClip[]): ComposeTimelineItem[] {
   return clips
     .filter(clip => clip.type === 'video')
@@ -300,6 +488,30 @@ export function composeTimelineItems(clips: EnhanceMediaClip[]): ComposeTimeline
       duration_ms: Math.max(100, Math.round(clip.duration * 1000)),
       source_offset_ms: Math.max(0, Math.round(clip.sourceOffset * 1000)),
     }));
+}
+
+export function composeSubtitleItems(subtitles: EnhanceSubtitleCue[]): ComposeSubtitleCue[] {
+  return subtitles.flatMap(cue => {
+    const normalized = normalizeEnhanceSubtitleCue(cue);
+    if (!normalized || !normalized.text.trim()) return [];
+    return [{
+      cue_id: normalized.id,
+      text: normalized.text,
+      start_ms: Math.round(normalized.startTime * 1000),
+      duration_ms: Math.round(normalized.duration * 1000),
+    }];
+  }).sort((a, b) => a.start_ms - b.start_ms || a.cue_id.localeCompare(b.cue_id));
+}
+
+export function composeSubtitleStyle(style: EnhanceSubtitleStyle): ComposeSubtitleStyle {
+  const normalized = normalizeEnhanceSubtitleStyle(style);
+  return {
+    font_size: normalized.fontSize,
+    text_color: normalized.textColor,
+    background_color: normalized.backgroundColor,
+    background_opacity: normalized.backgroundOpacity,
+    position: normalized.position,
+  };
 }
 
 export function formatTimelineTime(seconds: number, fps = 30): string {

@@ -99,15 +99,21 @@ def create_episode_video_router(
         selections = None
         audio_mode = "reference_dubbing"
         timeline = None
+        subtitles = None
+        subtitle_style = None
         try:
             body = await request.json()
             selections = (body or {}).get("selections")
             audio_mode = (body or {}).get("audio_mode") or "reference_dubbing"
             timeline = (body or {}).get("timeline")
+            subtitles = (body or {}).get("subtitles")
+            subtitle_style = (body or {}).get("subtitle_style")
         except Exception:
             selections = None
             audio_mode = "reference_dubbing"
             timeline = None
+            subtitles = None
+            subtitle_style = None
 
         try:
             return await start_episode_compose(
@@ -116,6 +122,8 @@ def create_episode_video_router(
                 selections,
                 audio_mode,
                 timeline,
+                subtitles,
+                subtitle_style,
                 episode_dao=EpisodeDAO,
             )
         except EpisodeNotFound as exc:

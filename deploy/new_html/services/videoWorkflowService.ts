@@ -160,6 +160,21 @@ export interface ComposeTimelineItem {
   source_offset_ms: number;
 }
 
+export interface ComposeSubtitleCue {
+  cue_id: string;
+  text: string;
+  start_ms: number;
+  duration_ms: number;
+}
+
+export interface ComposeSubtitleStyle {
+  font_size: number;
+  text_color: string;
+  background_color: string;
+  background_opacity: number;
+  position: 'top' | 'center' | 'bottom';
+}
+
 export interface VideoTake {
   segment_id: string;
   take_id?: string | null;
@@ -201,6 +216,8 @@ export async function startCompose(
   selections?: Record<string, string>,
   audioMode: ComposeAudioMode = DEFAULT_COMPOSE_AUDIO_MODE,
   timeline?: ComposeTimelineItem[],
+  subtitles?: ComposeSubtitleCue[],
+  subtitleStyle?: ComposeSubtitleStyle,
 ): Promise<ComposeStatus> {
   return apiJson<any>(`/api/episodes/${episodeId}/compose`, {
     method: 'POST',
@@ -208,6 +225,8 @@ export async function startCompose(
       ...(selections ? { selections } : {}),
       audio_mode: audioMode,
       ...(timeline?.length ? { timeline } : {}),
+      ...(subtitles ? { subtitles } : {}),
+      ...(subtitleStyle ? { subtitle_style: subtitleStyle } : {}),
     }),
   }, 'startCompose');
 }

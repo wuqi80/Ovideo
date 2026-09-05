@@ -1,16 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import type { EnhanceMediaClip } from '../../utils/enhanceSourceClips';
 import {
+  DEFAULT_ENHANCE_SUBTITLE_STYLE,
+  composeSubtitleItems,
+  composeSubtitleStyle,
   composeTimelineItems,
   deleteTimelineClip,
   duplicateTimelineClip,
   formatTimelineTime,
   moveTimelineClip,
+  moveSubtitleCue,
   resolveTimelineSnap,
   restoreEnhanceTimeline,
+  restoreEnhanceSubtitles,
+  restoreEnhanceSubtitleStyle,
   serializeEnhanceTimeline,
   splitTimelineClip,
   trimTimelineClip,
+  trimSubtitleCue,
 } from '../../utils/enhanceTimelineEditor';
 
 function video(id: string, startTime: number, duration: number): EnhanceMediaClip {
@@ -80,5 +87,52 @@ describe('enhance timeline editor', () => {
   it('uses the closest snap point and formats frame timecode', () => {
     expect(resolveTimelineSnap(4.91, [0, 5, 9], 0.2)).toEqual({ time: 5, guide: 5 });
     expect(formatTimelineTime(65.5, 30)).toBe('00:01:05:15');
+  });
+
+  it('moves and trims subtitle cues inside the final video duration', () => {
+    const source = [{ id: 's1', text: '中文字幕', startTime: 1, duration: 3 }];
+    expect(moveSubtitleCue(source, 's1', 9, 10)[0]).toMatchObject({ startTime: 7, duration: 3 });
+
+    const left = trimSubtitleCue(source, 's1', 'left', 1, 10);
+    expect(left[0]).toMatchObject({ startTime: 2, duration: 2 });
+    const right = trimSubtitleCue(left, 's1', 'right', 20, 10);
+    expect(right[0]).toMatchObject({ startTime: 2, duration: 8 });
+  });
+
+  it('persists subtitles and style while keeping legacy video snapshots compatible', () => {
+    const subtitles = [{ id: 's1', text: '第一行\n第二行', startTime: 1.25, duration: 2.5 }];
+    const style = { ...DEFAULT_ENHANCE_SUBTITLE_STYLE, position: 'top' as const, backgroundOpacity: 0.3 };
+    const saved = serializeEnhanceTimeline([video('a', 0, 5)], ['a'], subtitles, style);
+
+    expect(restoreEnhanceSubtitles(saved)).toEqual(subtitles);
+    expect(restoreEnhanceSubtitleStyle(saved)).toEqual(style);
+    expect(restoreEnhanceSubtitles([{ kind: 'video', sourceId: 'a' }])).toEqual([]);
+    expect(restoreEnhanceSubtitleStyle([{ kind: 'video', sourceId: 'a' }]))
+      .toEqual(DEFAULT_ENHANCE_SUBTITLE_STYLE);
+  });
+
+  it('builds a bounded subtitle composition payload and drops blank cues', () => {
+    expect(composeSubtitleItems([
+      { id: 'blank', text: '   ', startTime: 0, duration: 1 },
+      { id: 's1', text: '字幕', startTime: 1.234, duration: 2.345 },
+    ])).toEqual([{
+      cue_id: 's1',
+      text: '字幕',
+      start_ms: 1234,
+      duration_ms: 2345,
+    }]);
+    expect(composeSubtitleStyle({
+      fontSize: 999,
+      textColor: '#12abef',
+      backgroundColor: 'bad',
+      backgroundOpacity: -1,
+      position: 'center',
+    })).toEqual({
+      font_size: 96,
+      text_color: '#12ABEF',
+      background_color: '#000000',
+      background_opacity: 0,
+      position: 'center',
+    });
   });
 });

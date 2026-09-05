@@ -63,6 +63,23 @@ describe('EnhancePage compose audio mode', () => {
 
   it('composes from the current edited cut list', () => {
     expect(source).toContain('const timeline = composeTimelineItems(clipsRef.current)');
-    expect(source).toContain('startCompose(episodeId, undefined, composeAudioMode, timeline)');
+    expect(source).toContain('const subtitleItems = composeSubtitleItems(subtitlesRef.current)');
+    expect(source).toContain('composeSubtitleStyle(subtitleStyleRef.current)');
+  });
+
+  it('provides the complete subtitle editing and preview contract', () => {
+    expect(source).toContain('在播放头位置添加字幕');
+    expect(source).toContain('字幕内容');
+    expect(source).toContain('开始时间（秒）');
+    expect(source).toContain('持续时间（秒）');
+    expect(source).toContain('<option value="top">上</option>');
+    expect(source).toContain('<option value="center">中</option>');
+    expect(source).toContain('<option value="bottom">下</option>');
+    expect(source).toContain('文字颜色');
+    expect(source).toContain('背景颜色');
+    expect(source).toContain('背景透明度');
+    expect(source).toContain('handleSubtitleDragStart');
+    expect(source).toContain('handleSubtitleTrimStart');
+    expect(source).toContain('activeSubtitles.map');
   });
 });

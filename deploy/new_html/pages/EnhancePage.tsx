@@ -3,11 +3,12 @@ import {
   Wand2, MonitorPlay, Zap, Mic2, Volume2, Film, Play, Pause,
   Scissors, Trash2, Music, ZoomIn, ZoomOut, GripHorizontal,
   Maximize, Loader, CheckCircle, Download, RefreshCw, Sparkles, AlignStartVertical,
-  Undo2, Redo2, Copy, Magnet, Save, SkipBack, SkipForward, Lock, Unlock,
+  Undo2, Redo2, Copy, Magnet, Save, SkipBack, SkipForward, Lock, Unlock, Captions,
 } from 'lucide-react';
 import { useEpisode } from '../contexts/EpisodeContext';
 import type { VideoSegment, StoryboardItemDB, AudioTrack } from '../types';
 // 2026-05-20 (Task System Overhaul M4)：把 EnhancePage 的「假进度」改成真后端 worker。
+
 // All enhancement actions use real GPU tasks and report through videoTaskPoller.
 import { submitInterpolateTaskQueued, submitUpscaleTaskQueued, submitVoiceTaskQueued } from '../services/videoTaskService';
 import {
@@ -31,16 +32,27 @@ import { MusicModal } from '../components/audio/MusicModal';
 import { SfxModal } from '../components/audio/SfxModal';
 import { withEntityFileVideoFallbacks, type EnhanceMediaClip } from '../utils/enhanceSourceClips';
 import {
+  DEFAULT_ENHANCE_SUBTITLE_STYLE,
   cloneEnhanceClips,
+  composeSubtitleItems,
+  composeSubtitleStyle,
   composeTimelineItems,
   deleteTimelineClip,
   duplicateTimelineClip,
   formatTimelineTime,
   moveTimelineClip,
+  moveSubtitleCue,
+  normalizeEnhanceSubtitleStyle,
+  resolveTimelineSnap,
   restoreEnhanceTimeline,
+  restoreEnhanceSubtitles,
+  restoreEnhanceSubtitleStyle,
   serializeEnhanceTimeline,
   splitTimelineClip,
   trimTimelineClip,
+  trimSubtitleCue,
+  type EnhanceSubtitleCue,
+  type EnhanceSubtitleStyle,
   type PersistedEnhanceTimelineItem,
 } from '../utils/enhanceTimelineEditor';
 import { createTimelineTrack, getTimelineTracks, updateTimelineTrack } from '../services/scriptTimelineService';
@@ -57,6 +69,12 @@ import { sanitizeProcessingTerminology } from '../utils/processingTerminology';
 import { InlineCreditEstimate } from '../components/InlineCreditEstimate';
 
 type MediaClip = EnhanceMediaClip;
+
+interface TimelineHistoryState {
+  clips: MediaClip[];
+  subtitles: EnhanceSubtitleCue[];
+  subtitleStyle: EnhanceSubtitleStyle;
+}
 
 const ENHANCE_TIMELINE_TRACK_NAME = '优化合成时间线';
 
@@ -78,6 +96,20 @@ function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function hexToRgba(hex: string, opacity: number): string {
+  const value = hex.replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(value)) return `rgba(0, 0, 0, ${opacity})`;
+  return `rgba(${parseInt(value.slice(0, 2), 16)}, ${parseInt(value.slice(2, 4), 16)}, ${parseInt(value.slice(4, 6), 16)}, ${opacity})`;
+}
+
+function cloneTimelineHistoryState(state: TimelineHistoryState): TimelineHistoryState {
+  return {
+    clips: cloneEnhanceClips(state.clips),
+    subtitles: state.subtitles.map(cue => ({ ...cue })),
+    subtitleStyle: { ...state.subtitleStyle },
+  };
 }
 
 function normalizeStoryboardAudioItem(r: any): StoryboardItemDB {
@@ -335,6 +367,9 @@ export const EnhancePage: React.FC = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [clips, setClips] = useState<MediaClip[]>([]);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [subtitles, setSubtitles] = useState<EnhanceSubtitleCue[]>([]);
+  const [subtitleStyle, setSubtitleStyle] = useState<EnhanceSubtitleStyle>(DEFAULT_ENHANCE_SUBTITLE_STYLE);
+  const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [snapGuide, setSnapGuide] = useState<number | null>(null);
@@ -412,6 +447,7 @@ export const EnhancePage: React.FC = () => {
     void loadClusterNodes();
   }, [loadClusterNodes]);
 
+
   // 一键合成成片：后台拼接本集视频段+配音 → 完整 mp4 存入成品页，前端轮询进度。
   const [compose, setCompose] = useState<ComposeStatus | null>(null);
   const composeTimerRef = useRef<number | null>(null);
@@ -423,6 +459,7 @@ export const EnhancePage: React.FC = () => {
     }).catch(() => {});
   }, [episodeId]);
   useEffect(() => () => { if (composeTimerRef.current) clearTimeout(composeTimerRef.current); }, []);
+
   // 进入页面时恢复正在进行/已完成的合成状态
   useEffect(() => {
     if (!episodeId) return;
@@ -447,12 +484,22 @@ export const EnhancePage: React.FC = () => {
   const timelineTrackIdRef = useRef<string | null>(null);
   const timelineSaveInFlightRef = useRef<Promise<void> | null>(null);
   const clipsRef = useRef<MediaClip[]>([]);
-  const undoStackRef = useRef<MediaClip[][]>([]);
-  const redoStackRef = useRef<MediaClip[][]>([]);
+  const subtitlesRef = useRef<EnhanceSubtitleCue[]>([]);
+  const subtitleStyleRef = useRef<EnhanceSubtitleStyle>(DEFAULT_ENHANCE_SUBTITLE_STYLE);
+  const undoStackRef = useRef<TimelineHistoryState[]>([]);
+  const redoStackRef = useRef<TimelineHistoryState[]>([]);
 
   useEffect(() => {
     clipsRef.current = clips;
   }, [clips]);
+
+  useEffect(() => {
+    subtitlesRef.current = subtitles;
+  }, [subtitles]);
+
+  useEffect(() => {
+    subtitleStyleRef.current = subtitleStyle;
+  }, [subtitleStyle]);
 
   useEffect(() => {
     let active = true;
@@ -543,22 +590,29 @@ export const EnhancePage: React.FC = () => {
       ...buildEnhanceSourceClips(enhanceVideoSegments, storyboardAudioItems, audioTracks),
       ...actorDubbingClips,
     ];
+    const draft = persistedTimelineItemsRef.current;
     if (sourceClips.length === 0) {
       setClips([]);
+      setSubtitles(draft ? restoreEnhanceSubtitles(draft) : []);
+      setSubtitleStyle(draft ? restoreEnhanceSubtitleStyle(draft) : DEFAULT_ENHANCE_SUBTITLE_STYLE);
       return;
     }
     setClips(prev => {
       const merged = mergeSourceClips(prev, sourceClips);
-      const draft = persistedTimelineItemsRef.current;
       if (!draft) return merged;
       const restored = restoreEnhanceTimeline(sourceClips, draft);
       const restoredVideos = restored.filter(clip => clip.type === 'video');
       return [...restoredVideos, ...merged.filter(clip => clip.type === 'audio')];
     });
+    setSubtitles(draft ? restoreEnhanceSubtitles(draft) : []);
+    setSubtitleStyle(draft ? restoreEnhanceSubtitleStyle(draft) : DEFAULT_ENHANCE_SUBTITLE_STYLE);
     setSelectedClipId(prev => {
       const availableIds = new Set([
         ...sourceClips.map(clip => clip.id),
-        ...(persistedTimelineItemsRef.current || []).map(item => item.clipId).filter(Boolean),
+        ...(persistedTimelineItemsRef.current || [])
+          .filter(item => item.kind === 'video')
+          .map(item => item.clipId)
+          .filter(Boolean),
       ]);
       if (prev && availableIds.has(prev)) return prev;
       const draftFirstId = persistedTimelineItemsRef.current?.find(item => item.kind === 'video')?.clipId;
@@ -571,6 +625,9 @@ export const EnhancePage: React.FC = () => {
     if (clipScopeRef.current && clipScopeRef.current !== scope) {
       setClips([]);
       setSelectedClipId(null);
+      setSubtitles([]);
+      setSubtitleStyle(DEFAULT_ENHANCE_SUBTITLE_STYLE);
+      setSelectedSubtitleId(null);
       setCurrentTime(0);
       setPlaying(false);
       persistedTimelineItemsRef.current = null;
@@ -588,6 +645,12 @@ export const EnhancePage: React.FC = () => {
   const bgmClips = useMemo(() => audioClips.filter(c => c.audioKind === 'bgm'), [audioClips]);
   const sfxClips = useMemo(() => audioClips.filter(c => c.audioKind === 'sfx'), [audioClips]);
   const selectedClip = clips.find(c => c.id === selectedClipId);
+  const selectedSubtitle = subtitles.find(cue => cue.id === selectedSubtitleId);
+  const activeSubtitles = useMemo(() => subtitles.filter(cue => (
+    cue.text.trim()
+      && currentTime >= cue.startTime
+      && currentTime < cue.startTime + cue.duration
+  )), [currentTime, subtitles]);
   const videoUnderPlayhead = videoClips.find(
     c => currentTime >= c.startTime && currentTime <= c.startTime + c.duration
   ) || videoClips[0];
@@ -631,8 +694,14 @@ export const EnhancePage: React.FC = () => {
     [videoClips],
   );
   const totalDuration = useMemo(
-    () => Math.max(10, videoDuration, ...clips.map(c => c.startTime + c.duration), currentTime + 1),
-    [clips, currentTime, videoDuration]
+    () => Math.max(
+      10,
+      videoDuration,
+      ...clips.map(c => c.startTime + c.duration),
+      ...subtitles.map(cue => cue.startTime + cue.duration),
+      currentTime + 1,
+    ),
+    [clips, currentTime, subtitles, videoDuration]
   );
   const knownVideoSourceIds = useMemo(
     () => enhanceVideoSegments
@@ -641,19 +710,58 @@ export const EnhancePage: React.FC = () => {
     [enhanceVideoSegments],
   );
 
-  const markTimelineChanged = useCallback((next: MediaClip[]) => {
-    clipsRef.current = next;
-    persistedTimelineItemsRef.current = serializeEnhanceTimeline(next, knownVideoSourceIds);
-    setClips(next);
+  const markTimelineChanged = useCallback((next: TimelineHistoryState) => {
+    const normalizedStyle = normalizeEnhanceSubtitleStyle(next.subtitleStyle);
+    clipsRef.current = next.clips;
+    subtitlesRef.current = next.subtitles;
+    subtitleStyleRef.current = normalizedStyle;
+    persistedTimelineItemsRef.current = serializeEnhanceTimeline(
+      next.clips,
+      knownVideoSourceIds,
+      next.subtitles,
+      normalizedStyle,
+    );
+    setClips(next.clips);
+    setSubtitles(next.subtitles);
+    setSubtitleStyle(normalizedStyle);
     setTimelineSaveState('unsaved');
     setTimelineRevision(revision => revision + 1);
   }, [knownVideoSourceIds]);
 
   const commitTimeline = useCallback((update: (current: MediaClip[]) => MediaClip[]) => {
-    const current = clipsRef.current;
-    const next = update(cloneEnhanceClips(current));
-    if (next === current || JSON.stringify(next) === JSON.stringify(current)) return false;
-    undoStackRef.current = [...undoStackRef.current.slice(-79), cloneEnhanceClips(current)];
+    const current: TimelineHistoryState = {
+      clips: cloneEnhanceClips(clipsRef.current),
+      subtitles: subtitlesRef.current.map(cue => ({ ...cue })),
+      subtitleStyle: { ...subtitleStyleRef.current },
+    };
+    const nextClips = update(cloneEnhanceClips(current.clips));
+    if (JSON.stringify(nextClips) === JSON.stringify(current.clips)) return false;
+    undoStackRef.current = [...undoStackRef.current.slice(-79), current];
+    redoStackRef.current = [];
+    setUndoCount(undoStackRef.current.length);
+    setRedoCount(0);
+    markTimelineChanged({ ...current, clips: nextClips });
+    return true;
+  }, [markTimelineChanged]);
+
+  const commitSubtitleTimeline = useCallback((
+    update: (current: Pick<TimelineHistoryState, 'subtitles' | 'subtitleStyle'>) => Pick<TimelineHistoryState, 'subtitles' | 'subtitleStyle'>,
+  ) => {
+    const current: TimelineHistoryState = {
+      clips: cloneEnhanceClips(clipsRef.current),
+      subtitles: subtitlesRef.current.map(cue => ({ ...cue })),
+      subtitleStyle: { ...subtitleStyleRef.current },
+    };
+    const nextSubtitleState = update({
+      subtitles: current.subtitles.map(cue => ({ ...cue })),
+      subtitleStyle: { ...current.subtitleStyle },
+    });
+    const next = { ...current, ...nextSubtitleState };
+    if (JSON.stringify(nextSubtitleState) === JSON.stringify({
+      subtitles: current.subtitles,
+      subtitleStyle: current.subtitleStyle,
+    })) return false;
+    undoStackRef.current = [...undoStackRef.current.slice(-79), current];
     redoStackRef.current = [];
     setUndoCount(undoStackRef.current.length);
     setRedoCount(0);
@@ -664,29 +772,63 @@ export const EnhancePage: React.FC = () => {
   const commitPreviewTimeline = useCallback((before: MediaClip[]) => {
     const current = clipsRef.current;
     if (JSON.stringify(before) === JSON.stringify(current)) return;
-    undoStackRef.current = [...undoStackRef.current.slice(-79), cloneEnhanceClips(before)];
+    undoStackRef.current = [...undoStackRef.current.slice(-79), {
+      clips: cloneEnhanceClips(before),
+      subtitles: subtitlesRef.current.map(cue => ({ ...cue })),
+      subtitleStyle: { ...subtitleStyleRef.current },
+    }];
     redoStackRef.current = [];
     setUndoCount(undoStackRef.current.length);
     setRedoCount(0);
-    markTimelineChanged(current);
+    markTimelineChanged({
+      clips: current,
+      subtitles: subtitlesRef.current,
+      subtitleStyle: subtitleStyleRef.current,
+    });
+  }, [markTimelineChanged]);
+
+  const commitPreviewSubtitles = useCallback((before: EnhanceSubtitleCue[]) => {
+    const current = subtitlesRef.current;
+    if (JSON.stringify(before) === JSON.stringify(current)) return;
+    undoStackRef.current = [...undoStackRef.current.slice(-79), {
+      clips: cloneEnhanceClips(clipsRef.current),
+      subtitles: before.map(cue => ({ ...cue })),
+      subtitleStyle: { ...subtitleStyleRef.current },
+    }];
+    redoStackRef.current = [];
+    setUndoCount(undoStackRef.current.length);
+    setRedoCount(0);
+    markTimelineChanged({
+      clips: clipsRef.current,
+      subtitles: current,
+      subtitleStyle: subtitleStyleRef.current,
+    });
   }, [markTimelineChanged]);
 
   const undoTimeline = useCallback(() => {
     const previous = undoStackRef.current.pop();
     if (!previous) return;
-    redoStackRef.current.push(cloneEnhanceClips(clipsRef.current));
+    redoStackRef.current.push(cloneTimelineHistoryState({
+      clips: clipsRef.current,
+      subtitles: subtitlesRef.current,
+      subtitleStyle: subtitleStyleRef.current,
+    }));
     setUndoCount(undoStackRef.current.length);
     setRedoCount(redoStackRef.current.length);
-    markTimelineChanged(cloneEnhanceClips(previous));
+    markTimelineChanged(cloneTimelineHistoryState(previous));
   }, [markTimelineChanged]);
 
   const redoTimeline = useCallback(() => {
     const next = redoStackRef.current.pop();
     if (!next) return;
-    undoStackRef.current.push(cloneEnhanceClips(clipsRef.current));
+    undoStackRef.current.push(cloneTimelineHistoryState({
+      clips: clipsRef.current,
+      subtitles: subtitlesRef.current,
+      subtitleStyle: subtitleStyleRef.current,
+    }));
     setUndoCount(undoStackRef.current.length);
     setRedoCount(redoStackRef.current.length);
-    markTimelineChanged(cloneEnhanceClips(next));
+    markTimelineChanged(cloneTimelineHistoryState(next));
   }, [markTimelineChanged]);
 
   const saveTimelineNow = useCallback(async () => {
@@ -694,7 +836,12 @@ export const EnhancePage: React.FC = () => {
     if (timelineSaveInFlightRef.current) {
       await timelineSaveInFlightRef.current;
     }
-    const items = serializeEnhanceTimeline(clipsRef.current, knownVideoSourceIds);
+    const items = serializeEnhanceTimeline(
+      clipsRef.current,
+      knownVideoSourceIds,
+      subtitlesRef.current,
+      subtitleStyleRef.current,
+    );
     persistedTimelineItemsRef.current = items;
     setTimelineSaveState('saving');
     const saveTask = (async () => {
@@ -740,9 +887,17 @@ export const EnhancePage: React.FC = () => {
     if (!episodeId) { alert('未找到当前集'); return; }
     const timeline = composeTimelineItems(clipsRef.current);
     if (timeline.length === 0) { alert('时间线上没有可合成的视频片段'); return; }
+    const subtitleItems = composeSubtitleItems(subtitlesRef.current);
     try {
       await saveTimelineNow();
-      const s = await startCompose(episodeId, undefined, composeAudioMode, timeline);
+      const s = await startCompose(
+        episodeId,
+        undefined,
+        composeAudioMode,
+        timeline,
+        subtitleItems,
+        composeSubtitleStyle(subtitleStyleRef.current),
+      );
       setCompose({ ...s, status: (s.status as any) || 'running' });
       if (composeTimerRef.current) clearTimeout(composeTimerRef.current);
       composeTimerRef.current = window.setTimeout(pollCompose, 3000);
@@ -863,6 +1018,14 @@ export const EnhancePage: React.FC = () => {
   }, [commitTimeline, currentTime, selectedClipId, trackState]);
 
   const handleDelete = useCallback(() => {
+    if (selectedSubtitleId) {
+      commitSubtitleTimeline(current => ({
+        ...current,
+        subtitles: current.subtitles.filter(cue => cue.id !== selectedSubtitleId),
+      }));
+      setSelectedSubtitleId(null);
+      return;
+    }
     if (!selectedClipId) return;
     const clip = clipsRef.current.find(item => item.id === selectedClipId);
     if (!clip) return;
@@ -870,7 +1033,7 @@ export const EnhancePage: React.FC = () => {
     if (trackState[trackKey].locked) return;
     commitTimeline(current => deleteTimelineClip(current, selectedClipId, clip.type === 'video'));
     setSelectedClipId(null);
-  }, [commitTimeline, selectedClipId, trackState]);
+  }, [commitSubtitleTimeline, commitTimeline, selectedClipId, selectedSubtitleId, trackState]);
 
   const handleDuplicate = useCallback(() => {
     if (!selectedClipId) return;
@@ -883,6 +1046,51 @@ export const EnhancePage: React.FC = () => {
       setSelectedClipId(nextId);
     }
   }, [commitTimeline, selectedClipId, trackState]);
+
+  const handleAddSubtitle = useCallback(() => {
+    if (videoDuration <= 0) {
+      alert('请先加入视频片段');
+      return;
+    }
+    const startTime = Math.min(currentTime, Math.max(0, videoDuration - 0.2));
+    const cue: EnhanceSubtitleCue = {
+      id: `subtitle_${Date.now()}`,
+      text: '请输入字幕',
+      startTime,
+      duration: Math.max(0.2, Math.min(3, videoDuration - startTime)),
+    };
+    commitSubtitleTimeline(current => ({
+      ...current,
+      subtitles: [...current.subtitles, cue],
+    }));
+    setSelectedClipId(null);
+    setSelectedSubtitleId(cue.id);
+  }, [commitSubtitleTimeline, currentTime, videoDuration]);
+
+  const updateSelectedSubtitle = useCallback((updates: Partial<EnhanceSubtitleCue>) => {
+    if (!selectedSubtitleId) return;
+    commitSubtitleTimeline(current => ({
+      ...current,
+      subtitles: current.subtitles.map(cue => cue.id === selectedSubtitleId ? {
+        ...cue,
+        ...updates,
+        text: updates.text === undefined ? cue.text : updates.text.slice(0, 500),
+        startTime: updates.startTime === undefined
+          ? cue.startTime
+          : Math.max(0, Math.min(updates.startTime, Math.max(0, videoDuration - cue.duration))),
+        duration: updates.duration === undefined
+          ? cue.duration
+          : Math.max(0.2, Math.min(updates.duration, Math.max(0.2, videoDuration - cue.startTime))),
+      } : cue),
+    }));
+  }, [commitSubtitleTimeline, selectedSubtitleId, videoDuration]);
+
+  const updateSubtitleStyle = useCallback((updates: Partial<EnhanceSubtitleStyle>) => {
+    commitSubtitleTimeline(current => ({
+      ...current,
+      subtitleStyle: normalizeEnhanceSubtitleStyle({ ...current.subtitleStyle, ...updates }),
+    }));
+  }, [commitSubtitleTimeline]);
 
   const persistAudioClip = useCallback(async (clip: MediaClip) => {
     if (!clip.audioTrackId) return;
@@ -927,6 +1135,7 @@ export const EnhancePage: React.FC = () => {
     const trackKey = clip.type === 'video' ? 'video' : (clip.audioKind || 'voice');
     if (trackState[trackKey].locked) return;
     setSelectedClipId(clip.id);
+    setSelectedSubtitleId(null);
     const startX = e.clientX;
     const initialStart = clip.startTime;
     const before = cloneEnhanceClips(clipsRef.current);
@@ -960,12 +1169,73 @@ export const EnhancePage: React.FC = () => {
     document.addEventListener('mouseup', onUp);
   }, [commitPreviewTimeline, currentTime, persistAudioClip, scale, snapEnabled, trackState]);
 
+  const handleSubtitleDragStart = useCallback((event: React.MouseEvent, cue: EnhanceSubtitleCue) => {
+    event.stopPropagation();
+    setSelectedClipId(null);
+    setSelectedSubtitleId(cue.id);
+    const startX = event.clientX;
+    const initialStart = cue.startTime;
+    const before = subtitlesRef.current.map(item => ({ ...item }));
+    const boundaries = [
+      0,
+      videoDuration,
+      currentTime,
+      ...clipsRef.current.flatMap(item => [item.startTime, item.startTime + item.duration]),
+      ...before.filter(item => item.id !== cue.id).flatMap(item => [item.startTime, item.startTime + item.duration]),
+    ];
+    const onMove = (moveEvent: MouseEvent) => {
+      const rawStart = initialStart + (moveEvent.clientX - startX) / scale;
+      const snapped = snapEnabled && !moveEvent.shiftKey
+        ? resolveTimelineSnap(rawStart, boundaries, Math.max(0.05, 8 / scale))
+        : { time: rawStart, guide: null };
+      const next = moveSubtitleCue(before, cue.id, snapped.time, videoDuration);
+      subtitlesRef.current = next;
+      setSubtitles(next);
+      setSnapGuide(snapped.guide);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      setSnapGuide(null);
+      commitPreviewSubtitles(before);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [commitPreviewSubtitles, currentTime, scale, snapEnabled, videoDuration]);
+
+  const handleSubtitleTrimStart = useCallback((
+    event: React.MouseEvent,
+    cue: EnhanceSubtitleCue,
+    side: 'left' | 'right',
+  ) => {
+    event.stopPropagation();
+    event.preventDefault();
+    setSelectedClipId(null);
+    setSelectedSubtitleId(cue.id);
+    const startX = event.clientX;
+    const before = subtitlesRef.current.map(item => ({ ...item }));
+    const onMove = (moveEvent: MouseEvent) => {
+      const delta = (moveEvent.clientX - startX) / scale;
+      const next = trimSubtitleCue(before, cue.id, side, delta, videoDuration);
+      subtitlesRef.current = next;
+      setSubtitles(next);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      commitPreviewSubtitles(before);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [commitPreviewSubtitles, scale, videoDuration]);
+
   const handleTrimStart = useCallback((e: React.MouseEvent, clip: MediaClip, side: 'left' | 'right') => {
     e.stopPropagation();
     e.preventDefault();
     const trackKey = clip.type === 'video' ? 'video' : (clip.audioKind || 'voice');
     if (trackState[trackKey].locked) return;
     setSelectedClipId(clip.id);
+    setSelectedSubtitleId(null);
     const startX = e.clientX;
     const before = cloneEnhanceClips(clipsRef.current);
     const onMove = (event: MouseEvent) => {
@@ -1084,7 +1354,6 @@ export const EnhancePage: React.FC = () => {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [handleDelete, handleSplit, redoTimeline, saveTimelineNow, togglePlay, totalDuration, undoTimeline, videoDuration]);
-
   // 自动恢复本页发起且尚未完成的 GPU 美化任务，避免切页后丢失状态。
   useEffect(() => {
     const enhancePolls = getKnownVideoTaskIds().filter(uuid =>
@@ -1129,6 +1398,7 @@ export const EnhancePage: React.FC = () => {
     setEnhanceNotice('');
     // GPU enhancement actions require an online ComfyUI Agent.
     // 按钮已禁用，这里防止意外触发）。
+
     if (!selectedClusterNodeUsable) {
       setEnhanceError('该功能需要处理集群节点。当前没有可用节点，请刷新节点状态或稍后重试。');
       return;
@@ -1292,6 +1562,7 @@ export const EnhancePage: React.FC = () => {
       return;
     }
 
+
     // === upscale：真后端任务 + taskRegistry ===
     const filename = targetClip.url;
     if (!filename) {
@@ -1336,6 +1607,7 @@ export const EnhancePage: React.FC = () => {
             setProcessProgress(100);
             setEnhanceNotice('视频放大处理完成，结果已更新。');
             window.setTimeout(() => { setProcessing(false); setProcessProgress(0); setProcessStage('处理中'); }, 800);
+
             // 拉新数据让用户看到 upscaled 视频
             reload();
           },
@@ -1388,7 +1660,7 @@ export const EnhancePage: React.FC = () => {
             </div>
             <div className="toolbar-actions">
               <span className="text-xs font-mono tabular-nums text-n300" title="时:分:秒:帧（30 FPS）">{formatTimelineTime(currentTime)}</span>
-              <span className="text-[10px] text-n100">{videoClips.length}V · {audioClips.length}A</span>
+              <span className="text-[10px] text-n100">{videoClips.length}V · {audioClips.length}A · {subtitles.length}S</span>
               <button
                 type="button"
                 onClick={() => void saveTimelineNow().catch(() => {})}
@@ -1429,6 +1701,7 @@ export const EnhancePage: React.FC = () => {
               >
                 刷新
               </button>
+
               {/* 一键合成成片 */}
               {compose?.status === 'running' ? (
                 <span className="flex items-center gap-1 px-2.5 py-1 bg-primary-light text-primary text-xs rounded-lg border border-primary/20">
@@ -1443,7 +1716,7 @@ export const EnhancePage: React.FC = () => {
               ) : (
                 <button
                   className="flex items-center gap-1 px-2.5 py-1 bg-primary hover:bg-primary-hover text-white text-xs rounded-lg transition-colors disabled:opacity-50"
-                  title="把本集所有视频段按分镜顺序拼接、对齐配音，合成一个完整成片（约数分钟，可离开页面）"
+                  title="按当前时间线拼接视频、对齐音频并烧录字幕，合成一个完整成片（约数分钟，可离开页面）"
                   onClick={handleCompose}
                   disabled={!episodeId || videoClips.length === 0}
                 >
@@ -1457,7 +1730,11 @@ export const EnhancePage: React.FC = () => {
                 className="flex items-center gap-1 px-2.5 py-1 bg-primary hover:bg-primary-hover text-white text-xs rounded-lg transition-colors"
                 title="导出时间线配置"
                 onClick={() => {
-                  const data = JSON.stringify({ clips, scale, totalDuration }, null, 2);
+                  const data = JSON.stringify(
+                    serializeEnhanceTimeline(clips, knownVideoSourceIds, subtitles, subtitleStyle),
+                    null,
+                    2,
+                  );
                   const blob = new Blob([data], { type: 'application/json' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
@@ -1494,6 +1771,32 @@ export const EnhancePage: React.FC = () => {
                   </span>
                 </div>
               )}
+              {activeSubtitles.length > 0 && (
+                <div
+                  className={`absolute inset-x-6 z-20 flex flex-col items-center gap-1 pointer-events-none ${
+                    subtitleStyle.position === 'top'
+                      ? 'top-8'
+                      : subtitleStyle.position === 'center'
+                        ? 'top-1/2 -translate-y-1/2'
+                        : 'bottom-8'
+                  }`}
+                >
+                  {activeSubtitles.map(cue => (
+                    <div
+                      key={cue.id}
+                      className="max-w-full whitespace-pre-wrap break-words rounded px-3 py-1 text-center font-semibold leading-snug shadow-sm"
+                      style={{
+                        color: subtitleStyle.textColor,
+                        backgroundColor: hexToRgba(subtitleStyle.backgroundColor, subtitleStyle.backgroundOpacity),
+                        fontSize: `${Math.max(14, Math.round(subtitleStyle.fontSize * 0.65))}px`,
+                        textShadow: '0 1px 2px rgba(0,0,0,.9)',
+                      }}
+                    >
+                      {cue.text}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1504,7 +1807,125 @@ export const EnhancePage: React.FC = () => {
             <h2 className="text-sm font-semibold">片段美化选项</h2>
           </div>
           <div className="workflow-stage-scroll flex-1 p-4 space-y-4">
-            {selectedClip && selectedClip.type === 'video' ? (
+            {selectedSubtitle ? (
+              <div className="space-y-4">
+                <div>
+                  <div className="mb-1 flex items-center gap-2">
+                    <Captions size={16} className="text-primary" />
+                    <h3 className="text-sm font-semibold text-n800">字幕编辑</h3>
+                  </div>
+                  <p className="text-[11px] leading-4 text-n100">字幕会随时间线自动保存，并烧录到最终合成视频。</p>
+                </div>
+                <label className="block space-y-1">
+                  <span className="text-[11px] text-n300">字幕内容</span>
+                  <textarea
+                    value={selectedSubtitle.text}
+                    maxLength={500}
+                    rows={4}
+                    onChange={event => updateSelectedSubtitle({ text: event.target.value })}
+                    className="w-full resize-y rounded border border-n40 bg-n0 px-2.5 py-2 text-xs leading-5 focus:border-primary focus:outline-none"
+                    placeholder="输入字幕内容"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="space-y-1">
+                    <span className="text-[11px] text-n300">开始时间（秒）</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={Math.max(0, videoDuration - 0.2)}
+                      step={0.1}
+                      value={selectedSubtitle.startTime.toFixed(1)}
+                      onChange={event => updateSelectedSubtitle({ startTime: Number(event.target.value) || 0 })}
+                      className="w-full rounded border border-n40 bg-n0 px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[11px] text-n300">持续时间（秒）</span>
+                    <input
+                      type="number"
+                      min={0.2}
+                      max={Math.max(0.2, videoDuration - selectedSubtitle.startTime)}
+                      step={0.1}
+                      value={selectedSubtitle.duration.toFixed(1)}
+                      onChange={event => updateSelectedSubtitle({ duration: Number(event.target.value) || 0.2 })}
+                      className="w-full rounded border border-n40 bg-n0 px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateSelectedSubtitle({ startTime: currentTime })}
+                  className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded border border-primary/30 bg-primary-light text-xs font-medium text-primary"
+                >
+                  <Play size={12} /> 移到播放头
+                </button>
+                <div className="rounded-lg border border-n40 bg-n10 p-3 space-y-3">
+                  <div className="text-xs font-medium text-n500">字幕样式</div>
+                  <label className="block space-y-1">
+                    <span className="text-[11px] text-n300">位置</span>
+                    <select
+                      value={subtitleStyle.position}
+                      onChange={event => updateSubtitleStyle({ position: event.target.value as EnhanceSubtitleStyle['position'] })}
+                      className="w-full rounded border border-n40 bg-n0 px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                    >
+                      <option value="top">上</option>
+                      <option value="center">中</option>
+                      <option value="bottom">下</option>
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="flex justify-between text-[11px] text-n300">
+                      <span>字号</span><span>{subtitleStyle.fontSize}px</span>
+                    </span>
+                    <input
+                      type="range"
+                      min={16}
+                      max={96}
+                      step={1}
+                      value={subtitleStyle.fontSize}
+                      onChange={event => updateSubtitleStyle({ fontSize: Number(event.target.value) })}
+                      className="w-full accent-primary"
+                    />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1">
+                      <span className="text-[11px] text-n300">文字颜色</span>
+                      <input
+                        type="color"
+                        value={subtitleStyle.textColor}
+                        onChange={event => updateSubtitleStyle({ textColor: event.target.value })}
+                        className="h-8 w-full rounded border border-n40 bg-n0 p-1"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[11px] text-n300">背景颜色</span>
+                      <input
+                        type="color"
+                        value={subtitleStyle.backgroundColor}
+                        onChange={event => updateSubtitleStyle({ backgroundColor: event.target.value })}
+                        className="h-8 w-full rounded border border-n40 bg-n0 p-1"
+                      />
+                    </label>
+                  </div>
+                  <label className="block space-y-1">
+                    <span className="flex justify-between text-[11px] text-n300">
+                      <span>背景透明度</span><span>{Math.round(subtitleStyle.backgroundOpacity * 100)}%</span>
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={subtitleStyle.backgroundOpacity}
+                      onChange={event => updateSubtitleStyle({ backgroundOpacity: Number(event.target.value) })}
+                      className="w-full accent-primary"
+                    />
+                  </label>
+                </div>
+                <p className="text-[11px] leading-5 text-n100">可直接拖动下方字幕块调整开始时间，拖动两端调整持续时间；Delete 可删除。</p>
+              </div>
+            ) : selectedClip && selectedClip.type === 'video' ? (
               <>
                 <div className="text-[11px] text-n100 truncate">
                   选中: {selectedClip.id.slice(0, 20)}{selectedClip.id.length > 20 ? '...' : ''}
@@ -1601,7 +2022,7 @@ export const EnhancePage: React.FC = () => {
                       : opt.kind === 'lipSync' ? 'lipSync' as const
                       : opt.kind as 'upscale' | 'interpolate';
                     const checked = settingsKey ? (selectedClip.settings?.[settingsKey] ?? false) : false;
-                    // GPU 类增强（有 settingsKey 的 放大/补帧/对口型）无 ComfyUI GPU 集群节点时锁定
+
                     const gpuLocked = !selectedClusterNodeUsable;
 
                     return (
@@ -1953,8 +2374,8 @@ export const EnhancePage: React.FC = () => {
             </button>
             <button
               onClick={handleDelete}
-              disabled={!selectedClipId}
-              className={`p-1.5 rounded transition-colors ${selectedClipId ? 'hover:bg-n20 text-n300 hover:text-danger' : 'text-n100 cursor-not-allowed'}`}
+              disabled={!selectedClipId && !selectedSubtitleId}
+              className={`p-1.5 rounded transition-colors ${selectedClipId || selectedSubtitleId ? 'hover:bg-n20 text-n300 hover:text-danger' : 'text-n100 cursor-not-allowed'}`}
               title="删除选中片段"
             >
               <Trash2 size={14} />
@@ -1991,6 +2412,15 @@ export const EnhancePage: React.FC = () => {
               className="flex items-center gap-1 px-2 py-1.5 hover:bg-n20 rounded text-xs text-n300 hover:text-primary transition-colors disabled:opacity-50"
             >
               <Sparkles size={12} /> 特效音
+            </button>
+            <button
+              type="button"
+              onClick={handleAddSubtitle}
+              disabled={videoClips.length === 0}
+              className="flex items-center gap-1 px-2 py-1.5 hover:bg-n20 rounded text-xs text-n300 hover:text-primary transition-colors disabled:opacity-50"
+              title="在播放头位置添加字幕"
+            >
+              <Captions size={13} /> 字幕
             </button>
             <input type="file" accept="audio/*" className="hidden" ref={fileInputRef} onChange={handleAudioUpload} />
           </div>
@@ -2048,6 +2478,9 @@ export const EnhancePage: React.FC = () => {
                 </span>
               </div>
             ))}
+            <div className="h-10 border-b border-n40 flex items-center px-2 text-[11px] text-n300 gap-1">
+              <Captions size={12} /><span className="truncate">字幕</span>
+            </div>
           </div>
 
           {/* Track content */}
@@ -2191,6 +2624,43 @@ export const EnhancePage: React.FC = () => {
                 ))}
               </div>
               ))}
+
+              {/* Subtitle track */}
+              <div className="h-10 border-b border-n40 relative bg-n0">
+                {subtitles.length === 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center text-[10px] text-n100 pointer-events-none">
+                    点击工具栏“字幕”在播放头处添加
+                  </div>
+                )}
+                {subtitles.map(cue => (
+                  <div
+                    key={cue.id}
+                    onMouseDown={event => handleSubtitleDragStart(event, cue)}
+                    className={`absolute top-1 bottom-1 rounded border overflow-hidden cursor-grab active:cursor-grabbing ${
+                      selectedSubtitleId === cue.id
+                        ? 'border-primary bg-primary-light z-20 shadow-sm'
+                        : 'border-violet-300 bg-violet-50 hover:border-primary z-10'
+                    }`}
+                    style={{ left: `${cue.startTime * scale}px`, width: `${Math.max(16, cue.duration * scale)}px` }}
+                    title={cue.text || '空字幕'}
+                  >
+                    <div
+                      className="absolute inset-y-0 left-0 z-30 w-2 cursor-ew-resize bg-violet-300/50 hover:bg-primary"
+                      onMouseDown={event => handleSubtitleTrimStart(event, cue, 'left')}
+                      title="拖动调整字幕开始时间"
+                    />
+                    <div
+                      className="absolute inset-y-0 right-0 z-30 w-2 cursor-ew-resize bg-violet-300/50 hover:bg-primary"
+                      onMouseDown={event => handleSubtitleTrimStart(event, cue, 'right')}
+                      title="拖动调整字幕结束时间"
+                    />
+                    <div className="flex h-full items-center gap-1 overflow-hidden px-2 text-[9px] font-medium text-violet-700 pointer-events-none">
+                      <Captions size={10} className="shrink-0" />
+                      <span className="truncate">{cue.text || '空字幕'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

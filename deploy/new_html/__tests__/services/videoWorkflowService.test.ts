@@ -205,6 +205,28 @@ describe('video workflow service', () => {
     });
   });
 
+  it('sends subtitle cues and style with the edited timeline', async () => {
+    const { startCompose } = await loadService();
+    mockFetch.mockResolvedValueOnce(mockJsonResponse({ status: 'running', total: 1, done: 0 }));
+    const subtitles = [{ cue_id: 'cue-1', text: '中文字幕', start_ms: 500, duration_ms: 1500 }];
+    const subtitleStyle = {
+      font_size: 42,
+      text_color: '#FFFFFF',
+      background_color: '#000000',
+      background_opacity: 0.55,
+      position: 'bottom' as const,
+    };
+
+    await startCompose('ep_1', undefined, 'reference_dubbing', [], subtitles, subtitleStyle);
+
+    const [, opts] = mockFetch.mock.calls[0];
+    expect(JSON.parse(opts.body)).toEqual({
+      audio_mode: 'reference_dubbing',
+      subtitles,
+      subtitle_style: subtitleStyle,
+    });
+  });
+
   it('loads episode compose status', async () => {
     const { getComposeStatus } = await loadService();
     mockFetch.mockResolvedValueOnce(mockJsonResponse({ status: 'done', total: 2, done: 2 }));

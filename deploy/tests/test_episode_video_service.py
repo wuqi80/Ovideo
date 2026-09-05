@@ -64,6 +64,8 @@ class FakeComposeService:
         selections,
         audio_mode="reference_dubbing",
         timeline=None,
+        subtitles=None,
+        subtitle_style=None,
     ):
         cls.started = {
             "episode_id": episode_id,
@@ -74,6 +76,10 @@ class FakeComposeService:
         }
         if timeline is not None:
             cls.started["timeline"] = timeline
+        if subtitles is not None:
+            cls.started["subtitles"] = subtitles
+        if subtitle_style is not None:
+            cls.started["subtitle_style"] = subtitle_style
         return {
             "status": "running",
             "total": 3,
@@ -238,6 +244,26 @@ async def test_start_episode_compose_forwards_edited_timeline():
     )
 
     assert FakeComposeService.started["timeline"] == timeline
+
+
+async def test_start_episode_compose_forwards_subtitle_contract():
+    subtitles = [{"cue_id": "cue-1", "text": "中文字幕", "start_ms": 0, "duration_ms": 1500}]
+    subtitle_style = {"font_size": 42, "position": "bottom"}
+
+    await episode_video_service.start_episode_compose(
+        "ep_1",
+        "user_1",
+        None,
+        "reference_dubbing",
+        [],
+        subtitles,
+        subtitle_style,
+        episode_dao=FakeEpisodeDAO,
+        compose_service=FakeComposeService,
+    )
+
+    assert FakeComposeService.started["subtitles"] == subtitles
+    assert FakeComposeService.started["subtitle_style"] == subtitle_style
 
 
 async def test_start_episode_compose_raises_when_episode_missing():
